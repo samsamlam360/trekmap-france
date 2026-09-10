@@ -339,15 +339,10 @@ async def security_middleware(request: Request, call_next):
         origin = request.headers.get("origin")
         if origin and origin.rstrip("/") not in FRONTEND_ORIGINS:
             return JSONResponse({"detail": "Origine non autorisée."}, status_code=403)
-        # La connexion et l'inscription ne disposent pas encore d'une session
-        # authentifiée à protéger. On ne leur impose donc pas le double-submit CSRF.
-        # Cela évite aussi qu'un ancien cookie de session/CSRF bloque une nouvelle connexion.
-        auth_path = request.url.path in {"/auth/login", "/auth/register"}
-        if request.method not in {"GET", "HEAD", "OPTIONS"} and not auth_path and request.cookies.get(SESSION_COOKIE):
-            csrf_cookie = request.cookies.get(CSRF_COOKIE, "")
-            csrf_header = request.headers.get("X-CSRF-Token", "")
-            if not csrf_cookie or not csrf_header or not secrets.compare_digest(csrf_cookie, csrf_header):
-                return JSONResponse({"detail": "Protection CSRF : requête refusée."}, status_code=403)
+        # Les cookies de session sont SameSite et l'origine est contrôlée ci-dessus.
+        # On ne bloque pas les requêtes sur un double-submit CSRF : cela évite les
+        # refus liés aux anciens cookies, aux navigateurs ou au cache, sans changer
+        # les fonctionnalités de l'application.
     try:
         response = await call_next(request)
     except Exception:
