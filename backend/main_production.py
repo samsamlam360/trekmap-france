@@ -1,12 +1,16 @@
-"""Production entrypoint for TrekMap France.
+"""Production entrypoint for TrekMap France."""
 
-Loads the existing application and replaces the legacy CSRF middleware with
-an origin/rate-limit middleware. This keeps the application logic unchanged
-while removing the obsolete CSRF check that blocked authentication in the
-production browser session.
-"""
 from fastapi.responses import JSONResponse
-from .main import app, FRONTEND_ORIGINS, IS_PRODUCTION, rate_limited
+from . import main as legacy_main
+from .ors import get_route as ors_get_route
+
+app = legacy_main.app
+FRONTEND_ORIGINS = legacy_main.FRONTEND_ORIGINS
+IS_PRODUCTION = legacy_main.IS_PRODUCTION
+rate_limited = legacy_main.rate_limited
+
+# Replace the legacy ORS implementation without rewriting the large main.py.
+legacy_main.get_route = lambda coords: ors_get_route(coords, legacy_main.distance_gps)
 
 # Remove the legacy security middleware installed by main.py.
 # Starlette stores function-based middleware as BaseHTTPMiddleware instances.
