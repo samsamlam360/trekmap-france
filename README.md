@@ -1,10 +1,11 @@
-# TrekMap France - préparation au déploiement
+# TrekMap France - déploiement
 
-Cette version reprend la version fonctionnelle 4.5-secure et la prépare pour un déploiement Render.
+Version 4.5.1 préparée pour un déploiement Render propre.
 
 ## Structure
 
-- `backend/main.py` : API FastAPI + service de l'interface web
+- `backend/main.py` : API FastAPI + logique principale
+- `backend/main_production.py` : point d'entrée Render avec sécurité HTTP sans l'ancien contrôle CSRF bloquant
 - `backend/database.py` : connexion PostgreSQL/PostGIS
 - `frontend/index.html` : interface TrekMap France
 - `requirements.txt` : dépendances Python
@@ -26,25 +27,22 @@ L'interface est ensuite disponible sur `http://127.0.0.1:8000/`.
 
 ## Déploiement Render
 
-1. Créer un dépôt GitHub et y envoyer le contenu de ce dossier.
-2. Dans Render, créer un Blueprint depuis ce dépôt.
-3. Le fichier `render.yaml` crée le service web et la base.
-4. Renseigner les quatre secrets demandés : `ORS_API_KEY`, `ADMIN_USERNAME`, `ADMIN_EMAIL`, `ADMIN_PASSWORD`.
-5. Après le premier déploiement, activer PostGIS si nécessaire avec :
+Le `render.yaml` utilise `backend.main_production:app`. Ce point d'entrée conserve l'application existante mais remplace l'ancien middleware CSRF par un contrôle d'origine et un limiteur de requêtes, afin d'éviter les refus d'authentification liés aux anciens cookies CSRF.
 
-```sql
-CREATE EXTENSION IF NOT EXISTS postgis;
-```
+1. Connecter le dépôt GitHub à Render.
+2. Créer ou synchroniser le Blueprint depuis `render.yaml`.
+3. Renseigner les secrets : `ORS_API_KEY`, `ADMIN_USERNAME`, `ADMIN_EMAIL`, `ADMIN_PASSWORD`.
+4. Déployer la dernière version et vérifier le déploiement marqué **Live**.
 
-L'application exécute aussi cette commande au démarrage.
+## Base de données
 
-## Important pour la base gratuite
+PostgreSQL/PostGIS est configuré dans `render.yaml`. L'application crée l'extension PostGIS au démarrage si nécessaire.
 
-Le plan PostgreSQL gratuit est adapté au test, pas à une vraie mise en production durable. Render indique que les bases Postgres gratuites expirent après 30 jours. Pour un site public durable, passer la base à un plan payant et conserver des sauvegardes.
+Le plan PostgreSQL gratuit est adapté au test, pas à une mise en production durable. Pour un site public durable, utiliser une base adaptée et conserver des sauvegardes.
 
 ## Sécurité
 
-Les secrets ne sont pas dans le code. En production, les sessions utilisent un cookie HttpOnly sécurisé et une protection CSRF. La documentation FastAPI est désactivée en production.
+Les secrets ne sont pas dans le code. Les sessions utilisent un cookie HttpOnly sécurisé en production. Les requêtes sont limitées sur les endpoints sensibles et les origines sont contrôlées en production. L'ancien contrôle CSRF qui provoquait `Protection CSRF : requête refusée.` n'est plus utilisé par l'entrée Render.
 
 ## ORS
 
