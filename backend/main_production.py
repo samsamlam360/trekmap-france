@@ -43,7 +43,7 @@ def robust_db_or_503():
 legacy_main.db_or_503 = robust_db_or_503
 
 # Retirer les anciennes routes que l'on remplace par les versions production ci-dessous.
-app.routes = [r for r in app.routes if r.path not in {"/", "/auth/statistics", "/statistics"}]
+app.router.routes = [r for r in app.router.routes if r.path not in {"/", "/auth/statistics", "/statistics"}]
 
 @app.get("/auth/statistics")
 def user_statistics(user=Depends(legacy_main.current_user)):
@@ -126,7 +126,7 @@ def production_root():
     return HTMLResponse(html,media_type="text/html")
 
 # Remove the legacy security middleware installed by main.py.
-app.user_middleware=[m for m in app.user_middleware if getattr(getattr(m,"kwargs",{}).get("dispatch"),"__name__","")!="security_middleware"]
+app.user_middleware[:] = [m for m in app.user_middleware if getattr(getattr(m,"kwargs",{}).get("dispatch"),"__name__","")!="security_middleware"]
 app.middleware_stack=None
 
 @app.middleware("http")
