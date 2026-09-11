@@ -1,0 +1,23 @@
+name: TrekMap checks
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  python-check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Récupérer le dépôt
+        uses: actions/checkout@v4
+      - name: Installer Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Installer les dépendances
+        run: pip install -r requirements.txt
+      - name: Vérifier la syntaxe Python
+        run: python -m compileall -q backend
+      - name: Vérifier l'import de l'application
+        run: python -c "import backend.main_production; print('TrekMap production import OK')"
