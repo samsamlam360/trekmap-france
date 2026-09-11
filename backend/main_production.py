@@ -92,6 +92,41 @@ def public_statistics():
 
 FRONTEND_FILE = Path(__file__).resolve().parent.parent / "frontend" / "index.html"
 UI_ENHANCEMENT = r"""
+<style>
+/* TrekMap UI 2.0: couche visuelle injectée côté production sans toucher au front historique. */
+:root{
+  --green:#176b45;--green2:#269b69;--green3:#dff4e9;--ink:#14221c;--muted:#6c7b73;
+  --line:#e1e9e4;--bg:#eef3f0;--card:#ffffff;--shadow:0 14px 40px rgba(17,48,34,.12);--shadow2:0 5px 18px rgba(17,48,34,.09)
+}
+body{background:linear-gradient(135deg,#eef5f1 0%,#f8faf9 48%,#edf3f0 100%);letter-spacing:-.01em}
+.sidebar{width:390px;min-width:390px;border-right:1px solid rgba(210,223,216,.9);box-shadow:8px 0 35px rgba(18,43,31,.07);background:rgba(255,255,255,.96);backdrop-filter:blur(14px)}
+.sidebar.collapsed{margin-left:-390px}
+.brand{padding:22px 20px 16px;background:linear-gradient(145deg,#123f2b,#1b7950);color:white;position:relative;overflow:hidden}
+.brand:after{content:"";position:absolute;width:170px;height:170px;border-radius:50%;right:-55px;top:-90px;background:rgba(255,255,255,.09);box-shadow:-75px 95px 0 15px rgba(255,255,255,.045)}
+.brand h1{font-size:24px;letter-spacing:-.035em;position:relative;z-index:1}.brand small{color:rgba(255,255,255,.72);position:relative;z-index:1}
+.account{margin:13px 15px 11px;padding:10px 11px;background:linear-gradient(135deg,#eff8f3,#f8fbf9);border:1px solid #dcebe2;border-radius:16px;box-shadow:0 3px 12px rgba(18,64,42,.04)}
+.avatar{background:linear-gradient(145deg,var(--green),var(--green2));box-shadow:0 4px 12px rgba(23,107,69,.2)}
+.account .ghost-btn{background:white;border:1px solid #dbe6e0;box-shadow:0 2px 7px rgba(0,0,0,.04)}
+.search-wrap{margin:0 15px 11px}.search{border:1px solid #d5e1da;background:#fbfdfc;border-radius:14px;padding:14px 44px 14px 15px;box-shadow:inset 0 1px 2px rgba(20,50,35,.025);transition:.18s}
+.search:focus{border-color:#5ba77f;box-shadow:0 0 0 4px rgba(38,155,105,.10),0 4px 15px rgba(23,107,69,.07);background:#fff}
+.filters{padding:1px 15px 12px;border-bottom:1px solid #e8eeea;background:#fbfdfc}.filter-row{gap:9px}.field label{font-size:10px;text-transform:uppercase;letter-spacing:.055em;color:#718078;margin:8px 0 5px}.field select,.field input{border-color:#dce6e0;border-radius:10px;background:#fff;transition:.15s}.field select:focus{border-color:#65a985;outline:none;box-shadow:0 0 0 3px rgba(38,155,105,.08)}
+.tabs{padding:10px 12px;background:#fff;gap:7px}.tab{background:#f0f4f2;border:1px solid transparent;transition:.15s}.tab:hover{background:#e7f0eb}.tab.active{background:linear-gradient(135deg,#176b45,#269b69);box-shadow:0 4px 12px rgba(23,107,69,.18)}
+.list-head{padding:12px 16px 7px;background:#fff}.list-head b{font-size:13px;letter-spacing:.01em}.list-head span{background:#eef4f0;padding:4px 8px;border-radius:999px}
+#trek-list{padding:6px 13px 100px;background:linear-gradient(180deg,#fff 0%,#f8fbf9 100%)}
+.trek-card{border:1px solid #e2eae5;border-radius:17px;padding:14px;margin-bottom:10px;box-shadow:0 2px 7px rgba(24,56,41,.035);transition:transform .18s,box-shadow .18s,border-color .18s}
+.trek-card:hover{transform:translateY(-2px);box-shadow:var(--shadow2);border-color:#bdd7c8}.trek-card.active{border-color:#54a279;box-shadow:0 0 0 2px rgba(38,155,105,.11),var(--shadow2)}
+.trek-title strong{font-size:15px;line-height:1.25}.badges{margin:9px 0 8px}.badge{background:#edf6f1;color:#2c6049;border:1px solid #dfede5}.badge.private{background:#f3edff;border-color:#e8dcff}.badge.extreme{background:#fff0f0;border-color:#ffd9dc}.trek-meta{color:#64736b;font-size:11.5px}.card-actions{margin-top:10px}.card-actions button{border-radius:9px!important;border:1px solid #e0e8e3!important}
+#map{background:#dfe9e4}.leaflet-container{font:inherit}.leaflet-control-zoom{border:0!important;box-shadow:var(--shadow2)!important}.leaflet-control-zoom a{border:0!important;color:#244d3a!important;background:rgba(255,255,255,.96)!important}.leaflet-control-attribution{background:rgba(255,255,255,.78)!important;backdrop-filter:blur(5px)}
+.map-tools button,.map-tools select{border-color:#d9e4de;border-radius:12px;box-shadow:var(--shadow2);transition:.15s}.map-tools button:hover{transform:translateY(-1px);box-shadow:0 7px 20px rgba(0,0,0,.12)}
+.draw-panel{border-color:#d8e7de;box-shadow:0 18px 50px rgba(16,48,33,.18)}.draw-actions .finish{background:linear-gradient(135deg,#176b45,#269b69);box-shadow:0 5px 14px rgba(23,107,69,.2)}
+.map-legend{border:1px solid #e0e8e3;box-shadow:var(--shadow2);backdrop-filter:blur(8px)}
+.bottom-nav{left:calc(390px + 18px);background:rgba(255,255,255,.91);backdrop-filter:blur(18px);border-color:#dce7e1;box-shadow:0 12px 35px rgba(18,45,32,.15);padding:6px;border-radius:18px}.bottom-nav button{transition:.15s}.bottom-nav button.active,.bottom-nav button:hover{background:#e8f4ed;color:#176b45;box-shadow:inset 0 0 0 1px #d8eadf}
+.modal-backdrop{background:rgba(9,26,18,.55);backdrop-filter:blur(3px)}.modal{border:1px solid rgba(220,232,225,.9);box-shadow:0 30px 90px rgba(0,0,0,.27);border-radius:23px}.modal-head{padding-bottom:4px}.modal-head h2{letter-spacing:-.025em}.stat{background:linear-gradient(145deg,#f1f8f4,#f8fbf9);border:1px solid #dfebe4}.stat b{font-size:17px}.toast{border:1px solid rgba(255,255,255,.08);box-shadow:0 12px 35px rgba(0,0,0,.18)}
+.suggestions{border-color:#dbe6e0;border-radius:14px}.suggestion{padding:11px 13px}.suggestion:hover{background:#edf7f1}
+#trek-list::-webkit-scrollbar{width:8px}#trek-list::-webkit-scrollbar-track{background:transparent}#trek-list::-webkit-scrollbar-thumb{background:#cbd9d1;border-radius:20px;border:2px solid white}
+input[type=range]{accent-color:#20865a}
+@media(max-width:900px){.sidebar{width:min(410px,94vw);min-width:0}.sidebar.collapsed{margin-left:calc(-1 * min(410px,94vw))}.bottom-nav{left:10px;right:10px}.brand{padding-top:18px}.map-tools{max-width:calc(100% - 20px)}}
+</style>
 <script>
 (function(){
   function setupLargeTrekFilters(){
@@ -100,6 +135,19 @@ UI_ENHANCEMENT = r"""
     if(dur){const existing=new Set([...dur.options].map(o=>o.value));[[60,'≤ 60 jours'],[90,'≤ 90 jours'],[120,'≤ 120 jours'],[180,'≤ 180 jours'],[365,'≤ 365 jours']].forEach(([v,label])=>{if(!existing.has(String(v))){const o=document.createElement('option');o.value=v;o.textContent=label;dur.appendChild(o)}})}
   }
   function addStatsButton(){const nav=document.getElementById('bottom-nav');if(!nav||document.getElementById('stats-nav'))return;const b=document.createElement('button');b.id='stats-nav';b.innerHTML='📊 <span>Stats</span>';b.onclick=window.TrekMapOpenStats;nav.appendChild(b)}
+  function polishInterface(){
+    const sidebar=document.getElementById('sidebar');
+    if(sidebar) sidebar.setAttribute('aria-label','Navigation TrekMap France');
+    const search=document.getElementById('search');
+    if(search) search.setAttribute('aria-label','Rechercher un trek');
+    const list=document.getElementById('trek-list');
+    if(list) list.setAttribute('aria-label','Liste des treks');
+    const head=document.querySelector('.list-head');
+    if(head && !document.getElementById('tm-status-dot')){
+      const dot=document.createElement('span');dot.id='tm-status-dot';dot.title='TrekMap opérationnel';dot.style.cssText='display:inline-block;width:7px;height:7px;border-radius:50%;background:#31a56d;margin-right:5px;box-shadow:0 0 0 3px rgba(49,165,109,.12)';
+      const counter=head.querySelector('span');if(counter) counter.prepend(dot);
+    }
+  }
   window.TrekMapOpenStats=async function(){
     const modal=document.getElementById('modal'),back=document.getElementById('modal-backdrop');if(!modal||!back)return;
     modal.innerHTML='<div class="modal-head"><h2>📊 Statistiques TrekMap</h2><button class="close" id="stats-close">✕</button></div><div id="stats-content" class="detail-grid"><div class="stat"><small>Chargement</small><b>…</b></div></div>';
@@ -114,7 +162,7 @@ UI_ENHANCEMENT = r"""
       c.style.gridTemplateColumns='repeat(auto-fit,minmax(130px,1fr))';c.innerHTML=cards.map(x=>`<div class="stat"><small>${x[0]} ${x[1]}</small><b>${x[2]}</b></div>`).join('')+(d.most_viewed?`<div class="stat" style="grid-column:1/-1"><small>🏆 Trek le plus vu</small><b>${String(d.most_viewed.name).replace(/[&<>'"]/g,'')} · ${d.most_viewed.views} vues</b></div>`:'');
     }catch(e){document.getElementById('stats-content').innerHTML='<div class="empty">Impossible de charger les statistiques.</div>'}
   };
-  setupLargeTrekFilters();addStatsButton();setTimeout(addStatsButton,1000);
+  setupLargeTrekFilters();addStatsButton();polishInterface();setTimeout(function(){addStatsButton();polishInterface()},1000);
 })();
 </script>
 """
@@ -139,8 +187,8 @@ async def production_security(request,call_next):
     except Exception:
         if IS_PRODUCTION: return JSONResponse({"detail":"Erreur interne du serveur."},status_code=500)
         raise
-    response.headers["X-Content-Type-Options"]="nosniff";response.headers["X-Frame-Options"]="DENY";response.headers["Referrer-Policy"]="strict-origin-when-cross-origin";response.headers["Permissions-Policy"]="geolocation=(self), microphone=(), camera=()";response.headers["Cache-Control"]="no-store, no-cache, must-revalidate, max-age=0";response.headers["X-TrekMap-Version"]="4.6.1"
+    response.headers["X-Content-Type-Options"]="nosniff";response.headers["X-Frame-Options"]="DENY";response.headers["Referrer-Policy"]="strict-origin-when-cross-origin";response.headers["Permissions-Policy"]="geolocation=(self), microphone=(), camera=()";response.headers["Cache-Control"]="no-store, no-cache, must-revalidate, max-age=0";response.headers["X-TrekMap-Version"]="4.7.0"
     if IS_PRODUCTION: response.headers["Strict-Transport-Security"]="max-age=31536000; includeSubDomains"
     return response
 
-app.version="4.6.1"
+app.version="4.7.0"
