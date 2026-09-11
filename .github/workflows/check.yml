@@ -16,53 +16,29 @@ jobs:
     steps:
       - name: Récupérer le dépôt
         uses: actions/checkout@v4
-
       - name: Installer Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-
       - name: Installer les dépendances
         run: pip install -r requirements.txt
-
       - name: Vérifier la syntaxe Python
         run: python -m compileall -q backend
-
       - name: Vérifier l'import de l'application
         run: python -c "import backend.main_production; print('TrekMap production import OK')"
-
       - name: Vérifier le frontend
         shell: python
         run: |
           from pathlib import Path
-
           html = Path('frontend/index.html').read_text(encoding='utf-8')
-          required_ids = [
-              'app', 'sidebar', 'map', 'search', 'region-filter',
-              'difficulty-filter', 'distance-range', 'elevation-range',
-              'duration-filter', 'trek-list', 'draw-panel', 'gpx-file',
-              'modal-backdrop', 'bottom-nav'
-          ]
+          required_ids = ['app','sidebar','map','search','region-filter','difficulty-filter','distance-range','elevation-range','duration-filter','trek-list','draw-panel','gpx-file','modal-backdrop','bottom-nav']
           missing = [x for x in required_ids if f'id="{x}"' not in html]
-          if missing:
-              raise SystemExit('IDs frontend manquants: ' + ', '.join(missing))
-
-          required_markers = [
-              '<!DOCTYPE html>', '</html>',
-              'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css',
-              'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js',
-              'function openDetail(', 'function importGPX(',
-              'function startDrawing(', 'function exportGPX('
-          ]
+          if missing: raise SystemExit('IDs frontend manquants: ' + ', '.join(missing))
+          required_markers = ['<!DOCTYPE html>','</html>','https://unpkg.com/leaflet@1.9.4/dist/leaflet.css','https://unpkg.com/leaflet@1.9.4/dist/leaflet.js','function openDetail(','function importGPX(','function startDrawing(','function exportGPX(']
           missing = [x for x in required_markers if x not in html]
-          if missing:
-              raise SystemExit('Éléments frontend manquants: ' + ', '.join(missing))
-
-          if html.count('<html') != 1 or html.count('</html>') != 1:
-              raise SystemExit('Structure HTML invalide')
-          if html.count('id="trekmap-ui-redesign"') > 1:
-              raise SystemExit('La couche UI redesign est dupliquée')
-
+          if missing: raise SystemExit('Éléments frontend manquants: ' + ', '.join(missing))
+          if html.count('<html') != 1 or html.count('</html>') != 1: raise SystemExit('Structure HTML invalide')
+          if html.count('id="trekmap-ui-redesign"') > 1: raise SystemExit('La couche UI redesign est dupliquée')
           print('Frontend TrekMap: structure et fonctions principales OK')
 
   production-smoke:
@@ -79,7 +55,6 @@ jobs:
           grep -q 'TrekMap' /tmp/trekmap.html
           grep -q 'id="map"' /tmp/trekmap.html
           echo "Page publique Render: OK"
-
       - name: Vérifier la santé de l'API
         shell: bash
         run: |
@@ -89,34 +64,24 @@ jobs:
           echo "$health"
           echo "$health" | grep -Eiq 'ok|healthy|status'
           echo "Endpoint /health: OK"
-
       - name: Vérifier l'API des treks
         shell: bash
         run: |
           set -euo pipefail
           base="https://trekmap-france.onrender.com"
-          treks="$(curl --fail --silent --show-error --max-time 45 "$base/treks")"
-          echo "$treks" | head -c 1000
-          echo
+          curl --fail --silent --show-error --max-time 45 "$base/treks" -o /tmp/treks.json
           python - <<'PY'
           import json
-          import urllib.request
-
-          with urllib.request.urlopen('https://trekmap-france.onrender.com/treks', timeout=45) as response:
-              data = json.load(response)
+          from pathlib import Path
+          data = json.loads(Path('/tmp/treks.json').read_text(encoding='utf-8'))
           if not isinstance(data, list):
               raise SystemExit('/treks ne renvoie pas une liste JSON')
           print(f'/treks: OK ({len(data)} trek(s) public(s))')
           PY
-
       - name: Vérifier les ressources statiques essentielles
         shell: bash
         run: |
           set -euo pipefail
-          curl --fail --silent --show-error --max-time 30 \
-            'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css' \
-            -o /dev/null
-          curl --fail --silent --show-error --max-time 30 \
-            'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js' \
-            -o /dev/null
+          curl --fail --silent --show-error --max-time 30 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css' -o /dev/null
+          curl --fail --silent --show-error --max-time 30 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js' -o /dev/null
           echo "Ressources Leaflet: OK"
