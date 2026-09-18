@@ -45,7 +45,7 @@ jobs:
           if html.count('<script>') < 1:
               raise SystemExit('JavaScript principal introuvable')
 
-          for marker in ('/logo-trekmap.svg', 'tm-results-track', 'tm-results-handle', 'data-map-action="fit"'):
+          for marker in ('/logo-trekmap.svg', 'tm-results-track', 'tm-results-handle', 'tm-side-actions', 'tm-favorites-action', 'tm-stats-action', 'data-map-action="fit"'):
               if marker not in html:
                   raise SystemExit(f'Élément UI manquant: {marker}')
 
