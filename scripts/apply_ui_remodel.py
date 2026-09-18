@@ -167,7 +167,84 @@ html = html.replace(map_old, map_new, 1)
 
 html = re.sub(r'\s*<script id="trekmap-remodel-js">.*?</script>', '', html, flags=re.S)
 html = re.sub(r'\s*<script id="trekmap-home-js">.*?</script>', '', html, flags=re.S)
-html = html.replace('</body>', script + '\n</body>', 1)
+explorer_script = """<script id="trekmap-explorer-ui">
+(function(){
+  const app=document.getElementById('app');
+  if(!app)return;
+
+  if(!document.getElementById('tm-results-drawer')){
+    const drawer=document.createElement('section');
+    drawer.id='tm-results-drawer';
+    drawer.setAttribute('aria-label','Résultats de recherche');
+    drawer.innerHTML='<div class="tm-results-shell"><button class="tm-results-handle" id="tm-results-handle" aria-expanded="false"><span class="tm-results-grip"></span><span class="tm-results-title">Résultats de recherche</span><span class="tm-results-count" id="tm-results-count">0</span><span class="tm-results-chevron">⌃</span></button><div class="tm-results-track" id="tm-results-track"></div></div>';
+    const nav=document.getElementById('bottom-nav');
+    app.insertBefore(drawer,nav||null);
+  }
+
+  const drawer=document.getElementById('tm-results-drawer');
+  const track=document.getElementById('tm-results-track');
+  const handle=document.getElementById('tm-results-handle');
+  const count=document.getElementById('tm-results-count');
+  let userClosed=false;
+
+  function esc(v){return String(v??'').replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#039;','"':'&quot;'}[c]));}
+  function openDrawer(force){if(force)userClosed=false;if(userClosed&&!force)return;drawer?.classList.add('tm-open');handle?.setAttribute('aria-expanded','true');}
+  function closeDrawer(){userClosed=true;drawer?.classList.remove('tm-open');handle?.setAttribute('aria-expanded','false');}
+  handle?.addEventListener('click',()=>drawer.classList.contains('tm-open')?closeDrawer():openDrawer(true));
+
+  function renderResults(){
+    if(!track)return;
+    const data=Array.isArray(window.filteredTreks)?window.filteredTreks:[];
+    if(count)count.textContent=data.length;
+    if(!data.length){track.innerHTML='<div class="tm-results-empty">Aucun trek ne correspond à cette recherche.</div>';return;}
+    track.innerHTML=data.map(t=>'<article class="tm-result-card" data-id="'+Number(t.id)+'"><div class="tm-result-top"><strong>'+esc(t.name)+'</strong><span class="tm-result-pin">⌖</span></div><div class="tm-result-region">'+esc(t.region||'France')+'</div><div class="tm-result-badges"><span class="tm-result-badge">'+esc(({easy:'Facile',medium:'Moyen',hard:'Difficile',extreme:'Extrême'}[t.difficulty]||'Moyen'))+'</span><span class="tm-result-badge">'+(t.is_public?'Public':'Privé')+'</span></div><div class="tm-result-meta"><span>📏 '+Number(t.distance||0).toFixed(1)+' km</span><span>↗ '+Math.round(t.elevation||0)+' m</span><span>⏱ '+(t.duration_days?Number(t.duration_days)+' j':'—')+'</span></div></article>').join('');
+    track.querySelectorAll('.tm-result-card').forEach(card=>card.addEventListener('click',()=>window.openDetail?.(Number(card.dataset.id))));
+  }
+
+  function refreshResults(){
+    renderResults();
+    const q=(document.getElementById('search')?.value||'').trim();
+    if(q)openDrawer(true);
+  }
+
+  const oldApply=window.applyFilters;
+  if(typeof oldApply==='function'&&!window.__tmApplyWrapped){
+    window.applyFilters=function(){const result=oldApply.apply(this,arguments);setTimeout(refreshResults,0);return result;};
+    window.__tmApplyWrapped=true;
+  }
+  document.getElementById('search')?.addEventListener('input',()=>setTimeout(refreshResults,180));
+  document.getElementById('search')?.addEventListener('keydown',e=>{if(e.key==='Enter')setTimeout(()=>openDrawer(true),80)});
+
+  track?.addEventListener('wheel',e=>{if(Math.abs(e.deltaY)>Math.abs(e.deltaX)){e.preventDefault();track.scrollLeft+=e.deltaY;}},{passive:false});
+
+  const options=document.getElementById('tm-map-options');
+  const panel=document.getElementById('tm-map-options-panel');
+  options?.addEventListener('click',e=>{
+    e.stopPropagation();
+    const show=!panel.classList.contains('tm-show');
+    panel.classList.toggle('tm-show',show);
+    options.setAttribute('aria-expanded',String(show));
+    panel.setAttribute('aria-hidden',String(!show));
+  });
+  document.addEventListener('click',e=>{
+    if(panel&&!panel.contains(e.target)&&e.target!==options){panel.classList.remove('tm-show');options?.setAttribute('aria-expanded','false');}
+  });
+  document.querySelectorAll('[data-map-action]').forEach(b=>b.addEventListener('click',()=>{
+    const target={fit:'map-fit',locate:'locate-map',fullscreen:'map-fullscreen',api:'api-status'}[b.dataset.mapAction];
+    if(target)document.getElementById(target)?.click();
+    panel?.classList.remove('tm-show');options?.setAttribute('aria-expanded','false');
+  }));
+  const visibleLayers=document.getElementById('tm-map-layers-visible');
+  const hiddenLayers=document.getElementById('map-layers');
+  visibleLayers?.addEventListener('change',()=>{if(hiddenLayers){hiddenLayers.value=visibleLayers.value;hiddenLayers.dispatchEvent(new Event('change',{bubbles:true}));}});
+  document.getElementById('tm-hidden-map-controls')?.setAttribute('aria-hidden','true');
+
+  renderResults();
+  const list=document.getElementById('trek-list');
+  if(list)new MutationObserver(()=>setTimeout(renderResults,0)).observe(list,{childList:true,subtree:true});
+})();
+</script>"""
+html = html.replace('</body>', script + explorer_script + '\n</body>', 1)
 
 html_path.write_text(html, encoding='utf-8')
 print('TrekMap production UI applied')
