@@ -16,124 +16,54 @@ jobs:
       - name: Récupérer le dépôt
         uses: actions/checkout@v4
 
-      - name: Construire l'interface de production
+      - name: Construire l'interface unifiée
         run: |
           python scripts/apply_ui_remodel.py
-          python scripts/apply_stable_explorer.py
-          python scripts/apply_stable_repairs.py
-          python scripts/apply_zoom_repair.py
-          python scripts/apply_bottom_bar_repair.py
-          python scripts/apply_product_upgrade.py
-          python scripts/apply_display_stabilizer.py
-          python scripts/apply_functional_repairs.py
+          python scripts/apply_unified_experience.py
 
-      - name: Vérifier la structure et les fonctionnalités UI
+      - name: Vérifier l'architecture frontend
         shell: python
         run: |
           from pathlib import Path
           import re
 
-          html = Path('frontend/index.html').read_text(encoding='utf-8')
-          required_ids = [
-              'app', 'sidebar', 'map', 'search', 'region-filter',
-              'difficulty-filter', 'distance-range', 'elevation-range',
-              'duration-filter', 'trek-list', 'draw-panel', 'gpx-file',
-              'modal-backdrop', 'bottom-nav'
+          html=Path('frontend/index.html').read_text(encoding='utf-8')
+          required_ids=['app','sidebar','map','search','region-filter','difficulty-filter','distance-range','elevation-range','duration-filter','trek-list','draw-panel','gpx-file','modal-backdrop','bottom-nav']
+          missing=[x for x in required_ids if f'id="{x}"' not in html]
+          if missing: raise SystemExit('IDs historiques manquants: '+', '.join(missing))
+
+          required=[
+            'TREKMAP_UNIFIED_EXPERIENCE_START','trekmap-unified-css','trekmap-unified-js',
+            'tm-unified-topbar','tm-main-search','tm-unified-drawer','tm-drawer-track',
+            'tm-filter-toggle','tm-criteria-filters','tm-route-filter','tm-season-filter',
+            'tm-rating-filter','tm-photo-filter','tm-place-filter','TrekMapOpenTrek',
+            'openTrek','applyUnifiedFilters','openAdvancedUnified','tm-u-photos',
+            '/catalog/criteria','/uploaded-photos','/photos','tm-map-options-panel'
           ]
-          missing = [x for x in required_ids if f'id="{x}"' not in html]
-          if missing:
-              raise SystemExit('IDs frontend manquants: ' + ', '.join(missing))
+          missing=[x for x in required if x not in html]
+          if missing: raise SystemExit('Fonctions unifiées manquantes: '+', '.join(missing))
 
-          markers = [
-              'TREKMAP_STABLE_EXPLORER_START',
-              'TREKMAP_STABLE_REPAIRS_START',
-              'TREKMAP_BOTTOM_BAR_REPAIR_START',
-              'TREKMAP_PRODUCT_UPGRADE_START',
-              'TREKMAP_DISPLAY_STABILIZER_START',
-              'TREKMAP_FUNCTIONAL_REPAIRS_START',
-              'tm-stable-topbar', 'tm-stable-search', 'tm-stable-account',
-              'tm-stable-drawer', 'tm-stable-track', 'tm-filter-collapse',
-              'TrekMapBottomBarZoom', 'TrekMapOpenBottomTrek',
-              'TrekMapOpenTrekRobust', 'openTrekRobust',
-              'tm-detail-upgrade', 'tm-profile-upgrade',
-              'tm-rating-box', 'tm-import-preview',
-              'tm-advanced-filters', 'tm-route-filter', 'tm-season-filter',
-              'tm-rating-filter', 'tm-photo-filter', 'tm-place-filter',
-              'tm-local-photo-input', 'uploaded-photos', '/catalog/criteria',
-              '/photos', 'renderResults', 'openAdvancedLocal',
-              'trekmap-display-stabilizer-css', 'trekmap-display-stabilizer-js',
-              'tm-filters-compact', 'max-height:calc(100dvh - 40px)',
-              '#modal.tm-detail-modern{overflow-y:auto!important'
+          forbidden=[
+            'TREKMAP_STABLE_EXPLORER_START','TREKMAP_STABLE_REPAIRS_START',
+            'TREKMAP_BOTTOM_BAR_REPAIR_START','TREKMAP_PRODUCT_UPGRADE_START',
+            'TREKMAP_DISPLAY_STABILIZER_START','TREKMAP_FUNCTIONAL_REPAIRS_START',
+            'TREKMAP_NAVIGATION_POLISH_START','TREKMAP_TARGET_LAYOUT_START',
+            'TREKMAP_FINAL_EXPLORER_START','TREKMAP_EXPLORER_POLISH_START',
+            'id="trekmap-explorer-ui"','id="trekmap-home-css"','id="trekmap-remodel-css"'
           ]
-          missing = [x for x in markers if x not in html]
-          if missing:
-              raise SystemExit('Éléments TrekMap manquants: ' + ', '.join(missing))
+          present=[x for x in forbidden if x in html]
+          if present: raise SystemExit('Anciennes couches encore présentes: '+', '.join(present))
+          if html.count('TREKMAP_UNIFIED_EXPERIENCE_START')!=1: raise SystemExit('Couche unifiée dupliquée')
+          if html.count('id="tm-unified-drawer"')!=1: raise SystemExit('Tiroir dupliqué')
+          if html.count('id="tm-unified-topbar"')!=1: raise SystemExit('Barre supérieure dupliquée')
 
-          forbidden = [
-              'TREKMAP_TARGET_LAYOUT_START',
-              'TREKMAP_FINAL_EXPLORER_START',
-              'TREKMAP_EXPLORER_POLISH_START',
-              'TREKMAP_NAVIGATION_POLISH_START',
-              'id="trekmap-navigation-polish-js"',
-              'Le clic sur une carte de trek sert maintenant à la localiser sur la carte.'
-          ]
-          present = [x for x in forbidden if x in html]
-          if present:
-              raise SystemExit('Anciennes couches ou listeners concurrents encore actifs: ' + ', '.join(present))
+          m=re.search(r'<script id="trekmap-unified-js">(.*?)</script>',html,re.S)
+          if not m: raise SystemExit('JavaScript unifié introuvable')
+          Path('/tmp/trekmap-unified.js').write_text(m.group(1),encoding='utf-8')
+          print('Architecture TrekMap unifiée: OK')
 
-          for marker in (
-              'TREKMAP_STABLE_EXPLORER_START',
-              'TREKMAP_STABLE_REPAIRS_START',
-              'TREKMAP_BOTTOM_BAR_REPAIR_START',
-              'TREKMAP_PRODUCT_UPGRADE_START',
-              'TREKMAP_DISPLAY_STABILIZER_START',
-              'TREKMAP_FUNCTIONAL_REPAIRS_START'
-          ):
-              if html.count(marker) != 1:
-                  raise SystemExit(f'Couche dupliquée ou absente: {marker}')
-
-          scripts = {
-              'stable': r'<script id="trekmap-stable-explorer-js">(.*?)</script>',
-              'repairs': r'<script id="trekmap-stable-repairs-js">(.*?)</script>',
-              'bottom': r'<script id="trekmap-bottom-bar-repair-js">(.*?)</script>',
-              'product': r'<script id="trekmap-product-upgrade-js">(.*?)</script>',
-              'display': r'<script id="trekmap-display-stabilizer-js">(.*?)</script>',
-              'functional': r'<script id="trekmap-functional-repairs-js">(.*?)</script>',
-          }
-          extracted = {}
-          for name, pattern in scripts.items():
-              match = re.search(pattern, html, re.S)
-              if not match:
-                  raise SystemExit(f'JavaScript {name} introuvable')
-              extracted[name] = match.group(1)
-              Path(f'/tmp/trekmap-{name}.js').write_text(match.group(1), encoding='utf-8')
-
-          bottom = extracted['bottom']
-          for required in ('zoomToBottomTrek','openBottomTrek',"track.addEventListener('wheel'"):
-              if required not in bottom:
-                  raise SystemExit('Régression barre du bas: ' + required)
-
-          functional = extracted['functional']
-          for required in ('openTrekRobust','ensureTrek','renderResults','loadCriteria','openAdvancedLocal','tm-local-photo-input','/catalog/criteria'):
-              if required not in functional:
-                  raise SystemExit('Régression fonctionnelle: ' + required)
-
-          if '#modal.tm-detail-modern{overflow-y:auto!important' not in html:
-              raise SystemExit('La fiche trek risque à nouveau de couper son contenu')
-          if '.modal-backdrop{z-index:12000!important}' not in html:
-              raise SystemExit('Les modales peuvent repasser derrière la barre supérieure')
-
-          print('TrekMap: recherche avancée, barre des treks, photos et affichage OK')
-          print(f'HTML: {len(html):,} caractères')
-
-      - name: Vérifier la syntaxe JavaScript
-        run: |
-          node --check /tmp/trekmap-stable.js
-          node --check /tmp/trekmap-repairs.js
-          node --check /tmp/trekmap-bottom.js
-          node --check /tmp/trekmap-product.js
-          node --check /tmp/trekmap-display.js
-          node --check /tmp/trekmap-functional.js
+      - name: Vérifier le JavaScript unifié
+        run: node --check /tmp/trekmap-unified.js
 
       - name: Vérifier la syntaxe Python
         run: python -m compileall -q backend scripts
@@ -141,7 +71,7 @@ jobs:
       - name: Installer les dépendances
         run: pip install -r requirements.txt
 
-      - name: Vérifier les routes produit sans base active
+      - name: Vérifier l'application et les routes
         env:
           DATABASE_URL: postgresql+psycopg2://postgres:postgres@localhost:5432/trekmap_ci
           TREKMAP_ENV: development
@@ -151,13 +81,10 @@ jobs:
           python - <<'PY'
           import backend.app_v5 as app_v5
           paths={r.path for r in app_v5.app.routes}
-          required={
-              '/health/ready','/auth/library','/treks/{trek_id}/extras',
-              '/treks/{trek_id}/rating','/catalog/criteria',
-              '/treks/{trek_id}/photos','/treks/{trek_id}/uploaded-photos',
-              '/media/trek-photos/{photo_id}'
-          }
+          required={'/','/health/ready','/auth/library','/catalog/criteria','/treks/{trek_id}/extras','/treks/{trek_id}/rating','/treks/{trek_id}/photos','/treks/{trek_id}/uploaded-photos','/media/trek-photos/{photo_id}'}
           missing=required-paths
-          if missing: raise SystemExit('Routes produit manquantes: '+', '.join(sorted(missing)))
-          print('TrekMap routes fonctionnelles OK')
+          if missing: raise SystemExit('Routes manquantes: '+', '.join(sorted(missing)))
+          if sum(1 for r in app_v5.app.routes if r.path=='/')!=1: raise SystemExit('Route / dupliquée')
+          if sum(1 for r in app_v5.app.routes if r.path=='/media/trek-photos/{photo_id}')!=1: raise SystemExit('Route photo dupliquée')
+          print('Backend TrekMap unifié: OK')
           PY
