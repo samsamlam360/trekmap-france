@@ -16,14 +16,12 @@ jobs:
       - name: Récupérer le dépôt
         uses: actions/checkout@v4
 
-      - name: Appliquer la couche UI de production
+      - name: Construire l'interface de production
         run: |
           python scripts/apply_ui_remodel.py
-          python scripts/apply_explorer_polish.py
-          python scripts/apply_target_layout.py
-          python scripts/apply_final_explorer_fixes.py
+          python scripts/apply_stable_explorer.py
 
-      - name: Vérifier la structure de l'interface
+      - name: Vérifier la structure et les fonctionnalités UI
         shell: python
         run: |
           from pathlib import Path
@@ -39,30 +37,41 @@ jobs:
           if missing:
               raise SystemExit('IDs frontend manquants: ' + ', '.join(missing))
 
-          for marker in (
+          markers = [
               '<!DOCTYPE html>', '</html>',
               'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css',
               'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js',
-              '/logo-trekmap.svg', 'tm-results-track', 'tm-results-handle',
-              'tm-side-actions', 'tm-favorites-action', 'tm-stats-action',
-              'data-map-action="fit"', 'tm-explorer-topbar',
-              'tm-explorer-home', 'tm-top-search-input', 'tm-top-create',
-              'tm-top-notify', 'tm-filter-search', 'TREKMAP_TARGET_LAYOUT_START',
-              'TREKMAP_FINAL_EXPLORER_START', 'tm-top-search-clear',
-              'tm-top-suggestions', 'tm-brand-lockup'
-          ):
-              if marker not in html:
-                  raise SystemExit(f'Élément UI manquant: {marker}')
+              'TREKMAP_STABLE_EXPLORER_START',
+              'tm-stable-topbar', 'tm-stable-search', 'tm-stable-account',
+              'tm-stable-favorites', 'tm-stable-stats',
+              'tm-stable-drawer', 'tm-stable-track',
+              'openProfile()', "authModal('login')", "switchTab('favorites')",
+              'MutationObserver', 'map.invalidateSize()',
+              'data-map-action="fit"'
+          ]
+          missing = [x for x in markers if x not in html]
+          if missing:
+              raise SystemExit('Éléments UI manquants: ' + ', '.join(missing))
+
+          forbidden = [
+              'TREKMAP_TARGET_LAYOUT_START',
+              'TREKMAP_FINAL_EXPLORER_START',
+              'TREKMAP_EXPLORER_POLISH_START'
+          ]
+          present = [x for x in forbidden if x in html]
+          if present:
+              raise SystemExit('Anciennes couches UI encore présentes: ' + ', '.join(present))
 
           if html.count('<html') != 1 or html.count('</html>') != 1:
               raise SystemExit('Structure HTML invalide')
+          if html.count('id="tm-stable-topbar"') != 1:
+              raise SystemExit('Barre supérieure dupliquée')
 
-          print('Frontend TrekMap: structure OK')
+          print('Interface stable TrekMap: OK')
           print(f'HTML: {len(html):,} caractères')
 
       - name: Vérifier la syntaxe Python
-        run: |
-          python -m compileall -q backend scripts
+        run: python -m compileall -q backend scripts
 
       - name: Installer les dépendances
         run: pip install -r requirements.txt
