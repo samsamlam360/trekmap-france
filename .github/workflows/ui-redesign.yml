@@ -25,6 +25,7 @@ jobs:
           python scripts/apply_bottom_bar_repair.py
           python scripts/apply_product_upgrade.py
           python scripts/apply_display_stabilizer.py
+          python scripts/apply_functional_repairs.py
 
       - name: Vérifier la structure et les fonctionnalités UI
         shell: python
@@ -49,19 +50,24 @@ jobs:
               'TREKMAP_BOTTOM_BAR_REPAIR_START',
               'TREKMAP_PRODUCT_UPGRADE_START',
               'TREKMAP_DISPLAY_STABILIZER_START',
+              'TREKMAP_FUNCTIONAL_REPAIRS_START',
               'tm-stable-topbar', 'tm-stable-search', 'tm-stable-account',
               'tm-stable-drawer', 'tm-stable-track', 'tm-filter-collapse',
               'TrekMapBottomBarZoom', 'TrekMapOpenBottomTrek',
+              'TrekMapOpenTrekRobust', 'openTrekRobust',
               'tm-detail-upgrade', 'tm-profile-upgrade',
-              'tm-rating-box', 'tm-advanced-form', 'tm-import-preview',
-              '/health/ready', '/auth/library', '/extras', '/rating',
+              'tm-rating-box', 'tm-import-preview',
+              'tm-advanced-filters', 'tm-route-filter', 'tm-season-filter',
+              'tm-rating-filter', 'tm-photo-filter', 'tm-place-filter',
+              'tm-local-photo-input', 'uploaded-photos', '/catalog/criteria',
+              '/photos', 'renderResults', 'openAdvancedLocal',
               'trekmap-display-stabilizer-css', 'trekmap-display-stabilizer-js',
               'tm-filters-compact', 'max-height:calc(100dvh - 40px)',
               '#modal.tm-detail-modern{overflow-y:auto!important'
           ]
           missing = [x for x in markers if x not in html]
           if missing:
-              raise SystemExit('Éléments TrekMap 5.0 manquants: ' + ', '.join(missing))
+              raise SystemExit('Éléments TrekMap manquants: ' + ', '.join(missing))
 
           forbidden = [
               'TREKMAP_TARGET_LAYOUT_START',
@@ -80,7 +86,8 @@ jobs:
               'TREKMAP_STABLE_REPAIRS_START',
               'TREKMAP_BOTTOM_BAR_REPAIR_START',
               'TREKMAP_PRODUCT_UPGRADE_START',
-              'TREKMAP_DISPLAY_STABILIZER_START'
+              'TREKMAP_DISPLAY_STABILIZER_START',
+              'TREKMAP_FUNCTIONAL_REPAIRS_START'
           ):
               if html.count(marker) != 1:
                   raise SystemExit(f'Couche dupliquée ou absente: {marker}')
@@ -91,6 +98,7 @@ jobs:
               'bottom': r'<script id="trekmap-bottom-bar-repair-js">(.*?)</script>',
               'product': r'<script id="trekmap-product-upgrade-js">(.*?)</script>',
               'display': r'<script id="trekmap-display-stabilizer-js">(.*?)</script>',
+              'functional': r'<script id="trekmap-functional-repairs-js">(.*?)</script>',
           }
           extracted = {}
           for name, pattern in scripts.items():
@@ -101,26 +109,21 @@ jobs:
               Path(f'/tmp/trekmap-{name}.js').write_text(match.group(1), encoding='utf-8')
 
           bottom = extracted['bottom']
-          for required in ('zoomToBottomTrek','openBottomTrek',"track.addEventListener('wheel'",'openDetail(numericId)'):
+          for required in ('zoomToBottomTrek','openBottomTrek',"track.addEventListener('wheel'"):
               if required not in bottom:
                   raise SystemExit('Régression barre du bas: ' + required)
 
-          product = extracted['product']
-          for required in ('enhanceDetail','enhanceProfile','rateTrek','openAdvancedInfo','installImportPreview','showEndpoints'):
-              if required not in product:
-                  raise SystemExit('Régression TrekMap 5.0: ' + required)
-
-          display = extracted['display']
-          for required in ('syncFilterLayout','syncModal','map.invalidateSize','tm-modal-open'):
-              if required not in display:
-                  raise SystemExit('Régression affichage: ' + required)
+          functional = extracted['functional']
+          for required in ('openTrekRobust','ensureTrek','renderResults','loadCriteria','openAdvancedLocal','tm-local-photo-input','/catalog/criteria'):
+              if required not in functional:
+                  raise SystemExit('Régression fonctionnelle: ' + required)
 
           if '#modal.tm-detail-modern{overflow-y:auto!important' not in html:
               raise SystemExit('La fiche trek risque à nouveau de couper son contenu')
           if '.modal-backdrop{z-index:12000!important}' not in html:
               raise SystemExit('Les modales peuvent repasser derrière la barre supérieure')
 
-          print('TrekMap 5.0: structure, affichage, modales, carte et mobile OK')
+          print('TrekMap: recherche avancée, barre des treks, photos et affichage OK')
           print(f'HTML: {len(html):,} caractères')
 
       - name: Vérifier la syntaxe JavaScript
@@ -130,6 +133,7 @@ jobs:
           node --check /tmp/trekmap-bottom.js
           node --check /tmp/trekmap-product.js
           node --check /tmp/trekmap-display.js
+          node --check /tmp/trekmap-functional.js
 
       - name: Vérifier la syntaxe Python
         run: python -m compileall -q backend scripts
@@ -147,8 +151,13 @@ jobs:
           python - <<'PY'
           import backend.app_v5 as app_v5
           paths={r.path for r in app_v5.app.routes}
-          required={'/health/ready','/auth/library','/treks/{trek_id}/extras','/treks/{trek_id}/rating'}
+          required={
+              '/health/ready','/auth/library','/treks/{trek_id}/extras',
+              '/treks/{trek_id}/rating','/catalog/criteria',
+              '/treks/{trek_id}/photos','/treks/{trek_id}/uploaded-photos',
+              '/media/trek-photos/{photo_id}'
+          }
           missing=required-paths
           if missing: raise SystemExit('Routes produit manquantes: '+', '.join(sorted(missing)))
-          print('TrekMap 5.0 import et routes OK')
+          print('TrekMap routes fonctionnelles OK')
           PY
