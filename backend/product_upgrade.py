@@ -64,33 +64,47 @@ def _clean_pois(values: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
 
 def install_product_upgrade(app, legacy_main, db_factory):
-    """Installe les routes et migrations de la couche produit sans réécrire main.py."""
+    """Installe les routes de la couche produit sans réécrire main.py."""
+    state = {"schema_ready": False}
 
-    db = db_factory()
-    try:
-        db.execute(text("ALTER TABLE treks ADD COLUMN IF NOT EXISTS route_type VARCHAR(40) NOT NULL DEFAULT ''"))
-        db.execute(text("ALTER TABLE treks ADD COLUMN IF NOT EXISTS best_season VARCHAR(120) NOT NULL DEFAULT ''"))
-        db.execute(text("ALTER TABLE treks ADD COLUMN IF NOT EXISTS start_name VARCHAR(180) NOT NULL DEFAULT ''"))
-        db.execute(text("ALTER TABLE treks ADD COLUMN IF NOT EXISTS end_name VARCHAR(180) NOT NULL DEFAULT ''"))
-        db.execute(text("ALTER TABLE treks ADD COLUMN IF NOT EXISTS photos JSONB NOT NULL DEFAULT '[]'::jsonb"))
-        db.execute(text("ALTER TABLE treks ADD COLUMN IF NOT EXISTS points_of_interest JSONB NOT NULL DEFAULT '[]'::jsonb"))
-        db.execute(text("""
-            CREATE TABLE IF NOT EXISTS trek_ratings (
-                user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-                trek_id INTEGER NOT NULL REFERENCES treks(id) ON DELETE CASCADE,
-                value SMALLINT NOT NULL CHECK(value BETWEEN 1 AND 5),
-                updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                PRIMARY KEY(user_id, trek_id)
-            )
-        """))
-        db.execute(text("CREATE INDEX IF NOT EXISTS idx_trek_ratings_trek ON trek_ratings(trek_id)"))
-        db.execute(text("CREATE INDEX IF NOT EXISTS idx_treks_region_public ON treks(region,is_public)"))
-        db.commit()
-    except Exception:
-        db.rollback()
-        raise
-    finally:
-        db.close()
+    def ensure_product_schema():
+        if state["schema_ready"]:
+            return
+        db = db_factory()
+        try:
+            db.execute(text("ALTER TABLE treks ADD COLUMN IF NOT EXISTS route_type VARCHAR(40) NOT NULL DEFAULT ''"))
+            db.execute(text("ALTER TABLE treks ADD COLUMN IF NOT EXISTS best_season VARCHAR(120) NOT NULL DEFAULT ''"))
+            db.execute(text("ALTER TABLE treks ADD COLUMN IF NOT EXISTS start_name VARCHAR(180) NOT NULL DEFAULT ''"))
+            db.execute(text("ALTER TABLE treks ADD COLUMN IF NOT EXISTS end_name VARCHAR(180) NOT NULL DEFAULT ''"))
+            db.execute(text("ALTER TABLE treks ADD COLUMN IF NOT EXISTS photos JSONB NOT NULL DEFAULT '[]'::jsonb"))
+            db.execute(text("ALTER TABLE treks ADD COLUMN IF NOT EXISTS points_of_interest JSONB NOT NULL DEFAULT '[]'::jsonb"))
+            db.execute(text("""
+                CREATE TABLE IF NOT EXISTS trek_ratings (
+                    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                    trek_id INTEGER NOT NULL REFERENCES treks(id) ON DELETE CASCADE,
+                    value SMALLINT NOT NULL CHECK(value BETWEEN 1 AND 5),
+                    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    PRIMARY KEY(user_id, trek_id)
+                )
+            """))
+            db.execute(text("CREATE INDEX IF NOT EXISTS idx_trek_ratings_trek ON trek_ratings(trek_id)"))
+            db.execute(text("CREATE INDEX IF NOT EXISTS idx_treks_region_public ON treks(region,is_public)"))
+            db.commit()
+            state["schema_ready"] = True
+        except Exception:
+            db.rollback()
+            raise
+        finally:
+            db.close()
+
+    @app.on_event("startup")
+    def product_startup():
+        try:
+            ensure_product_schema()
+            print("[TrekMap 5.0] Extensions produit prêtes")
+        except Exception as exc:
+            # Le backend historique reste disponible même si la migration produit doit être retentée.
+            print("[TrekMap 5.0] Migration produit différée:", repr(exc))
 
     def visible_trek(db, trek_id: int, user):
         uid = user["id"] if user else -1
@@ -106,6 +120,7 @@ def install_product_upgrade(app, legacy_main, db_factory):
 
     @app.get("/treks/{trek_id}/extras")
     def trek_extras(trek_id: int, user=Depends(legacy_main.get_optional_user)):
+        ensure_product_schema()
         db = db_factory()
         try:
             row = visible_trek(db, trek_id, user)
@@ -136,6 +151,7 @@ def install_product_upgrade(app, legacy_main, db_factory):
     @app.put("/treks/{trek_id}/extras")
     def update_trek_extras(trek_id: int, payload: TrekExtrasPayload,
                            user=Depends(legacy_main.current_user)):
+        ensure_product_schema()
         db = db_factory()
         try:
             row = db.execute(text("SELECT owner_id FROM treks WHERE id=:id"), {"id": trek_id}).first()
@@ -168,6 +184,7 @@ def install_product_upgrade(app, legacy_main, db_factory):
 
     @app.put("/treks/{trek_id}/rating")
     def rate_trek(trek_id: int, payload: RatingPayload, user=Depends(legacy_main.current_user)):
+        ensure_product_schema()
         db = db_factory()
         try:
             visible_trek(db, trek_id, user)
@@ -190,6 +207,7 @@ def install_product_upgrade(app, legacy_main, db_factory):
 
     @app.get("/auth/library")
     def user_library(user=Depends(legacy_main.current_user)):
+        ensure_product_schema()
         db = db_factory()
         try:
             uid = user["id"]
@@ -221,6 +239,7 @@ def install_product_upgrade(app, legacy_main, db_factory):
 
     @app.get("/health/ready")
     def readiness():
+        ensure_product_schema()
         db = db_factory()
         try:
             db.execute(text("SELECT 1")).scalar_one()
@@ -235,6 +254,7 @@ def install_product_upgrade(app, legacy_main, db_factory):
 
     @app.get("/admin/consistency")
     def consistency(user=Depends(legacy_main.current_user)):
+        ensure_product_schema()
         if not user.get("is_admin"):
             raise HTTPException(status_code=403, detail="Accès administrateur requis.")
         db = db_factory()
