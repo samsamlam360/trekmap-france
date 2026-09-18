@@ -23,10 +23,19 @@ html = re.sub(
 block = r'''<!-- TREKMAP_BOTTOM_BAR_REPAIR_START -->
 <style id="trekmap-bottom-bar-repair-css">
 #tm-stable-track{scroll-behavior:auto!important;overscroll-behavior-x:contain!important;touch-action:pan-x!important}
-#tm-stable-track .tm-stable-card{cursor:pointer!important;user-select:none!important;position:relative!important}
+#tm-stable-track .tm-stable-card{cursor:pointer!important;user-select:none!important;position:relative!important;max-width:none!important}
 #tm-stable-track .tm-stable-card.is-map-selected{border-color:#128456!important;background:#f5fbf7!important;box-shadow:0 0 0 3px rgba(18,132,86,.15),0 14px 30px rgba(17,59,40,.16)!important;transform:translateY(-2px)!important}
-#tm-stable-track .tm-stable-card:after{content:'⌖ Voir sur la carte'!important;position:absolute!important;right:10px!important;bottom:8px!important;font-size:9px!important;font-weight:850!important;color:#176b45!important;background:#edf7f1!important;border:1px solid #dceee4!important;border-radius:999px!important;padding:4px 7px!important;opacity:1!important;transform:none!important}
+#tm-stable-track .tm-stable-card:after{content:'↗ Ouvrir le trek'!important;position:absolute!important;right:10px!important;bottom:8px!important;font-size:9px!important;font-weight:850!important;color:#176b45!important;background:#edf7f1!important;border:1px solid #dceee4!important;border-radius:999px!important;padding:4px 7px!important;opacity:1!important;transform:none!important}
 #tm-stable-drawer.tm-zooming .tm-drawer-shell{box-shadow:0 18px 52px rgba(10,70,42,.26)!important}
+
+/* Sur grand écran on voit 5 à 6 treks en même temps, puis on continue avec la molette. */
+@media(min-width:1100px) and (max-width:1599px){
+  #tm-stable-track .tm-stable-card{flex:0 0 calc((100% - 52px)/5)!important;min-width:180px!important}
+}
+@media(min-width:1600px){
+  #tm-stable-track .tm-stable-card{flex:0 0 calc((100% - 65px)/6)!important;min-width:190px!important}
+}
+
 #tm-filter-collapse{position:absolute!important;z-index:5!important;right:12px!important;top:10px!important;height:34px!important;border:1px solid #d8e6df!important;border-radius:11px!important;background:#eef6f1!important;color:#176b45!important;padding:0 11px!important;font-size:11px!important;font-weight:850!important}
 #sidebar .filters.tm-filters-collapsed{height:56px!important;min-height:56px!important;max-height:56px!important;overflow:hidden!important;padding:0!important}
 #sidebar .filters.tm-filters-collapsed>*:not(#tm-filter-collapse){display:none!important}
@@ -152,7 +161,6 @@ block = r'''<!-- TREKMAP_BOTTOM_BAR_REPAIR_START -->
       }else{
         let bounds=coords.length>1?L.latLngBounds(coords):boundsFromLayer(trek);
         if(!bounds||!bounds.isValid?.()){
-          if(typeof toast==='function')toast('Impossible de localiser ce trek sur la carte.');
           drawer?.classList.remove('tm-zooming');
           return false;
         }
@@ -173,14 +181,29 @@ block = r'''<!-- TREKMAP_BOTTOM_BAR_REPAIR_START -->
       return true;
     }catch(err){
       console.error('Zoom barre du bas:',err);
-      if(typeof toast==='function')toast('Le zoom sur ce trek a échoué.');
       drawer?.classList.remove('tm-zooming');
       return false;
     }
   }
   window.TrekMapBottomBarZoom=zoomToBottomTrek;
 
-  // Un clic normal zoome. Un glissement horizontal ne déclenche pas de zoom.
+  // Même comportement qu'un trek choisi dans la barre de recherche :
+  // on le cadre sur la carte, puis on ouvre sa fiche détaillée.
+  async function openBottomTrek(id){
+    const numericId=Number(id);
+    if(!Number.isFinite(numericId))return false;
+    try{await zoomToBottomTrek(numericId)}catch(_){}
+    try{
+      if(typeof openDetail==='function'){
+        setTimeout(()=>openDetail(numericId),90);
+        return true;
+      }
+    }catch(err){console.error('Ouverture du trek:',err)}
+    return false;
+  }
+  window.TrekMapOpenBottomTrek=openBottomTrek;
+
+  // Un clic normal ouvre le trek. Un glissement horizontal ne déclenche pas l'ouverture.
   let dragStart=null;
   let dragged=false;
   track.addEventListener('pointerdown',e=>{
@@ -202,14 +225,14 @@ block = r'''<!-- TREKMAP_BOTTOM_BAR_REPAIR_START -->
     e.stopPropagation();
     e.stopImmediatePropagation();
     if(dragged){dragged=false;return;}
-    zoomToBottomTrek(Number(card.dataset.id));
+    openBottomTrek(Number(card.dataset.id));
   },true);
 
   track.addEventListener('keydown',e=>{
     const card=e.target.closest?.('.tm-stable-card');
     if(!card||!(e.key==='Enter'||e.key===' '))return;
     e.preventDefault();
-    zoomToBottomTrek(Number(card.dataset.id));
+    openBottomTrek(Number(card.dataset.id));
   },true);
 
   // Molette verticale = déplacement horizontal. Delta positif fait entrer les cartes de droite.
@@ -229,7 +252,7 @@ block = r'''<!-- TREKMAP_BOTTOM_BAR_REPAIR_START -->
     track.querySelectorAll('.tm-stable-card').forEach(card=>{
       card.setAttribute('role','button');
       card.setAttribute('tabindex','0');
-      card.setAttribute('aria-label','Zoomer sur '+(card.querySelector('strong')?.textContent||'ce trek'));
+      card.setAttribute('aria-label','Ouvrir '+(card.querySelector('strong')?.textContent||'ce trek'));
     });
   }
   new MutationObserver(()=>requestAnimationFrame(decorateCards)).observe(track,{childList:true,subtree:true});
