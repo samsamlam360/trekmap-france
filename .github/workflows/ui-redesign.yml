@@ -20,6 +20,7 @@ jobs:
         run: |
           python scripts/apply_ui_remodel.py
           python scripts/apply_stable_explorer.py
+          python scripts/apply_stable_repairs.py
 
       - name: Vérifier la structure et les fonctionnalités UI
         shell: python
@@ -43,12 +44,18 @@ jobs:
               'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css',
               'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js',
               'TREKMAP_STABLE_EXPLORER_START',
+              'TREKMAP_STABLE_REPAIRS_START',
               'tm-stable-topbar', 'tm-stable-search', 'tm-stable-account',
               'tm-stable-favorites', 'tm-stable-stats',
               'tm-stable-drawer', 'tm-stable-track',
               'openProfile()', "authModal('login')", "switchTab('favorites')",
               'MutationObserver', 'map.invalidateSize()',
-              'data-map-action="fit"'
+              'data-map-action="fit"',
+              'forceAllMode', "currentTab='all'",
+              "visibleSearch?.addEventListener('input'",
+              "e.target.closest('.tm-stable-suggestion')",
+              'Recherche dans mes favoris',
+              'syncMapMenu'
           ]
           missing = [x for x in markers if x not in html]
           if missing:
@@ -67,17 +74,28 @@ jobs:
               raise SystemExit('Structure HTML invalide')
           if html.count('TREKMAP_STABLE_EXPLORER_START') != 1:
               raise SystemExit('Couche stable dupliquée')
+          if html.count('TREKMAP_STABLE_REPAIRS_START') != 1:
+              raise SystemExit('Couche de correctifs dupliquée')
 
-          m = re.search(r'<script id="trekmap-stable-explorer-js">(.*?)</script>', html, re.S)
-          if not m:
-              raise SystemExit('JavaScript stable introuvable')
-          Path('/tmp/trekmap-stable.js').write_text(m.group(1), encoding='utf-8')
+          stable = re.search(r'<script id="trekmap-stable-explorer-js">(.*?)</script>', html, re.S)
+          repairs = re.search(r'<script id="trekmap-stable-repairs-js">(.*?)</script>', html, re.S)
+          if not stable or not repairs:
+              raise SystemExit('JavaScript TrekMap introuvable')
+          Path('/tmp/trekmap-stable.js').write_text(stable.group(1), encoding='utf-8')
+          Path('/tmp/trekmap-repairs.js').write_text(repairs.group(1), encoding='utf-8')
 
-          print('Interface stable TrekMap: structure OK')
+          # Régression importante : une recherche doit sortir de Favoris/Mes treks/Privés.
+          js = repairs.group(1)
+          if "currentTab='all'" not in js or "addEventListener('input'" not in js:
+              raise SystemExit('Régression possible: la recherche ne réinitialise plus le contexte')
+
+          print('Interface stable TrekMap: structure et régressions OK')
           print(f'HTML: {len(html):,} caractères')
 
-      - name: Vérifier la syntaxe JavaScript stable
-        run: node --check /tmp/trekmap-stable.js
+      - name: Vérifier la syntaxe JavaScript
+        run: |
+          node --check /tmp/trekmap-stable.js
+          node --check /tmp/trekmap-repairs.js
 
       - name: Vérifier la syntaxe Python
         run: python -m compileall -q backend scripts
