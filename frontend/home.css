@@ -14,3 +14,19 @@
 .tm-stats-strip{display:grid;grid-template-columns:repeat(4,1fr);margin:55px 0 15px;padding:22px;border-radius:18px;background:#123f2b;color:#fff;box-shadow:0 20px 45px rgba(18,63,43,.18)}.tm-stats-strip div{padding:0 18px;border-right:1px solid rgba(255,255,255,.13)}.tm-stats-strip div:last-child{border-right:0}.tm-stats-strip b,.tm-stats-strip span{display:block}.tm-stats-strip b{font-size:25px}.tm-stats-strip span{font-size:11px;color:rgba(255,255,255,.68);margin-top:3px}.tm-home-footer{position:relative;z-index:1;max-width:1240px;margin:auto;padding:25px 28px 30px;display:flex;justify-content:space-between;color:#84918b;font-size:12px;border-top:1px solid #dfe8e2}
 @media(max-width:900px){.tm-home-nav{padding:15px 18px}.tm-home-links{display:none}.tm-home-login{margin-left:auto}.tm-home-main{padding:5px 18px 30px}.tm-hero{grid-template-columns:1fr;min-height:auto;padding-top:45px;gap:15px}.tm-hero h1{font-size:48px}.tm-hero-copy>p{font-size:16px}.tm-hero-visual{height:390px}.tm-map-orb{width:310px;height:310px}.tm-route.r1{width:185px;left:47px;top:95px}.tm-route.r2{width:130px;left:90px;top:165px}.tm-route.r3{width:100px;left:135px;top:235px}.tm-fc-top{right:0;top:20px}.tm-fc-bottom{left:0;bottom:25px}.tm-features,.tm-featured{grid-template-columns:1fr}.tm-features{margin-bottom:45px}.tm-section-head{align-items:flex-start;gap:10px}.tm-section-head h2{font-size:24px}.tm-stats-strip{grid-template-columns:1fr 1fr;gap:18px}.tm-stats-strip div{border-bottom:1px solid rgba(255,255,255,.13);padding:5px 8px 14px}.tm-stats-strip div:nth-child(2){border-right:0}.tm-home-footer{padding:20px 18px}.tm-home-footer span:last-child{display:none}}
 @media(max-width:480px){.tm-hero-search{padding:6px}.tm-hero-search input{font-size:12px}.tm-hero-search button{padding:11px 12px}.tm-hero h1{font-size:42px}.tm-hero-visual{height:350px}.tm-map-orb{width:270px;height:270px}.tm-floating-card{transform:scale(.88)}}
+
+/* Modern trek detail */
+#modal.tm-detail-modern{padding:0;overflow:hidden;border-radius:26px;background:#f9fbfa}
+#modal.tm-detail-modern .modal-head{margin:0;padding:25px 25px 20px;background:linear-gradient(135deg,#123f2b,#20865a);color:#fff;position:relative}
+#modal.tm-detail-modern .modal-head h2{font-size:30px;color:#fff;margin-bottom:6px}
+#modal.tm-detail-modern .modal-head>div>div{color:rgba(255,255,255,.76)!important}
+#modal.tm-detail-modern .modal-head .close{background:rgba(255,255,255,.14);color:#fff}
+#modal.tm-detail-modern>.badges,#modal.tm-detail-modern>.detail-grid,#modal.tm-detail-modern>.detail-desc,#modal.tm-detail-modern>.modal-actions,#modal.tm-detail-modern>.comments{margin-left:25px;margin-right:25px}
+#modal.tm-detail-modern>.badges{margin-top:18px}
+#modal.tm-detail-modern>.detail-grid{grid-template-columns:repeat(4,1fr);gap:10px}
+#modal.tm-detail-modern>.detail-grid .stat{padding:14px;border-radius:14px}
+#modal.tm-detail-modern>.detail-grid .stat b{font-size:18px}
+#modal.tm-detail-modern>.detail-desc{padding:16px 18px;background:#fff;border:1px solid #e2ebe5;border-radius:15px;line-height:1.65}
+#modal.tm-detail-modern>.modal-actions{justify-content:flex-start;padding-bottom:4px}
+#modal.tm-detail-modern>.comments{padding-bottom:24px}
+@media(max-width:700px){#modal.tm-detail-modern>.detail-grid{grid-template-columns:1fr 1fr}#modal.tm-detail-modern .modal-head h2{font-size:24px}}
