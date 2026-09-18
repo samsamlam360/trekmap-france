@@ -25,6 +25,7 @@ jobs:
         shell: python
         run: |
           from pathlib import Path
+          import re
 
           html = Path('frontend/index.html').read_text(encoding='utf-8')
           required_ids = [
@@ -64,11 +65,19 @@ jobs:
 
           if html.count('<html') != 1 or html.count('</html>') != 1:
               raise SystemExit('Structure HTML invalide')
-          if html.count('id="tm-stable-topbar"') != 1:
-              raise SystemExit('Barre supérieure dupliquée')
+          if html.count('TREKMAP_STABLE_EXPLORER_START') != 1:
+              raise SystemExit('Couche stable dupliquée')
 
-          print('Interface stable TrekMap: OK')
+          m = re.search(r'<script id="trekmap-stable-explorer-js">(.*?)</script>', html, re.S)
+          if not m:
+              raise SystemExit('JavaScript stable introuvable')
+          Path('/tmp/trekmap-stable.js').write_text(m.group(1), encoding='utf-8')
+
+          print('Interface stable TrekMap: structure OK')
           print(f'HTML: {len(html):,} caractères')
+
+      - name: Vérifier la syntaxe JavaScript stable
+        run: node --check /tmp/trekmap-stable.js
 
       - name: Vérifier la syntaxe Python
         run: python -m compileall -q backend scripts
