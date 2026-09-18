@@ -1,0 +1,174 @@
+name: TrekMap one-time homepage redesign
+
+on:
+  push:
+    paths-ignore:
+      - ".github/workflows/homepage-redesign.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  redesign:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Inject modern homepage
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p = Path("frontend/index.html")
+          s = p.read_text(encoding="utf-8")
+          start, end = "/* TREKMAP_HOME_CSS_START */", "/* TREKMAP_HOME_CSS_END */"
+          import re
+          s = re.sub(re.escape(start) + r".*?" + re.escape(end), "", s, flags=re.S)
+          js_start, js_end = "/* TREKMAP_HOME_JS_START */", "/* TREKMAP_HOME_JS_END */"
+          s = re.sub(re.escape(js_start) + r".*?" + re.escape(js_end), "", s, flags=re.S)
+          marker = '<div id="tm-home" aria-label="Accueil TrekMap France">'
+          if marker not in s:
+              home = r'''<div id="tm-home" aria-label="Accueil TrekMap France">
+  <div class="tm-home-bg"></div>
+  <header class="tm-home-nav">
+    <a class="tm-logo" href="#" id="tm-home-logo"><span class="tm-logo-mark">⌁</span><span>TrekMap <b>France</b></span></a>
+    <nav class="tm-home-links">
+      <button data-home-explore>Explorer</button>
+      <button data-home-create>Créer un trek</button>
+      <button data-home-account>Mon compte</button>
+    </nav>
+    <button class="tm-home-login" data-home-account>Connexion</button>
+  </header>
+  <main class="tm-home-main">
+    <section class="tm-hero">
+      <div class="tm-hero-copy">
+        <span class="tm-kicker">LA FRANCE À VOTRE RYTHME</span>
+        <h1>Le prochain sentier<br><em>commence ici.</em></h1>
+        <p>Explore des treks, prépare ton itinéraire et crée tes propres parcours sur une carte pensée pour les randonneurs.</p>
+        <div class="tm-hero-search">
+          <span>⌕</span>
+          <input id="tm-home-search" placeholder="Rechercher un trek, une région ou un lieu…" autocomplete="off">
+          <button id="tm-home-search-btn">Explorer</button>
+        </div>
+        <div class="tm-quick">
+          <button data-home-explore>Découvrir les randonnées</button>
+          <button data-home-create>✦ Créer mon parcours</button>
+        </div>
+      </div>
+      <div class="tm-hero-visual">
+        <div class="tm-map-orb">
+          <div class="tm-route r1"></div><div class="tm-route r2"></div><div class="tm-route r3"></div>
+          <span class="tm-pin p1">●</span><span class="tm-pin p2">●</span><span class="tm-pin p3">●</span>
+          <div class="tm-compass">N</div>
+        </div>
+        <div class="tm-floating-card tm-fc-top"><span>🥾</span><div><b>Des itinéraires</b><small>pour tous les niveaux</small></div></div>
+        <div class="tm-floating-card tm-fc-bottom"><span>✦</span><div><b>Crée ton trek</b><small>Trace · Enregistre · Pars</small></div></div>
+      </div>
+    </section>
+    <section class="tm-features">
+      <article><span>🗺️</span><div><b>Explore</b><small>Trouve ton prochain itinéraire grâce à la carte et aux filtres.</small></div></article>
+      <article><span>✏️</span><div><b>Crée</b><small>Trace ton parcours et calcule automatiquement l'itinéraire pédestre.</small></div></article>
+      <article><span>🎒</span><div><b>Prépare</b><small>Enregistre tes favoris, tes plans et exporte tes traces en GPX.</small></div></article>
+    </section>
+    <section class="tm-discover">
+      <div class="tm-section-head"><div><span class="tm-kicker">À DÉCOUVRIR</span><h2>Quelques idées pour commencer</h2></div><button data-home-explore>Voir tous les treks →</button></div>
+      <div id="tm-featured" class="tm-featured"><div class="tm-featured-loading">Chargement des itinéraires…</div></div>
+    </section>
+    <section class="tm-stats-strip">
+      <div><b id="tm-stat-treks">—</b><span>treks publics</span></div>
+      <div><b id="tm-stat-distance">—</b><span>km de parcours</span></div>
+      <div><b id="tm-stat-creators">—</b><span>créateurs</span></div>
+      <div><b>100%</b><span>pensé pour la randonnée</span></div>
+    </section>
+  </main>
+  <footer class="tm-home-footer"><span>🥾 TrekMap France</span><span>Explorer · Créer · Partir</span></footer>
+</div>'''
+              s = s.replace('<div id="app">', home + '\n<div id="app">', 1)
+          css = r'''<style>
+/* TREKMAP_HOME_CSS_START */
+#tm-home{position:fixed;inset:0;z-index:10000;overflow:auto;color:#14221c;background:#f5f8f6;font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif}
+#tm-home.tm-hidden{display:none}
+.tm-home-bg{position:absolute;inset:0;pointer-events:none;background:radial-gradient(circle at 79% 20%,rgba(76,170,120,.18),transparent 29%),radial-gradient(circle at 8% 75%,rgba(37,126,83,.09),transparent 28%),linear-gradient(135deg,#f8fbf9,#edf5f0)}
+.tm-home-nav{position:relative;z-index:2;max-width:1240px;margin:auto;padding:22px 28px;display:flex;align-items:center;gap:30px}
+.tm-logo{display:flex;align-items:center;gap:9px;text-decoration:none;color:#14221c;font-weight:800;font-size:20px;letter-spacing:-.03em}.tm-logo b{color:#176b45}.tm-logo-mark{display:grid;place-items:center;width:34px;height:34px;border-radius:11px;color:white;background:linear-gradient(145deg,#123f2b,#269b69);font-size:24px;box-shadow:0 8px 20px rgba(23,107,69,.22)}
+.tm-home-links{display:flex;gap:7px;margin-left:auto}.tm-home-links button,.tm-home-login{border:0;background:transparent;padding:10px 13px;border-radius:10px;color:#53635b;font-weight:650}.tm-home-links button:hover,.tm-home-login:hover{background:#e7f2ec;color:#176b45}.tm-home-login{border:1px solid #d6e3db;background:#fff;color:#176b45}
+.tm-home-main{position:relative;z-index:1;max-width:1240px;margin:auto;padding:15px 28px 40px}
+.tm-hero{min-height:535px;display:grid;grid-template-columns:1.05fr .95fr;align-items:center;gap:45px}.tm-kicker{display:inline-block;color:#20865a;font-size:11px;font-weight:850;letter-spacing:.16em}.tm-hero h1{font-size:clamp(45px,6vw,76px);line-height:.98;letter-spacing:-.065em;margin:16px 0 20px;max-width:700px}.tm-hero h1 em{font-style:normal;color:#176b45}.tm-hero-copy>p{font-size:18px;line-height:1.6;color:#607069;max-width:610px;margin:0 0 25px}
+.tm-hero-search{display:flex;align-items:center;gap:8px;max-width:640px;padding:7px 8px 7px 15px;border:1px solid #d7e4dc;background:rgba(255,255,255,.92);border-radius:16px;box-shadow:0 16px 45px rgba(24,65,44,.11)}.tm-hero-search>span{font-size:23px;color:#74847b}.tm-hero-search input{flex:1;min-width:0;border:0;outline:0;background:transparent;padding:12px 4px;font-size:14px}.tm-hero-search button{border:0;border-radius:11px;padding:12px 18px;background:#176b45;color:white;font-weight:800}.tm-hero-search button:hover{background:#125437}.tm-quick{display:flex;gap:18px;margin-top:16px}.tm-quick button{border:0;background:transparent;color:#176b45;font-weight:750;padding:5px 0}.tm-quick button:hover{text-decoration:underline}
+.tm-hero-visual{position:relative;height:480px;display:grid;place-items:center}.tm-map-orb{width:min(430px,78vw);height:min(430px,78vw);border-radius:50%;position:relative;overflow:hidden;background:linear-gradient(145deg,#dcebe2,#bcd8c7);box-shadow:inset -25px -25px 70px rgba(35,88,59,.12),0 30px 70px rgba(21,67,44,.17);border:10px solid rgba(255,255,255,.7)}.tm-map-orb:before{content:"";position:absolute;inset:-20%;background:repeating-linear-gradient(18deg,transparent 0 28px,rgba(255,255,255,.48) 29px 31px),repeating-linear-gradient(108deg,transparent 0 42px,rgba(77,125,98,.17) 43px 45px);transform:rotate(-13deg)}.tm-route{position:absolute;height:9px;border:3px solid #176b45;border-left-color:transparent;border-radius:50%;transform:rotate(-24deg);filter:drop-shadow(0 3px 3px rgba(15,70,43,.2))}.tm-route.r1{width:260px;left:65px;top:125px}.tm-route.r2{width:180px;left:125px;top:225px;transform:rotate(18deg)}.tm-route.r3{width:130px;left:185px;top:305px;transform:rotate(-12deg)}.tm-pin{position:absolute;color:#e86d45;font-size:22px;text-shadow:0 2px 4px rgba(0,0,0,.18)}.p1{left:90px;top:115px}.p2{left:270px;top:215px}.p3{left:195px;top:335px}.tm-compass{position:absolute;right:48px;top:42px;width:42px;height:42px;border-radius:50%;display:grid;place-items:center;background:rgba(255,255,255,.8);color:#176b45;font-weight:900;font-size:13px;box-shadow:0 5px 15px rgba(0,0,0,.1)}
+.tm-floating-card{position:absolute;display:flex;align-items:center;gap:10px;background:rgba(255,255,255,.94);backdrop-filter:blur(14px);border:1px solid rgba(216,229,221,.9);border-radius:15px;padding:11px 14px;box-shadow:0 15px 35px rgba(19,60,40,.13)}.tm-floating-card>span{font-size:23px}.tm-floating-card b,.tm-floating-card small{display:block}.tm-floating-card b{font-size:13px}.tm-floating-card small{font-size:11px;color:#708078;margin-top:2px}.tm-fc-top{right:0;top:65px}.tm-fc-bottom{left:10px;bottom:65px}
+.tm-features{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin:5px 0 60px}.tm-features article{display:flex;gap:13px;padding:19px;background:rgba(255,255,255,.75);border:1px solid #e0eae4;border-radius:16px}.tm-features article>span{font-size:23px}.tm-features b,.tm-features small{display:block}.tm-features b{font-size:14px;margin-bottom:4px}.tm-features small{font-size:12px;line-height:1.5;color:#718078}
+.tm-section-head{display:flex;align-items:end;justify-content:space-between;margin-bottom:17px}.tm-section-head h2{font-size:29px;letter-spacing:-.04em;margin:7px 0 0}.tm-section-head button{border:0;background:transparent;color:#176b45;font-weight:800}.tm-featured{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;min-height:170px}.tm-featured-loading{grid-column:1/-1;padding:50px;text-align:center;color:#7a8981}.tm-f-card{background:#fff;border:1px solid #dfE8e2;border-radius:17px;padding:17px;box-shadow:0 5px 18px rgba(19,58,39,.05);cursor:pointer;transition:.18s}.tm-f-card:hover{transform:translateY(-3px);box-shadow:0 14px 35px rgba(19,58,39,.11);border-color:#bfd8c9}.tm-f-top{display:flex;justify-content:space-between;gap:10px}.tm-f-card h3{font-size:17px;margin:0 0 5px;letter-spacing:-.02em}.tm-f-card p{font-size:12px;color:#738078;margin:0;line-height:1.45}.tm-f-badges{display:flex;gap:6px;flex-wrap:wrap;margin:15px 0 10px}.tm-f-badge{font-size:11px;background:#edf6f1;color:#2d624b;border-radius:999px;padding:5px 8px}.tm-f-meta{font-size:12px;color:#53645b;display:flex;gap:12px;flex-wrap:wrap}
+.tm-stats-strip{display:grid;grid-template-columns:repeat(4,1fr);margin:55px 0 15px;padding:22px;border-radius:18px;background:#123f2b;color:white;box-shadow:0 20px 45px rgba(18,63,43,.18)}.tm-stats-strip div{padding:0 18px;border-right:1px solid rgba(255,255,255,.13)}.tm-stats-strip div:last-child{border-right:0}.tm-stats-strip b,.tm-stats-strip span{display:block}.tm-stats-strip b{font-size:25px}.tm-stats-strip span{font-size:11px;color:rgba(255,255,255,.68);margin-top:3px}
+.tm-home-footer{position:relative;z-index:1;max-width:1240px;margin:auto;padding:25px 28px 30px;display:flex;justify-content:space-between;color:#84918b;font-size:12px;border-top:1px solid #dfe8e2}
+@media(max-width:900px){.tm-home-nav{padding:15px 18px}.tm-home-links{display:none}.tm-home-login{margin-left:auto}.tm-home-main{padding:5px 18px 30px}.tm-hero{grid-template-columns:1fr;min-height:auto;padding-top:45px;gap:15px}.tm-hero h1{font-size:48px}.tm-hero-copy>p{font-size:16px}.tm-hero-visual{height:390px}.tm-map-orb{width:310px;height:310px}.tm-route.r1{width:185px;left:47px;top:95px}.tm-route.r2{width:130px;left:90px;top:165px}.tm-route.r3{width:100px;left:135px;top:235px}.tm-fc-top{right:0;top:20px}.tm-fc-bottom{left:0;bottom:25px}.tm-features,.tm-featured{grid-template-columns:1fr}.tm-features{margin-bottom:45px}.tm-section-head{align-items:flex-start;gap:10px}.tm-section-head h2{font-size:24px}.tm-stats-strip{grid-template-columns:1fr 1fr;gap:18px}.tm-stats-strip div:nth-child(2){border-right:0}.tm-stats-strip div{border-bottom:1px solid rgba(255,255,255,.13);padding:5px 8px 14px}.tm-home-footer{padding:20px 18px}.tm-home-footer span:last-child{display:none}}
+@media(max-width:480px){.tm-hero-search{padding:6px}.tm-hero-search input{font-size:12px}.tm-hero-search button{padding:11px 12px}.tm-hero h1{font-size:42px}.tm-hero-visual{height:350px}.tm-map-orb{width:270px;height:270px}.tm-floating-card{transform:scale(.88)}}
+</style>
+/* TREKMAP_HOME_CSS_END */'''
+          js = r'''<script>
+/* TREKMAP_HOME_JS_START */
+(function(){
+  const home=document.getElementById('tm-home');
+  if(!home)return;
+  const hide=()=>{home.classList.add('tm-hidden');document.body.style.overflow='hidden';};
+  const show=()=>{home.classList.remove('tm-hidden');window.scrollTo(0,0);};
+  const explore=(query)=>{
+    const input=document.getElementById('search');
+    if(input&&query){input.value=query;input.dispatchEvent(new Event('input',{bubbles:true}));}
+    hide();
+    const side=document.getElementById('sidebar');
+    if(side)side.classList.remove('collapsed');
+    setTimeout(()=>{if(input&&query){input.focus();if(typeof window.applyFilters==='function')window.applyFilters();}},80);
+  };
+  const create=()=>{hide();setTimeout(()=>{const b=document.getElementById('create-button');if(b)b.click();},100);};
+  document.querySelectorAll('[data-home-explore]').forEach(b=>b.addEventListener('click',()=>explore('')));
+  document.querySelectorAll('[data-home-create]').forEach(b=>b.addEventListener('click',create));
+  document.querySelectorAll('[data-home-account]').forEach(b=>b.addEventListener('click',()=>{hide();setTimeout(()=>{const b=document.getElementById('account-button');if(b)b.click()},100)}));
+  document.getElementById('tm-home-logo')?.addEventListener('click',e=>{e.preventDefault();show()});
+  const hs=document.getElementById('tm-home-search'),hb=document.getElementById('tm-home-search-btn');
+  const go=()=>explore(hs?.value.trim()||'');
+  hb?.addEventListener('click',go);hs?.addEventListener('keydown',e=>{if(e.key==='Enter')go()});
+  async function loadHomeData(){
+    const base=String(window.TREKMAP_API||location.origin).replace(/\/$/,'');
+    try{
+      const [tr,st]=await Promise.all([fetch(base+'/treks',{cache:'no-store'}),fetch(base+'/statistics',{cache:'no-store'})]);
+      const treks=await tr.json();const stats=await st.json();
+      const list=Array.isArray(treks)?treks:[];const featured=list.slice().sort((a,b)=>(b.view_count||0)-(a.view_count||0)).slice(0,3);
+      const box=document.getElementById('tm-featured');
+      if(box)box.innerHTML=featured.length?featured.map(t=>'<article class="tm-f-card" data-trek-id="'+Number(t.id)+'"><div class="tm-f-top"><div><h3>'+escHome(t.name)+'</h3><p>'+escHome(t.region||'France')+'</p></div><span>🥾</span></div><div class="tm-f-badges"><span class="tm-f-badge">'+escHome((window.difficultyLabel&&window.difficultyLabel[t.difficulty])||({easy:'Facile',medium:'Moyen',hard:'Difficile',extreme:'Extrême'}[t.difficulty]||'Randonnée'))+'</span></div><div class="tm-f-meta"><span>📏 '+Number(t.distance||0).toFixed(1)+' km</span><span>↗ '+Math.round(t.elevation||0)+' m</span></div></article>').join(''):'<div class="tm-featured-loading">Les premiers itinéraires arrivent bientôt.</div>';
+      box?.querySelectorAll('[data-trek-id]').forEach(c=>c.addEventListener('click',()=>{const id=c.dataset.trekId;hide();setTimeout(()=>{if(typeof window.openDetail==='function')window.openDetail(Number(id));},100)}));
+      const set=(id,v)=>{const el=document.getElementById(id);if(el)el.textContent=v};
+      set('tm-stat-treks',stats.treks??list.length);set('tm-stat-distance',Number(stats.distance_km||0).toLocaleString('fr-FR'));set('tm-stat-creators',stats.creators??'—');
+    }catch(e){const box=document.getElementById('tm-featured');if(box)box.innerHTML='<div class="tm-featured-loading">Les itinéraires sont temporairement indisponibles.</div>'}
+  }
+  function escHome(v){return String(v??'').replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#039;','"':'&quot;'}[c]))}
+  window.TrekMapShowHome=show;window.TrekMapHideHome=hide;
+  loadHomeData();
+})();
+</script>
+/* TREKMAP_HOME_JS_END */'''
+          s = s.replace("</head>", css + "\n</head>", 1)
+          s = s.replace("</body>", js + "\n</body>", 1)
+          p.write_text(s, encoding="utf-8")
+          PY
+      - name: Validate homepage
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          s=Path("frontend/index.html").read_text(encoding="utf-8")
+          for x in ["id="tm-home"", "tm-home-search", "data-home-explore", "tm-featured", "TrekMapShowHome"]:
+              assert x in s, x
+          assert s.count("TREKMAP_HOME_CSS_START")==1
+          assert s.count("TREKMAP_HOME_JS_START")==1
+          assert s.count("<html")==1
+          assert s.count("</html>")==1
+          print("Homepage validation OK")
+          PY
+      - name: Commit homepage and remove one-time workflow
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add frontend/index.html .github/workflows/homepage-redesign.yml
+          git commit -m "Créer une vraie page d'accueil TrekMap moderne"
+          git rm .github/workflows/homepage-redesign.yml
+          git commit -m "Supprimer le workflow de redesign temporaire"
+          git push
