@@ -14,9 +14,15 @@ from . import main as legacy_main
 from .main_production import app, robust_db_or_503, FRONTEND_FILE
 from .product_upgrade import install_product_upgrade
 from .functional_upgrade import install_functional_upgrade
+from .ai_planner import install_ai_planner
 
 install_product_upgrade(app, legacy_main, robust_db_or_503)
 install_functional_upgrade(app, legacy_main, robust_db_or_503)
+install_ai_planner(app, legacy_main)
+
+# L'IA coûte plus cher qu'une requête classique : on limite aussi les appels
+# au niveau du middleware historique, en complément de la limite par utilisateur.
+legacy_main.RATE_LIMITS["/ai/plan"] = 6
 
 # Retire la route production historique qui injectait encore une ancienne couche
 # CSS/JS. Même principe pour la route photo : on la remplace par une version qui
