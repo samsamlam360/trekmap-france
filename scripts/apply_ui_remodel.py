@@ -172,11 +172,19 @@ explorer_script = """<script id="trekmap-explorer-ui">
   const app=document.getElementById('app');
   if(!app)return;
 
+  if(!document.getElementById('tm-side-actions')){
+    const actions=document.createElement('aside');
+    actions.id='tm-side-actions';
+    actions.setAttribute('aria-label','Accès rapide');
+    actions.innerHTML='<button type="button" id="tm-favorites-action" title="Mes favoris"><span>☆</span><small>Favoris</small></button><button type="button" id="tm-stats-action" title="Statistiques"><span>▥</span><small>Stats</small></button>';
+    app.appendChild(actions);
+  }
+
   if(!document.getElementById('tm-results-drawer')){
     const drawer=document.createElement('section');
     drawer.id='tm-results-drawer';
     drawer.setAttribute('aria-label','Résultats de recherche');
-    drawer.innerHTML='<div class="tm-results-shell"><button class="tm-results-handle" id="tm-results-handle" aria-expanded="false"><span class="tm-results-grip"></span><span class="tm-results-title">Résultats de recherche</span><span class="tm-results-count" id="tm-results-count">0</span><span class="tm-results-chevron">⌃</span></button><div class="tm-results-track" id="tm-results-track"></div></div>';
+    drawer.innerHTML='<div class="tm-results-shell"><button class="tm-results-handle" id="tm-results-handle" aria-expanded="false"><span class="tm-results-grip"></span><span class="tm-results-title">Treks populaires</span><span class="tm-results-count" id="tm-results-count">0</span><span class="tm-results-chevron">⌃</span></button><div class="tm-results-track" id="tm-results-track"></div></div>';
     const nav=document.getElementById('bottom-nav');
     app.insertBefore(drawer,nav||null);
   }
@@ -194,7 +202,8 @@ explorer_script = """<script id="trekmap-explorer-ui">
 
   function renderResults(){
     if(!track)return;
-    const data=typeof filteredTreks!=='undefined'&&Array.isArray(filteredTreks)?filteredTreks:[];
+    const source=typeof filteredTreks!=='undefined'&&Array.isArray(filteredTreks)?filteredTreks:[];
+    const data=source.slice().sort((a,b)=>Number(b.view_count||b.views||0)-Number(a.view_count||a.views||0)||Number(b.favorite_count||b.favorites||0)-Number(a.favorite_count||a.favorites||0)||String(a.name||'').localeCompare(String(b.name||''),'fr'));
     if(count)count.textContent=data.length;
     if(!data.length){track.innerHTML='<div class="tm-results-empty">Aucun trek ne correspond à cette recherche.</div>';return;}
     track.innerHTML=data.map(t=>'<article class="tm-result-card" data-id="'+Number(t.id)+'"><div class="tm-result-top"><strong>'+esc(t.name)+'</strong><span class="tm-result-pin">⌖</span></div><div class="tm-result-region">'+esc(t.region||'France')+'</div><div class="tm-result-badges"><span class="tm-result-badge">'+esc(({easy:'Facile',medium:'Moyen',hard:'Difficile',extreme:'Extrême'}[t.difficulty]||'Moyen'))+'</span><span class="tm-result-badge">'+(t.is_public?'Public':'Privé')+'</span></div><div class="tm-result-meta"><span>📏 '+Number(t.distance||0).toFixed(1)+' km</span><span>↗ '+Math.round(t.elevation||0)+' m</span><span>⏱ '+(t.duration_days?Number(t.duration_days)+' j':'—')+'</span></div></article>').join('');
@@ -204,6 +213,8 @@ explorer_script = """<script id="trekmap-explorer-ui">
   function refreshResults(){
     renderResults();
     const q=(document.getElementById('search')?.value||'').trim();
+    const title=document.querySelector('#tm-results-drawer .tm-results-title');
+    if(title)title.textContent=q?'Résultats de recherche':'Treks populaires';
     if(q)openDrawer(true);
   }
 
@@ -238,6 +249,16 @@ explorer_script = """<script id="trekmap-explorer-ui">
   const hiddenLayers=document.getElementById('map-layers');
   visibleLayers?.addEventListener('change',()=>{if(hiddenLayers){hiddenLayers.value=visibleLayers.value;hiddenLayers.dispatchEvent(new Event('change',{bubbles:true}));}});
   document.getElementById('tm-hidden-map-controls')?.setAttribute('aria-hidden','true');
+
+  document.getElementById('tm-favorites-action')?.addEventListener('click',()=>{
+    if(typeof switchTab==='function')switchTab('favorites');
+    document.querySelectorAll('.tab').forEach(x=>x.classList.toggle('active',x.dataset.tab==='favorites'));
+    document.getElementById('sidebar')?.classList.remove('collapsed');
+  });
+  document.getElementById('tm-stats-action')?.addEventListener('click',()=>{
+    if(typeof window.TrekMapOpenStats==='function')window.TrekMapOpenStats();
+    else setTimeout(()=>window.TrekMapOpenStats?.(),100);
+  });
 
   renderResults();
   const list=document.getElementById('trek-list');
