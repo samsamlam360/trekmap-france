@@ -54,8 +54,8 @@ jobs:
           present=[x for x in forbidden if x in html]
           if present: raise SystemExit('Anciennes couches encore présentes: '+', '.join(present))
           if html.count('TREKMAP_UNIFIED_EXPERIENCE_START')!=1: raise SystemExit('Couche unifiée dupliquée')
-          if html.count('id="tm-unified-drawer"')!=1: raise SystemExit('Tiroir dupliqué')
-          if html.count('id="tm-unified-topbar"')!=1: raise SystemExit('Barre supérieure dupliquée')
+          if html.count("drawer.id='tm-unified-drawer'")!=1: raise SystemExit('Création du tiroir dupliquée')
+          if html.count("top.id='tm-unified-topbar'")!=1: raise SystemExit('Création de la barre supérieure dupliquée')
 
           m=re.search(r'<script id="trekmap-unified-js">(.*?)</script>',html,re.S)
           if not m: raise SystemExit('JavaScript unifié introuvable')
