@@ -192,3 +192,21 @@ async def production_security(request,call_next):
     return response
 
 app.version="4.7.0"
+
+# Static assets used by the redesigned homepage and explorer UI.
+from fastapi.responses import FileResponse
+
+FRONTEND_DIR = Path(__file__).resolve().parent.parent / "frontend"
+
+@app.get("/home.css", include_in_schema=False)
+def production_home_css():
+    return FileResponse(FRONTEND_DIR / "home.css", media_type="text/css")
+
+@app.get("/remodel.css", include_in_schema=False)
+def production_remodel_css():
+    return FileResponse(FRONTEND_DIR / "remodel.css", media_type="text/css")
+
+@app.get("/logo-trekmap.svg", include_in_schema=False)
+def production_logo():
+    return FileResponse(FRONTEND_DIR / "logo-trekmap.svg", media_type="image/svg+xml")
+
