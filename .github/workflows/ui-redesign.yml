@@ -16,6 +16,9 @@ jobs:
       - name: Récupérer le dépôt
         uses: actions/checkout@v4
 
+      - name: Appliquer la couche UI de production
+        run: python scripts/apply_ui_remodel.py
+
       - name: Vérifier la structure de l'interface
         shell: python
         run: |
@@ -41,6 +44,10 @@ jobs:
               raise SystemExit('Structure HTML invalide')
           if html.count('<script>') < 1:
               raise SystemExit('JavaScript principal introuvable')
+
+          for marker in ('/logo-trekmap.svg', 'tm-results-track', 'tm-results-handle', 'data-map-action="fit"'):
+              if marker not in html:
+                  raise SystemExit(f'Élément UI manquant: {marker}')
 
           print('Frontend TrekMap: structure OK')
           print(f'HTML: {len(html):,} caractères')
