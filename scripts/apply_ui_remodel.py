@@ -176,7 +176,7 @@ explorer_script = """<script id="trekmap-explorer-ui">
     const actions=document.createElement('aside');
     actions.id='tm-side-actions';
     actions.setAttribute('aria-label','Accès rapide');
-    actions.innerHTML='<button type="button" id="tm-favorites-action" title="Mes favoris"><span>☆</span><small>Favoris</small></button><button type="button" id="tm-stats-action" title="Statistiques"><span>▥</span><small>Stats</small></button>';
+    actions.innerHTML='<button type="button" id="tm-favorites-action" title="Mes favoris"><span class="tm-action-icon" aria-hidden="true">★</span><b>Favoris</b><small>Mes treks</small></button><button type="button" id="tm-stats-action" title="Statistiques"><span class="tm-action-icon" aria-hidden="true">▥</span><b>Stats</b><small>Activité</small></button>';
     app.appendChild(actions);
   }
 
