@@ -55,7 +55,13 @@ jobs:
               "visibleSearch?.addEventListener('input'",
               "e.target.closest('.tm-stable-suggestion')",
               'Recherche dans mes favoris',
-              'syncMapMenu'
+              'syncMapMenu',
+              'function zoomToTrek',
+              "e.target.closest('.tm-stable-card')",
+              "e.target.closest('[data-map-action=\"fit\"]')",
+              "L.latLngBounds([[41.15,-5.5],[51.25,9.75]])",
+              'tm-filter-section-title',
+              'organizeFilters()'
           ]
           missing = [x for x in markers if x not in html]
           if missing:
@@ -84,10 +90,13 @@ jobs:
           Path('/tmp/trekmap-stable.js').write_text(stable.group(1), encoding='utf-8')
           Path('/tmp/trekmap-repairs.js').write_text(repairs.group(1), encoding='utf-8')
 
-          # Régression importante : une recherche doit sortir de Favoris/Mes treks/Privés.
           js = repairs.group(1)
           if "currentTab='all'" not in js or "addEventListener('input'" not in js:
               raise SystemExit('Régression possible: la recherche ne réinitialise plus le contexte')
+          if 'function zoomToTrek' not in js or "closest('.tm-stable-card')" not in js:
+              raise SystemExit('Régression possible: les cartes de trek ne pilotent plus le zoom')
+          if '41.15,-5.5' not in js or '51.25,9.75' not in js:
+              raise SystemExit('Régression possible: le recentrage France dépend à nouveau des traces')
 
           print('Interface stable TrekMap: structure et régressions OK')
           print(f'HTML: {len(html):,} caractères')
