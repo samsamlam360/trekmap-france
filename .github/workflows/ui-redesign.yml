@@ -110,6 +110,9 @@ jobs:
       - name: Vérifier la syntaxe Python
         run: python -m compileall -q backend scripts
 
+      - name: Installer les dépendances
+        run: pip install -r requirements.txt
+
       - name: Vérifier les routes produit sans base active
         env:
           DATABASE_URL: postgresql+psycopg2://postgres:postgres@localhost:5432/trekmap_ci
