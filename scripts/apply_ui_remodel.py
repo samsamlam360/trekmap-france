@@ -194,7 +194,7 @@ explorer_script = """<script id="trekmap-explorer-ui">
 
   function renderResults(){
     if(!track)return;
-    const data=Array.isArray(window.filteredTreks)?window.filteredTreks:[];
+    const data=typeof filteredTreks!=='undefined'&&Array.isArray(filteredTreks)?filteredTreks:[];
     if(count)count.textContent=data.length;
     if(!data.length){track.innerHTML='<div class="tm-results-empty">Aucun trek ne correspond à cette recherche.</div>';return;}
     track.innerHTML=data.map(t=>'<article class="tm-result-card" data-id="'+Number(t.id)+'"><div class="tm-result-top"><strong>'+esc(t.name)+'</strong><span class="tm-result-pin">⌖</span></div><div class="tm-result-region">'+esc(t.region||'France')+'</div><div class="tm-result-badges"><span class="tm-result-badge">'+esc(({easy:'Facile',medium:'Moyen',hard:'Difficile',extreme:'Extrême'}[t.difficulty]||'Moyen'))+'</span><span class="tm-result-badge">'+(t.is_public?'Public':'Privé')+'</span></div><div class="tm-result-meta"><span>📏 '+Number(t.distance||0).toFixed(1)+' km</span><span>↗ '+Math.round(t.elevation||0)+' m</span><span>⏱ '+(t.duration_days?Number(t.duration_days)+' j':'—')+'</span></div></article>').join('');
