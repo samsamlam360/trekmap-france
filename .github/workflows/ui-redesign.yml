@@ -20,6 +20,7 @@ jobs:
         run: |
           python scripts/apply_ui_remodel.py
           python scripts/apply_unified_experience.py
+          python scripts/finalize_unified_build.py
 
       - name: Vérifier l'architecture frontend
         shell: python
