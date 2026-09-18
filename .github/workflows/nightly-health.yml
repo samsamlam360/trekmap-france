@@ -1,0 +1,33 @@
+name: TrekMap nightly health
+
+on:
+  schedule:
+    - cron: '17 5 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  public-health:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Vérifier la page publique
+        run: curl --fail --silent --show-error --retry 2 --retry-delay 4 https://trekmap-france.onrender.com/ >/dev/null
+
+      - name: Vérifier l'API historique
+        run: curl --fail --silent --show-error --retry 2 --retry-delay 4 https://trekmap-france.onrender.com/health
+
+      - name: Vérifier TrekMap 5.0
+        run: curl --fail --silent --show-error --retry 2 --retry-delay 4 https://trekmap-france.onrender.com/health/ready
+
+      - name: Vérifier les treks publics
+        run: |
+          python - <<'PY'
+          import json, urllib.request
+          with urllib.request.urlopen('https://trekmap-france.onrender.com/treks', timeout=30) as r:
+              data=json.load(r)
+          if not isinstance(data,list):
+              raise SystemExit('La route /treks ne renvoie plus une liste')
+          print(f'{len(data)} trek(s) accessibles')
+          PY
