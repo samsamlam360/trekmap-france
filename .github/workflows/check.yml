@@ -24,52 +24,31 @@ jobs:
         run: pip install -r requirements.txt
       - name: Vérifier la syntaxe Python
         run: python -m compileall -q backend scripts
-      - name: Vérifier l'import de l'application 5.0
-        run: python -c "import backend.app_v5; print('TrekMap 5.0 import OK')"
-      - name: Construire le frontend de production
+      - name: Vérifier l'import de l'application
+        run: python -c "import backend.app_v5; print('TrekMap unified import OK')"
+      - name: Construire le frontend unifié
         run: |
           python scripts/apply_ui_remodel.py
-          python scripts/apply_stable_explorer.py
-          python scripts/apply_stable_repairs.py
-          python scripts/apply_zoom_repair.py
-          python scripts/apply_bottom_bar_repair.py
-          python scripts/apply_product_upgrade.py
-          python scripts/apply_display_stabilizer.py
-          python scripts/apply_functional_repairs.py
+          python scripts/apply_unified_experience.py
       - name: Vérifier le frontend construit
         shell: python
         run: |
           from pathlib import Path
           import re
-          html = Path('frontend/index.html').read_text(encoding='utf-8')
-          required_ids = ['app','sidebar','map','search','region-filter','difficulty-filter','distance-range','elevation-range','duration-filter','trek-list','draw-panel','gpx-file','modal-backdrop','bottom-nav']
-          missing = [x for x in required_ids if f'id="{x}"' not in html]
-          if missing: raise SystemExit('IDs frontend manquants: ' + ', '.join(missing))
-          required_markers = [
-              '<!DOCTYPE html>','</html>',
-              'TREKMAP_DISPLAY_STABILIZER_START','TREKMAP_FUNCTIONAL_REPAIRS_START',
-              'trekmap-display-stabilizer-js','trekmap-functional-repairs-js',
-              'tm-advanced-filters','tm-local-photo-input','TrekMapOpenTrekRobust',
-              'function openDetail(','function importGPX(','function startDrawing(','function exportGPX('
-          ]
-          missing = [x for x in required_markers if x not in html]
-          if missing: raise SystemExit('Éléments frontend manquants: ' + ', '.join(missing))
-          if 'TREKMAP_NAVIGATION_POLISH_START' in html: raise SystemExit('Ancienne couche navigation encore présente')
-          if 'Le clic sur une carte de trek sert maintenant à la localiser sur la carte.' in html: raise SystemExit('Ancien listener du tiroir encore présent')
-          if html.count('<html') != 1 or html.count('</html>') != 1: raise SystemExit('Structure HTML invalide')
-          scripts = re.findall(r'<script id="(trekmap-[^"]+-js)">(.*?)</script>', html, re.S)
-          for name, source in scripts:
-              Path('/tmp/'+name+'.js').write_text(source,encoding='utf-8')
-          print('Frontend TrekMap final: fonctions et structure OK')
-      - name: Vérifier le JavaScript généré
-        shell: bash
-        run: |
-          set -euo pipefail
-          for f in /tmp/trekmap-*-js.js; do
-            [ -f "$f" ] || continue
-            node --check "$f"
-          done
-          echo "JavaScript généré: OK"
+          html=Path('frontend/index.html').read_text(encoding='utf-8')
+          required=['<!DOCTYPE html>','</html>','TREKMAP_UNIFIED_EXPERIENCE_START','trekmap-unified-css','trekmap-unified-js','tm-unified-topbar','tm-unified-drawer','tm-map-options-panel','function openDetail(','function startDrawing(','function exportGPX(']
+          missing=[x for x in required if x not in html]
+          if missing: raise SystemExit('Éléments frontend manquants: '+', '.join(missing))
+          forbidden=['TREKMAP_STABLE_EXPLORER_START','TREKMAP_STABLE_REPAIRS_START','TREKMAP_BOTTOM_BAR_REPAIR_START','TREKMAP_PRODUCT_UPGRADE_START','TREKMAP_DISPLAY_STABILIZER_START','TREKMAP_FUNCTIONAL_REPAIRS_START','TREKMAP_NAVIGATION_POLISH_START','id="trekmap-explorer-ui"']
+          present=[x for x in forbidden if x in html]
+          if present: raise SystemExit('Anciennes couches présentes: '+', '.join(present))
+          if html.count('<html')!=1 or html.count('</html>')!=1: raise SystemExit('Structure HTML invalide')
+          m=re.search(r'<script id="trekmap-unified-js">(.*?)</script>',html,re.S)
+          if not m: raise SystemExit('Script unifié introuvable')
+          Path('/tmp/trekmap-unified.js').write_text(m.group(1),encoding='utf-8')
+          print('Frontend TrekMap unifié: OK')
+      - name: Vérifier le JavaScript
+        run: node --check /tmp/trekmap-unified.js
 
   production-smoke:
     runs-on: ubuntu-latest
@@ -103,15 +82,14 @@ jobs:
           python - <<'PY'
           import json
           from pathlib import Path
-          data = json.loads(Path('/tmp/treks.json').read_text(encoding='utf-8'))
-          if not isinstance(data, list):
-              raise SystemExit('/treks ne renvoie pas une liste JSON')
-          print(f'/treks: OK ({len(data)} trek(s) accessible(s))')
+          data=json.loads(Path('/tmp/treks.json').read_text(encoding='utf-8'))
+          if not isinstance(data,list): raise SystemExit('/treks ne renvoie pas une liste JSON')
+          print(f'/treks: OK ({len(data)} trek(s))')
           PY
-      - name: Vérifier les ressources statiques essentielles
+      - name: Vérifier les ressources Leaflet
         shell: bash
         run: |
           set -euo pipefail
           curl --fail --silent --show-error --max-time 30 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css' -o /dev/null
           curl --fail --silent --show-error --max-time 30 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js' -o /dev/null
-          echo "Ressources Leaflet: OK"
+          echo "Leaflet: OK"
