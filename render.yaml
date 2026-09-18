@@ -3,9 +3,9 @@ services:
     name: trekmap-france
     runtime: python
     plan: free
-    buildCommand: pip install -r requirements.txt && python scripts/apply_ui_remodel.py && python scripts/apply_stable_explorer.py && python scripts/apply_stable_repairs.py && python scripts/apply_zoom_repair.py && python scripts/apply_navigation_polish.py && python scripts/apply_bottom_bar_repair.py
-    startCommand: uvicorn backend.main_production:app --host 0.0.0.0 --port $PORT
-    healthCheckPath: /health
+    buildCommand: pip install -r requirements.txt && python scripts/apply_ui_remodel.py && python scripts/apply_stable_explorer.py && python scripts/apply_stable_repairs.py && python scripts/apply_zoom_repair.py && python scripts/apply_navigation_polish.py && python scripts/apply_bottom_bar_repair.py && python scripts/apply_product_upgrade.py
+    startCommand: uvicorn backend.app_v5:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health/ready
     envVars:
       - key: TREKMAP_ENV
         value: production
