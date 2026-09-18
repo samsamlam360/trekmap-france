@@ -22,9 +22,9 @@ jobs:
           python scripts/apply_stable_explorer.py
           python scripts/apply_stable_repairs.py
           python scripts/apply_zoom_repair.py
-          python scripts/apply_navigation_polish.py
           python scripts/apply_bottom_bar_repair.py
           python scripts/apply_product_upgrade.py
+          python scripts/apply_display_stabilizer.py
 
       - name: Vérifier la structure et les fonctionnalités UI
         shell: python
@@ -48,14 +48,16 @@ jobs:
               'TREKMAP_STABLE_REPAIRS_START',
               'TREKMAP_BOTTOM_BAR_REPAIR_START',
               'TREKMAP_PRODUCT_UPGRADE_START',
+              'TREKMAP_DISPLAY_STABILIZER_START',
               'tm-stable-topbar', 'tm-stable-search', 'tm-stable-account',
               'tm-stable-drawer', 'tm-stable-track', 'tm-filter-collapse',
               'TrekMapBottomBarZoom', 'TrekMapOpenBottomTrek',
-              'tm-product-status', 'tm-detail-upgrade', 'tm-profile-upgrade',
+              'tm-detail-upgrade', 'tm-profile-upgrade',
               'tm-rating-box', 'tm-advanced-form', 'tm-import-preview',
               '/health/ready', '/auth/library', '/extras', '/rating',
-              'showEndpoints', 'enhanceDetail', 'enhanceProfile',
-              'installImportPreview', 'openAdvancedInfo'
+              'trekmap-display-stabilizer-css', 'trekmap-display-stabilizer-js',
+              'tm-filters-compact', 'max-height:calc(100dvh - 40px)',
+              '#modal.tm-detail-modern{overflow-y:auto!important'
           ]
           missing = [x for x in markers if x not in html]
           if missing:
@@ -65,13 +67,21 @@ jobs:
               'TREKMAP_TARGET_LAYOUT_START',
               'TREKMAP_FINAL_EXPLORER_START',
               'TREKMAP_EXPLORER_POLISH_START',
-              'id="trekmap-navigation-polish-js"'
+              'TREKMAP_NAVIGATION_POLISH_START',
+              'id="trekmap-navigation-polish-js"',
+              'Le clic sur une carte de trek sert maintenant à la localiser sur la carte.'
           ]
           present = [x for x in forbidden if x in html]
           if present:
-              raise SystemExit('Anciennes couches encore actives: ' + ', '.join(present))
+              raise SystemExit('Anciennes couches ou listeners concurrents encore actifs: ' + ', '.join(present))
 
-          for marker in ('TREKMAP_STABLE_EXPLORER_START','TREKMAP_STABLE_REPAIRS_START','TREKMAP_BOTTOM_BAR_REPAIR_START','TREKMAP_PRODUCT_UPGRADE_START'):
+          for marker in (
+              'TREKMAP_STABLE_EXPLORER_START',
+              'TREKMAP_STABLE_REPAIRS_START',
+              'TREKMAP_BOTTOM_BAR_REPAIR_START',
+              'TREKMAP_PRODUCT_UPGRADE_START',
+              'TREKMAP_DISPLAY_STABILIZER_START'
+          ):
               if html.count(marker) != 1:
                   raise SystemExit(f'Couche dupliquée ou absente: {marker}')
 
@@ -80,24 +90,37 @@ jobs:
               'repairs': r'<script id="trekmap-stable-repairs-js">(.*?)</script>',
               'bottom': r'<script id="trekmap-bottom-bar-repair-js">(.*?)</script>',
               'product': r'<script id="trekmap-product-upgrade-js">(.*?)</script>',
+              'display': r'<script id="trekmap-display-stabilizer-js">(.*?)</script>',
           }
+          extracted = {}
           for name, pattern in scripts.items():
               match = re.search(pattern, html, re.S)
               if not match:
                   raise SystemExit(f'JavaScript {name} introuvable')
+              extracted[name] = match.group(1)
               Path(f'/tmp/trekmap-{name}.js').write_text(match.group(1), encoding='utf-8')
 
-          bottom = re.search(scripts['bottom'], html, re.S).group(1)
+          bottom = extracted['bottom']
           for required in ('zoomToBottomTrek','openBottomTrek',"track.addEventListener('wheel'",'openDetail(numericId)'):
               if required not in bottom:
                   raise SystemExit('Régression barre du bas: ' + required)
 
-          product = re.search(scripts['product'], html, re.S).group(1)
+          product = extracted['product']
           for required in ('enhanceDetail','enhanceProfile','rateTrek','openAdvancedInfo','installImportPreview','showEndpoints'):
               if required not in product:
                   raise SystemExit('Régression TrekMap 5.0: ' + required)
 
-          print('TrekMap 5.0: structure, détail, profil, carte, import et mobile OK')
+          display = extracted['display']
+          for required in ('syncFilterLayout','syncModal','map.invalidateSize','tm-modal-open'):
+              if required not in display:
+                  raise SystemExit('Régression affichage: ' + required)
+
+          if '#modal.tm-detail-modern{overflow-y:auto!important' not in html:
+              raise SystemExit('La fiche trek risque à nouveau de couper son contenu')
+          if '.modal-backdrop{z-index:12000!important}' not in html:
+              raise SystemExit('Les modales peuvent repasser derrière la barre supérieure')
+
+          print('TrekMap 5.0: structure, affichage, modales, carte et mobile OK')
           print(f'HTML: {len(html):,} caractères')
 
       - name: Vérifier la syntaxe JavaScript
@@ -106,6 +129,7 @@ jobs:
           node --check /tmp/trekmap-repairs.js
           node --check /tmp/trekmap-bottom.js
           node --check /tmp/trekmap-product.js
+          node --check /tmp/trekmap-display.js
 
       - name: Vérifier la syntaxe Python
         run: python -m compileall -q backend scripts
