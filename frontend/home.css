@@ -61,3 +61,32 @@
 #tm-map-options-panel button:hover{background:#edf6f1;color:#176b45}
 #tm-map-options-panel label{display:block;font-size:10px;text-transform:uppercase;color:#718078;font-weight:800;margin:4px 2px 5px}
 #tm-hidden-map-controls{display:none!important}
+
+
+/* Explorer: panneau horizontal des treks + accès rapides à droite */
+#tm-results-drawer{left:18px;right:18px;bottom:18px;height:0;transition:height .28s ease;z-index:1400}
+#tm-results-drawer.tm-open{height:184px}
+#tm-results-drawer .tm-results-shell{border-radius:24px;box-shadow:0 18px 55px rgba(18,53,36,.22);border:1px solid rgba(216,229,222,.95)}
+#tm-results-drawer .tm-results-handle{height:44px;padding:0 20px}
+#tm-results-drawer .tm-results-track{height:140px;padding:0 16px 13px;gap:14px}
+#tm-results-drawer .tm-result-card{flex-basis:300px;height:116px}
+#tm-results-drawer.tm-collapsed{height:44px}
+#tm-results-drawer.tm-collapsed .tm-results-track{display:none}
+#tm-results-drawer.tm-collapsed .tm-results-chevron{transform:rotate(180deg)}
+#tm-results-drawer .tm-results-chevron{transform:rotate(0deg)}
+
+#tm-side-actions{position:absolute;z-index:1450;right:18px;top:50%;transform:translateY(-50%);display:flex;flex-direction:column;gap:10px}
+#tm-side-actions button{width:66px;min-height:66px;border:1px solid rgba(216,229,222,.95);border-radius:18px;background:rgba(255,255,255,.95);backdrop-filter:blur(16px);box-shadow:0 10px 30px rgba(18,53,36,.16);color:#315247;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;transition:.16s}
+#tm-side-actions button:hover{transform:translateY(-2px);border-color:#9fc8b1;background:#fff;box-shadow:0 14px 35px rgba(18,53,36,.20);color:#176b45}
+#tm-side-actions button span{font-size:24px;line-height:1;font-weight:800}
+#tm-side-actions button small{font-size:10px;font-weight:800}
+#bottom-nav{display:none!important}
+@media(max-width:900px){
+  #tm-results-drawer{left:10px;right:10px;bottom:10px}
+  #tm-results-drawer.tm-open{height:165px}
+  #tm-results-drawer .tm-results-track{height:121px}
+  #tm-results-drawer .tm-result-card{flex-basis:260px;height:105px}
+  #tm-side-actions{right:10px;top:auto;bottom:190px;transform:none}
+  #tm-side-actions button{width:56px;min-height:56px;border-radius:15px}
+  #tm-side-actions button span{font-size:21px}
+}
