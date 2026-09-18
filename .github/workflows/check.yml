@@ -31,25 +31,32 @@ jobs:
           python scripts/apply_ui_remodel.py
           python scripts/apply_unified_experience.py
           python scripts/finalize_unified_build.py
+          python scripts/apply_mobile_experience.py
       - name: Vérifier le frontend construit
         shell: python
         run: |
           from pathlib import Path
           import re
           html=Path('frontend/index.html').read_text(encoding='utf-8')
-          required=['<!DOCTYPE html>','</html>','TREKMAP_UNIFIED_EXPERIENCE_START','trekmap-unified-css','trekmap-unified-js','tm-unified-topbar','tm-unified-drawer','tm-map-options-panel','function openDetail(','function startDrawing(','function exportGPX(']
+          required=['<!DOCTYPE html>','</html>','TREKMAP_UNIFIED_EXPERIENCE_START','trekmap-unified-css','trekmap-unified-js','tm-unified-topbar','tm-unified-drawer','TREKMAP_MOBILE_EXPERIENCE_START','trekmap-mobile-css','trekmap-mobile-js','tm-mobile-nav','tm-mobile-create-sheet','function openDetail(','function startDrawing(','function exportGPX(']
           missing=[x for x in required if x not in html]
           if missing: raise SystemExit('Éléments frontend manquants: '+', '.join(missing))
           forbidden=['TREKMAP_STABLE_EXPLORER_START','TREKMAP_STABLE_REPAIRS_START','TREKMAP_BOTTOM_BAR_REPAIR_START','TREKMAP_PRODUCT_UPGRADE_START','TREKMAP_DISPLAY_STABILIZER_START','TREKMAP_FUNCTIONAL_REPAIRS_START','TREKMAP_NAVIGATION_POLISH_START','id="trekmap-explorer-ui"']
           present=[x for x in forbidden if x in html]
           if present: raise SystemExit('Anciennes couches présentes: '+', '.join(present))
           if html.count('<html')!=1 or html.count('</html>')!=1: raise SystemExit('Structure HTML invalide')
-          m=re.search(r'<script id="trekmap-unified-js">(.*?)</script>',html,re.S)
-          if not m: raise SystemExit('Script unifié introuvable')
-          Path('/tmp/trekmap-unified.js').write_text(m.group(1),encoding='utf-8')
-          print('Frontend TrekMap unifié: OK')
+          if html.count('TREKMAP_MOBILE_EXPERIENCE_START')!=1: raise SystemExit('Couche mobile dupliquée')
+          unified=re.search(r'<script id="trekmap-unified-js">(.*?)</script>',html,re.S)
+          mobile=re.search(r'<script id="trekmap-mobile-js">(.*?)</script>',html,re.S)
+          if not unified: raise SystemExit('Script unifié introuvable')
+          if not mobile: raise SystemExit('Script mobile introuvable')
+          Path('/tmp/trekmap-unified.js').write_text(unified.group(1),encoding='utf-8')
+          Path('/tmp/trekmap-mobile.js').write_text(mobile.group(1),encoding='utf-8')
+          print('Frontend TrekMap unifié + mobile: OK')
       - name: Vérifier le JavaScript
-        run: node --check /tmp/trekmap-unified.js
+        run: |
+          node --check /tmp/trekmap-unified.js
+          node --check /tmp/trekmap-mobile.js
 
   production-smoke:
     runs-on: ubuntu-latest
