@@ -8,4 +8,3 @@ gpxpy>=1.2,<2
 requests>=2.31,<3
 shapely>=2.0,<3
 geoalchemy2>=0.15,<1
-openai>=2.0,<3
