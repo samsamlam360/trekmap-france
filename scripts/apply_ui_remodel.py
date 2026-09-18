@@ -145,6 +145,17 @@ script = r'''<script id="trekmap-remodel-js">
   }
   function set(id,v){const e=document.getElementById(id);if(e)e.textContent=v;}
   function esc(v){return String(v??'').replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#039;','"':'&quot;'}[c]));}
+  const originalOpenDetail=window.openDetail;
+  if(typeof originalOpenDetail==='function' && !window.__trekmapDetailWrapped){
+    window.openDetail=function(id){
+      originalOpenDetail(id);
+      setTimeout(()=>{
+        const modal=document.getElementById('modal');
+        if(modal)modal.classList.add('tm-detail-modern');
+      },20);
+    };
+    window.__trekmapDetailWrapped=true;
+  }
   window.TrekMapShowHome=show;window.TrekMapHideHome=hide;
   loadHomeData();
 })();
