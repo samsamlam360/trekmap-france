@@ -22,7 +22,7 @@ home = r'''<!-- TREKMAP_HOME_START -->
 <div id="tm-home" aria-label="Accueil TrekMap France">
   <div class="tm-home-bg"></div>
   <header class="tm-home-nav">
-    <a class="tm-logo" href="#" id="tm-home-logo"><span class="tm-logo-mark">⌁</span><span>TrekMap <b>France</b></span></a>
+    <a class="tm-logo" href="#" id="tm-home-logo"><img src="/logo-trekmap.svg" alt="TrekMap France" style="width:150px;height:auto;border-radius:10px"><span style="display:none">TrekMap <b>France</b></span></a>
     <nav class="tm-home-links">
       <button data-home-explore>Explorer</button>
       <button data-home-create>Créer un trek</button>
@@ -77,6 +77,7 @@ home = r'''<!-- TREKMAP_HOME_START -->
 <!-- TREKMAP_HOME_END -->
 '''
 html = html.replace('<div id="app">', home + '\n<div id="app">', 1)
+html = html.replace('<h1>🥾 TrekMap France</h1>', '<h1 style="display:flex;align-items:center"><img src="/logo-trekmap.svg" alt="TrekMap France" style="width:185px;height:auto;border-radius:12px"></h1>', 1)
 
 script = r'''<script id="trekmap-remodel-js">
 (function(){
@@ -160,6 +161,10 @@ script = r'''<script id="trekmap-remodel-js">
   loadHomeData();
 })();
 </script>'''
+map_old = '<div class="map-tools"><button id="map-toggle">☰ <span class="desktop-label">Liste</span></button><button id="map-fit">⌖ <span class="desktop-label">France</span></button><button id="api-status" title="État du serveur">● API</button><button id="locate-map">◎ <span class="desktop-label">Ma position</span></button><select id="map-layers"><option value="standard">Standard</option><option value="topo">Topographique</option><option value="satellite">Satellite</option></select><button id="map-fullscreen">⛶</button></div>'
+map_new = '<div class="map-tools"><button id="tm-map-options" aria-expanded="false">⚙ Carte</button><div id="tm-map-options-panel" role="menu" aria-hidden="true"><label>Type de carte</label><select id="tm-map-layers-visible"><option value="standard">Standard</option><option value="topo">Topographique</option><option value="satellite">Satellite</option></select><button type="button" data-map-action="fit">⌖ Recentrer sur la France</button><button type="button" data-map-action="locate">◎ Ma position</button><button type="button" data-map-action="fullscreen">⛶ Plein écran</button><button type="button" data-map-action="api">● État de l’API</button></div></div><div id="tm-hidden-map-controls"><button id="map-toggle"></button><button id="map-fit"></button><button id="api-status"></button><button id="locate-map"></button><select id="map-layers"><option value="standard">Standard</option><option value="topo">Topographique</option><option value="satellite">Satellite</option></select><button id="map-fullscreen"></button></div>'
+html = html.replace(map_old, map_new, 1)
+
 html = re.sub(r'\s*<script id="trekmap-remodel-js">.*?</script>', '', html, flags=re.S)
 html = re.sub(r'\s*<script id="trekmap-home-js">.*?</script>', '', html, flags=re.S)
 html = html.replace('</body>', script + '\n</body>', 1)
