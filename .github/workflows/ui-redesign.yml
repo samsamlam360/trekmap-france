@@ -22,6 +22,7 @@ jobs:
           python scripts/apply_stable_explorer.py
           python scripts/apply_stable_repairs.py
           python scripts/apply_zoom_repair.py
+          python scripts/apply_navigation_polish.py
 
       - name: Vérifier la structure et les fonctionnalités UI
         shell: python
@@ -46,6 +47,7 @@ jobs:
               'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js',
               'TREKMAP_STABLE_EXPLORER_START',
               'TREKMAP_STABLE_REPAIRS_START',
+              'TREKMAP_NAVIGATION_POLISH_START',
               'tm-stable-topbar', 'tm-stable-search', 'tm-stable-account',
               'tm-stable-favorites', 'tm-stable-stats',
               'tm-stable-drawer', 'tm-stable-track',
@@ -64,7 +66,12 @@ jobs:
               "e.target.closest('.tm-stable-card')",
               "L.latLngBounds([[41.15,-5.5],[51.25,9.75]])",
               'tm-filter-section-title',
-              'organizeFilters()'
+              'organizeFilters()',
+              'tm-filter-collapse',
+              'Importer un trek',
+              'TrekMapZoomToTrek',
+              'wheelTarget',
+              'tm-filters-collapsed'
           ]
           missing = [x for x in markers if x not in html]
           if missing:
@@ -85,13 +92,17 @@ jobs:
               raise SystemExit('Couche stable dupliquée')
           if html.count('TREKMAP_STABLE_REPAIRS_START') != 1:
               raise SystemExit('Couche de correctifs dupliquée')
+          if html.count('TREKMAP_NAVIGATION_POLISH_START') != 1:
+              raise SystemExit('Couche navigation dupliquée')
 
           stable = re.search(r'<script id="trekmap-stable-explorer-js">(.*?)</script>', html, re.S)
           repairs = re.search(r'<script id="trekmap-stable-repairs-js">(.*?)</script>', html, re.S)
-          if not stable or not repairs:
+          navigation = re.search(r'<script id="trekmap-navigation-polish-js">(.*?)</script>', html, re.S)
+          if not stable or not repairs or not navigation:
               raise SystemExit('JavaScript TrekMap introuvable')
           Path('/tmp/trekmap-stable.js').write_text(stable.group(1), encoding='utf-8')
           Path('/tmp/trekmap-repairs.js').write_text(repairs.group(1), encoding='utf-8')
+          Path('/tmp/trekmap-navigation.js').write_text(navigation.group(1), encoding='utf-8')
 
           js = repairs.group(1)
           if "currentTab='all'" not in js or "addEventListener('input'" not in js:
@@ -110,6 +121,11 @@ jobs:
           if '41.15,-5.5' not in js or '51.25,9.75' not in js:
               raise SystemExit('Régression possible: le recentrage France dépend à nouveau des traces')
 
+          nav = navigation.group(1)
+          for required in ('importGPX', 'tm-filter-collapse', 'TrekMapZoomToTrek', "addEventListener('wheel'", 'wheelTarget'):
+              if required not in nav:
+                  raise SystemExit('Régression navigation: ' + required)
+
           print('Interface stable TrekMap: structure et régressions OK')
           print(f'HTML: {len(html):,} caractères')
 
@@ -117,6 +133,7 @@ jobs:
         run: |
           node --check /tmp/trekmap-stable.js
           node --check /tmp/trekmap-repairs.js
+          node --check /tmp/trekmap-navigation.js
 
       - name: Vérifier la syntaxe Python
         run: python -m compileall -q backend scripts
