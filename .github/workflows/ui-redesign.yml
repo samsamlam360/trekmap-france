@@ -21,6 +21,7 @@ jobs:
           python scripts/apply_ui_remodel.py
           python scripts/apply_explorer_polish.py
           python scripts/apply_target_layout.py
+          python scripts/apply_final_explorer_fixes.py
 
       - name: Vérifier la structure de l'interface
         shell: python
@@ -46,7 +47,9 @@ jobs:
               'tm-side-actions', 'tm-favorites-action', 'tm-stats-action',
               'data-map-action="fit"', 'tm-explorer-topbar',
               'tm-explorer-home', 'tm-top-search-input', 'tm-top-create',
-              'tm-top-notify', 'tm-filter-search', 'TREKMAP_TARGET_LAYOUT_START'
+              'tm-top-notify', 'tm-filter-search', 'TREKMAP_TARGET_LAYOUT_START',
+              'TREKMAP_FINAL_EXPLORER_START', 'tm-top-search-clear',
+              'tm-top-suggestions', 'tm-brand-lockup'
           ):
               if marker not in html:
                   raise SystemExit(f'Élément UI manquant: {marker}')
