@@ -196,8 +196,8 @@ explorer_script = """<script id="trekmap-explorer-ui">
   let userClosed=false;
 
   function esc(v){return String(v??'').replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#039;','"':'&quot;'}[c]));}
-  function openDrawer(force){if(force)userClosed=false;if(userClosed&&!force)return;drawer?.classList.add('tm-open');handle?.setAttribute('aria-expanded','true');}
-  function closeDrawer(){userClosed=true;drawer?.classList.remove('tm-open');handle?.setAttribute('aria-expanded','false');}
+  function openDrawer(force){if(force)userClosed=false;if(userClosed&&!force)return;drawer?.classList.add('tm-open');drawer?.classList.remove('tm-collapsed');handle?.setAttribute('aria-expanded','true');}
+  function closeDrawer(){userClosed=true;drawer?.classList.remove('tm-open');drawer?.classList.add('tm-collapsed');handle?.setAttribute('aria-expanded','false');}
   handle?.addEventListener('click',()=>drawer.classList.contains('tm-open')?closeDrawer():openDrawer(true));
 
   function renderResults(){
