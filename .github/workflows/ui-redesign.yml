@@ -21,6 +21,7 @@ jobs:
           python scripts/apply_ui_remodel.py
           python scripts/apply_unified_experience.py
           python scripts/finalize_unified_build.py
+          python scripts/apply_mobile_experience.py
 
       - name: Vérifier l'architecture frontend
         shell: python
@@ -39,10 +40,12 @@ jobs:
             'tm-filter-toggle','tm-criteria-filters','tm-route-filter','tm-season-filter',
             'tm-rating-filter','tm-photo-filter','tm-place-filter','TrekMapOpenTrek',
             'openTrek','applyUnifiedFilters','openAdvancedUnified','tm-u-photos',
-            '/catalog/criteria','/uploaded-photos','/photos','tm-map-options-panel'
+            '/catalog/criteria','/uploaded-photos','/photos','tm-map-options-panel',
+            'TREKMAP_MOBILE_EXPERIENCE_START','trekmap-mobile-css','trekmap-mobile-js',
+            'tm-mobile-nav','tm-mobile-create-sheet','tm-mobile-filters-open','safe-area-inset-bottom'
           ]
           missing=[x for x in required if x not in html]
-          if missing: raise SystemExit('Fonctions unifiées manquantes: '+', '.join(missing))
+          if missing: raise SystemExit('Fonctions unifiées/mobile manquantes: '+', '.join(missing))
 
           forbidden=[
             'TREKMAP_STABLE_EXPLORER_START','TREKMAP_STABLE_REPAIRS_START',
@@ -55,16 +58,22 @@ jobs:
           present=[x for x in forbidden if x in html]
           if present: raise SystemExit('Anciennes couches encore présentes: '+', '.join(present))
           if html.count('TREKMAP_UNIFIED_EXPERIENCE_START')!=1: raise SystemExit('Couche unifiée dupliquée')
+          if html.count('TREKMAP_MOBILE_EXPERIENCE_START')!=1: raise SystemExit('Couche mobile dupliquée')
           if html.count("drawer.id='tm-unified-drawer'")!=1: raise SystemExit('Création du tiroir dupliquée')
           if html.count("top.id='tm-unified-topbar'")!=1: raise SystemExit('Création de la barre supérieure dupliquée')
 
-          m=re.search(r'<script id="trekmap-unified-js">(.*?)</script>',html,re.S)
-          if not m: raise SystemExit('JavaScript unifié introuvable')
-          Path('/tmp/trekmap-unified.js').write_text(m.group(1),encoding='utf-8')
-          print('Architecture TrekMap unifiée: OK')
+          unified=re.search(r'<script id="trekmap-unified-js">(.*?)</script>',html,re.S)
+          mobile=re.search(r'<script id="trekmap-mobile-js">(.*?)</script>',html,re.S)
+          if not unified: raise SystemExit('JavaScript unifié introuvable')
+          if not mobile: raise SystemExit('JavaScript mobile introuvable')
+          Path('/tmp/trekmap-unified.js').write_text(unified.group(1),encoding='utf-8')
+          Path('/tmp/trekmap-mobile.js').write_text(mobile.group(1),encoding='utf-8')
+          print('Architecture TrekMap unifiée + mobile: OK')
 
-      - name: Vérifier le JavaScript unifié
-        run: node --check /tmp/trekmap-unified.js
+      - name: Vérifier les JavaScript
+        run: |
+          node --check /tmp/trekmap-unified.js
+          node --check /tmp/trekmap-mobile.js
 
       - name: Vérifier la syntaxe Python
         run: python -m compileall -q backend scripts
