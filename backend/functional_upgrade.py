@@ -1,7 +1,8 @@
 """Correctifs fonctionnels finaux pour TrekMap France.
 
 Ajoute un index de critères pour la recherche avancée et un stockage durable des
-photos de trek dans PostgreSQL. Cette couche reste séparée du backend historique.
+photos de trek dans PostgreSQL. Les migrations sont paresseuses afin que
+l'application reste importable même quand PostgreSQL n'est pas joignable en CI.
 """
 
 from __future__ import annotations
@@ -15,33 +16,46 @@ MAX_IMAGES_PER_TREK = 8
 
 
 def install_functional_upgrade(app, legacy_main, db_factory):
-    db = db_factory()
-    try:
-        db.execute(text("""
-            CREATE TABLE IF NOT EXISTS trek_photos (
-                id SERIAL PRIMARY KEY,
-                trek_id INTEGER NOT NULL REFERENCES treks(id) ON DELETE CASCADE,
-                owner_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
-                filename VARCHAR(255) NOT NULL DEFAULT 'photo',
-                media_type VARCHAR(50) NOT NULL,
-                data BYTEA NOT NULL,
-                created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
-            )
-        """))
-        db.execute(text("CREATE INDEX IF NOT EXISTS idx_trek_photos_trek ON trek_photos(trek_id, created_at, id)"))
-        db.commit()
-    except Exception:
-        db.rollback()
-        raise
-    finally:
-        db.close()
+    schema_state = {"ready": False}
+
+    def ensure_functional_schema():
+        if schema_state["ready"]:
+            return
+        db = db_factory()
+        try:
+            db.execute(text("""
+                CREATE TABLE IF NOT EXISTS trek_photos (
+                    id SERIAL PRIMARY KEY,
+                    trek_id INTEGER NOT NULL REFERENCES treks(id) ON DELETE CASCADE,
+                    owner_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+                    filename VARCHAR(255) NOT NULL DEFAULT 'photo',
+                    media_type VARCHAR(50) NOT NULL,
+                    data BYTEA NOT NULL,
+                    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+                )
+            """))
+            db.execute(text("CREATE INDEX IF NOT EXISTS idx_trek_photos_trek ON trek_photos(trek_id, created_at, id)"))
+            db.commit()
+            schema_state["ready"] = True
+        except Exception:
+            db.rollback()
+            raise
+        finally:
+            db.close()
+
+    @app.on_event("startup")
+    def functional_startup():
+        try:
+            ensure_functional_schema()
+        except Exception as exc:
+            print("[TrekMap] Correctifs fonctionnels en attente de PostgreSQL:", repr(exc))
 
     def visible_clause(user):
         return user["id"] if user else -1, bool(user and user.get("is_admin"))
 
     @app.get("/catalog/criteria")
     def catalog_criteria(user=Depends(legacy_main.get_optional_user)):
-        """Retourne en une requête les critères enrichis de tous les treks visibles."""
+        ensure_functional_schema()
         db = db_factory()
         try:
             uid, admin = visible_clause(user)
@@ -87,11 +101,8 @@ def install_functional_upgrade(app, legacy_main, db_factory):
             db.close()
 
     @app.post("/treks/{trek_id}/photos")
-    async def upload_trek_photo(
-        trek_id: int,
-        file: UploadFile = File(...),
-        user=Depends(legacy_main.current_user),
-    ):
+    async def upload_trek_photo(trek_id: int, file: UploadFile = File(...), user=Depends(legacy_main.current_user)):
+        ensure_functional_schema()
         db = db_factory()
         try:
             trek = db.execute(text("SELECT owner_id FROM treks WHERE id=:id"), {"id": trek_id}).first()
@@ -132,6 +143,7 @@ def install_functional_upgrade(app, legacy_main, db_factory):
 
     @app.get("/media/trek-photos/{photo_id}")
     def get_trek_photo(photo_id: int, user=Depends(legacy_main.get_optional_user)):
+        ensure_functional_schema()
         db = db_factory()
         try:
             row = db.execute(text("""
@@ -141,7 +153,8 @@ def install_functional_upgrade(app, legacy_main, db_factory):
             """), {"id": photo_id}).first()
             if not row:
                 raise HTTPException(status_code=404, detail="Photo introuvable.")
-            allowed = bool(row.is_public or (user and (user.get("is_admin") or NumberLike(user.get("id")) == NumberLike(row.owner_id))))
+            uid = int(user["id"]) if user else -1
+            allowed = bool(row.is_public or (user and (user.get("is_admin") or uid == int(row.owner_id or -2))))
             if not allowed:
                 raise HTTPException(status_code=404, detail="Photo introuvable.")
             cache = "public, max-age=86400" if row.is_public else "private, no-store"
@@ -151,6 +164,7 @@ def install_functional_upgrade(app, legacy_main, db_factory):
 
     @app.delete("/treks/{trek_id}/photos/{photo_id}")
     def delete_trek_photo(trek_id: int, photo_id: int, user=Depends(legacy_main.current_user)):
+        ensure_functional_schema()
         db = db_factory()
         try:
             trek = db.execute(text("SELECT owner_id FROM treks WHERE id=:id"), {"id": trek_id}).first()
@@ -171,6 +185,7 @@ def install_functional_upgrade(app, legacy_main, db_factory):
 
     @app.get("/treks/{trek_id}/uploaded-photos")
     def uploaded_photos(trek_id: int, user=Depends(legacy_main.get_optional_user)):
+        ensure_functional_schema()
         db = db_factory()
         try:
             uid, admin = visible_clause(user)
@@ -192,10 +207,3 @@ def install_functional_upgrade(app, legacy_main, db_factory):
             }
         finally:
             db.close()
-
-
-def NumberLike(value):
-    try:
-        return int(value)
-    except (TypeError, ValueError):
-        return -1
