@@ -20,6 +20,7 @@ jobs:
         run: |
           python scripts/apply_ui_remodel.py
           python scripts/apply_explorer_polish.py
+          python scripts/apply_target_layout.py
 
       - name: Vérifier la structure de l'interface
         shell: python
@@ -44,7 +45,8 @@ jobs:
               '/logo-trekmap.svg', 'tm-results-track', 'tm-results-handle',
               'tm-side-actions', 'tm-favorites-action', 'tm-stats-action',
               'data-map-action="fit"', 'tm-explorer-topbar',
-              'tm-explorer-home', 'tm-top-search-input', 'tm-top-create'
+              'tm-explorer-home', 'tm-top-search-input', 'tm-top-create',
+              'tm-top-notify', 'tm-filter-search', 'TREKMAP_TARGET_LAYOUT_START'
           ):
               if marker not in html:
                   raise SystemExit(f'Élément UI manquant: {marker}')
