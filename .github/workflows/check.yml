@@ -35,6 +35,7 @@ jobs:
           python scripts/apply_bottom_bar_repair.py
           python scripts/apply_product_upgrade.py
           python scripts/apply_display_stabilizer.py
+          python scripts/apply_functional_repairs.py
       - name: Vérifier le frontend construit
         shell: python
         run: |
@@ -44,7 +45,13 @@ jobs:
           required_ids = ['app','sidebar','map','search','region-filter','difficulty-filter','distance-range','elevation-range','duration-filter','trek-list','draw-panel','gpx-file','modal-backdrop','bottom-nav']
           missing = [x for x in required_ids if f'id="{x}"' not in html]
           if missing: raise SystemExit('IDs frontend manquants: ' + ', '.join(missing))
-          required_markers = ['<!DOCTYPE html>','</html>','TREKMAP_DISPLAY_STABILIZER_START','trekmap-display-stabilizer-js','function openDetail(','function importGPX(','function startDrawing(','function exportGPX(']
+          required_markers = [
+              '<!DOCTYPE html>','</html>',
+              'TREKMAP_DISPLAY_STABILIZER_START','TREKMAP_FUNCTIONAL_REPAIRS_START',
+              'trekmap-display-stabilizer-js','trekmap-functional-repairs-js',
+              'tm-advanced-filters','tm-local-photo-input','TrekMapOpenTrekRobust',
+              'function openDetail(','function importGPX(','function startDrawing(','function exportGPX('
+          ]
           missing = [x for x in required_markers if x not in html]
           if missing: raise SystemExit('Éléments frontend manquants: ' + ', '.join(missing))
           if 'TREKMAP_NAVIGATION_POLISH_START' in html: raise SystemExit('Ancienne couche navigation encore présente')
@@ -53,7 +60,7 @@ jobs:
           scripts = re.findall(r'<script id="(trekmap-[^"]+-js)">(.*?)</script>', html, re.S)
           for name, source in scripts:
               Path('/tmp/'+name+'.js').write_text(source,encoding='utf-8')
-          print('Frontend TrekMap final: structure et couches OK')
+          print('Frontend TrekMap final: fonctions et structure OK')
       - name: Vérifier le JavaScript généré
         shell: bash
         run: |
