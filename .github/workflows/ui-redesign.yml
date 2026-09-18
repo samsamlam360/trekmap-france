@@ -54,13 +54,15 @@ jobs:
               'tm-stable-favorites', 'tm-stable-stats',
               'tm-stable-drawer', 'tm-stable-track',
               'tm-filter-collapse', 'Importer un trek',
-              'TrekMapBottomBarZoom',
-              'zoomToBottomTrek',
+              'TrekMapBottomBarZoom', 'TrekMapOpenBottomTrek',
+              'openBottomTrek', 'openDetail',
               "track.addEventListener('click'",
               "track.addEventListener('wheel'",
               'coordsFromFeatures', 'boundsFromLayer',
               "fetch(base+'/treks/'+numericId",
               'map.fitBounds(bounds.pad(.10)',
+              'calc((100% - 52px)/5)',
+              'calc((100% - 65px)/6)',
               'tm-filters-collapsed'
           ]
           missing = [x for x in markers if x not in html]
@@ -98,7 +100,11 @@ jobs:
           js = bottom.group(1)
           required_bottom = [
               'async function zoomToBottomTrek',
+              'async function openBottomTrek',
               'window.TrekMapBottomBarZoom=zoomToBottomTrek',
+              'window.TrekMapOpenBottomTrek=openBottomTrek',
+              "typeof openDetail==='function'",
+              'openDetail(numericId)',
               "track.addEventListener('click'",
               "track.addEventListener('wheel'",
               'e.stopImmediatePropagation()',
@@ -114,7 +120,7 @@ jobs:
           if missing_bottom:
               raise SystemExit('Régression barre du bas: ' + ', '.join(missing_bottom))
 
-          print('Interface stable TrekMap: barre du bas et navigation OK')
+          print('Interface stable TrekMap: barre du bas, ouverture des treks et navigation OK')
           print(f'HTML: {len(html):,} caractères')
 
       - name: Vérifier la syntaxe JavaScript
