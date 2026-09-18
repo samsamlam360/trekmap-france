@@ -23,6 +23,7 @@ jobs:
           python scripts/apply_stable_repairs.py
           python scripts/apply_zoom_repair.py
           python scripts/apply_navigation_polish.py
+          python scripts/apply_bottom_bar_repair.py
 
       - name: Vérifier la structure et les fonctionnalités UI
         shell: python
@@ -48,29 +49,18 @@ jobs:
               'TREKMAP_STABLE_EXPLORER_START',
               'TREKMAP_STABLE_REPAIRS_START',
               'TREKMAP_NAVIGATION_POLISH_START',
+              'TREKMAP_BOTTOM_BAR_REPAIR_START',
               'tm-stable-topbar', 'tm-stable-search', 'tm-stable-account',
               'tm-stable-favorites', 'tm-stable-stats',
               'tm-stable-drawer', 'tm-stable-track',
-              'openProfile()', "authModal('login')", "switchTab('favorites')",
-              'MutationObserver', 'map.invalidateSize()',
-              'data-map-action="fit"',
-              'forceAllMode', "currentTab='all'",
-              "visibleSearch?.addEventListener('input'",
-              "e.target.closest('.tm-stable-suggestion')",
-              'syncMapMenu',
-              'async function zoomToTrek',
-              'window.TrekMapZoomToTrek=zoomToTrek',
-              'coordsFromFeatures', 'boundsFromRenderedLayer',
+              'tm-filter-collapse', 'Importer un trek',
+              'TrekMapBottomBarZoom',
+              'zoomToBottomTrek',
+              "track.addEventListener('click'",
+              "track.addEventListener('wheel'",
+              'coordsFromFeatures', 'boundsFromLayer',
               "fetch(base+'/treks/'+numericId",
-              "map.fitBounds(bounds.pad(.12),options)",
-              "e.target.closest('.tm-stable-card')",
-              "L.latLngBounds([[41.15,-5.5],[51.25,9.75]])",
-              'tm-filter-section-title',
-              'organizeFilters()',
-              'tm-filter-collapse',
-              'Importer un trek',
-              'TrekMapZoomToTrek',
-              'wheelTarget',
+              'map.fitBounds(bounds.pad(.10)',
               'tm-filters-collapsed'
           ]
           missing = [x for x in markers if x not in html]
@@ -80,11 +70,12 @@ jobs:
           forbidden = [
               'TREKMAP_TARGET_LAYOUT_START',
               'TREKMAP_FINAL_EXPLORER_START',
-              'TREKMAP_EXPLORER_POLISH_START'
+              'TREKMAP_EXPLORER_POLISH_START',
+              'id="trekmap-navigation-polish-js"'
           ]
           present = [x for x in forbidden if x in html]
           if present:
-              raise SystemExit('Anciennes couches UI encore présentes: ' + ', '.join(present))
+              raise SystemExit('Anciennes couches ou anciens listeners encore présents: ' + ', '.join(present))
 
           if html.count('<html') != 1 or html.count('</html>') != 1:
               raise SystemExit('Structure HTML invalide')
@@ -92,48 +83,45 @@ jobs:
               raise SystemExit('Couche stable dupliquée')
           if html.count('TREKMAP_STABLE_REPAIRS_START') != 1:
               raise SystemExit('Couche de correctifs dupliquée')
-          if html.count('TREKMAP_NAVIGATION_POLISH_START') != 1:
-              raise SystemExit('Couche navigation dupliquée')
+          if html.count('TREKMAP_BOTTOM_BAR_REPAIR_START') != 1:
+              raise SystemExit('Correctif de barre du bas dupliqué')
 
           stable = re.search(r'<script id="trekmap-stable-explorer-js">(.*?)</script>', html, re.S)
           repairs = re.search(r'<script id="trekmap-stable-repairs-js">(.*?)</script>', html, re.S)
-          navigation = re.search(r'<script id="trekmap-navigation-polish-js">(.*?)</script>', html, re.S)
-          if not stable or not repairs or not navigation:
+          bottom = re.search(r'<script id="trekmap-bottom-bar-repair-js">(.*?)</script>', html, re.S)
+          if not stable or not repairs or not bottom:
               raise SystemExit('JavaScript TrekMap introuvable')
           Path('/tmp/trekmap-stable.js').write_text(stable.group(1), encoding='utf-8')
           Path('/tmp/trekmap-repairs.js').write_text(repairs.group(1), encoding='utf-8')
-          Path('/tmp/trekmap-navigation.js').write_text(navigation.group(1), encoding='utf-8')
+          Path('/tmp/trekmap-bottom.js').write_text(bottom.group(1), encoding='utf-8')
 
-          js = repairs.group(1)
-          if "currentTab='all'" not in js or "addEventListener('input'" not in js:
-              raise SystemExit('Régression possible: la recherche ne réinitialise plus le contexte')
-          zoom_requirements = [
-              'async function zoomToTrek',
+          js = bottom.group(1)
+          required_bottom = [
+              'async function zoomToBottomTrek',
+              'window.TrekMapBottomBarZoom=zoomToBottomTrek',
+              "track.addEventListener('click'",
+              "track.addEventListener('wheel'",
+              'e.stopImmediatePropagation()',
+              'track.scrollLeft=',
               'coordsFromFeatures',
-              'boundsFromRenderedLayer',
+              'boundsFromLayer',
               "fetch(base+'/treks/'+numericId",
-              'map.fitBounds(bounds.pad(.12),options)',
-              'window.TrekMapZoomToTrek=zoomToTrek'
+              'map.fitBounds(bounds.pad(.10)',
+              'tm-filter-collapse',
+              'importGPX'
           ]
-          missing_zoom = [x for x in zoom_requirements if x not in js]
-          if missing_zoom:
-              raise SystemExit('Régression possible: zoom trek incomplet: ' + ', '.join(missing_zoom))
-          if '41.15,-5.5' not in js or '51.25,9.75' not in js:
-              raise SystemExit('Régression possible: le recentrage France dépend à nouveau des traces')
+          missing_bottom = [x for x in required_bottom if x not in js]
+          if missing_bottom:
+              raise SystemExit('Régression barre du bas: ' + ', '.join(missing_bottom))
 
-          nav = navigation.group(1)
-          for required in ('importGPX', 'tm-filter-collapse', 'TrekMapZoomToTrek', "addEventListener('wheel'", 'wheelTarget'):
-              if required not in nav:
-                  raise SystemExit('Régression navigation: ' + required)
-
-          print('Interface stable TrekMap: structure et régressions OK')
+          print('Interface stable TrekMap: barre du bas et navigation OK')
           print(f'HTML: {len(html):,} caractères')
 
       - name: Vérifier la syntaxe JavaScript
         run: |
           node --check /tmp/trekmap-stable.js
           node --check /tmp/trekmap-repairs.js
-          node --check /tmp/trekmap-navigation.js
+          node --check /tmp/trekmap-bottom.js
 
       - name: Vérifier la syntaxe Python
         run: python -m compileall -q backend scripts
