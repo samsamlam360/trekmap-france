@@ -131,21 +131,21 @@ def install_functional_upgrade(app, legacy_main, db_factory):
             db.close()
 
     @app.get("/media/trek-photos/{photo_id}")
-    def get_trek_photo(photo_id: int):
+    def get_trek_photo(photo_id: int, user=Depends(legacy_main.get_optional_user)):
         db = db_factory()
         try:
             row = db.execute(text("""
-                SELECT p.media_type,p.data,t.is_public
+                SELECT p.media_type,p.data,t.is_public,t.owner_id
                 FROM trek_photos p JOIN treks t ON t.id=p.trek_id
                 WHERE p.id=:id
             """), {"id": photo_id}).first()
-            if not row or not row.is_public:
+            if not row:
                 raise HTTPException(status_code=404, detail="Photo introuvable.")
-            return Response(
-                content=bytes(row.data),
-                media_type=row.media_type,
-                headers={"Cache-Control": "public, max-age=86400"},
-            )
+            allowed = bool(row.is_public or (user and (user.get("is_admin") or NumberLike(user.get("id")) == NumberLike(row.owner_id))))
+            if not allowed:
+                raise HTTPException(status_code=404, detail="Photo introuvable.")
+            cache = "public, max-age=86400" if row.is_public else "private, no-store"
+            return Response(content=bytes(row.data), media_type=row.media_type, headers={"Cache-Control": cache})
         finally:
             db.close()
 
@@ -169,8 +169,6 @@ def install_functional_upgrade(app, legacy_main, db_factory):
         finally:
             db.close()
 
-    # Enrichit la route /extras existante sans la remplacer : on ajoute une route dédiée
-    # aux photos que l'interface peut joindre au résultat de /extras.
     @app.get("/treks/{trek_id}/uploaded-photos")
     def uploaded_photos(trek_id: int, user=Depends(legacy_main.get_optional_user)):
         db = db_factory()
@@ -194,3 +192,10 @@ def install_functional_upgrade(app, legacy_main, db_factory):
             }
         finally:
             db.close()
+
+
+def NumberLike(value):
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return -1
