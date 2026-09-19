@@ -14,7 +14,7 @@ from . import main as legacy_main
 from .main_production import app, robust_db_or_503, FRONTEND_FILE
 from .product_upgrade import install_product_upgrade
 from .functional_upgrade import install_functional_upgrade
-from .smart_planner_v5 import install_smart_planner
+from .smart_planner_v6 import install_smart_planner
 
 install_product_upgrade(app, legacy_main, robust_db_or_503)
 install_functional_upgrade(app, legacy_main, robust_db_or_503)
