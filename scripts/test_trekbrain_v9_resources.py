@@ -1,10 +1,13 @@
 """Regression checks for TrekBrain v9.1 route-relative resources."""
 from pathlib import Path
+import os
 import sys
 
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
+
+os.environ.setdefault("TREKBRAIN_VERSION", "v9")
 
 from backend.trekbrain_resources_v9 import enrich_resources
 
@@ -63,4 +66,18 @@ assert resources["counts"]["trail"] == 1
 assert plan["transport"]["outbound_point"]["name"] == "Gare du départ"
 assert plan["transport"]["return_point"]["name"] == "Arrêt de bus arrivée"
 assert plan["trail_context"]["near_route"][0]["name"] == "GR Test"
-print("TrekBrain v9.1 route resources: OK")
+
+# Production regression: /ai/plan must accept the planner model as JSON body,
+# never as a query parameter named `data`.
+from backend import app_v5
+
+schema = app_v5.app.openapi()
+plan_post = schema["paths"]["/ai/plan"]["post"]
+assert "requestBody" in plan_post, "/ai/plan lost its JSON request body"
+parameters = plan_post.get("parameters") or []
+assert not any(p.get("in") == "query" and p.get("name") == "data" for p in parameters), \
+    "/ai/plan incorrectly exposes data as a query parameter"
+content = plan_post["requestBody"].get("content") or {}
+assert "application/json" in content, "/ai/plan no longer accepts application/json"
+
+print("TrekBrain v9.1 route resources + JSON body contract: OK")
