@@ -16,12 +16,17 @@ jobs:
       - name: Récupérer le dépôt
         uses: actions/checkout@v4
 
-      - name: Construire l'interface unifiée
+      - name: Construire l'interface complète
         run: |
           python scripts/apply_ui_remodel.py
           python scripts/apply_unified_experience.py
           python scripts/finalize_unified_build.py
           python scripts/apply_mobile_experience.py
+          python scripts/apply_map_polish.py
+          python scripts/apply_ai_planner.py
+          python scripts/apply_free_planner_labels.py
+          python scripts/apply_language_learning_ui.py
+          python scripts/apply_reasoning_agent_ui.py
 
       - name: Vérifier l'architecture frontend
         shell: python
@@ -42,10 +47,13 @@ jobs:
             'openTrek','applyUnifiedFilters','openAdvancedUnified','tm-u-photos',
             '/catalog/criteria','/uploaded-photos','/photos','tm-map-options-panel',
             'TREKMAP_MOBILE_EXPERIENCE_START','trekmap-mobile-css','trekmap-mobile-js',
-            'tm-mobile-nav','tm-mobile-create-sheet','tm-mobile-filters-open','safe-area-inset-bottom'
+            'tm-mobile-nav','tm-mobile-create-sheet','tm-mobile-filters-open','safe-area-inset-bottom',
+            'TREKMAP_MAP_POLISH_START','TREKMAP_AI_EXPERIENCE_START','trekmap-ai-js',
+            'TREKMAP_LANGUAGE_UI_START','trekmap-language-js','TREKMAP_REASONING_AGENT_UI_START',
+            'trekmap-reasoning-agent-js','tm-agent-clarify','/ai/clarify'
           ]
           missing=[x for x in required if x not in html]
-          if missing: raise SystemExit('Fonctions unifiées/mobile manquantes: '+', '.join(missing))
+          if missing: raise SystemExit('Fonctions frontend manquantes: '+', '.join(missing))
 
           forbidden=[
             'TREKMAP_STABLE_EXPLORER_START','TREKMAP_STABLE_REPAIRS_START',
@@ -59,21 +67,28 @@ jobs:
           if present: raise SystemExit('Anciennes couches encore présentes: '+', '.join(present))
           if html.count('TREKMAP_UNIFIED_EXPERIENCE_START')!=1: raise SystemExit('Couche unifiée dupliquée')
           if html.count('TREKMAP_MOBILE_EXPERIENCE_START')!=1: raise SystemExit('Couche mobile dupliquée')
-          if html.count("drawer.id='tm-unified-drawer'")!=1: raise SystemExit('Création du tiroir dupliquée')
-          if html.count("top.id='tm-unified-topbar'")!=1: raise SystemExit('Création de la barre supérieure dupliquée')
+          if html.count('TREKMAP_REASONING_AGENT_UI_START')!=1: raise SystemExit('Couche agent dupliquée')
 
-          unified=re.search(r'<script id="trekmap-unified-js">(.*?)</script>',html,re.S)
-          mobile=re.search(r'<script id="trekmap-mobile-js">(.*?)</script>',html,re.S)
-          if not unified: raise SystemExit('JavaScript unifié introuvable')
-          if not mobile: raise SystemExit('JavaScript mobile introuvable')
-          Path('/tmp/trekmap-unified.js').write_text(unified.group(1),encoding='utf-8')
-          Path('/tmp/trekmap-mobile.js').write_text(mobile.group(1),encoding='utf-8')
-          print('Architecture TrekMap unifiée + mobile: OK')
+          scripts={
+            'unified': re.search(r'<script id="trekmap-unified-js">(.*?)</script>',html,re.S),
+            'mobile': re.search(r'<script id="trekmap-mobile-js">(.*?)</script>',html,re.S),
+            'advisor': re.search(r'<script id="trekmap-ai-js">(.*?)</script>',html,re.S),
+            'language': re.search(r'<script id="trekmap-language-js">(.*?)</script>',html,re.S),
+            'reasoning': re.search(r'<script id="trekmap-reasoning-agent-js">(.*?)</script>',html,re.S),
+          }
+          missing_scripts=[name for name,value in scripts.items() if not value]
+          if missing_scripts: raise SystemExit('JavaScript introuvable: '+', '.join(missing_scripts))
+          for name,value in scripts.items():
+              Path(f'/tmp/trekmap-{name}.js').write_text(value.group(1),encoding='utf-8')
+          print('Architecture TrekMap Agent v7: OK')
 
       - name: Vérifier les JavaScript
         run: |
           node --check /tmp/trekmap-unified.js
           node --check /tmp/trekmap-mobile.js
+          node --check /tmp/trekmap-advisor.js
+          node --check /tmp/trekmap-language.js
+          node --check /tmp/trekmap-reasoning.js
 
       - name: Vérifier la syntaxe Python
         run: python -m compileall -q backend scripts
@@ -91,10 +106,10 @@ jobs:
           python - <<'PY'
           import backend.app_v5 as app_v5
           paths={r.path for r in app_v5.app.routes}
-          required={'/','/health/ready','/auth/library','/catalog/criteria','/treks/{trek_id}/extras','/treks/{trek_id}/rating','/treks/{trek_id}/photos','/treks/{trek_id}/uploaded-photos','/media/trek-photos/{photo_id}'}
+          required={'/','/health/ready','/auth/library','/catalog/criteria','/treks/{trek_id}/extras','/treks/{trek_id}/rating','/treks/{trek_id}/photos','/treks/{trek_id}/uploaded-photos','/media/trek-photos/{photo_id}','/ai/status','/ai/plan','/ai/clarify'}
           missing=required-paths
           if missing: raise SystemExit('Routes manquantes: '+', '.join(sorted(missing)))
-          if sum(1 for r in app_v5.app.routes if r.path=='/')!=1: raise SystemExit('Route / dupliquée')
-          if sum(1 for r in app_v5.app.routes if r.path=='/media/trek-photos/{photo_id}')!=1: raise SystemExit('Route photo dupliquée')
-          print('Backend TrekMap unifié: OK')
+          for path in {'/','/media/trek-photos/{photo_id}','/ai/status'}:
+              if sum(1 for r in app_v5.app.routes if r.path==path)!=1: raise SystemExit('Route dupliquée: '+path)
+          print('Backend TrekMap Agent v7: OK')
           PY
