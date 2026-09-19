@@ -42,7 +42,7 @@ helper = r'''  // TREKMAP_API_ERROR_GUARD_V92
     }
     if(typeof detail==='string'&&detail.trim())return detail.trim();
     if(data&&typeof data.message==='string'&&data.message.trim())return data.message.trim();
-    return `La préparation IA a échoué${status?` (HTTP ${status})`:''}.`;
+    return `La préparation du trek a échoué${status?` (HTTP ${status})`:''}.`;
   };'''
 
 if anchor not in html:
@@ -65,11 +65,17 @@ if old_payload not in html:
     raise SystemExit("Le format du payload TrekMap AI a changé ; correctif V9.2 à revoir.")
 html = html.replace(old_payload, new_payload, 1)
 
-old_error = "      if(!r.ok)throw new Error(d.detail||'La préparation IA a échoué.');"
+error_candidates = [
+    "      if(!r.ok)throw new Error(d.detail||'La préparation IA a échoué.');",
+    "      if(!r.ok)throw new Error(d.detail||'La préparation du trek a échoué.');",
+]
 new_error = "      if(!r.ok)throw new Error(apiErrorMessage(d,r.status));"
-if old_error not in html:
+for old_error in error_candidates:
+    if old_error in html:
+        html = html.replace(old_error, new_error, 1)
+        break
+else:
     raise SystemExit("La gestion d'erreur TrekMap AI a changé ; correctif V9.2 à revoir.")
-html = html.replace(old_error, new_error, 1)
 
 html_path.write_text(html, encoding="utf-8")
 print("TrekBrain API validation/error guard applied")
