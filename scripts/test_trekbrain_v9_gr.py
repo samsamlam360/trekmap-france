@@ -89,9 +89,26 @@ try:
     assert candidates, "A GR corridor with three off-route campsites should create a 4-day hypothesis"
     valid = [c for c in candidates if len(c.boundaries) == 5 and all(p.get("category") == "camping" for p in c.boundaries[1:-1])]
     assert valid, [getattr(c, "boundaries", None) for c in candidates]
-    assert any("gr-detour" in c.strategy or c.strategy.endswith("-gr") for c in valid), [c.strategy for c in valid]
+    assert any("gr-global" in c.strategy or "gr-detour" in c.strategy or c.strategy.endswith("-gr") for c in valid), [c.strategy for c in valid]
     # "Boucle" means the candidate closes on the exact departure object.
     assert all(c.boundaries[-1] is start for c in valid), [c.boundaries[-1] for c in valid]
+
+    # The new optimiser chooses all nights at once and verifies every estimated
+    # day before spending ORS requests. This prevents a locally attractive camp
+    # from creating a 30 km final stage.
+    cum = gr._cumulative(trail["coords"])
+    rows = []
+    for camp in camps:
+        pos, off = gr._trail_position(camp, trail, cum)
+        rows.append((camp, pos, off))
+    global_solutions = []
+    for direction in (1, -1):
+        global_solutions += detours._global_loop_sequences(trail, start, rows, intent, gr, direction)
+    assert global_solutions, "Global loop optimiser should find a feasible campsite sequence"
+    best_global = min(global_solutions, key=lambda row: row[0])
+    assert len(best_global[1]) == 3, best_global
+    assert max(best_global[2]) <= max(intent["daily_max"], intent["daily_target"] * 1.22) + 0.35, best_global
+    assert max(best_global[2]) - min(best_global[2]) < 12.0, best_global
 
     # A campsite branch must explicitly insert a GR junction so routing follows
     # camp -> junction -> GR -> junction -> next camp rather than a generic chord.
