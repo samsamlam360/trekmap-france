@@ -1,4 +1,11 @@
 """Offline regression tests for TrekBrain v9 precision logic."""
+from pathlib import Path
+import sys
+
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
 from backend.free_planner_v2 import AIPlanRequest
 from backend.smart_planner_v9 import precision_audit
 from backend.web_research_v9 import source_score
