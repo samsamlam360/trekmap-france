@@ -25,25 +25,26 @@ jobs:
       - name: Vérifier la syntaxe Python
         run: python -m compileall -q backend scripts
       - name: Vérifier l'import de l'application
-        run: python -c "import backend.app_v5; print('TrekMap research agent import OK')"
-      - name: Vérifier les routes de l'agent
+        run: python -c "import backend.app_v5; print('TrekBrain v8 import OK')"
+      - name: Vérifier les routes de l'agent apprenant
         shell: bash
         run: |
           python - <<'PY'
           import backend.app_v5 as app_v5
           paths={r.path for r in app_v5.app.routes}
-          required={'/ai/status','/ai/plan','/ai/clarify','/ai/language','/ai/language/learn'}
+          required={'/ai/status','/ai/plan','/ai/clarify','/ai/feedback','/ai/brain','/ai/language','/ai/language/learn'}
           missing=required-paths
           if missing: raise SystemExit('Routes agent manquantes: '+', '.join(sorted(missing)))
-          if sum(1 for r in app_v5.app.routes if r.path=='/ai/status')!=1:
-              raise SystemExit('Route /ai/status dupliquée')
-          print('Routes TrekMap Agent v7: OK')
+          for path in ['/ai/status','/ai/plan','/ai/clarify','/ai/feedback','/ai/brain']:
+              if sum(1 for r in app_v5.app.routes if r.path==path)!=1:
+                  raise SystemExit('Route dupliquée: '+path)
+          print('Routes TrekBrain v8: OK')
           PY
       - name: Vérifier la compréhension du français simple
         shell: bash
         run: |
           python - <<'PY'
-          from backend import smart_planner_v7  # active toutes les couches de langage
+          from backend import smart_planner_v8
           from backend.language_engine import normalize_for_planner
           text,matches=normalize_for_planner('Je veux trois jours pépère, 15 bornes par jour, sans bagnole et de beaux spots')
           expected=['3 jours','facile','15 km','train','panorama']
@@ -55,6 +56,8 @@ jobs:
           PY
       - name: Vérifier les longues phrases et demandes secondaires
         run: python scripts/test_language_v6.py
+      - name: Vérifier TrekBrain et son apprentissage
+        run: python scripts/test_trekbrain_v8.py
       - name: Vérifier clarification et recherche sans clé payante
         shell: bash
         run: |
@@ -67,7 +70,7 @@ jobs:
           queries=build_research_queries(data.prompt,'Vercors',compound,[])
           if not any('fête' in q or 'festival' in q for q in queries): raise SystemExit('Recherche événement non générée')
           if not any('château' in q for q in queries): raise SystemExit('Recherche château non générée')
-          print('Clarification/recherche Agent v7: OK')
+          print('Clarification/recherche Web: OK')
           PY
       - name: Construire le frontend complet
         run: |
@@ -80,13 +83,14 @@ jobs:
           python scripts/apply_free_planner_labels.py
           python scripts/apply_language_learning_ui.py
           python scripts/apply_reasoning_agent_ui.py
+          python scripts/apply_trekbrain_ui.py
       - name: Vérifier le frontend construit
         shell: python
         run: |
           from pathlib import Path
           import re
           html=Path('frontend/index.html').read_text(encoding='utf-8')
-          required=['<!DOCTYPE html>','</html>','TREKMAP_UNIFIED_EXPERIENCE_START','trekmap-unified-css','trekmap-unified-js','tm-unified-topbar','tm-unified-drawer','TREKMAP_MOBILE_EXPERIENCE_START','trekmap-mobile-css','trekmap-mobile-js','tm-mobile-nav','tm-mobile-create-sheet','TREKMAP_MAP_POLISH_START','TREKMAP_AI_EXPERIENCE_START','trekmap-ai-js','TREKMAP_LANGUAGE_UI_START','trekmap-language-js','TREKMAP_REASONING_AGENT_UI_START','trekmap-reasoning-agent-js','tm-agent-clarify','/ai/clarify','tm-language-learn','Apprendre mon vocabulaire','Conseiller TrekMap','Ce que j’ai compris','Pourquoi je te conseille ce trek','function openDetail(','function startDrawing(','function exportGPX(']
+          required=['<!DOCTYPE html>','</html>','TREKMAP_UNIFIED_EXPERIENCE_START','trekmap-unified-css','trekmap-unified-js','tm-unified-topbar','tm-unified-drawer','TREKMAP_MOBILE_EXPERIENCE_START','trekmap-mobile-css','trekmap-mobile-js','tm-mobile-nav','tm-mobile-create-sheet','TREKMAP_MAP_POLISH_START','TREKMAP_AI_EXPERIENCE_START','trekmap-ai-js','TREKMAP_LANGUAGE_UI_START','trekmap-language-js','TREKMAP_REASONING_AGENT_UI_START','trekmap-reasoning-agent-js','TREKMAP_TREKBRAIN_UI_START','trekmap-trekbrain-js','tm-agent-clarify','/ai/clarify','/ai/feedback','tm-language-learn','Apprendre mon vocabulaire','Conseiller TrekMap','Ce que j’ai compris','Pourquoi je te conseille ce trek','function openDetail(','function startDrawing(','function exportGPX(']
           missing=[x for x in required if x not in html]
           if missing: raise SystemExit('Éléments frontend manquants: '+', '.join(missing))
           forbidden=['TREKMAP_STABLE_EXPLORER_START','TREKMAP_STABLE_REPAIRS_START','TREKMAP_BOTTOM_BAR_REPAIR_START','TREKMAP_PRODUCT_UPGRADE_START','TREKMAP_DISPLAY_STABILIZER_START','TREKMAP_FUNCTIONAL_REPAIRS_START','TREKMAP_NAVIGATION_POLISH_START','id="trekmap-explorer-ui"']
@@ -94,18 +98,16 @@ jobs:
           if present: raise SystemExit('Anciennes couches présentes: '+', '.join(present))
           if html.count('<html')!=1 or html.count('</html>')!=1: raise SystemExit('Structure HTML invalide')
           if html.count('TREKMAP_REASONING_AGENT_UI_START')!=1: raise SystemExit('Couche agent dupliquée')
-          unified=re.search(r'<script id="trekmap-unified-js">(.*?)</script>',html,re.S)
-          mobile=re.search(r'<script id="trekmap-mobile-js">(.*?)</script>',html,re.S)
-          advisor=re.search(r'<script id="trekmap-ai-js">(.*?)</script>',html,re.S)
-          language=re.search(r'<script id="trekmap-language-js">(.*?)</script>',html,re.S)
-          reasoning=re.search(r'<script id="trekmap-reasoning-agent-js">(.*?)</script>',html,re.S)
-          if not unified or not mobile or not advisor or not language or not reasoning: raise SystemExit('Un script frontend est introuvable')
-          Path('/tmp/trekmap-unified.js').write_text(unified.group(1),encoding='utf-8')
-          Path('/tmp/trekmap-mobile.js').write_text(mobile.group(1),encoding='utf-8')
-          Path('/tmp/trekmap-advisor.js').write_text(advisor.group(1),encoding='utf-8')
-          Path('/tmp/trekmap-language.js').write_text(language.group(1),encoding='utf-8')
-          Path('/tmp/trekmap-reasoning.js').write_text(reasoning.group(1),encoding='utf-8')
-          print('Frontend TrekMap complet + Agent v7: OK')
+          if html.count('TREKMAP_TREKBRAIN_UI_START')!=1: raise SystemExit('Couche TrekBrain dupliquée')
+          scripts={
+            'unified':'trekmap-unified-js','mobile':'trekmap-mobile-js','advisor':'trekmap-ai-js',
+            'language':'trekmap-language-js','reasoning':'trekmap-reasoning-agent-js','trekbrain':'trekmap-trekbrain-js'
+          }
+          for name,sid in scripts.items():
+              match=re.search(r'<script id="'+re.escape(sid)+r'">(.*?)</script>',html,re.S)
+              if not match: raise SystemExit('Script introuvable: '+sid)
+              Path('/tmp/trekmap-'+name+'.js').write_text(match.group(1),encoding='utf-8')
+          print('Frontend TrekMap complet + TrekBrain v8: OK')
       - name: Vérifier le JavaScript
         run: |
           node --check /tmp/trekmap-unified.js
@@ -113,6 +115,7 @@ jobs:
           node --check /tmp/trekmap-advisor.js
           node --check /tmp/trekmap-language.js
           node --check /tmp/trekmap-reasoning.js
+          node --check /tmp/trekmap-trekbrain.js
 
   production-smoke:
     runs-on: ubuntu-latest
