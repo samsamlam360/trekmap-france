@@ -46,7 +46,7 @@ block = r'''<!-- TREKMAP_REASONING_AGENT_UI_START -->
   const $=id=>document.getElementById(id);
   const endpoint=path=>(typeof API!=='undefined'?API:'')+path;
   const requestHeaders=(extra={},method='GET')=>{try{return typeof headers==='function'?headers(extra,method):extra}catch(_){return extra}};
-  const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]));
+  const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot',"'":'&#039;'}[c]));
   const safeUrl=v=>{try{const u=new URL(String(v||''));return ['http:','https:'].includes(u.protocol)?u.href:''}catch(_){return''}};
 
   const generate=$('tm-ai-generate');
@@ -82,6 +82,23 @@ block = r'''<!-- TREKMAP_REASONING_AGENT_UI_START -->
       require_food:!!$('tm-ai-food')?.checked,
       current_plan:null
     };
+  }
+
+  function applyEffectiveRequest(data){
+    const e=data&&data.effective_request;if(!e)return false;
+    let changed=false;
+    const setValue=(id,value)=>{const el=$(id);if(!el||value===undefined||value===null)return;if(String(el.value)!==String(value)){el.value=String(value);changed=true}};
+    setValue('tm-ai-region',e.region);
+    setValue('tm-ai-days',e.days);
+    setValue('tm-ai-km',e.daily_km);
+    setValue('tm-ai-difficulty',e.difficulty);
+    setValue('tm-ai-route-type',e.route_type);
+    const checks=[['tm-ai-transit','require_transit'],['tm-ai-water','require_water'],['tm-ai-sleep','require_accommodation'],['tm-ai-food','require_food']];
+    checks.forEach(([id,key])=>{const el=$(id);if(!el||typeof e[key]!=='boolean')return;if(el.checked!==e[key]){el.checked=e[key];changed=true}});
+    if(changed&&data.request_resolution?.region_overridden){
+      thinking.textContent=`🧭 Demande comprise : ${e.region}, ${e.days} jour${Number(e.days)>1?'s':''}. Les anciens champs ont été corrigés automatiquement.`;
+    }
+    return changed;
   }
 
   function hideClarify(){clarify.classList.remove('show');lastClarification=null}
@@ -121,11 +138,12 @@ block = r'''<!-- TREKMAP_REASONING_AGENT_UI_START -->
       if(typeof toast==='function')toast('Décris un peu plus le trek souhaité.');
       return;
     }
-    pendingPayload=p;thinking.classList.add('show');generate.disabled=true;hideClarify();
+    pendingPayload=p;thinking.textContent='🧠 Analyse de ta demande avant de calculer le parcours…';thinking.classList.add('show');generate.disabled=true;hideClarify();
     try{
       const r=await fetch(endpoint('/ai/clarify'),{method:'POST',headers:requestHeaders({'Content-Type':'application/json'},'POST'),body:JSON.stringify(p)});
       const d=await r.json().catch(()=>({}));
       if(!r.ok)throw new Error(d.detail||'Analyse indisponible');
+      applyEffectiveRequest(d);
       if(d.needs_clarification&&(d.questions||[]).length){
         thinking.classList.remove('show');generate.disabled=false;showQuestions(d);return;
       }
