@@ -1,8 +1,8 @@
-"""Add clear start/end markers and one route color per trekking day.
+"""Add clear start/end markers, daily colors and coherent route selection.
 
-This layer is deliberately generic: it works for TrekBrain previews, saved
-multi-day treks, and manual drawing endpoints without changing the stable
-routing/storage code underneath.
+When a saved trek is selected, its normal green overview trace is hidden so the
+per-day colored trace is the only route shown. Clicking the map away from the
+selected route exits selection and restores the normal green overview.
 """
 from pathlib import Path
 import re
@@ -47,6 +47,7 @@ block = r'''<!-- TREKMAP_ROUTE_DAY_VISUALS_START -->
   if(window.__trekmapRouteDayVisuals)return;window.__trekmapRouteDayVisuals=true;
   const palette=['#1565c0','#d32f2f','#2e7d32','#ef6c00','#7b1fa2','#00838f','#c2185b','#5d4037','#455a64','#9e9d24','#3949ab','#ad1457','#00796b','#6a1b9a'];
   let aiPlan=null,aiGroup=null,selectedGroup=null,manualEndpoints=null,aiLegend=null,selectedLegend=null;
+  let selectedTrekId=null,routeClickGuard=false,mapExitBound=false;
 
   const cleanCoords=coords=>(Array.isArray(coords)?coords:[]).map(p=>[Number(p?.[0]),Number(p?.[1])]).filter(p=>p.every(Number.isFinite)&&Math.abs(p[0])<=90&&Math.abs(p[1])<=180);
   function km(a,b){
@@ -95,6 +96,14 @@ block = r'''<!-- TREKMAP_ROUTE_DAY_VISUALS_START -->
       L.DomEvent.disableClickPropagation(div);L.DomEvent.disableScrollPropagation(div);return div;
     };control.addTo(map);return control;
   }
+  function protectSelectedInteraction(layer){
+    if(!layer||typeof layer.on!=='function')return;
+    layer.on('click',e=>{
+      routeClickGuard=true;
+      try{if(e?.originalEvent)L.DomEvent.stopPropagation(e.originalEvent)}catch(_){}
+      setTimeout(()=>{routeClickGuard=false},80);
+    });
+  }
   function render(kind,coords,weights,names,fit=false){
     if(typeof map==='undefined'||typeof L==='undefined')return;const pts=cleanCoords(coords);if(pts.length<2)return;
     if(kind==='ai'){try{if(aiGroup)map.removeLayer(aiGroup)}catch(_){}aiLegend=clearControl(aiLegend)}
@@ -102,6 +111,7 @@ block = r'''<!-- TREKMAP_ROUTE_DAY_VISUALS_START -->
     const segments=splitRoute(pts,weights),group=L.featureGroup().addTo(map);
     segments.forEach((seg,i)=>L.polyline(seg,{color:palette[i%palette.length],weight:7,opacity:.96,lineCap:'round',lineJoin:'round'}).bindTooltip(`Jour ${i+1}`,{sticky:true}).addTo(group));
     addEndpoints(group,pts,names||{});
+    if(kind==='selected')group.eachLayer(protectSelectedInteraction);
     const legend=makeLegend(segments,segments.length>1?'Étapes du trek':'Tracé du trek');
     if(kind==='ai'){aiGroup=group;aiLegend=legend}else{selectedGroup=group;selectedLegend=legend}
     if(fit){const bounds=group.getBounds();if(bounds.isValid())map.fitBounds(bounds.pad(.12),{maxZoom:15,paddingTopLeft:[25,70],paddingBottomRight:[25,110],animate:true})}
@@ -122,8 +132,12 @@ block = r'''<!-- TREKMAP_ROUTE_DAY_VISUALS_START -->
     if(Array.isArray(t?.coords)&&t.coords.length>1)return t.coords;
     try{return typeof geometryToLeaflet==='function'?geometryToLeaflet(t?.geometry):[]}catch(_){return[]}
   }
+  function removeLegacySelectedLine(){
+    try{if(typeof detailLayer!=='undefined'&&detailLayer){map.removeLayer(detailLayer);detailLayer=null}}catch(_){}
+  }
   function renderSaved(t,fit=true){
     try{if(aiGroup)map.removeLayer(aiGroup)}catch(_){}aiGroup=null;aiLegend=clearControl(aiLegend);
+    removeLegacySelectedLine();
     render('selected',savedCoords(t),savedWeights(t),{start:t?.start_name||t?.name||'',end:t?.end_name||''},fit);
   }
   function renderManualEndpoints(){
@@ -132,6 +146,25 @@ block = r'''<!-- TREKMAP_ROUTE_DAY_VISUALS_START -->
     const pts=cleanCoords(drawCoords);if(!pts.length)return;manualEndpoints=L.featureGroup().addTo(map);
     if(pts.length===1)L.marker(pts[0],{icon:icon('start'),zIndexOffset:1200,title:'Départ'}).bindPopup('<b>Départ</b>').addTo(manualEndpoints);
     else addEndpoints(manualEndpoints,pts,{});
+  }
+  function exitSelectedTrek(){
+    if(selectedTrekId===null)return;
+    try{if(selectedGroup)map.removeLayer(selectedGroup)}catch(_){}selectedGroup=null;
+    selectedLegend=clearControl(selectedLegend);removeLegacySelectedLine();
+    selectedTrekId=null;
+    try{if(typeof currentDetail!=='undefined')currentDetail=null}catch(_){}
+    try{if(typeof refreshTraceStyles==='function')refreshTraceStyles()}catch(_){}
+  }
+  function bindMapExit(){
+    if(mapExitBound)return;
+    if(typeof map==='undefined'||!map||typeof map.on!=='function'){setTimeout(bindMapExit,120);return}
+    mapExitBound=true;
+    map.on('click',()=>{
+      if(selectedTrekId===null)return;
+      if(routeClickGuard){routeClickGuard=false;return}
+      try{if(typeof drawMode!=='undefined'&&drawMode)return}catch(_){}
+      exitSelectedTrek();
+    });
   }
 
   if(!window.__trekmapRouteDayFetchWrapped){
@@ -143,9 +176,31 @@ block = r'''<!-- TREKMAP_ROUTE_DAY_VISUALS_START -->
   document.addEventListener('click',e=>{if(e.target.closest('#tm-ai-preview')&&aiPlan)setTimeout(()=>renderAi(aiPlan,true),70)},false);
 
   try{
+    if(typeof drawTrace==='function'){
+      const originalDrawTrace=drawTrace;
+      drawTrace=function(t,highlight){
+        if(selectedTrekId!==null&&Number(t?.id)===Number(selectedTrekId))return;
+        return originalDrawTrace.apply(this,arguments);
+      };
+      window.drawTrace=drawTrace;
+    }
+  }catch(_){}
+  try{
     if(typeof openDetail==='function'){
       const originalOpenDetail=openDetail;
-      openDetail=function(id){const value=originalOpenDetail.apply(this,arguments);setTimeout(()=>{try{const t=(typeof allTreks!=='undefined'?allTreks:[]).find(x=>Number(x.id)===Number(id));if(t)renderSaved(t,true)}catch(_){}},30);return value};
+      openDetail=function(id){
+        selectedTrekId=Number(id);routeClickGuard=true;setTimeout(()=>{routeClickGuard=false},120);
+        const value=originalOpenDetail.apply(this,arguments);
+        setTimeout(()=>{
+          try{
+            removeLegacySelectedLine();
+            if(typeof refreshTraceStyles==='function')refreshTraceStyles();
+            const t=(typeof allTreks!=='undefined'?allTreks:[]).find(x=>Number(x.id)===Number(id));
+            if(t)renderSaved(t,true);
+          }catch(_){}
+        },30);
+        return value;
+      };
       window.openDetail=openDetail;
     }
   }catch(_){}
@@ -159,10 +214,12 @@ block = r'''<!-- TREKMAP_ROUTE_DAY_VISUALS_START -->
       clearDrawingLayers=function(){const value=originalClearDrawingLayers.apply(this,arguments);try{if(manualEndpoints)map.removeLayer(manualEndpoints)}catch(_){}manualEndpoints=null;return value};window.clearDrawingLayers=clearDrawingLayers;
     }
   }catch(_){}
+  window.TrekMapExitSelectedTrek=exitSelectedTrek;
+  bindMapExit();
 })();
 </script>
 <!-- TREKMAP_ROUTE_DAY_VISUALS_END -->'''
 
 html = html.replace("</body>", block + "\n</body>", 1)
 html_path.write_text(html, encoding="utf-8")
-print("TrekMap route day colors + start/end markers applied")
+print("TrekMap route day colors + coherent selection behavior applied")
