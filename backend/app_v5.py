@@ -32,10 +32,14 @@ install_smart_planner(app, legacy_main)
 if TREKBRAIN_VERSION == "v9":
     # GR/GRP relations are strong route evidence: use their real OSM geometry
     # to guide candidate selection before the geographic safety overlay runs.
-    # They never bypass pedestrian routing or the final safety gate.
+    # Short walking branches to genuine campsites are allowed while the GR stays
+    # the main corridor; every connector is still routed as a pedestrian path.
     from . import smart_planner_v7 as _planner_v7
+    from . import trekbrain_gr_v9 as _gr_v9
     from .trekbrain_gr_v9 import install_gr_guidance
+    from .trekbrain_gr_detours_v9 import install_gr_detours
     install_gr_guidance(_planner_v7.v5.v3)
+    install_gr_detours(_planner_v7.v5.v3, _gr_v9)
 
     # Keep V8 untouched. V9 first adds geographic safety/resources, then wraps
     # the public planner endpoints with natural-language request reconciliation.
