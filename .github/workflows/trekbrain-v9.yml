@@ -2,7 +2,7 @@ name: TrekBrain v9 checks
 
 on:
   push:
-    branches: [main]
+    branches: [main, trekbrain-v9-stabilization]
   pull_request:
 
 jobs:
@@ -13,6 +13,8 @@ jobs:
       TREKMAP_ENV: development
       FRONTEND_ORIGINS: http://127.0.0.1:5500,http://localhost:5500
       ORS_API_KEY: ci-placeholder
+      TREKBRAIN_VERSION: v9
+      TREKBRAIN_FREE_MODE: '1'
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -25,7 +27,7 @@ jobs:
       - name: Python syntax
         run: python -m compileall -q backend scripts
       - name: Import active app
-        run: python -c "import backend.app_v5; print('TrekBrain v9 import OK')"
+        run: python -c "import backend.app_v5 as app; assert app.TREKBRAIN_VERSION == 'v9'; print('TrekBrain v9 import OK')"
       - name: Check v9 endpoints
         run: |
           python - <<'PY'
@@ -40,6 +42,14 @@ jobs:
           PY
       - name: Precision tests
         run: python scripts/test_trekbrain_v9.py
+      - name: V8 and French language regressions
+        run: |
+          python scripts/test_trekbrain_v8.py
+          python scripts/test_language_v6.py
+      - name: Free mode, research and dialogue regressions
+        run: python scripts/test_trekbrain_v9_extended.py
+      - name: UI stability and dialogue
+        run: node scripts/test_trekbrain_v9_ui.mjs
       - name: Build production frontend
         run: |
           python scripts/apply_ui_remodel.py
@@ -70,3 +80,5 @@ jobs:
           print('TrekBrain v9 frontend: OK')
       - name: Check v9 JavaScript
         run: node --check /tmp/trekbrain-v9.js
+      - name: Check inherited research panel stability
+        run: node scripts/test_trekbrain_v9_ui.mjs frontend/index.html

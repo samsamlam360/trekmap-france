@@ -29,7 +29,7 @@ compound = {"side_requests": []}
 
 base = {
     "confidence": {"score": 92, "limitations": []},
-    "route_preview": {"fallback": False, "distance_km": 64},
+    "route_preview": {"fallback": False, "distance_km": 64, "coords": [[44.97, 5.55], [44.971, 5.551]]},
     "start": {"lat": 44.97, "lon": 5.55},
     "end": {"lat": 44.971, "lon": 5.551},
     "stages": [
@@ -60,6 +60,16 @@ broken["duration_days"] = 3
 bad = precision_audit(broken, request, features, research, compound)
 assert bad["score"] < good["score"] - 20, (good, bad)
 assert bad["blockers"], bad
+
+transit_request = request.model_copy(update={"require_transit": True})
+missing_transit = precision_audit(base, transit_request, {**features, "transit": 1.0}, research, compound)
+assert "accès en transport non renseigné" in missing_transit["blockers"], missing_transit
+
+missing_water_plan = dict(base)
+missing_water_plan["stages"] = [dict(stage, water_notes="") for stage in base["stages"]]
+missing_water = precision_audit(missing_water_plan, request, features, research, compound)
+water_check = next(item for item in missing_water["checks"] if item["name"] == "Eau")
+assert water_check["status"] == "unknown", missing_water
 
 trusted = source_score({"url": "https://www.example.gouv.fr/agenda", "title": "Agenda randonnée Vercors", "snippet": "Informations officielles randonnée Vercors 2026"}, "agenda randonnée Vercors")
 social = source_score({"url": "https://www.instagram.com/example", "title": "Vercors", "snippet": "Photo randonnée"}, "agenda randonnée Vercors")

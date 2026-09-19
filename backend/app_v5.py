@@ -6,6 +6,8 @@ main_production n'est plus injectée : l'interface est désormais pilotée par u
 seule couche unifiée générée au build.
 """
 
+import os
+
 from fastapi import Depends, HTTPException
 from fastapi.responses import HTMLResponse, Response
 from sqlalchemy import text
@@ -14,10 +16,18 @@ from . import main as legacy_main
 from .main_production import app, robust_db_or_503, FRONTEND_FILE
 from .product_upgrade import install_product_upgrade
 from .functional_upgrade import install_functional_upgrade
-from .smart_planner_v9 import install_smart_planner
 
 install_product_upgrade(app, legacy_main, robust_db_or_503)
 install_functional_upgrade(app, legacy_main, robust_db_or_503)
+TREKBRAIN_VERSION = os.getenv("TREKBRAIN_VERSION", "v8").strip().casefold()
+if TREKBRAIN_VERSION == "v9":
+    from .smart_planner_v9 import install_smart_planner
+else:
+    # V8 remains the safe production default. V9 is activated explicitly in a
+    # staging environment, so an incomplete V9 change cannot replace V8 merely
+    # because it was merged or deployed.
+    from .smart_planner_v8 import install_smart_planner
+
 install_smart_planner(app, legacy_main)
 
 # Retire la route production historique qui injectait encore une ancienne couche
