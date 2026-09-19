@@ -33,15 +33,17 @@ jobs:
           python - <<'PY'
           import backend.app_v5 as app_v5
           paths=[r.path for r in app_v5.app.routes]
-          required={'/ai/status','/ai/plan','/ai/clarify','/ai/feedback','/ai/brain'}
+          required={'/ai/status','/ai/plan','/ai/clarify','/ai/feedback','/ai/brain','/ai/ask','/treks/{trek_id}/ai-redraw'}
           missing=required-set(paths)
           if missing: raise SystemExit('Missing endpoints: '+', '.join(sorted(missing)))
           for path in required:
               if paths.count(path)!=1: raise SystemExit(f'Duplicate endpoint: {path} ({paths.count(path)})')
-          print('TrekBrain v9 endpoints: OK')
+          print('TrekBrain v9.1 endpoints: OK')
           PY
       - name: Precision tests
         run: python scripts/test_trekbrain_v9.py
+      - name: Route resource tests
+        run: python scripts/test_trekbrain_v9_resources.py
       - name: V8 and French language regressions
         run: |
           python scripts/test_trekbrain_v8.py
@@ -62,23 +64,36 @@ jobs:
           python scripts/apply_language_learning_ui.py
           python scripts/apply_reasoning_agent_ui.py
           python scripts/apply_trekbrain_ui.py
-          python scripts/apply_trekbrain_v9_ui.py
+          python scripts/apply_selected_trekbrain_ui.py
       - name: Check v9 frontend
         shell: python
         run: |
           from pathlib import Path
           import re
           html=Path('frontend/index.html').read_text(encoding='utf-8')
-          required=['TREKMAP_TREKBRAIN_V9_UI_START','trekmap-trekbrain-v9-js','Décision TrekBrain','Confirmé','À vérifier','Important','/ai/feedback']
+          required=[
+            'TREKMAP_TREKBRAIN_V9_UI_START','trekmap-trekbrain-v9-js','Décision TrekBrain',
+            'Confirmé','À vérifier','Important','/ai/feedback',
+            'TREKMAP_TREKBRAIN_V91_MAP_START','trekmap-trekbrain-v91-map-js',
+            'Repères TrekBrain','ai-redraw','Mettre à jour ce trek dans TrekMap'
+          ]
           missing=[x for x in required if x not in html]
-          if missing: raise SystemExit('Missing V9 UI: '+', '.join(missing))
+          if missing: raise SystemExit('Missing V9.1 UI: '+', '.join(missing))
           if 'TREKMAP_TREKBRAIN_UI_START' in html: raise SystemExit('Old V8 TrekBrain UI was not replaced')
           if html.count('TREKMAP_TREKBRAIN_V9_UI_START')!=1: raise SystemExit('V9 UI duplicated')
-          m=re.search(r'<script id="trekmap-trekbrain-v9-js">(.*?)</script>',html,re.S)
-          if not m: raise SystemExit('V9 JavaScript missing')
-          Path('/tmp/trekbrain-v9.js').write_text(m.group(1),encoding='utf-8')
-          print('TrekBrain v9 frontend: OK')
+          if html.count('TREKMAP_TREKBRAIN_V91_MAP_START')!=1: raise SystemExit('V9.1 map UI duplicated')
+          scripts={
+              'v9':'trekmap-trekbrain-v9-js',
+              'v91-map':'trekmap-trekbrain-v91-map-js',
+          }
+          for name,sid in scripts.items():
+              m=re.search(r'<script id="'+re.escape(sid)+r'">(.*?)</script>',html,re.S)
+              if not m: raise SystemExit('JavaScript missing: '+sid)
+              Path('/tmp/trekbrain-'+name+'.js').write_text(m.group(1),encoding='utf-8')
+          print('TrekBrain v9.1 frontend: OK')
       - name: Check v9 JavaScript
-        run: node --check /tmp/trekbrain-v9.js
+        run: |
+          node --check /tmp/trekbrain-v9.js
+          node --check /tmp/trekbrain-v91-map.js
       - name: Check inherited research panel stability
         run: node scripts/test_trekbrain_v9_ui.mjs frontend/index.html
