@@ -30,6 +30,13 @@ else:
 
 install_smart_planner(app, legacy_main)
 if TREKBRAIN_VERSION == "v9":
+    # GR/GRP relations are strong route evidence: use their real OSM geometry
+    # to guide candidate selection before the geographic safety overlay runs.
+    # They never bypass pedestrian routing or the final safety gate.
+    from . import smart_planner_v7 as _planner_v7
+    from .trekbrain_gr_v9 import install_gr_guidance
+    install_gr_guidance(_planner_v7.v5.v3)
+
     # Keep V8 untouched. V9 first adds geographic safety/resources, then wraps
     # the public planner endpoints with natural-language request reconciliation.
     # The reconciliation wrapper is intentionally installed last so stale form
