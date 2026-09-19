@@ -72,6 +72,7 @@ intent = {
     "route_type": "Boucle",
     "avoid": set(),
     "priorities": {},
+    "max_dplus_day": None,
 }
 
 # Install the same layers as production.
