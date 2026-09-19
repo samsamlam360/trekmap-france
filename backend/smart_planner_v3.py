@@ -101,8 +101,8 @@ def _parse_intent(data: AIPlanRequest) -> dict[str, Any]:
     text = _fold(original)
     days = int(data.days)
     daily_target = float(data.daily_km)
-    daily_min = max(3.0, daily_target * 0.75)
-    daily_max = min(40.0, daily_target * 1.25)
+    daily_min = max(3.0, daily_target * 0.85)
+    daily_max = min(40.0, daily_target * 1.15)
     difficulty = data.difficulty if data.difficulty in {"easy", "medium", "hard"} else "medium"
     route_type = data.route_type or "Boucle"
 
@@ -120,8 +120,8 @@ def _parse_intent(data: AIPlanRequest) -> dict[str, Any]:
         m = re.search(r"\b(\d{1,2}(?:[.,]\d+)?)\s*km\s*(?:/|par\s+)?(?:jour|j)\b", text)
         if m:
             daily_target = max(3.0, min(_num(m.group(1)), 40.0))
-            daily_min = max(3.0, daily_target * 0.8)
-            daily_max = min(40.0, daily_target * 1.2)
+            daily_min = max(3.0, daily_target * 0.85)
+            daily_max = min(40.0, daily_target * 1.15)
 
     m = re.search(r"(?:max(?:imum)?|pas\s+plus\s+de|moins\s+de)\s*(\d{1,2}(?:[.,]\d+)?)\s*km(?:\s*(?:par\s*jour|/\s*j|/\s*jour))?", text)
     if m:
@@ -566,10 +566,26 @@ def _route_points_for_candidate(candidate: Candidate, all_items, intent, forced_
     return route_points, stage_highlights
 
 
+_ROUTE_CACHE = {}
+_ROUTE_CACHE_ORDER = []
+_ROUTE_CACHE_MAX = 256
+
+
 def _route_cached(points, legacy_main):
     coords = [[round(float(p["lat"]), 6), round(float(p["lon"]), 6)] for p in points]
-    # ORS is already a safe wrapper; keep this function isolated so persistent cache can be added later.
-    return ors.get_route(coords, legacy_main.distance_gps)
+    key = tuple((p[0], p[1]) for p in coords)
+    cached = _ROUTE_CACHE.get(key)
+    if cached is not None:
+        return dict(cached)
+    result = ors.get_route(coords, legacy_main.distance_gps)
+    # Cache only validated routes. Unsafe diagnostics should be retried later.
+    if not result.get("fallback"):
+        _ROUTE_CACHE[key] = dict(result)
+        _ROUTE_CACHE_ORDER.append(key)
+        if len(_ROUTE_CACHE_ORDER) > _ROUTE_CACHE_MAX:
+            old = _ROUTE_CACHE_ORDER.pop(0)
+            _ROUTE_CACHE.pop(old, None)
+    return result
 
 
 def _nearest_route_indices(route_coords, boundaries):
@@ -608,6 +624,29 @@ def _stage_distances(route_coords, boundaries, legacy_main, total_distance):
     return distances
 
 
+def _route_retrace_ratio(coords):
+    """Estimate how much of a route reuses the same corridor.
+
+    Consecutive geometry points are collapsed into ~100 m cells first, so normal
+    ORS point density does not look like retracing. A genuine loop should visit
+    mostly new cells; an out-and-back route revisits a large share of them.
+    """
+    cells = []
+    for point in coords or []:
+        if len(point) < 2:
+            continue
+        cell = (round(float(point[0]), 3), round(float(point[1]), 3))
+        if not cells or cell != cells[-1]:
+            cells.append(cell)
+    if len(cells) < 12:
+        return 0.0
+    # Ignore the final return-to-start cell: that is required for a loop.
+    body = cells[:-1] if cells[-1] == cells[0] else cells
+    if not body:
+        return 0.0
+    return max(0.0, 1.0 - len(set(body)) / len(body))
+
+
 def _candidate_score(candidate, route_points, route, intent, items, legacy_main, compute_elevation=False):
     coords = route.get("coords") or [[p["lat"], p["lon"]] for p in route_points]
     distance = float(route.get("distance") or legacy_main.distance_gps(coords))
@@ -627,7 +666,7 @@ def _candidate_score(candidate, route_points, route, intent, items, legacy_main,
     # Distance per day is a user constraint, not a decorative preference.
     # Reject candidates with a grossly oversized stage instead of merely
     # penalising them and still displaying a 30 km day for a ~20 km request.
-    hard_day_max = max(intent["daily_max"], intent["daily_target"] * 1.22)
+    hard_day_max = intent["daily_max"]
     if any(d > hard_day_max + 0.25 for d in stage_dist):
         score += 1000 + sum(max(0.0, d - hard_day_max) for d in stage_dist) * 50
 
@@ -637,6 +676,12 @@ def _candidate_score(candidate, route_points, route, intent, items, legacy_main,
     if _fold(intent.get("route_type") or "") == "boucle":
         if _dist(candidate.boundaries[0], candidate.boundaries[-1]) > 0.35:
             score += 2000
+        retrace_ratio = _route_retrace_ratio(coords)
+        # Returning to the start is necessary but not sufficient: a 40 km
+        # outward leg followed by the same 40 km backwards is an aller-retour,
+        # not a loop. Strongly reject heavily retraced geometry.
+        if retrace_ratio > 0.32:
+            score += 2200 + (retrace_ratio - 0.32) * 3000
 
     elevation = None
     if compute_elevation or intent["max_dplus_day"]:
@@ -708,13 +753,13 @@ def _build(data: AIPlanRequest, legacy_main):
             continue
         unique.add(key)
         candidates.append(candidate)
-        if len(candidates) >= 5:
+        if len(candidates) >= 10:
             break
     if not candidates:
         raise HTTPException(status_code=422, detail="Je n'ai pas trouvé de combinaison d'étapes cohérente. Essaie une zone plus précise ou assouplis la distance quotidienne.")
 
     evaluated = []
-    for candidate in candidates[:3]:
+    for candidate in candidates[:6]:
         route_points, stage_highlights = _route_points_for_candidate(candidate, items, intent, forced_via)
         route = _route_cached(route_points, legacy_main)
         score, distance, stage_dist, elevation, route_coords = _candidate_score(candidate, route_points, route, intent, items, legacy_main, compute_elevation=False)
@@ -725,7 +770,7 @@ def _build(data: AIPlanRequest, legacy_main):
     # Humans asked for 20 km, not "20 km except when the optimiser feels artistic".
     acceptable = [
         row for row in evaluated
-        if row[6] and max(row[6]) <= max(intent["daily_max"], intent["daily_target"] * 1.22) + 0.25
+        if row[6] and max(row[6]) <= intent["daily_max"] + 0.25 and (_fold(intent.get("route_type") or "") != "boucle" or _route_retrace_ratio(row[7]) <= 0.32)
     ]
     if acceptable:
         evaluated = acceptable
