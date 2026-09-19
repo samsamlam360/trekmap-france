@@ -63,6 +63,150 @@ def _best_arc(trail, ia: int, ib: int, target_km: float, max_km: float, gr):
     return min(options, key=lambda row: (row[0], row[1]))[2]
 
 
+
+def _global_loop_sequences(trail, start, rows, intent, gr, direction: int, beam_width: int = 64):
+    """Jointly optimise loop direction, overnight stops and every day's mileage."""
+    days = max(1, int(intent.get("days") or 1))
+    if days <= 1 or not _is_loop(trail, gr):
+        return []
+    coords = trail.get("coords") or []
+    cum = gr._cumulative(coords)
+    length = cum[-1]
+    if length <= 0:
+        return []
+    start_pos, start_off = gr._trail_position(start, trail, cum)
+    target = float(intent.get("daily_target") or 18)
+    daily_min = float(intent.get("daily_min") or target * 0.75)
+    daily_max = float(intent.get("daily_max") or target * 1.25)
+    hard_max = max(daily_max, target * 1.22) + 0.35
+
+    ordered = []
+    for stay, pos, off in rows:
+        progress = (pos - start_pos) % length if direction > 0 else (start_pos - pos) % length
+        if 0.15 < progress < length - 0.15:
+            ordered.append((progress, stay, off))
+    ordered.sort(key=lambda row: row[0])
+    if len(ordered) < days - 1:
+        return []
+
+    beam = [(0.0, [], 0.0, start_off)]
+    for night in range(1, days):
+        wanted = length * night / days
+        expanded = []
+        for cost, chosen, prev_progress, prev_off in beam:
+            used = {x[1].get("source_url") or x[1].get("name") for x in chosen}
+            for progress, stay, off in ordered:
+                key = stay.get("source_url") or stay.get("name")
+                if key in used or progress <= prev_progress + 0.15:
+                    continue
+                remaining_nights = (days - 1) - night
+                if sum(1 for p, _, _ in ordered if p > progress + 0.15) < remaining_nights:
+                    continue
+                estimated_day = (progress - prev_progress) + prev_off + off
+                if estimated_day > hard_max:
+                    continue
+                expanded.append((
+                    cost + abs(estimated_day - target) * 1.35
+                    + max(0.0, daily_min - estimated_day) * 1.8
+                    + abs(progress - wanted) * 0.18 + off * 0.22,
+                    chosen + [(progress, stay, off)], progress, off,
+                ))
+        if not expanded:
+            return []
+        expanded.sort(key=lambda state: state[0])
+        beam = expanded[:beam_width]
+
+    finals = []
+    for cost, chosen, prev_progress, prev_off in beam:
+        final_day = (length - prev_progress) + prev_off + start_off
+        if final_day > hard_max:
+            continue
+        legs, last_progress, last_off = [], 0.0, start_off
+        for progress, _, off in chosen:
+            legs.append((progress - last_progress) + last_off + off)
+            last_progress, last_off = progress, off
+        legs.append((length - last_progress) + last_off + start_off)
+        total = sum(legs)
+        total_target = float(intent.get("total_target") or target * days)
+        final_cost = cost + abs(final_day - target) * 1.35 + abs(total - total_target) * 0.30
+        finals.append((final_cost, [row[1] for row in chosen], legs, total, direction))
+    finals.sort(key=lambda row: row[0])
+    return finals[:6]
+
+
+def _global_linear_sequences(trail, start, end, rows, intent, gr, direction: int, beam_width: int = 64):
+    """Joint optimiser for non-loop itineraries using monotonic GR progress."""
+    days = max(1, int(intent.get("days") or 1))
+    if days <= 1:
+        return []
+    coords = trail.get("coords") or []
+    cum = gr._cumulative(coords)
+    start_pos, start_off = gr._trail_position(start, trail, cum)
+    end_pos, end_off = gr._trail_position(end, trail, cum)
+    target = float(intent.get("daily_target") or 18)
+    daily_min = float(intent.get("daily_min") or target * 0.75)
+    daily_max = float(intent.get("daily_max") or target * 1.25)
+    hard_max = max(daily_max, target * 1.22) + 0.35
+
+    def progress(pos):
+        return direction * (pos - start_pos)
+
+    end_progress = progress(end_pos)
+    if end_progress <= 0.5:
+        return []
+    ordered = sorted(
+        [(progress(pos), stay, off) for stay, pos, off in rows if 0.15 < progress(pos) < end_progress - 0.15],
+        key=lambda row: row[0],
+    )
+    if len(ordered) < days - 1:
+        return []
+
+    beam = [(0.0, [], 0.0, start_off)]
+    for night in range(1, days):
+        wanted = end_progress * night / days
+        expanded = []
+        for cost, chosen, prev_progress, prev_off in beam:
+            used = {x[1].get("source_url") or x[1].get("name") for x in chosen}
+            for prog, stay, off in ordered:
+                key = stay.get("source_url") or stay.get("name")
+                if key in used or prog <= prev_progress + 0.15:
+                    continue
+                if sum(1 for p, _, _ in ordered if p > prog + 0.15) < (days - 1 - night):
+                    continue
+                estimated_day = (prog - prev_progress) + prev_off + off
+                if estimated_day > hard_max:
+                    continue
+                expanded.append((
+                    cost + abs(estimated_day - target) * 1.35
+                    + max(0.0, daily_min - estimated_day) * 1.8
+                    + abs(prog - wanted) * 0.18 + off * 0.22,
+                    chosen + [(prog, stay, off)], prog, off,
+                ))
+        if not expanded:
+            return []
+        expanded.sort(key=lambda state: state[0])
+        beam = expanded[:beam_width]
+
+    finals = []
+    for cost, chosen, prev_progress, prev_off in beam:
+        final_day = (end_progress - prev_progress) + prev_off + end_off
+        if final_day > hard_max:
+            continue
+        legs, lp, lo = [], 0.0, start_off
+        for prog, _, off in chosen:
+            legs.append((prog - lp) + lo + off)
+            lp, lo = prog, off
+        legs.append((end_progress - lp) + lo + end_off)
+        total = sum(legs)
+        total_target = float(intent.get("total_target") or target * days)
+        finals.append((
+            cost + abs(final_day - target) * 1.35 + abs(total - total_target) * 0.30,
+            [row[1] for row in chosen], legs, total, direction,
+        ))
+    finals.sort(key=lambda row: row[0])
+    return finals[:6]
+
+
 def install_gr_detours(v3, gr) -> None:
     global _INSTALLED
     if _INSTALLED:
@@ -174,7 +318,6 @@ def install_gr_detours(v3, gr) -> None:
             return existing
 
         target = float(intent.get("daily_target") or 18)
-        total_target = float(intent.get("total_target") or target * days)
         generated = []
         loop_requested = v3_module._fold(intent.get("route_type") or "") == "boucle"
 
@@ -183,7 +326,6 @@ def install_gr_detours(v3, gr) -> None:
             if len(coords) < 4:
                 continue
             cum = gr._cumulative(coords)
-            length = cum[-1]
             start_pos, start_off = gr._trail_position(start, trail, cum)
             if start_off > MAX_BRANCH_KM:
                 continue
@@ -196,57 +338,27 @@ def install_gr_detours(v3, gr) -> None:
             if len(rows) < days - 1:
                 continue
 
-            closed = _is_loop(trail, gr)
-            for direction in (1, -1):
-                chosen = []
-                used = set()
-                error = 0.0
-                current = start
-                for step in range(1, days):
-                    ranked = []
-                    if loop_requested and closed:
-                        wanted_progress = length * step / days
-                    else:
-                        wanted_progress = target * step
-
-                    for stay, pos, off in rows:
-                        key = stay.get("source_url") or stay.get("name")
-                        if key in used:
-                            continue
-                        progress = directed_progress(pos, start_pos, length, direction) if closed else direction * (pos - start_pos)
-                        if progress <= 0:
-                            continue
-                        along_error = abs(progress - wanted_progress)
-                        straight = gr._dist(current, stay)
-                        if straight > float(intent.get("daily_max") or 30) * 1.30:
-                            continue
-                        # Off-corridor distance is a real detour, not a reason to
-                        # reject the campsite. Around 2 km is perfectly normal.
-                        cost = along_error + off * 1.25 + abs(straight - target * 0.65) * 0.35
-                        ranked.append((cost, stay))
-                    if not ranked:
-                        chosen = []
-                        break
-                    cost, stay = min(ranked, key=lambda row: row[0])
-                    chosen.append(stay)
-                    used.add(stay.get("source_url") or stay.get("name"))
-                    error += cost
-                    current = stay
-
-                if len(chosen) != days - 1:
+            solutions = []
+            if loop_requested:
+                if not _is_loop(trail, gr):
                     continue
-                boundaries = [start] + chosen + [end]
-                # A requested loop must really close at the departure point. A
-                # near-start endpoint is not enough: that produced visually
-                # misleading out-and-back routes.
-                if loop_requested:
-                    boundaries[-1] = start
-                # Prefer GR-backed hypotheses enough to survive the generic beam
-                # ranking, but leave final distance/scoring to the real route.
-                loop_penalty = abs(length - total_target) * 0.05 if loop_requested and closed else 0.0
-                generated.append(v3_module.Candidate(boundaries, f"{strategy}-gr-detour", error * 0.22 + loop_penalty - 22.0))
+                for direction in (1, -1):
+                    solutions.extend(_global_loop_sequences(trail, start, rows, intent, gr, direction))
+            else:
+                for direction in (1, -1):
+                    solutions.extend(_global_linear_sequences(trail, start, end, rows, intent, gr, direction))
 
-        combined = existing + generated
+            for global_cost, chosen, estimated_legs, estimated_total, direction in sorted(solutions, key=lambda row: row[0])[:6]:
+                boundaries = [start] + chosen + ([start] if loop_requested else [end])
+                spread = max(estimated_legs) - min(estimated_legs) if estimated_legs else target
+                heuristic = global_cost * 0.16 + spread * 0.12 - 28.0
+                generated.append(v3_module.Candidate(
+                    boundaries,
+                    f"{strategy}-gr-global-{'cw' if direction > 0 else 'ccw'}",
+                    heuristic,
+                ))
+
+        combined = generated + existing
         seen = set()
         unique = []
         for candidate in sorted(combined, key=lambda c: c.heuristic):
@@ -258,7 +370,7 @@ def install_gr_detours(v3, gr) -> None:
                 continue
             seen.add(key)
             unique.append(candidate)
-        return unique[:8]
+        return unique[:10]
 
     v3._night_pool = strict_night_pool
     gr._trail_section = trail_section
