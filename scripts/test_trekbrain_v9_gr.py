@@ -56,16 +56,16 @@ start = {"name": "Départ", "lat": p1[0], "lon": p1[1], "category": "village", "
 end = start
 camps = [
     # Roughly 2 km south/east/north of the corridor at each quarter.
-    {"name": "Camping 1", "lat": 48.582, "lon": -1.465, "category": "camping", "source_url": "c1"},
-    {"name": "Camping 2", "lat": 48.690, "lon": -1.303, "category": "camping", "source_url": "c2"},
-    {"name": "Camping 3", "lat": 48.798, "lon": -1.465, "category": "camping", "source_url": "c3"},
+    {"name": "Camping 1", "lat": 48.582, "lon": -1.330, "category": "camping", "source_url": "c1"},
+    {"name": "Camping 2", "lat": 48.780, "lon": -1.303, "category": "camping", "source_url": "c2"},
+    {"name": "Camping 3", "lat": 48.798, "lon": -1.600, "category": "camping", "source_url": "c3"},
 ]
 village = {"name": "Village tentant mais interdit comme nuitée", "lat": 48.69, "lon": -1.60, "category": "village", "source_url": "v1"}
 intent = {
     "days": 4,
     "daily_target": 20.0,
-    "daily_min": 12.0,
-    "daily_max": 28.0,
+    "daily_min": 17.0,
+    "daily_max": 23.0,
     "total_target": 80.0,
     "accommodation": "camping",
     "sleep": True,
@@ -108,7 +108,7 @@ try:
     assert global_solutions, "Global loop optimiser should find a feasible campsite sequence"
     best_global = min(global_solutions, key=lambda row: row[0])
     assert len(best_global[1]) == 3, best_global
-    assert max(best_global[2]) <= max(intent["daily_max"], intent["daily_target"] * 1.22) + 0.35, best_global
+    assert max(best_global[2]) <= intent["daily_max"] + 0.35, best_global
     assert max(best_global[2]) - min(best_global[2]) < 12.0, best_global
 
     # A campsite branch must explicitly insert a GR junction so routing follows
@@ -165,3 +165,13 @@ try:
     assert score >= 1000, score
 finally:
     v3._stage_distances = real_stage
+
+
+# Retrace detector: a real rectangular loop should pass, while an exact
+# out-and-back must be rejected even though both end at the start.
+real_loop = trail["coords"]
+out_leg = sampled_edge(p1, p2, 100) + sampled_edge(p2, p3, 100)
+out_and_back = out_leg + list(reversed(out_leg))
+assert v3._route_retrace_ratio(real_loop) < 0.32, v3._route_retrace_ratio(real_loop)
+assert v3._route_retrace_ratio(out_and_back) > 0.32, v3._route_retrace_ratio(out_and_back)
+print("Retrace detector: OK")
