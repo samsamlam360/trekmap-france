@@ -10,6 +10,8 @@ if str(ROOT) not in sys.path:
 from backend.free_planner_v2 import AIPlanRequest
 from backend.smart_planner_v9 import precision_audit
 from backend.web_research_v9 import source_score
+from backend import trekbrain_request_v9 as request_reconcile
+from backend.trekbrain_request_overlay_v9 import _effective_payload
 
 request = AIPlanRequest(
     prompt="Je veux une boucle de 4 jours, 16 km par jour, avec eau et camping",
@@ -75,6 +77,62 @@ assert water_check["status"] == "unknown", missing_water
 trusted = source_score({"url": "https://www.example.gouv.fr/agenda", "title": "Agenda randonnée Vercors", "snippet": "Informations officielles randonnée Vercors 2026"}, "agenda randonnée Vercors")
 social = source_score({"url": "https://www.instagram.com/example", "title": "Vercors", "snippet": "Photo randonnée"}, "agenda randonnée Vercors")
 assert trusted > social, (trusted, social)
+
+# Regression from the mobile advisor: the text asks for four days around the
+# Mont-Saint-Michel while the form still contains Belle-Ile / five days from a
+# previous request. The written request must win instead of creating an
+# impossible cross-region constraint set.
+real_geocode = request_reconcile.geo._geocode
+
+def fake_geocode(query):
+    q = request_reconcile._fold(query)
+    if "mont saint-michel" in q or "mont st michel" in q:
+        return [{"name": "Mont Saint-Michel", "short_name": "Mont Saint-Michel", "lat": 48.636, "lon": -1.511}]
+    if "belle-ile" in q or "belle ile" in q:
+        return [{"name": "Belle-Ile-en-Mer", "short_name": "Belle-Ile-en-Mer", "lat": 47.326, "lon": -3.170}]
+    if "vercors" in q:
+        return [{"name": "Vercors", "short_name": "Vercors", "lat": 44.970, "lon": 5.550}]
+    if "grenoble" in q:
+        return [{"name": "Grenoble", "short_name": "Grenoble", "lat": 45.188, "lon": 5.724}]
+    return []
+
+request_reconcile.geo._geocode = fake_geocode
+try:
+    stale = AIPlanRequest(
+        prompt=(
+            "Je souhaite faire un trek de 4 jours et je veux visiter le mont st Michel "
+            "un soir après la randonnée. Je veux que ce soit une boucle et je veux des campings tous les jours"
+        ),
+        region="Belle-Île en mer",
+        days=5,
+        daily_km=18,
+        difficulty="medium",
+        route_type="Boucle",
+        require_transit=True,
+        require_water=True,
+        require_accommodation=True,
+        require_food=True,
+    )
+    effective, resolution = _effective_payload(stale)
+    assert effective.region == "Mont Saint-Michel", (effective.region, resolution)
+    assert effective.days == 4, effective
+    assert effective.route_type == "Boucle", effective
+    assert "passer par Mont Saint-Michel" in effective.prompt, effective.prompt
+    assert resolution["region_overridden"] is True, resolution
+    assert resolution["reason"] == "stale-form-region-conflict", resolution
+
+    # An explicitly stated trek area remains authoritative when another place is
+    # merely an activity after the trip.
+    explicit = stale.model_copy(update={
+        "prompt": "Je fais un trek dans le Vercors puis je veux visiter Grenoble après le trek",
+        "region": "Vercors",
+        "days": 3,
+    })
+    effective2, resolution2 = _effective_payload(explicit)
+    assert effective2.region == "Vercors", (effective2.region, resolution2)
+    assert resolution2["region_overridden"] is False, resolution2
+finally:
+    request_reconcile.geo._geocode = real_geocode
 
 # The geographic gate is part of the mandatory precision suite so a future
 # routing refactor cannot reintroduce direct lines across water unnoticed.
