@@ -1,4 +1,11 @@
 """Regression checks for TrekBrain v9.1 route-relative resources."""
+from pathlib import Path
+import sys
+
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
 from backend.trekbrain_resources_v9 import enrich_resources
 
 
