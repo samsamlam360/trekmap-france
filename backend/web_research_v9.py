@@ -1,9 +1,10 @@
 """Fast, ranked Web research for TrekBrain v9.
 
-V9 keeps the no-key fallback from v7 but executes independent searches in
-parallel, deduplicates canonical URLs and ranks search leads without blindly
-downloading linked pages. Search text remains untrusted and never becomes route
-geometry by itself.
+V9 keeps the no-key fallback from v7, runs independent searches in parallel,
+deduplicates canonical URLs and ranks search leads without blindly downloading
+linked pages. V9.1 adds hiking-logistics coverage (water, overnight stops,
+transport and named trails) while keeping a small bounded query budget.
+Search text remains untrusted and never becomes route geometry by itself.
 """
 from __future__ import annotations
 
@@ -18,21 +19,25 @@ from urllib.parse import urlsplit, urlunsplit, parse_qsl, urlencode
 from . import web_research_v7 as base
 from .trekbrain_runtime_v9 import free_mode, seconds
 
-MAX_QUERIES = 4
-MAX_RESULTS = 14
-_POOL = ThreadPoolExecutor(max_workers=4, thread_name_prefix="trekbrain-search")
+MAX_QUERIES = 5
+MAX_RESULTS = 16
+_POOL = ThreadPoolExecutor(max_workers=5, thread_name_prefix="trekbrain-search")
 _LOCK = Lock()
 _PENDING = {}
 _CACHE = {}
-MAX_PENDING = 12
+MAX_PENDING = 15
 
 _OFFICIAL_HINTS = (
     ".gouv.fr", "service-public.fr", "data.gouv.fr", "france.fr",
     "sncf.com", "sncf-connect.com", "ter.sncf.com", "datatourisme.fr",
     "parcs-naturels-regionaux.fr", "parcnational.fr", "ffrandonnee.fr",
+    "ign.fr", "geoportail.gouv.fr",
 )
 _TOURISM_HINTS = (
     "tourisme", "office-de-tourisme", "destination", "montagnes", "vallee", "vallée",
+)
+_HIKING_HINTS = (
+    "refuges.info", "camptocamp.org", "visorando.com", "altituderando.com",
 )
 _LOW_TRUST_HINTS = (
     "pinterest.", "facebook.", "instagram.", "tiktok.", "tripadvisor.",
@@ -50,7 +55,6 @@ def _canonical_url(url: str) -> str:
         if not host or p.scheme.lower() not in {"http", "https"} or p.username or p.password:
             return ""
         path = re.sub(r"/+", "/", p.path or "/").rstrip("/") or "/"
-        # Keep semantic parameters (event/date/page IDs); drop only tracking.
         query = urlencode(sorted((k, v) for k, v in parse_qsl(p.query, keep_blank_values=True)
                                  if not k.lower().startswith("utm_") and k.lower() not in {"fbclid", "gclid"}))
         netloc = host + (f":{p.port}" if p.port else "")
@@ -62,6 +66,23 @@ def _canonical_url(url: str) -> str:
 def _tokens(value: str) -> set[str]:
     words = re.findall(r"[a-zà-ÿ0-9]{3,}", str(value or "").casefold())
     return {w for w in words if w not in _STOP}
+
+
+def _topic(query: str) -> str:
+    low = str(query or "").casefold()
+    if any(x in low for x in ("fermet", "réglement", "reglement", "interdit", "bivouac")):
+        return "regulation"
+    if any(x in low for x in ("fête", "festival", "agenda", "événement", "evenement")):
+        return "event"
+    if any(x in low for x in ("gare", "bus", "transport", "train", "sncf")):
+        return "transport"
+    if any(x in low for x in ("camping", "refuge", "gîte", "gite", "hébergement", "hebergement")):
+        return "overnight"
+    if any(x in low for x in ("eau", "fontaine", "source", "potable")):
+        return "water"
+    if any(x in low for x in ("gr ", "sentier", "balis", "itinéraire", "itineraire")):
+        return "trail"
+    return "general"
 
 
 def source_score(item: dict[str, Any], query: str = "") -> float:
@@ -76,6 +97,8 @@ def source_score(item: dict[str, Any], query: str = "") -> float:
         score += 0.32
     elif any(h in host for h in _TOURISM_HINTS):
         score += 0.18
+    elif any(h in host for h in _HIKING_HINTS):
+        score += 0.11
     if any(host == h + "com" or host.endswith("." + h + "com") for h in _LOW_TRUST_HINTS):
         score -= 0.18
 
@@ -92,7 +115,6 @@ def source_score(item: dict[str, Any], query: str = "") -> float:
 
 
 def _run_query(query: str, free: bool) -> tuple[str, list[dict[str, str]]]:
-    # No paid search provider is contacted in free mode, even if keys exist.
     return query, base._duckduckgo_search(query, 5) if free else base.search_web(query, limit=5)
 
 
@@ -105,31 +127,54 @@ def _finish(key, future):
         _PENDING.pop(key, None)
         if value is not None:
             _CACHE[key] = (time.monotonic(), deepcopy(value))
-            while len(_CACHE) > 128:
+            while len(_CACHE) > 160:
                 _CACHE.pop(next(iter(_CACHE)))
 
 
+def _resource_queries(location: str) -> list[str]:
+    place = re.sub(r"\s+", " ", str(location or "")).strip()
+    if not place:
+        return []
+    return [
+        f"{place} randonnée eau potable fontaine source",
+        f"{place} randonnée camping refuge gîte",
+        f"{place} gare bus train accès randonnée",
+        f"{place} GR sentier balisé randonnée",
+    ]
+
+
 def _select_queries(prompt: str, location: str, compound: dict[str, Any], brain_queries: list[str] | None) -> list[str]:
-    queries = base.build_research_queries(prompt, location, compound, brain_queries)
-    if len(queries) <= MAX_QUERIES:
-        return queries
+    original = base.build_research_queries(prompt, location, compound, brain_queries)
+    merged = list(dict.fromkeys([q for q in original + _resource_queries(location) if str(q).strip()]))
+    if len(merged) <= MAX_QUERIES:
+        return merged
 
-    # Dated events, regulations and transport can invalidate a plan, so they
-    # take precedence over generic inspiration searches.
-    def priority(q: str) -> tuple[int, int]:
+    original_set = set(original)
+    def priority(q: str) -> tuple[int, int, int]:
         low = q.casefold()
-        p = 4
-        if any(x in low for x in ("fermet", "réglement", "reglement", "interdit")):
+        topic = _topic(q)
+        p = 7
+        if topic == "regulation":
             p = 0
-        elif any(x in low for x in ("fête", "festival", "agenda")):
+        elif topic == "event":
             p = 1
-        elif any(x in low for x in ("gare", "bus", "transport")):
+        elif topic == "transport":
             p = 2
-        elif any(x in low for x in ("camping", "refuge", "château", "chateau")):
+        elif topic in {"overnight", "water"}:
             p = 3
-        return p, queries.index(q)
+        elif topic == "trail":
+            p = 4
+        elif q in original_set:
+            p = 5
+        # Prefer a user-derived query when two queries have equal importance.
+        return p, 0 if q in original_set else 1, merged.index(q)
 
-    return sorted(queries, key=priority)[:MAX_QUERIES]
+    selected = sorted(merged, key=priority)[:MAX_QUERIES]
+    # Preserve at least one original query when possible so a specific request
+    # is never completely displaced by generic logistics research.
+    if original and not any(q in original_set for q in selected):
+        selected[-1] = original[0]
+    return list(dict.fromkeys(selected))[:MAX_QUERIES]
 
 
 def research_request(prompt: str, location: str, compound: dict[str, Any], brain_queries: list[str] | None = None) -> dict[str, Any]:
@@ -144,7 +189,7 @@ def research_request(prompt: str, location: str, compound: dict[str, Any], brain
         new_future = None
         with _LOCK:
             cached = _CACHE.get(key)
-            ttl = 600 if cached and cached[1][1] else 30
+            ttl = 900 if cached and cached[1][1] else 30
             if cached and time.monotonic() - cached[0] < ttl:
                 completed.append(deepcopy(cached[1]))
                 cache_hits += 1
@@ -157,8 +202,6 @@ def research_request(prompt: str, location: str, compound: dict[str, Any], brain
                 skipped += 1
             else:
                 futures.append(future)
-        # A completed future executes callbacks immediately; never register it
-        # under the lock (otherwise a fast cache/provider result deadlocks).
         if new_future is not None:
             new_future.add_done_callback(lambda f, k=key: _finish(k, f))
     budget = seconds("TREKBRAIN_WEB_BUDGET_SECONDS", 8)
@@ -173,7 +216,14 @@ def research_request(prompt: str, location: str, compound: dict[str, Any], brain
             key = _canonical_url(item.get("url") or "")
             if not key:
                 continue
-            enriched = dict(item, url=key, query=q, evidence_score=source_score(item, q), evidence_type="search_snippet")
+            enriched = dict(
+                item,
+                url=key,
+                query=q,
+                topic=_topic(q),
+                evidence_score=source_score(item, q),
+                evidence_type="search_snippet",
+            )
             old = merged.get(key)
             if old is None or (enriched["evidence_score"], q) > (old["evidence_score"], old["query"]):
                 merged[key] = enriched
@@ -183,13 +233,14 @@ def research_request(prompt: str, location: str, compound: dict[str, Any], brain
         key=lambda x: (float(x.get("evidence_score") or 0), len(str(x.get("snippet") or "")), x["url"]),
         reverse=True,
     )[:MAX_RESULTS]
-
-    # Search snippets are leads, not verified facts. Do not blindly fetch URLs
-    # from search results (redirects/private-network targets and extra latency).
     pages = []
 
     provider = results[0].get("provider") if results else None
     evidence = [float(x.get("evidence_score") or 0) for x in results]
+    by_topic = {}
+    for item in results:
+        topic = str(item.get("topic") or "general")
+        by_topic[topic] = by_topic.get(topic, 0) + 1
     return {
         "provider": provider,
         "queries": queries,
@@ -210,5 +261,6 @@ def research_request(prompt: str, location: str, compound: dict[str, Any], brain
             "strong_results": sum(1 for s in evidence if s >= 0.68),
             "mean_score": round(sum(evidence) / len(evidence), 3) if evidence else 0.0,
             "pages_read": len(pages),
+            "topics": by_topic,
         },
     }
