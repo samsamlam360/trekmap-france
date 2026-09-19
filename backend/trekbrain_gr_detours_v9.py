@@ -176,7 +176,7 @@ def install_gr_detours(v3, gr) -> None:
         target = float(intent.get("daily_target") or 18)
         total_target = float(intent.get("total_target") or target * days)
         generated = []
-        loop_requested = v3_module._fold(intent.get("route_type") or "") in {"boucle", "aller-retour", "aller retour"}
+        loop_requested = v3_module._fold(intent.get("route_type") or "") == "boucle"
 
         for trail in gr._ACTIVE_TRAILS.get()[:6]:
             coords = trail.get("coords") or []
@@ -236,6 +236,11 @@ def install_gr_detours(v3, gr) -> None:
                 if len(chosen) != days - 1:
                     continue
                 boundaries = [start] + chosen + [end]
+                # A requested loop must really close at the departure point. A
+                # near-start endpoint is not enough: that produced visually
+                # misleading out-and-back routes.
+                if loop_requested:
+                    boundaries[-1] = start
                 # Prefer GR-backed hypotheses enough to survive the generic beam
                 # ranking, but leave final distance/scoring to the real route.
                 loop_penalty = abs(length - total_target) * 0.05 if loop_requested and closed else 0.0
