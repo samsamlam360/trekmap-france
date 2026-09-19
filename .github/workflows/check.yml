@@ -26,10 +26,11 @@ jobs:
         run: python -m compileall -q backend scripts
       - name: Vérifier l'import de l'application
         run: python -c "import backend.app_v5; print('TrekMap language planner import OK')"
-      - name: Vérifier la compréhension du français
+      - name: Vérifier la compréhension du français simple
         shell: bash
         run: |
           python - <<'PY'
+          from backend import smart_planner_v6  # active le pack de langage v6
           from backend.language_engine import normalize_for_planner
           text,matches=normalize_for_planner('Je veux trois jours pépère, 15 bornes par jour, sans bagnole et de beaux spots')
           expected=['3 jours','facile','15 km','train','panorama']
@@ -39,6 +40,8 @@ jobs:
           if 'facile' not in custom or '12 km' not in custom: raise SystemExit('Règle personnelle non appliquée: '+custom)
           print('Compréhension française + vocabulaire personnel: OK')
           PY
+      - name: Vérifier les longues phrases et demandes secondaires
+        run: python scripts/test_language_v6.py
       - name: Construire le frontend complet
         run: |
           python scripts/apply_ui_remodel.py
