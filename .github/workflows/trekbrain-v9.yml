@@ -65,6 +65,7 @@ jobs:
           python scripts/apply_reasoning_agent_ui.py
           python scripts/apply_trekbrain_ui.py
           python scripts/apply_selected_trekbrain_ui.py
+          python scripts/apply_route_day_visuals.py
       - name: Check v9 frontend
         shell: python
         run: |
@@ -75,25 +76,30 @@ jobs:
             'TREKMAP_TREKBRAIN_V9_UI_START','trekmap-trekbrain-v9-js','Décision TrekBrain',
             'Confirmé','À vérifier','Important','/ai/feedback',
             'TREKMAP_TREKBRAIN_V91_MAP_START','trekmap-trekbrain-v91-map-js',
-            'Repères TrekBrain','ai-redraw','Mettre à jour ce trek dans TrekMap'
+            'Repères TrekBrain','ai-redraw','Mettre à jour ce trek dans TrekMap',
+            'TREKMAP_ROUTE_DAY_VISUALS_START','trekmap-route-day-visuals-js',
+            'Étapes du trek','Départ','Arrivée','Jour ${i+1}'
           ]
           missing=[x for x in required if x not in html]
           if missing: raise SystemExit('Missing V9.1 UI: '+', '.join(missing))
           if 'TREKMAP_TREKBRAIN_UI_START' in html: raise SystemExit('Old V8 TrekBrain UI was not replaced')
           if html.count('TREKMAP_TREKBRAIN_V9_UI_START')!=1: raise SystemExit('V9 UI duplicated')
           if html.count('TREKMAP_TREKBRAIN_V91_MAP_START')!=1: raise SystemExit('V9.1 map UI duplicated')
+          if html.count('TREKMAP_ROUTE_DAY_VISUALS_START')!=1: raise SystemExit('Daily route visuals duplicated')
           scripts={
               'v9':'trekmap-trekbrain-v9-js',
               'v91-map':'trekmap-trekbrain-v91-map-js',
+              'route-days':'trekmap-route-day-visuals-js',
           }
           for name,sid in scripts.items():
               m=re.search(r'<script id="'+re.escape(sid)+r'">(.*?)</script>',html,re.S)
               if not m: raise SystemExit('JavaScript missing: '+sid)
               Path('/tmp/trekbrain-'+name+'.js').write_text(m.group(1),encoding='utf-8')
-          print('TrekBrain v9.1 frontend: OK')
+          print('TrekBrain v9.1 frontend + daily route visuals: OK')
       - name: Check v9 JavaScript
         run: |
           node --check /tmp/trekbrain-v9.js
           node --check /tmp/trekbrain-v91-map.js
+          node --check /tmp/trekbrain-route-days.js
       - name: Check inherited research panel stability
         run: node scripts/test_trekbrain_v9_ui.mjs frontend/index.html
