@@ -78,7 +78,7 @@ def _global_loop_sequences(trail, start, rows, intent, gr, direction: int, beam_
     target = float(intent.get("daily_target") or 18)
     daily_min = float(intent.get("daily_min") or target * 0.75)
     daily_max = float(intent.get("daily_max") or target * 1.25)
-    hard_max = max(daily_max, target * 1.22) + 0.35
+    hard_max = daily_max + 0.35
 
     ordered = []
     for stay, pos, off in rows:
