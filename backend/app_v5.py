@@ -29,6 +29,11 @@ else:
     from .smart_planner_v8 import install_smart_planner
 
 install_smart_planner(app, legacy_main)
+if TREKBRAIN_VERSION == "v9":
+    # Keep V8 untouched. The V9 overlay enriches only the active V9 response
+    # with route-relative resources and enables safe redraws of saved AI treks.
+    from .trekbrain_resources_v9 import install_resource_overlay
+    install_resource_overlay(app, legacy_main)
 
 # Retire la route production historique qui injectait encore une ancienne couche
 # CSS/JS. Même principe pour la route photo : on la remplace par une version qui
