@@ -27,8 +27,9 @@ jobs:
       - name: Vérifier l'import de l'application
         run: python -c "import backend.app_v5; print('TrekMap language planner import OK')"
       - name: Vérifier la compréhension du français
-        shell: python
+        shell: bash
         run: |
+          python - <<'PY'
           from backend.language_engine import normalize_for_planner
           text,matches=normalize_for_planner('Je veux trois jours pépère, 15 bornes par jour, sans bagnole et de beaux spots')
           expected=['3 jours','facile','15 km','train','panorama']
@@ -37,6 +38,7 @@ jobs:
           custom,_=normalize_for_planner('Je veux un trek pépouze', [{'phrase':'pépouze','meaning':'facile max 12 km par jour'}])
           if 'facile' not in custom or '12 km' not in custom: raise SystemExit('Règle personnelle non appliquée: '+custom)
           print('Compréhension française + vocabulaire personnel: OK')
+          PY
       - name: Construire le frontend complet
         run: |
           python scripts/apply_ui_remodel.py
