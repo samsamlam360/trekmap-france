@@ -1,5 +1,6 @@
 """Offline regression tests for TrekBrain v9 precision logic."""
 from pathlib import Path
+import runpy
 import sys
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -74,6 +75,10 @@ assert water_check["status"] == "unknown", missing_water
 trusted = source_score({"url": "https://www.example.gouv.fr/agenda", "title": "Agenda randonnée Vercors", "snippet": "Informations officielles randonnée Vercors 2026"}, "agenda randonnée Vercors")
 social = source_score({"url": "https://www.instagram.com/example", "title": "Vercors", "snippet": "Photo randonnée"}, "agenda randonnée Vercors")
 assert trusted > social, (trusted, social)
+
+# The geographic gate is part of the mandatory precision suite so a future
+# routing refactor cannot reintroduce direct lines across water unnoticed.
+runpy.run_path(str(ROOT / "scripts" / "test_trekbrain_v9_geo_safety.py"), run_name="__trekbrain_geo_safety__")
 
 print("TrekBrain v9 precision tests: OK")
 print("good=", good["score"], "bad=", bad["score"], "trusted=", trusted, "social=", social)
