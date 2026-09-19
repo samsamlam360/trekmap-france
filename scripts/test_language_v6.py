@@ -1,4 +1,11 @@
 """Offline regression tests for TrekMap French understanding v6."""
+from pathlib import Path
+import sys
+
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
 from backend import smart_planner_v6  # noqa: F401 - loads the v6 language pack
 from backend.compound_language_v5 import extract_side_requests
 from backend.language_engine import normalize_for_planner
