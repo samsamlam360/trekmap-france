@@ -1,14 +1,13 @@
-"""TrekBrain v9 resource overlay.
+"""TrekBrain v9 resource and geographic-safety overlay.
 
 Adds route-relative map resources (water, campsites, refuges and public
-transport) without changing the stable geographic planner. It also exposes a
-safe endpoint to replace the geometry of an AI-created trek after a refinement.
+transport), keeps island planning inside the requested island, and refuses to
+show or save a route that was not actually validated by the walking router.
 """
 from __future__ import annotations
 
 import json
 import math
-import re
 from typing import Any
 
 from fastapi import Body, Depends, HTTPException
@@ -16,6 +15,13 @@ from pydantic import BaseModel, Field, ConfigDict
 from sqlalchemy import text
 
 from . import smart_planner_v7 as v7
+from .trekbrain_geo_safety_v9 import (
+    activate_region,
+    install_geo_filters,
+    reset_region,
+    route_safety_report,
+    safety_error_message,
+)
 
 
 RESOURCE_LIMITS = {
@@ -91,12 +97,12 @@ def _route_match(coords: list[list[float]], item: dict[str, Any]) -> tuple[float
 
 
 def _resource_kind(item: dict[str, Any], fallback: str = "") -> str:
-    raw = f"{item.get('type') or ''} {item.get('name') or ''} {fallback}".casefold()
+    raw = f"{item.get('type') or ''} {item.get('category') or ''} {item.get('name') or ''} {fallback}".casefold()
     if fallback == "water" or any(x in raw for x in ("eau", "fontaine", "source")):
         return "water"
-    if any(x in raw for x in ("camping", "campement")):
+    if any(x in raw for x in ("camping", "camp_site", "caravan_site", "campement")):
         return "camping"
-    if any(x in raw for x in ("refuge", "abri", "gîte", "gite")):
+    if any(x in raw for x in ("refuge", "abri", "gîte", "gite", "hut")):
         return "refuge"
     if any(x in raw for x in ("gare", "station ferroviaire", "train", "sncf")):
         return "station"
@@ -195,11 +201,11 @@ def enrich_resources(result: dict[str, Any]) -> dict[str, Any]:
         "note": "Les noms de sentiers sont des repères cartographiques proches du tracé. TrekBrain ne prétend pas suivre intégralement un GR sans géométrie de relation vérifiée.",
     }
     result["map_resources"] = {
-        "version": "v9.1",
+        "version": "v9.2",
         "points": limited,
         "counts": counts,
         "route_filtered": True,
-        "meaning": "Points cartographiques proches du tracé. Horaires, ouverture, débit et disponibilité restent à vérifier avant le départ.",
+        "meaning": "Points cartographiques proches d'un tracé pédestre validé. Horaires, ouverture, débit et disponibilité restent à vérifier avant le départ.",
     }
     return result
 
@@ -216,8 +222,28 @@ def _install_plan_overlay(app, legacy_main):
         data: v7.v5.v3.AIPlanRequest = Body(...),
         user=Depends(legacy_main.current_user),
     ):
-        result = original_endpoint(data, user)
-        return enrich_resources(result) if isinstance(result, dict) else result
+        # Candidate discovery becomes island-aware for the duration of this
+        # request. The ContextVar keeps concurrent requests isolated.
+        token = activate_region(data.region or "")
+        try:
+            result = original_endpoint(data, user)
+            if not isinstance(result, dict):
+                return result
+
+            report = route_safety_report(result, data)
+            if not report["safe"]:
+                # Never expose ORS fallback points as a hiking line. A clear
+                # refusal is much safer than a convincing-looking route at sea.
+                raise HTTPException(status_code=422, detail=safety_error_message(report))
+
+            result["route_safety"] = report
+            result.setdefault("advisor_notes", []).insert(
+                0,
+                "🛡️ Sécurité géographique : tracé pédestre validé avant affichage. Les lignes directes de secours sont interdites dans le conseiller.",
+            )
+            return enrich_resources(result)
+        finally:
+            reset_region(token)
 
 
 def _install_redraw_endpoint(app, legacy_main):
@@ -226,10 +252,22 @@ def _install_redraw_endpoint(app, legacy_main):
         error = legacy_main.validate_coords(data.coords)
         if error:
             raise HTTPException(status_code=400, detail=error)
+
         route = legacy_main.get_route(data.coords)
         coords = route.get("coords") or []
-        if len(coords) < 2:
-            raise HTTPException(status_code=422, detail="Le recalcul n'a pas produit de tracé exploitable.")
+        report = route_safety_report({
+            "route_preview": {
+                "coords": coords,
+                "distance_km": route.get("distance"),
+                "fallback": route.get("fallback"),
+            }
+        })
+        if not report["safe"]:
+            raise HTTPException(
+                status_code=422,
+                detail="Mise à jour refusée : le moteur pédestre n'a pas validé ce tracé. Aucun segment direct de secours ne sera enregistré.",
+            )
+
         db = legacy_main.db_or_503()
         try:
             row = db.execute(text("SELECT owner_id,is_public FROM treks WHERE id=:id"), {"id": trek_id}).first()
@@ -260,8 +298,8 @@ def _install_redraw_endpoint(app, legacy_main):
                 "distance": route["distance"],
                 "duration_days": days,
                 "coords": coords,
-                "fallback": route.get("fallback", False),
-                "warning": route.get("warning"),
+                "fallback": False,
+                "route_safety": report,
             }
         except HTTPException:
             db.rollback()
@@ -274,5 +312,8 @@ def _install_redraw_endpoint(app, legacy_main):
 
 
 def install_resource_overlay(app, legacy_main):
+    # Apply once to v3 candidate discovery. The wrappers are inert unless an
+    # island-aware request activates bounds in the current request context.
+    install_geo_filters(v7.v5.v3)
     _install_plan_overlay(app, legacy_main)
     _install_redraw_endpoint(app, legacy_main)
