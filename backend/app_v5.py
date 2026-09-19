@@ -30,10 +30,14 @@ else:
 
 install_smart_planner(app, legacy_main)
 if TREKBRAIN_VERSION == "v9":
-    # Keep V8 untouched. The V9 overlay enriches only the active V9 response
-    # with route-relative resources and enables safe redraws of saved AI treks.
+    # Keep V8 untouched. V9 first adds geographic safety/resources, then wraps
+    # the public planner endpoints with natural-language request reconciliation.
+    # The reconciliation wrapper is intentionally installed last so stale form
+    # regions are corrected before island filtering, research and routing run.
     from .trekbrain_resources_v9 import install_resource_overlay
+    from .trekbrain_request_overlay_v9 import install_request_overlay
     install_resource_overlay(app, legacy_main)
+    install_request_overlay(app, legacy_main)
 
 # Retire la route production historique qui injectait encore une ancienne couche
 # CSS/JS. Même principe pour la route photo : on la remplace par une version qui
