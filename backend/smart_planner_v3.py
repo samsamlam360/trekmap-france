@@ -624,6 +624,20 @@ def _candidate_score(candidate, route_points, route, intent, items, legacy_main,
     if route.get("fallback"):
         score += 35
 
+    # Distance per day is a user constraint, not a decorative preference.
+    # Reject candidates with a grossly oversized stage instead of merely
+    # penalising them and still displaying a 30 km day for a ~20 km request.
+    hard_day_max = max(intent["daily_max"], intent["daily_target"] * 1.22)
+    if any(d > hard_day_max + 0.25 for d in stage_dist):
+        score += 1000 + sum(max(0.0, d - hard_day_max) for d in stage_dist) * 50
+
+    # A loop must genuinely return to its start and must not collapse into an
+    # out-and-back trace. End-point equality is enforced here; GR loop guidance
+    # supplies the circular arc itself.
+    if _fold(intent.get("route_type") or "") == "boucle":
+        if _dist(candidate.boundaries[0], candidate.boundaries[-1]) > 0.35:
+            score += 2000
+
     elevation = None
     if compute_elevation or intent["max_dplus_day"]:
         elevation = int(legacy_main.elevation_gain(coords) or 0)
@@ -706,6 +720,24 @@ def _build(data: AIPlanRequest, legacy_main):
         score, distance, stage_dist, elevation, route_coords = _candidate_score(candidate, route_points, route, intent, items, legacy_main, compute_elevation=False)
         evaluated.append((score, candidate, route_points, stage_highlights, route, distance, stage_dist, route_coords))
     evaluated.sort(key=lambda x: x[0])
+
+    # Do not knowingly return a trek that violates the requested daily mileage.
+    # Humans asked for 20 km, not "20 km except when the optimiser feels artistic".
+    acceptable = [
+        row for row in evaluated
+        if row[6] and max(row[6]) <= max(intent["daily_max"], intent["daily_target"] * 1.22) + 0.25
+    ]
+    if acceptable:
+        evaluated = acceptable
+    elif evaluated:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                f"Je n'ai pas trouvé de tracé réellement compatible avec environ "
+                f"{intent['daily_target']:.0f} km/jour. Je préfère ne pas proposer "
+                "une étape beaucoup trop longue. Élargis légèrement la zone ou la distance quotidienne."
+            ),
+        )
 
     # If D+ is an explicit concern, compare elevation of the two best real routes.
     finalists = evaluated[:2] if intent["max_dplus_day"] and len(evaluated) > 1 else evaluated[:1]
