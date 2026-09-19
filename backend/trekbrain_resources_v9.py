@@ -11,9 +11,11 @@ import math
 import re
 from typing import Any
 
-from fastapi import Depends, HTTPException
+from fastapi import Body, Depends, HTTPException
 from pydantic import BaseModel, Field, ConfigDict
 from sqlalchemy import text
+
+from . import smart_planner_v7 as v7
 
 
 RESOURCE_LIMITS = {
@@ -209,11 +211,11 @@ def _install_plan_overlay(app, legacy_main):
     original_endpoint = original.endpoint
     app.router.routes = [r for r in app.router.routes if r is not original]
 
-    # Use the same request model as the installed TrekBrain endpoint.
-    from . import smart_planner_v7 as v7
-
     @app.post("/ai/plan")
-    def plan_with_resources(data: v7.v5.v3.AIPlanRequest, user=Depends(legacy_main.current_user)):
+    def plan_with_resources(
+        data: v7.v5.v3.AIPlanRequest = Body(...),
+        user=Depends(legacy_main.current_user),
+    ):
         result = original_endpoint(data, user)
         return enrich_resources(result) if isinstance(result, dict) else result
 
