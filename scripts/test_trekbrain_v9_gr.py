@@ -90,6 +90,8 @@ try:
     valid = [c for c in candidates if len(c.boundaries) == 5 and all(p.get("category") == "camping" for p in c.boundaries[1:-1])]
     assert valid, [getattr(c, "boundaries", None) for c in candidates]
     assert any("gr-detour" in c.strategy or c.strategy.endswith("-gr") for c in valid), [c.strategy for c in valid]
+    # "Boucle" means the candidate closes on the exact departure object.
+    assert all(c.boundaries[-1] is start for c in valid), [c.boundaries[-1] for c in valid]
 
     # A campsite branch must explicitly insert a GR junction so routing follows
     # camp -> junction -> GR -> junction -> next camp rather than a generic chord.
@@ -132,3 +134,16 @@ finally:
     ors.ORS_API_KEY = real_key
 
 print("TrekBrain GR corridor + campsite detour tests: OK")
+
+
+# Daily mileage is a hard constraint at final selection: a 30 km day must not
+# survive when the request is around 20 km/day.
+oversized = v3.Candidate([start, camps[0], camps[1], camps[2], start], "test", 0.0)
+fake_route = {"coords": [[48.6, -1.6], [48.6, -1.4]], "distance": 80.0, "fallback": False}
+real_stage = v3._stage_distances
+v3._stage_distances = lambda *args, **kwargs: [18.0, 30.0, 17.0, 15.0]
+try:
+    score, *_ = v3._candidate_score(oversized, [start, camps[0], camps[1], camps[2], start], fake_route, intent, camps, type("L", (), {"distance_gps": staticmethod(lambda x: 80.0), "elevation_gain": staticmethod(lambda x: 0)})())
+    assert score >= 1000, score
+finally:
+    v3._stage_distances = real_stage
