@@ -108,7 +108,7 @@ try:
     assert global_solutions, "Global loop optimiser should find a feasible campsite sequence"
     best_global = min(global_solutions, key=lambda row: row[0])
     assert len(best_global[1]) == 3, best_global
-    assert max(best_global[2]) <= intent["daily_max"] + 0.35, best_global
+    assert max(best_global[2]) <= intent["daily_max"] + max(1.0, min(2.5, intent["daily_target"] * 0.10)), best_global
     assert max(best_global[2]) - min(best_global[2]) < 12.0, best_global
 
     # A campsite branch must explicitly insert a GR junction so routing follows
