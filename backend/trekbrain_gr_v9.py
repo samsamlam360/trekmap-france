@@ -43,9 +43,7 @@ def _dist(a: dict[str, Any] | list[float], b: dict[str, Any] | list[float]) -> f
         lat2, lon2 = float(b[0]), float(b[1])
     lat1, lon1, lat2, lon2 = map(math.radians, (lat1, lon1, lat2, lon2))
     dlat, dlon = lat2 - lat1, lon2 - lon1
-    h = math.sin(dlat / 2) ** 2 + math.cos(lat1) * math.cos(lat2) ** 2 * math.sin(dlon / 2) ** 2
-    # Recompute with the standard expression. Keeping this explicit makes the
-    # helper independent from the planner module patched below.
+    h = math.sin(dlat / 2) ** 2 + math.cos(lat1) * math.cos(lat2) * math.sin(dlon / 2) ** 2
     h = math.sin(dlat / 2) ** 2 + math.cos(lat1) * math.cos(lat2) * math.sin(dlon / 2) ** 2
     return 6371.0088 * 2 * math.asin(min(1.0, math.sqrt(h)))
 
@@ -79,7 +77,6 @@ def _member_geometry(member: dict[str, Any]) -> list[list[float]]:
 
 
 def _join_relation_members(members: list[dict[str, Any]]) -> list[list[float]]:
-    """Rebuild the longest continuous chain from ordered relation way members."""
     components: list[list[list[float]]] = []
     current: list[list[float]] = []
     for member in members:
@@ -254,7 +251,6 @@ def _trail_position(item: dict[str, Any], trail: dict[str, Any], cumulative: lis
 
 
 def gr_candidates(v3, start, end, items, intent, strategy: str) -> list[Any]:
-    """Build extra stage hypotheses whose nights sit near the same GR corridor."""
     days = max(1, int(intent.get("days") or 1))
     if days <= 1 or not _ACTIVE_TRAILS.get():
         return []
@@ -267,26 +263,24 @@ def gr_candidates(v3, start, end, items, intent, strategy: str) -> list[Any]:
         stays = [x for x in items if x.get("category") in {"camping", "refuge", "village"}]
     if len(stays) < days - 1:
         return []
-
-    target = float(intent.get("daily_target") or 18)
     out = []
+    target = float(intent.get("daily_target") or 18)
     for trail in _ACTIVE_TRAILS.get()[:5]:
         coords = trail.get("coords") or []
         if len(coords) < 4:
             continue
-        cum = _cumulative(coords)
-        trail_len = cum[-1]
-        start_pos, start_off = _trail_position(start, trail, cum)
-        if start_off > 6.0:
+        cumulative = _cumulative(coords)
+        start_pos, start_off = _trail_position(start, trail, cumulative)
+        end_pos, end_off = _trail_position(end, trail, cumulative)
+        if start_off > 5.0 or end_off > 5.0:
             continue
         stay_rows = []
         for stay in stays:
-            pos, off = _trail_position(stay, trail, cum)
-            if off <= 4.5:
+            pos, off = _trail_position(stay, trail, cumulative)
+            if off <= 4.0:
                 stay_rows.append((stay, pos, off))
         if len(stay_rows) < days - 1:
             continue
-
         for direction in (1, -1):
             chosen = []
             used = set()
@@ -300,8 +294,6 @@ def gr_candidates(v3, start, end, items, intent, strategy: str) -> list[Any]:
                     if key in used:
                         continue
                     along_error = abs(pos - wanted)
-                    # For long relation geometries, do not jump to a point on a
-                    # distant branch just because its cumulative index matches.
                     straight = _dist(current, stay)
                     if straight > float(intent.get("daily_max") or 30) * 1.25:
                         continue
@@ -317,9 +309,6 @@ def gr_candidates(v3, start, end, items, intent, strategy: str) -> list[Any]:
             if len(chosen) != days - 1:
                 continue
             boundaries = [start] + chosen + [end]
-            # Let the normal ORS scoring decide whether the resulting walking
-            # distances really fit. This heuristic only makes the hypothesis
-            # available instead of rejecting the request too early.
             out.append(v3.Candidate(boundaries, f"{strategy}-gr", error * 0.35 - 12.0))
     return sorted(out, key=lambda c: c.heuristic)[:4]
 
@@ -336,7 +325,6 @@ def active_trail_summary() -> list[dict[str, Any]]:
 
 
 def install_gr_guidance(v3) -> None:
-    """Patch the trusted v3 planner without changing its public API."""
     global _INSTALLED
     if _INSTALLED:
         return
@@ -351,8 +339,6 @@ def install_gr_guidance(v3) -> None:
         items, notes = original_extra(center, radius_km)
         trails = _discover(v3, center, radius_km)
         _ACTIVE_TRAILS.set(trails)
-        # Keep one map-visible representative per route; geometry itself remains
-        # internal and is only used to guide the pedestrian router.
         for trail in trails:
             coords = trail.get("coords") or []
             if not coords:
@@ -404,6 +390,12 @@ def install_gr_guidance(v3) -> None:
 
     def route_points_for_candidate(candidate, all_items, intent, forced_via):
         points, highlights = original_route_points(candidate, all_items, intent, forced_via)
+        # Matrix candidates were selected using real hiking-network distances.
+        # Forcing extra GR anchors afterwards can change those carefully balanced
+        # 20 km stages into 25+ km stages. Let ORS choose the best hiking path
+        # directly between the selected overnight stops.
+        if "matrix-loop" in str(getattr(candidate, "strategy", "")):
+            return points, highlights
         if not _ACTIVE_TRAILS.get() or len(points) < 2:
             return points, highlights
         guided = [points[0]]
