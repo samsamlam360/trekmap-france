@@ -50,6 +50,8 @@ jobs:
         run: python scripts/test_trekbrain_v9_matrix.py
       - name: Daily mileage tolerance regressions
         run: python scripts/test_trekbrain_v9_distance_tolerance.py
+      - name: Planner recovery regressions
+        run: python scripts/test_trekbrain_v9_recovery.py
       - name: Route resource tests
         run: python scripts/test_trekbrain_v9_resources.py
       - name: V8 and French language regressions
