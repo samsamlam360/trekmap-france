@@ -19,7 +19,7 @@ from urllib.parse import urlsplit, urlunsplit, parse_qsl, urlencode
 from . import web_research_v7 as base
 from .trekbrain_runtime_v9 import free_mode, seconds
 
-MAX_QUERIES = 5
+MAX_QUERIES = 4
 MAX_RESULTS = 16
 _POOL = ThreadPoolExecutor(max_workers=5, thread_name_prefix="trekbrain-search")
 _LOCK = Lock()
@@ -204,7 +204,7 @@ def research_request(prompt: str, location: str, compound: dict[str, Any], brain
                 futures.append(future)
         if new_future is not None:
             new_future.add_done_callback(lambda f, k=key: _finish(k, f))
-    budget = seconds("TREKBRAIN_WEB_BUDGET_SECONDS", 8)
+    budget = seconds("TREKBRAIN_WEB_BUDGET_SECONDS", 4)
     done, pending = wait(futures, timeout=max(0, budget - (time.monotonic() - started))) if futures else (set(), set())
     for future in done:
         try:
