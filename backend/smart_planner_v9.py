@@ -395,10 +395,12 @@ def _build(data, legacy_main, user_id: int):
     hypotheses.append({"strategy": primary, "quality": audit1["score"], "grade": audit1["grade"], "elapsed_ms": ms1})
     chosen_result, chosen_audit, chosen_action = first, audit1, primary
 
-    threshold = seconds("TREKBRAIN_V9_RETRY_THRESHOLD", 80, 100)
+    threshold = seconds("TREKBRAIN_V9_RETRY_THRESHOLD", 72, 100)
     margin = float(ranked[0].get("margin", 0)) if ranked else 0.0
-    should_retry = bool(audit1.get("needs_reflection")) or (audit1["score"] < threshold and margin < 1.2)
-    retry_budget = seconds("TREKBRAIN_RETRY_BUDGET_SECONDS", 25)
+    # A second full geographic hypothesis is expensive. Retry only when the first
+    # route is actually blocked, or when quality is clearly poor and uncertain.
+    should_retry = bool(audit1.get("blockers")) or (audit1["score"] < threshold and margin < 0.6)
+    retry_budget = seconds("TREKBRAIN_RETRY_BUDGET_SECONDS", 10)
     if should_retry and len(ranked) > 1 and time.perf_counter() - total_started < retry_budget:
         alternative = next((x["action"] for x in ranked[1:] if x["action"] != primary), "balanced")
         reason = "; ".join(audit1.get("reasons") or []) or "la première hypothèse n'est pas assez précise"
