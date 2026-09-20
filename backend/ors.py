@@ -1,20 +1,30 @@
 """OpenRouteService client for TrekMap France.
 
-The planner first asks ORS for the complete walking route. If a complex
-multi-waypoint request cannot be snapped reliably, it retries with a moderate
-walking-network snap radius and, as a last *validated* fallback, computes each
-leg separately. Straight lines remain diagnostics only and are never marked as
-validated routing.
+TrekBrain uses ORS in two different ways:
+- the Matrix API cheaply compares many campsite combinations using *real walking
+  network distances*;
+- the Directions API then builds geometry only for the best candidates.
+
+This separation is important.  Earlier versions used straight-line estimates to
+choose nights and only discovered impossible 30 km stages after expensive route
+calls.  V9 now plans on network distances first and renders geometry second.
 """
 
 import os
+import time
+from copy import deepcopy
 from typing import Any
 
 import requests
 
 ORS_API_KEY = os.getenv("ORS_API_KEY", "").strip()
-ORS_URL = "https://api.heigit.org/openrouteservice/v2/directions/foot-walking/geojson"
+ORS_PROFILE = os.getenv("TREKBRAIN_ORS_PROFILE", "foot-hiking").strip() or "foot-hiking"
+ORS_BASE = "https://api.heigit.org/openrouteservice/v2"
+ORS_URL = f"{ORS_BASE}/directions/{ORS_PROFILE}/geojson"
+ORS_MATRIX_URL = f"{ORS_BASE}/matrix/{ORS_PROFILE}"
 SNAP_RADIUS_M = max(350, min(int(os.getenv("TREKBRAIN_ORS_SNAP_RADIUS_M", "800") or 800), 1500))
+_MATRIX_CACHE: dict[tuple, tuple[float, dict[str, Any]]] = {}
+_MATRIX_TTL = 1800
 
 
 def _fallback(coords, distance_gps, warning: str | None = None):
@@ -66,6 +76,7 @@ def _parse_response(response, coords, distance_gps):
         "distance": round(float(summary["distance"]) / 1000, 2),
         "fallback": False,
         "routing_mode": "ors",
+        "profile": ORS_PROFILE,
     }, None, response.status_code
 
 
@@ -85,7 +96,7 @@ def _request_route(coords, distance_gps, snap_radius_m: int | None = None):
                 "Authorization": ORS_API_KEY,
                 "Content-Type": "application/json",
             },
-            timeout=25,
+            timeout=20,
         )
     except requests.Timeout:
         return None, "OpenRouteService : délai d'attente dépassé.", None
@@ -94,6 +105,83 @@ def _request_route(coords, distance_gps, snap_radius_m: int | None = None):
     except Exception:
         return None, "Erreur inattendue avec OpenRouteService.", None
     return _parse_response(response, coords, distance_gps)
+
+
+def _matrix_key(coords):
+    return tuple((round(float(p[0]), 5), round(float(p[1]), 5)) for p in coords)
+
+
+def get_distance_matrix(coords):
+    """Return a real pedestrian distance matrix in kilometres.
+
+    ``coords`` are ``[lat, lon]`` pairs. Null ORS cells remain ``None`` and are
+    treated as non-routable by the planner. No straight-line substitute is ever
+    inserted into this matrix.
+    """
+    if not ORS_API_KEY:
+        return {"distances": None, "fallback": True, "warning": "ORS_API_KEY absente."}
+    if len(coords) < 2:
+        return {"distances": None, "fallback": True, "warning": "Au moins deux points sont nécessaires."}
+    # Public ORS allows comfortably more than TrekBrain's <= 21 locations, but
+    # keep a hard local cap so a malformed POI query cannot create huge matrices.
+    coords = coords[:24]
+    key = _matrix_key(coords)
+    now = time.monotonic()
+    cached = _MATRIX_CACHE.get(key)
+    if cached and now - cached[0] < _MATRIX_TTL:
+        return deepcopy(cached[1])
+
+    payload = {
+        "locations": [[float(p[1]), float(p[0])] for p in coords],
+        "metrics": ["distance"],
+        "units": "km",
+        "resolve_locations": False,
+    }
+    try:
+        response = requests.post(
+            ORS_MATRIX_URL,
+            json=payload,
+            headers={"Authorization": ORS_API_KEY, "Content-Type": "application/json"},
+            timeout=15,
+        )
+    except requests.Timeout:
+        return {"distances": None, "fallback": True, "warning": "OpenRouteService Matrix : délai dépassé."}
+    except requests.RequestException as exc:
+        return {"distances": None, "fallback": True, "warning": f"OpenRouteService Matrix inaccessible ({exc.__class__.__name__})."}
+
+    if response.status_code in {401, 403, 429} or response.status_code >= 500:
+        return {"distances": None, "fallback": True, "warning": f"OpenRouteService Matrix HTTP {response.status_code}."}
+    if not response.ok:
+        return {"distances": None, "fallback": True, "warning": f"OpenRouteService Matrix HTTP {response.status_code}."}
+    try:
+        data = response.json()
+    except ValueError:
+        return {"distances": None, "fallback": True, "warning": "Réponse Matrix JSON invalide."}
+
+    raw = data.get("distances")
+    n = len(coords)
+    if not isinstance(raw, list) or len(raw) != n or any(not isinstance(row, list) or len(row) != n for row in raw):
+        return {"distances": None, "fallback": True, "warning": "Matrice ORS incomplète."}
+    distances = []
+    for row in raw:
+        clean = []
+        for value in row:
+            try:
+                number = float(value) if value is not None else None
+            except (TypeError, ValueError):
+                number = None
+            clean.append(round(number, 3) if number is not None and number >= 0 else None)
+        distances.append(clean)
+    result = {
+        "distances": distances,
+        "fallback": False,
+        "routing_mode": "ors-matrix",
+        "profile": ORS_PROFILE,
+    }
+    _MATRIX_CACHE[key] = (now, deepcopy(result))
+    while len(_MATRIX_CACHE) > 80:
+        _MATRIX_CACHE.pop(next(iter(_MATRIX_CACHE)))
+    return result
 
 
 def _append_geometry(target, segment):
@@ -129,6 +217,7 @@ def _segmented_route(coords, distance_gps):
         "fallback": False,
         "routing_mode": "ors-segmented",
         "snap_retries": retries,
+        "profile": ORS_PROFILE,
     }, None
 
 
@@ -145,17 +234,12 @@ def get_route(coords, distance_gps):
         return {**fallback, "warning": "OpenRouteService : au moins deux points sont nécessaires."}
 
     first_warning = None
-    # ORS accepts a limited number of waypoints. For larger generated routes we
-    # skip directly to the fully validated leg-by-leg strategy.
     if len(coords) <= 50:
         result, warning, status = _request_route(coords, distance_gps)
         if result is not None:
             return result
         first_warning = warning
 
-        # A campsite or POI can sit inside a parcel rather than exactly on the
-        # walking graph. Retry with a moderate snap radius, never kilometres of
-        # blind straight-line tolerance.
         if status not in {401, 403, 429} and not (status and status >= 500):
             result, warning2, _ = _request_route(coords, distance_gps, SNAP_RADIUS_M)
             if result is not None:
@@ -166,8 +250,6 @@ def get_route(coords, distance_gps):
         elif status in {401, 403, 429} or (status and status >= 500):
             return {**fallback, "warning": first_warning or "OpenRouteService indisponible."}
 
-    # Complex waypoint sets can fail as one request even though every walking
-    # leg is routable. Recover only by asking ORS for *every* consecutive leg.
     segmented, segmented_warning = _segmented_route(coords, distance_gps)
     if segmented is not None:
         if first_warning:
