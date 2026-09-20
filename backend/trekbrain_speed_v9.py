@@ -54,21 +54,21 @@ def install_fast_planning(v3, v5, v9) -> None:
         rows = list(original_beam(start, end, center, items, intent, strategy, width))
         if len(rows) <= 4:
             return rows
-        network = [c for c in rows if "path-network-loop" in str(getattr(c, "strategy", ""))]
-        gr = [c for c in rows if "gr-" in str(getattr(c, "strategy", "")) and c not in network]
-        generic = [c for c in rows if c not in network and c not in gr]
-        # Keep the strongest structurally different hypotheses. v3 later
-        # deduplicates them across balanced/scenic/logistics strategies.
-        selected = network[:2] + gr[:1] + generic[:1]
-        return selected or rows[:4]
+        matrix = [c for c in rows if "matrix-loop" in str(getattr(c, "strategy", ""))]
+        network = [c for c in rows if "path-network-loop" in str(getattr(c, "strategy", "")) and c not in matrix]
+        gr = [c for c in rows if "gr-" in str(getattr(c, "strategy", "")) and c not in network and c not in matrix]
+        generic = [c for c in rows if c not in matrix and c not in network and c not in gr]
+        # A matrix hypothesis already uses real walking distances for every
+        # overnight edge, so it gets first priority. Keep one fallback from each
+        # structurally different family instead of spending ORS geometry calls
+        # on near-duplicates.
+        selected = matrix[:2] + network[:1] + gr[:1] + generic[:1]
+        return selected[:5] or rows[:5]
 
     def candidate_prompts(normalized, targets, compound):
         prompts = list(original_prompts(normalized, targets, compound))
         if len(prompts) <= 1:
             return prompts
-        # Only a hard dated/required/day-specific objective deserves a second
-        # complete route computation. Ordinary nice-to-have POIs are scored on
-        # the first route instead of multiplying ORS calls.
         hard = any(
             (t.get("request") or {}).get("required")
             or (t.get("request") or {}).get("target_date")
@@ -90,8 +90,6 @@ def install_fast_planning(v3, v5, v9) -> None:
 
     v3._beam_candidates = beam_candidates
     v5._candidate_prompts = candidate_prompts
-    # smart_planner_v9 imported research_request by name; replace that module
-    # global so _prepare_shared resolves this fast wrapper at call time.
     v9.research_request = research_request
 
 
