@@ -78,7 +78,10 @@ def _global_loop_sequences(trail, start, rows, intent, gr, direction: int, beam_
     target = float(intent.get("daily_target") or 18)
     daily_min = float(intent.get("daily_min") or target * 0.75)
     daily_max = float(intent.get("daily_max") or target * 1.25)
-    hard_max = daily_max + 0.35
+    # The GR geometry is sampled and the campsite connector is initially
+    # estimated as a straight distance. Keep a small planning tolerance here;
+    # the final ORS route remains subject to the strict daily_max gate.
+    hard_max = daily_max + max(1.0, min(2.5, target * 0.10))
 
     ordered = []
     for stay, pos, off in rows:
