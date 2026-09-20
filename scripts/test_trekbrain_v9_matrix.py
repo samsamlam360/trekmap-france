@@ -1,4 +1,11 @@
 """Regression tests for TrekBrain's matrix-first constraint planner."""
+from pathlib import Path
+import sys
+
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
 from backend import trekbrain_matrix_v9 as matrix_planner
 
 
@@ -20,9 +27,6 @@ intent = {
     "total_target": 80.0,
 }
 
-# 0=start. The only feasible 4-day cycle is 0->1->2->3->0.
-# Other edges deliberately exceed the hard per-day maximum.
-X = None
 matrix = [
     [0, 19, 31, 28, 29],
     [19, 0, 20, 30, 27],
@@ -38,21 +42,23 @@ assert max(best[2]) <= 23.35, best
 assert abs(sum(best[2]) - 80) <= 1.0, best
 print("Matrix feasible loop: OK")
 
-# A 30 km final day must make this sequence unusable for a ~20 km/day request.
-bad = [row[:] for row in matrix]
+good3 = [
+    [0, 19, 31, 28],
+    [19, 0, 20, 30],
+    [31, 20, 0, 21],
+    [20, 30, 21, 0],
+]
+
+bad = [row[:] for row in good3]
 bad[3][0] = 30
-bad[0][3] = 30
 assert not matrix_planner._matrix_sequences(bad, stays[:3], intent), "30 km stage must be rejected"
 print("Matrix daily maximum: OK")
 
-# Null matrix cells mean there is no routable pedestrian connection. They must
-# never be silently replaced by an aerial distance.
-unreachable = [row[:] for row in matrix]
-unreachable[1][2] = X
+unreachable = [row[:] for row in good3]
+unreachable[1][2] = None
 assert not matrix_planner._matrix_sequences(unreachable, stays[:3], intent), "Unroutable edge must not become a straight line"
 print("Matrix unroutable edge: OK")
 
-# A broad polygon is a loop candidate; nearly collinear nights are not.
 start = {"lat": 48.64, "lon": -1.51}
 shape_ok = matrix_planner._shape_ratio(start, stays[:3])
 line_stays = [
