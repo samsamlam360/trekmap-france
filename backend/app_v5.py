@@ -35,16 +35,22 @@ if TREKBRAIN_VERSION == "v9":
     # Short walking branches to genuine campsites are allowed while the GR stays
     # the main corridor; every connector is still routed as a pedestrian path.
     from . import smart_planner_v7 as _planner_v7
+    from . import smart_planner_v5 as _planner_v5
+    from . import smart_planner_v9 as _planner_v9
     from . import trekbrain_gr_v9 as _gr_v9
     from .trekbrain_gr_v9 import install_gr_guidance
     from .trekbrain_gr_detours_v9 import install_gr_detours
     from .trekbrain_network_v9 import install_path_network
+    from .trekbrain_speed_v9 import install_fast_planning
     install_gr_guidance(_planner_v7.v5.v3)
     install_gr_detours(_planner_v7.v5.v3, _gr_v9)
     # A useful loop does not have to be one closed GR. This layer can combine
     # multiple hiking corridors and ordinary OSM walking paths through ORS,
     # while still requiring every final metre to be pedestrian-routed.
     install_path_network(_planner_v7.v5.v3, _gr_v9)
+    # Remove redundant full-route hypotheses and skip Web research when the
+    # request only needs static OSM/ORS planning data.
+    install_fast_planning(_planner_v7.v5.v3, _planner_v5, _planner_v9)
 
     # Keep V8 untouched. V9 first adds geographic safety/resources, then wraps
     # the public planner endpoints with natural-language request reconciliation.
