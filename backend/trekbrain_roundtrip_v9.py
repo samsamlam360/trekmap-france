@@ -1,14 +1,13 @@
 """ORS-native round-trip fallback for TrekBrain v9.
 
 The normal planner remains the preferred path because it can optimise campsites,
-GR corridors and POIs.  This layer exists for the much simpler promise that must
-always work when ORS itself is healthy: create a real pedestrian loop around a
-known place.  It never accepts straight-line geometry.
+GR corridors and POIs. This layer exists for the simpler promise that must still
+work when ORS itself is healthy: create a real pedestrian loop around a known
+place. It never accepts straight-line geometry.
 """
 from __future__ import annotations
 
 import math
-from typing import Any
 
 import requests
 from fastapi import HTTPException
@@ -43,6 +42,9 @@ def _equal_anchors(coords, days):
     floor = 1
     for day in range(1, days):
         target = total * day / days
+        choices = range(floor, len(cum) - 1)
+        if not list(choices):
+            return []
         best = min(range(floor, len(cum) - 1), key=lambda i: abs(cum[i] - target))
         anchors.append({
             "name": f"Repère jour {day}",
@@ -93,7 +95,6 @@ def _roundtrip_request(start, target_km: float, seed: int):
 
 
 def _best_roundtrip(start, target_km: float, daily_min: float, daily_max: float, days: int, v3):
-    # The public ORS round-trip endpoint is intentionally kept below 100 km.
     if target_km > 99.0:
         raise HTTPException(
             status_code=422,
@@ -110,8 +111,6 @@ def _best_roundtrip(start, target_km: float, daily_min: float, daily_max: float,
         distance = float(route.get("distance") or 0)
         per_day = distance / max(days, 1)
         retrace = float(v3._route_retrace_ratio(route.get("coords") or [])) if hasattr(v3, "_route_retrace_ratio") else 0.0
-        # Keep a real route even when ORS misses the requested length somewhat,
-        # but strongly prefer the requested daily window and a genuine loop.
         range_penalty = max(0.0, daily_min - per_day) * 5 + max(0.0, per_day - daily_max) * 8
         rows.append((abs(distance - target_km) + range_penalty + retrace * 80, route))
     if not rows:
@@ -158,8 +157,8 @@ def _build_roundtrip(data, legacy_main, v3):
         "category": "place",
     }
 
-    target_km = float(intent.get("total_target") or float(intent.get("daily_target") or data.daily_km) * int(intent.get("days") or data.days))
     days = max(1, int(intent.get("days") or data.days))
+    target_km = float(intent.get("total_target") or float(intent.get("daily_target") or data.daily_km) * days)
     route = _best_roundtrip(
         start,
         target_km,
@@ -176,8 +175,6 @@ def _build_roundtrip(data, legacy_main, v3):
     category = "camping" if intent.get("accommodation") == "camping" else "refuge" if intent.get("accommodation") == "refuge" else None
     stays = _nearest_unique_stays(v3, anchors, category) if category else []
 
-    # If the request explicitly requires camping/refuge, route through those
-    # real places rather than merely labelling nearby accommodation on the map.
     if category and days > 1:
         if len(stays) != days - 1:
             label = "campings" if category == "camping" else "hébergements"
@@ -205,7 +202,6 @@ def _build_roundtrip(data, legacy_main, v3):
         stage_distances = [float(route.get("distance") or 0) / days] * days
 
     daily_max = float(intent.get("daily_max") or 40)
-    explicit_max = getattr(intent, "distance_tolerance", None) == "explicit" if not isinstance(intent, dict) else intent.get("distance_tolerance") == "explicit"
     if any(d > daily_max + 0.35 for d in stage_distances):
         raise HTTPException(
             status_code=422,
@@ -237,7 +233,7 @@ def _build_roundtrip(data, legacy_main, v3):
         })
 
     end = dict(start)
-    result = {
+    return {
         "name": f"Boucle randonnée autour de {location}",
         "region": location,
         "description": "Boucle générée directement sur le réseau pédestre OpenRouteService après échec du planificateur avancé.",
@@ -274,7 +270,6 @@ def _build_roundtrip(data, legacy_main, v3):
         },
         "planner_fallback": "ors-round-trip",
     }
-    return result
 
 
 def install_roundtrip_fallback(v3) -> None:
@@ -290,8 +285,15 @@ def install_roundtrip_fallback(v3) -> None:
         except HTTPException as original_error:
             try:
                 return _build_roundtrip(data, legacy_main, v3)
-            except HTTPException:
-                raise original_error
+            except HTTPException as fallback_error:
+                if fallback_error.status_code >= 500:
+                    raise fallback_error
+                original_detail = str(getattr(original_error, "detail", original_error))
+                fallback_detail = str(getattr(fallback_error, "detail", fallback_error))
+                raise HTTPException(
+                    status_code=getattr(original_error, "status_code", 422),
+                    detail=f"{original_detail} Secours boucle ORS : {fallback_detail}",
+                )
 
     v3._build = build
 
