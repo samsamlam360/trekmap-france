@@ -32,7 +32,8 @@ if TREKBRAIN_VERSION == "v9":
     # 2) allow short campsite branches;
     # 3) synthesize loops from several walking corridors;
     # 4) solve overnight choices on a real ORS walking-distance matrix;
-    # 5) trim redundant expensive hypotheses.
+    # 5) interpret a daily-km value as a target unless explicit bounds are given;
+    # 6) trim redundant expensive hypotheses.
     from . import smart_planner_v7 as _planner_v7
     from . import smart_planner_v5 as _planner_v5
     from . import smart_planner_v9 as _planner_v9
@@ -43,12 +44,14 @@ if TREKBRAIN_VERSION == "v9":
     from .trekbrain_gr_detours_v9 import install_gr_detours
     from .trekbrain_network_v9 import install_path_network
     from .trekbrain_matrix_v9 import install_matrix_planner
+    from .trekbrain_distance_tolerance_v9 import install_distance_tolerance
     from .trekbrain_speed_v9 import install_fast_planning
 
     install_gr_guidance(_planner_v7.v5.v3)
     install_gr_detours(_planner_v7.v5.v3, _gr_v9)
     install_path_network(_planner_v7.v5.v3, _gr_v9)
     install_matrix_planner(_planner_v7.v5.v3, _ors, _network_v9)
+    install_distance_tolerance(_planner_v7.v5.v3)
     install_fast_planning(_planner_v7.v5.v3, _planner_v5, _planner_v9)
 
     # Geographic safety/resources remain final authorities. The request overlay
