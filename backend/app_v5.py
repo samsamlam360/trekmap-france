@@ -23,47 +23,41 @@ TREKBRAIN_VERSION = os.getenv("TREKBRAIN_VERSION", "v8").strip().casefold()
 if TREKBRAIN_VERSION == "v9":
     from .smart_planner_v9 import install_smart_planner
 else:
-    # V8 remains the safe production default. V9 is activated explicitly in a
-    # staging environment, so an incomplete V9 change cannot replace V8 merely
-    # because it was merged or deployed.
     from .smart_planner_v8 import install_smart_planner
 
 install_smart_planner(app, legacy_main)
 if TREKBRAIN_VERSION == "v9":
-    # GR/GRP relations are strong route evidence: use their real OSM geometry
-    # to guide candidate selection before the geographic safety overlay runs.
-    # Short walking branches to genuine campsites are allowed while the GR stays
-    # the main corridor; every connector is still routed as a pedestrian path.
+    # V9 architecture, in order:
+    # 1) understand hiking relations;
+    # 2) allow short campsite branches;
+    # 3) synthesize loops from several walking corridors;
+    # 4) solve overnight choices on a real ORS walking-distance matrix;
+    # 5) trim redundant expensive hypotheses.
     from . import smart_planner_v7 as _planner_v7
     from . import smart_planner_v5 as _planner_v5
     from . import smart_planner_v9 as _planner_v9
     from . import trekbrain_gr_v9 as _gr_v9
+    from . import trekbrain_network_v9 as _network_v9
+    from . import ors as _ors
     from .trekbrain_gr_v9 import install_gr_guidance
     from .trekbrain_gr_detours_v9 import install_gr_detours
     from .trekbrain_network_v9 import install_path_network
+    from .trekbrain_matrix_v9 import install_matrix_planner
     from .trekbrain_speed_v9 import install_fast_planning
+
     install_gr_guidance(_planner_v7.v5.v3)
     install_gr_detours(_planner_v7.v5.v3, _gr_v9)
-    # A useful loop does not have to be one closed GR. This layer can combine
-    # multiple hiking corridors and ordinary OSM walking paths through ORS,
-    # while still requiring every final metre to be pedestrian-routed.
     install_path_network(_planner_v7.v5.v3, _gr_v9)
-    # Remove redundant full-route hypotheses and skip Web research when the
-    # request only needs static OSM/ORS planning data.
+    install_matrix_planner(_planner_v7.v5.v3, _ors, _network_v9)
     install_fast_planning(_planner_v7.v5.v3, _planner_v5, _planner_v9)
 
-    # Keep V8 untouched. V9 first adds geographic safety/resources, then wraps
-    # the public planner endpoints with natural-language request reconciliation.
-    # The reconciliation wrapper is intentionally installed last so stale form
-    # regions are corrected before island filtering, research and routing run.
+    # Geographic safety/resources remain final authorities. The request overlay
+    # is installed last so natural-language corrections happen before planning.
     from .trekbrain_resources_v9 import install_resource_overlay
     from .trekbrain_request_overlay_v9 import install_request_overlay
     install_resource_overlay(app, legacy_main)
     install_request_overlay(app, legacy_main)
 
-# Retire la route production historique qui injectait encore une ancienne couche
-# CSS/JS. Même principe pour la route photo : on la remplace par une version qui
-# sait aussi servir les images des treks privés à leur propriétaire.
 app.router.routes = [
     route for route in app.router.routes
     if route.path not in {"/", "/media/trek-photos/{photo_id}"}
