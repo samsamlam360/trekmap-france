@@ -3,8 +3,17 @@
 Historically smart_planner_v5 tried several language variants and swallowed every
 underlying HTTPException. If they all failed, users always received the same
 "parcours cohérent" message, hiding whether the actual cause was ORS, missing
-geodata, mileage, or lodging. This layer preserves the useful orchestration while
-surfacing the most recent real planner failure when all variants fail.
+geodata, mileage, or lodging.
+
+Important implementation detail: after the v7/v8/v9 installers run, ``v5._build``
+may itself point back to ``v7._build``. Wrapping that public reference and then
+assigning the wrapper to ``v7._BASE_BUILD`` creates an infinite recursion:
+
+    v7._build -> v7._BASE_BUILD -> wrapped v5._build -> v7._build -> ...
+
+This module therefore wraps only the *already captured lower-level base* stored
+in ``v7._BASE_BUILD``. That preserves the original v5/v3 planning chain without
+creating another edge back to v7.
 """
 from __future__ import annotations
 
@@ -33,14 +42,14 @@ def _prefer_underlying(wrapper_error: HTTPException, underlying: HTTPException |
 
 
 def install_failure_diagnostics(v3: Any, v5: Any, v7: Any) -> None:
-    """Make v5/v7 propagate the real v3/ORS error instead of a generic 422."""
+    """Surface the real v3/ORS failure without changing planner call topology."""
     global _INSTALLED
     if _INSTALLED:
         return
     _INSTALLED = True
 
     current_v3_build = v3._build
-    current_v5_build = v5._build
+    current_base_build = v7._BASE_BUILD
 
     def diagnostic_v3_build(data, legacy_main):
         try:
@@ -51,10 +60,10 @@ def install_failure_diagnostics(v3: Any, v5: Any, v7: Any) -> None:
 
     v3._build = diagnostic_v3_build
 
-    def transparent_v5_build(data, legacy_main, user_id: int):
+    def transparent_base_build(data, legacy_main, user_id: int):
         token = _LAST_ERROR.set(None)
         try:
-            return current_v5_build(data, legacy_main, user_id)
+            return current_base_build(data, legacy_main, user_id)
         except HTTPException as exc:
             chosen = _prefer_underlying(exc, _LAST_ERROR.get())
             if chosen is not exc:
@@ -63,9 +72,11 @@ def install_failure_diagnostics(v3: Any, v5: Any, v7: Any) -> None:
         finally:
             _LAST_ERROR.reset(token)
 
-    # v7 captured v5._build at import time, so patch both references.
-    v5._build = transparent_v5_build
-    v7._BASE_BUILD = transparent_v5_build
+    # V9 executes geographic hypotheses through v7._BASE_BUILD. Patch exactly
+    # that captured lower-level call. Do NOT assign v5._build here: in the live
+    # installer chain v5._build can already be v7._build, which would create a
+    # recursion cycle when v7._BASE_BUILD points at our wrapper.
+    v7._BASE_BUILD = transparent_base_build
 
 
 __all__ = [
