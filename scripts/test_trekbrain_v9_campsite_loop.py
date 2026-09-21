@@ -1,7 +1,29 @@
-"""Regression for campsite-aware ORS loop recovery."""
+"""Regression for campsite-first loop recovery.
+
+The recovery must not depend on generating more ORS round-trip seeds.  It should
+choose real campsites from one broad pool, solve the overnight order with a real
+walking matrix, then request one final route.
+"""
 from types import SimpleNamespace
+import math
 
 from backend import trekbrain_campsite_loop_v9 as recovery
+
+
+START = {"name": "Mont Saint-Michel", "lat": 48.636, "lon": -1.511, "category": "place"}
+CAMPS = [
+    {"name": "Camping A", "lat": 48.67, "lon": -1.33, "category": "camping", "source_url": "a"},
+    {"name": "Camping B", "lat": 48.80, "lon": -1.50, "category": "camping", "source_url": "b"},
+    {"name": "Camping C", "lat": 48.68, "lon": -1.70, "category": "camping", "source_url": "c"},
+    {"name": "Camping mauvais", "lat": 48.64, "lon": -1.40, "category": "camping", "source_url": "bad"},
+]
+
+
+def hav(a, b):
+    lat1, lon1, lat2, lon2 = map(math.radians, (float(a["lat"]), float(a["lon"]), float(b["lat"]), float(b["lon"])))
+    dlat, dlon = lat2 - lat1, lon2 - lon1
+    h = math.sin(dlat / 2) ** 2 + math.cos(lat1) * math.cos(lat2) * math.sin(dlon / 2) ** 2
+    return 6371.0088 * 2 * math.asin(min(1.0, math.sqrt(h)))
 
 
 class V3:
@@ -28,47 +50,68 @@ class V3:
 
     @staticmethod
     def _geocode(query):
-        return [{"name": "Mont Saint-Michel", "lat": 48.636, "lon": -1.511}]
+        return [dict(START)]
+
+    @staticmethod
+    def _dist(a, b):
+        return hav(a, b)
 
     @staticmethod
     def _stage_distances(coords, boundaries, legacy_main, total):
-        assert len(boundaries) == 5
+        assert [x["name"] for x in boundaries] == [
+            "Mont Saint-Michel", "Camping A", "Camping B", "Camping C", "Mont Saint-Michel"
+        ]
         return [17.0, 19.0, 18.0, 18.0]
 
 
 class Roundtrip:
-    seeds = []
+    nearby_calls = 0
+
+    @staticmethod
+    def _haversine(a, b):
+        aa = {"lat": a[0], "lon": a[1]}
+        bb = {"lat": b[0], "lon": b[1]}
+        return hav(aa, bb)
 
     @classmethod
-    def _roundtrip_request(cls, start, target_km, seed):
-        cls.seeds.append(seed)
-        coords = [[48.636, -1.511], [48.70, -1.40], [48.78, -1.51], [48.70, -1.62], [48.636, -1.511]]
-        return {"coords": coords, "distance": 72.0, "fallback": False, "profile": "foot-hiking"}, None
+    def _nearby_stays(cls, v3, anchor, category, radius_km):
+        cls.nearby_calls += 1
+        assert category == "camping"
+        assert radius_km >= 18
+        return [dict(x) for x in CAMPS]
 
     @staticmethod
-    def _balanced_corridor_stays(v3, coords, days, category, daily_target, daily_min, daily_max):
-        seed = Roundtrip.seeds[-1]
-        if seed == 29:
-            return [], {"options": [3, 0], "search_radius_km": 4.0, "window_km": 7.2}
-        camps = [
-            {"name": "Camping A", "lat": 48.68, "lon": -1.43, "category": "camping"},
-            {"name": "Camping B", "lat": 48.76, "lon": -1.52, "category": "camping"},
-            {"name": "Camping C", "lat": 48.69, "lon": -1.60, "category": "camping"},
-        ]
-        return camps, {"options": [2, 3, 2], "search_radius_km": 4.0, "window_km": 7.2}
-
-    @staticmethod
-    def _route_points_with_stays(coords, start, stays, days):
-        return [start] + stays + [start]
+    def _roundtrip_request(*args, **kwargs):
+        raise AssertionError("Camping-first recovery must not request another ORS round-trip seed")
 
 
 class ORS:
     ORS_PROFILE = "foot-hiking"
+    matrix_calls = 0
+    route_calls = 0
 
-    @staticmethod
-    def get_route(coords, distance_gps):
+    @classmethod
+    def get_distance_matrix(cls, coords):
+        cls.matrix_calls += 1
+        # indexes: 0 start, 1 A, 2 B, 3 C, 4 bad
+        # Only start -> A -> B -> C -> start gives four good hiking days.
         return {
-            "coords": [[48.636, -1.511], [48.68, -1.43], [48.76, -1.52], [48.69, -1.60], [48.636, -1.511]],
+            "fallback": False,
+            "distances": [
+                [0, 17, 31, 18, 8],
+                [17, 0, 19, 30, 9],
+                [31, 19, 0, 18, 27],
+                [18, 30, 18, 0, 26],
+                [8, 9, 27, 26, 0],
+            ],
+        }
+
+    @classmethod
+    def get_route(cls, coords, distance_gps):
+        cls.route_calls += 1
+        assert len(coords) == 5
+        return {
+            "coords": coords,
             "distance": 72.0,
             "fallback": False,
             "profile": "foot-hiking",
@@ -87,13 +130,13 @@ data = SimpleNamespace(
     require_transit=False,
 )
 
-Roundtrip.seeds.clear()
 result = recovery._recover(data, legacy, V3, Roundtrip, ORS)
-assert Roundtrip.seeds == [29, 47], Roundtrip.seeds
-assert result["planner_fallback"] == "ors-campsite-aware-round-trip"
+assert Roundtrip.nearby_calls == 1, Roundtrip.nearby_calls
+assert ORS.matrix_calls == 1, ORS.matrix_calls
+assert ORS.route_calls == 1, ORS.route_calls
+assert result["planner_fallback"] == "ors-camping-matrix-loop"
 assert result["route_preview"]["fallback"] is False
 assert len(result["stages"]) == 4
-assert len(result["accommodations"]) == 3
 assert [x["overnight"] for x in result["stages"][:3]] == ["Camping A", "Camping B", "Camping C"]
 assert max(x["distance_km"] for x in result["stages"]) <= 23.35
-print("Campsite-aware alternate ORS loop recovery: OK")
+print("Campsite-first matrix loop recovery: OK")
