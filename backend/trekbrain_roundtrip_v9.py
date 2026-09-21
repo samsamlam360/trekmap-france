@@ -20,7 +20,7 @@ _INSTALLED = False
 def _haversine(a, b) -> float:
     lat1, lon1, lat2, lon2 = map(math.radians, (float(a[0]), float(a[1]), float(b[0]), float(b[1])))
     dlat, dlon = lat2 - lat1, lon2 - lon1
-    h = math.sin(dlat / 2) ** 2 + math.cos(lat1) * math.cos(lat2) * math.sin(dlon / 2) ** 2
+    h = math.sin(dlat / 2) ** 2 + math.cos(lat1) * math.cos(dlat + lat1) * math.sin(dlon / 2) ** 2
     return 6371.0088 * 2 * math.asin(min(1.0, math.sqrt(h)))
 
 
@@ -29,6 +29,23 @@ def _cumulative(coords):
     for a, b in zip(coords, coords[1:]):
         out.append(out[-1] + _haversine(a, b))
     return out
+
+
+def _route_index_for_progress(cum, progress_km: float) -> int:
+    if len(cum) <= 2:
+        return 0
+    return min(range(1, len(cum) - 1), key=lambda i: abs(float(cum[i]) - float(progress_km)))
+
+
+def _route_anchor(coords, cum, index: int, name: str = "Repère de boucle") -> dict:
+    index = max(0, min(int(index), len(coords) - 1))
+    return {
+        "name": name,
+        "lat": float(coords[index][0]),
+        "lon": float(coords[index][1]),
+        "category": "route_anchor",
+        "route_progress_km": round(float(cum[index]), 3) if cum else 0.0,
+    }
 
 
 def _equal_anchors(coords, days):
@@ -46,12 +63,7 @@ def _equal_anchors(coords, days):
         if not list(choices):
             return []
         best = min(range(floor, len(cum) - 1), key=lambda i: abs(cum[i] - target))
-        anchors.append({
-            "name": f"Repère jour {day}",
-            "lat": float(coords[best][0]),
-            "lon": float(coords[best][1]),
-            "category": "route_anchor",
-        })
+        anchors.append(_route_anchor(coords, cum, best, f"Repère jour {day}"))
         floor = min(best + 1, len(cum) - 2)
     return anchors
 
@@ -120,22 +132,230 @@ def _best_roundtrip(start, target_km: float, daily_min: float, daily_max: float,
     return rows[0][1]
 
 
+def _stay_key(stay: dict) -> str:
+    source = str(stay.get("source_url") or "").strip()
+    if source:
+        return source
+    name = str(stay.get("name") or "").strip().casefold()
+    try:
+        return f"{name}|{float(stay['lat']):.5f}|{float(stay['lon']):.5f}"
+    except Exception:
+        return name
+
+
+def _project_stay_to_route(coords, cum, stay: dict):
+    try:
+        point = [float(stay["lat"]), float(stay["lon"])]
+    except Exception:
+        return None
+    if not coords:
+        return None
+    index = min(range(len(coords)), key=lambda i: _haversine(coords[i], point))
+    return index, float(cum[index]), float(_haversine(coords[index], point))
+
+
+def _nearby_stays(v3, anchor: dict, category: str, radius_km: float):
+    try:
+        rows = list(v3._nearby(anchor["lat"], anchor["lon"], radius_km, [category]))
+    except Exception:
+        rows = []
+    return [dict(x) for x in rows if x.get("category") == category]
+
+
 def _nearest_unique_stays(v3, anchors, category: str, max_km: float = 2.6):
+    """Legacy exact-anchor lookup kept for compatibility and regressions."""
     chosen = []
     used = set()
     for anchor in anchors:
-        try:
-            rows = list(v3._nearby(anchor["lat"], anchor["lon"], max_km, [category]))
-        except Exception:
-            rows = []
-        rows = [x for x in rows if x.get("category") == category]
+        rows = _nearby_stays(v3, anchor, category, max_km)
         rows.sort(key=lambda x: v3._dist(anchor, x))
-        stay = next((x for x in rows if (x.get("source_url") or x.get("name")) not in used), None)
+        stay = next((x for x in rows if _stay_key(x) not in used), None)
         if not stay:
             return []
-        used.add(stay.get("source_url") or stay.get("name"))
+        used.add(_stay_key(stay))
         chosen.append(stay)
     return chosen
+
+
+def _adaptive_stay_options(
+    v3,
+    coords,
+    cum,
+    target_progress: float,
+    category: str,
+    search_radius_km: float,
+    window_km: float,
+):
+    """Find real stays around a section of the loop, not one arbitrary endpoint.
+
+    Searching only at the mathematically exact daily split caused valid campsites
+    a few kilometres earlier/later to be ignored. We now scan three points across
+    a progress window, then project every stay back onto the ORS loop corridor.
+    """
+    if len(coords) < 3 or not cum:
+        return []
+    total = float(cum[-1])
+    probes = []
+    for progress in (target_progress - window_km, target_progress, target_progress + window_km):
+        progress = max(0.2, min(total - 0.2, progress))
+        idx = _route_index_for_progress(cum, progress)
+        if idx not in probes:
+            probes.append(idx)
+
+    by_key = {}
+    corridor_margin = window_km + search_radius_km + 1.0
+    for idx in probes:
+        anchor = _route_anchor(coords, cum, idx, "Recherche nuitée")
+        for stay in _nearby_stays(v3, anchor, category, search_radius_km):
+            projected = _project_stay_to_route(coords, cum, stay)
+            if not projected:
+                continue
+            route_index, progress, offroute = projected
+            if offroute > search_radius_km + 0.35:
+                continue
+            if abs(progress - target_progress) > corridor_margin:
+                continue
+            enriched = dict(stay)
+            enriched["_route_index"] = int(route_index)
+            enriched["_route_progress_km"] = float(progress)
+            enriched["_offroute_km"] = float(offroute)
+            key = _stay_key(enriched)
+            quality = abs(progress - target_progress) + offroute * 0.75
+            previous = by_key.get(key)
+            if previous is None or quality < previous[0]:
+                by_key[key] = (quality, enriched)
+
+    rows = [value[1] for value in by_key.values()]
+    rows.sort(key=lambda x: (
+        abs(float(x.get("_route_progress_km") or 0) - target_progress)
+        + float(x.get("_offroute_km") or 0) * 0.75
+    ))
+    return rows[:12]
+
+
+def _range_penalty(distance: float, target: float, low: float, high: float) -> float:
+    penalty = abs(float(distance) - float(target))
+    if distance < low:
+        penalty += (low - distance) * 8.0
+    if distance > high:
+        penalty += (distance - high) * 12.0
+    return penalty
+
+
+def _balanced_corridor_stays(
+    v3,
+    coords,
+    days: int,
+    category: str,
+    daily_target: float,
+    daily_min: float,
+    daily_max: float,
+):
+    """Choose ordered stays that balance all days of the loop.
+
+    A stay may sit a few kilometres before/after the ideal split and a few
+    kilometres off the main corridor. The final geometry is still re-routed by
+    ORS, and the hard daily-distance gate remains in force afterwards.
+    """
+    if days <= 1:
+        return [], {"search_radius_km": 0.0, "window_km": 0.0, "options": []}
+    cum = _cumulative(coords)
+    if not cum or cum[-1] <= 0:
+        return [], {"search_radius_km": 0.0, "window_km": 0.0, "options": []}
+
+    total = float(cum[-1])
+    search_radius = min(4.5, max(3.6, float(daily_target) * 0.22))
+    window = min(8.0, max(5.0, float(daily_target) * 0.40))
+    option_sets = []
+    for night in range(1, days):
+        target = total * night / days
+        options = _adaptive_stay_options(
+            v3, coords, cum, target, category, search_radius, window
+        )
+        option_sets.append(options)
+        if not options:
+            return [], {
+                "search_radius_km": search_radius,
+                "window_km": window,
+                "options": [len(x) for x in option_sets],
+            }
+
+    # score, chosen, used keys, previous corridor progress, previous detour
+    beam = [(0.0, [], frozenset(), 0.0, 0.0)]
+    min_progress_gap = max(1.0, float(daily_min) * 0.22)
+    for night_index, options in enumerate(option_sets, start=1):
+        expanded = []
+        target_progress = total * night_index / days
+        for score, chosen, used, previous_progress, previous_detour in beam:
+            for stay in options:
+                key = _stay_key(stay)
+                if key in used:
+                    continue
+                progress = float(stay.get("_route_progress_km") or 0)
+                detour = float(stay.get("_offroute_km") or 0)
+                if progress <= previous_progress + min_progress_gap:
+                    continue
+                estimated_stage = (progress - previous_progress) + previous_detour + detour
+                stage_score = _range_penalty(estimated_stage, daily_target, daily_min, daily_max)
+                placement_score = abs(progress - target_progress) * 0.30 + detour * 0.55
+                expanded.append((
+                    score + stage_score + placement_score,
+                    chosen + [stay],
+                    used | {key},
+                    progress,
+                    detour,
+                ))
+        if not expanded:
+            return [], {
+                "search_radius_km": search_radius,
+                "window_km": window,
+                "options": [len(x) for x in option_sets],
+            }
+        expanded.sort(key=lambda state: state[0])
+        beam = expanded[:36]
+
+    finalists = []
+    for score, chosen, used, previous_progress, previous_detour in beam:
+        final_stage = (total - previous_progress) + previous_detour
+        score += _range_penalty(final_stage, daily_target, daily_min, daily_max)
+        finalists.append((score, chosen))
+    finalists.sort(key=lambda row: row[0])
+    return finalists[0][1] if finalists else [], {
+        "search_radius_km": search_radius,
+        "window_km": window,
+        "options": [len(x) for x in option_sets],
+    }
+
+
+def _route_points_with_stays(coords, start: dict, stays, days: int):
+    """Preserve the original ORS loop while inserting out-and-back stay detours."""
+    cum = _cumulative(coords)
+    if len(coords) < 3 or not cum:
+        return [start, start]
+
+    stay_by_index = {}
+    for stay in stays:
+        idx = int(stay.get("_route_index") or 0)
+        idx = max(1, min(idx, len(coords) - 2))
+        stay_by_index.setdefault(idx, []).append(stay)
+
+    # Keep enough shape points to prevent ORS from shortcutting across the loop.
+    shape_sections = max(8, int(days) * 3)
+    shape_indices = {
+        _route_index_for_progress(cum, cum[-1] * part / shape_sections)
+        for part in range(1, shape_sections)
+    }
+    ordered_indices = sorted(shape_indices | set(stay_by_index))
+
+    points = [dict(start)]
+    for idx in ordered_indices:
+        anchor = _route_anchor(coords, cum, idx, "Repère de boucle")
+        points.append(anchor)
+        for stay in stay_by_index.get(idx, []):
+            points.append(dict(stay))
+            points.append(dict(anchor))
+    points.append(dict(start))
+    return points
 
 
 def _constraint_near_start(v3, query: str, location: str, start: dict, max_km: float = 3.0) -> bool:
@@ -203,34 +423,38 @@ def _build_roundtrip(data, legacy_main, v3):
         )
 
     days = max(1, int(intent.get("days") or data.days))
-    target_km = float(intent.get("total_target") or float(intent.get("daily_target") or data.daily_km) * days)
-    route = _best_roundtrip(
-        start,
-        target_km,
-        float(intent.get("daily_min") or data.daily_km * 0.75),
-        float(intent.get("daily_max") or data.daily_km * 1.25),
-        days,
-        v3,
-    )
+    daily_target = float(intent.get("daily_target") or data.daily_km)
+    daily_min = float(intent.get("daily_min") or data.daily_km * 0.75)
+    daily_max = float(intent.get("daily_max") or data.daily_km * 1.25)
+    target_km = float(intent.get("total_target") or daily_target * days)
+    route = _best_roundtrip(start, target_km, daily_min, daily_max, days, v3)
     coords = route.get("coords") or []
     anchors = _equal_anchors(coords, days)
     if len(anchors) != max(0, days - 1):
         raise HTTPException(status_code=422, detail="La boucle ORS n'a pas pu être découpée correctement en journées.")
 
     category = "camping" if intent.get("accommodation") == "camping" else "refuge" if intent.get("accommodation") == "refuge" else None
-    stays = _nearest_unique_stays(v3, anchors, category) if category else []
+    stays = []
+    stay_search = {"search_radius_km": 0.0, "window_km": 0.0, "options": []}
 
     if category and days > 1:
+        stays, stay_search = _balanced_corridor_stays(
+            v3, coords, days, category, daily_target, daily_min, daily_max
+        )
         if len(stays) != days - 1:
             label = "campings" if category == "camping" else "hébergements"
+            radius = float(stay_search.get("search_radius_km") or 0)
+            window = float(stay_search.get("window_km") or 0)
             raise HTTPException(
                 status_code=422,
-                detail=f"La boucle pédestre existe, mais je n'ai pas trouvé assez de {label} à moins d'environ 2,6 km des fins d'étape.",
+                detail=(
+                    f"La boucle pédestre existe, mais je n'ai pas trouvé une combinaison de {label} "
+                    f"permettant d'équilibrer les étapes. J'ai cherché le long du corridor, jusqu'à environ "
+                    f"{radius:.1f} km de celui-ci et ±{window:.1f} km autour de chaque fin d'étape idéale."
+                ),
             )
-        route_points = [start]
-        for anchor, stay in zip(anchors, stays):
-            route_points.extend([anchor, stay, anchor])
-        route_points.append(start)
+
+        route_points = _route_points_with_stays(coords, start, stays, days)
         routed = ors.get_route([[p["lat"], p["lon"]] for p in route_points], legacy_main.distance_gps)
         if routed.get("fallback") is not False:
             raise HTTPException(status_code=503, detail=str(routed.get("warning") or "ORS n'a pas validé les détours vers les nuitées."))
@@ -246,7 +470,6 @@ def _build_roundtrip(data, legacy_main, v3):
     if len(stage_distances) != days:
         stage_distances = [float(route.get("distance") or 0) / days] * days
 
-    daily_max = float(intent.get("daily_max") or 40)
     if any(d > daily_max + 0.35 for d in stage_distances):
         raise HTTPException(
             status_code=422,
@@ -278,6 +501,15 @@ def _build_roundtrip(data, legacy_main, v3):
         })
 
     end = dict(start)
+    notes = [
+        "Planificateur avancé indisponible pour cette demande : boucle de secours calculée directement par ORS sur le réseau pédestre.",
+        "Les distances sont réelles côté routage ; les services et conditions terrain restent à vérifier avant le départ.",
+    ]
+    if stays:
+        notes.append(
+            "Les fins d'étape ont été adaptées aux campings réellement trouvés le long de la boucle, puis tous les détours ont été revalidés par ORS."
+        )
+
     return {
         "name": f"Boucle randonnée autour de {location}",
         "region": location,
@@ -305,10 +537,7 @@ def _build_roundtrip(data, legacy_main, v3):
             "return": f"Retour depuis le même secteur ({location}) à vérifier." if getattr(data, "require_transit", False) else "",
         },
         "points_of_interest": [],
-        "advisor_notes": [
-            "Planificateur avancé indisponible pour cette demande : boucle de secours calculée directement par ORS sur le réseau pédestre.",
-            "Les distances sont réelles côté routage ; les services et conditions terrain restent à vérifier avant le départ.",
-        ],
+        "advisor_notes": notes,
         "confidence": {
             "score": 78,
             "limitations": ["Boucle ORS de secours : moins optimisée pour les POI que le planificateur principal."],
@@ -343,4 +572,12 @@ def install_roundtrip_fallback(v3) -> None:
     v3._build = build
 
 
-__all__ = ["install_roundtrip_fallback", "_build_roundtrip", "_equal_anchors", "_best_roundtrip", "_constraint_near_start"]
+__all__ = [
+    "install_roundtrip_fallback",
+    "_build_roundtrip",
+    "_equal_anchors",
+    "_best_roundtrip",
+    "_constraint_near_start",
+    "_balanced_corridor_stays",
+    "_route_points_with_stays",
+]
