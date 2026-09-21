@@ -111,8 +111,8 @@ print("ORS round-trip recovery: OK")
 
 
 # ---------------------------------------------------------------------------
-# 2. The v5 language layer must not replace a useful ORS/geographic error with
-#    the generic 'parcours cohérent' message.
+# 2. The language layer must not replace a useful ORS/geographic error with the
+#    generic 'parcours cohérent' message.
 # ---------------------------------------------------------------------------
 
 class FailureV3:
@@ -156,3 +156,43 @@ else:
     raise AssertionError("The real planner failure should have propagated")
 
 print("Underlying planner failure transparency: OK")
+
+
+# ---------------------------------------------------------------------------
+# 3. Reproduce the live v7 topology that caused "maximum recursion depth
+#    exceeded": after v7 installation, v5._build points to v7._build while
+#    v7._BASE_BUILD still points to the lower-level v5 implementation. The
+#    diagnostics installer must NEVER replace v5._build with a wrapper and then
+#    point v7._BASE_BUILD at that same wrapper.
+# ---------------------------------------------------------------------------
+
+class TopologyV3:
+    @staticmethod
+    def _build(data, legacy_main):
+        return {"low": True}
+
+calls = {"base": 0, "public": 0}
+
+def lower_v5_build(data, legacy_main, user_id):
+    calls["base"] += 1
+    return {"ok": True, "user_id": user_id}
+
+TopologyV7 = SimpleNamespace(_BASE_BUILD=lower_v5_build)
+
+def public_v7_build(data, legacy_main, user_id):
+    calls["public"] += 1
+    return TopologyV7._BASE_BUILD(data, legacy_main, user_id)
+
+TopologyV5 = SimpleNamespace(_build=public_v7_build)
+original_public = TopologyV5._build
+
+diagnostics._INSTALLED = False
+diagnostics.install_failure_diagnostics(TopologyV3, TopologyV5, TopologyV7)
+
+# Critical assertion: diagnostics must leave the public v5 -> v7 edge alone.
+assert TopologyV5._build is original_public
+result = TopologyV5._build(None, None, 7)
+assert result == {"ok": True, "user_id": 7}, result
+assert calls == {"base": 1, "public": 1}, calls
+
+print("Production v7 call topology stays acyclic: OK")
