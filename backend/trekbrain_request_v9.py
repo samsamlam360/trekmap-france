@@ -41,7 +41,12 @@ def _clean_place(value: str) -> str:
 
 
 def _extract_prompt_places(prompt: str) -> list[dict[str, Any]]:
-    """Return likely geographic anchors in strongest-to-weakest order."""
+    """Return likely geographic anchors in strongest-to-weakest order.
+
+    Evening/post-hike visits are deliberately marked as non-routing objectives.
+    Visiting a monument after the day's walk must not silently become a hard
+    hiking waypoint and make an otherwise valid loop impossible.
+    """
     text = re.sub(r"\s+", " ", str(prompt or "")).strip()
     if not text:
         return []
@@ -63,7 +68,12 @@ def _extract_prompt_places(prompt: str) -> list[dict[str, Any]]:
     found: list[dict[str, Any]] = []
     seen: set[str] = set()
     folded_all = _fold(text)
-    after_trip = bool(re.search(r"\bapres\s+(?:le|mon|notre)\s+trek\b|\bapres\s+la\s+fin\s+du\s+trek\b", folded_all))
+    after_trip_global = bool(
+        re.search(
+            r"\bapres\s+(?:(?:le|mon|notre)\s+trek|la\s+fin\s+du\s+trek)\b",
+            folded_all,
+        )
+    )
     for kind, pattern in patterns:
         for match in re.finditer(pattern, text, flags=re.I):
             place = _clean_place(match.group(1))
@@ -74,10 +84,22 @@ def _extract_prompt_places(prompt: str) -> list[dict[str, Any]]:
             if key in {"camping", "campings", "refuge", "refuges", "gare", "train", "bus", "boucle"}:
                 continue
             seen.add(key)
+
+            tail = _fold(text[match.end(): match.end() + 160])
+            after_daily_hike = bool(
+                re.match(
+                    r"\s*(?:(?:un|le)\s+(?:soir|matin|apres-midi)\s+)?"
+                    r"apres\s+(?:la|le|une|mon|notre)\s+"
+                    r"(?:randonnee|rando|marche|journee(?:\s+de\s+randonnee)?|etape)\b",
+                    tail,
+                )
+            )
             found.append({
                 "kind": kind,
                 "place": place,
-                "after_trip": bool(after_trip and kind == "visit"),
+                # Historical field name retained for compatibility. It now also
+                # means "visit outside the hiking trace", such as an evening visit.
+                "after_trip": bool(kind == "visit" and (after_trip_global or after_daily_hike)),
             })
     return found[:6]
 
@@ -149,8 +171,17 @@ def reconcile_request(data):
                     effective_region = anchor_name
                     region_overridden = _fold(effective_region) != _fold(form_region)
                     reason = "stale-form-region-conflict"
+
             if selected["kind"] == "visit" and not selected["after_trip"]:
-                forced_waypoint = anchor_name
+                # Do not manufacture a hard waypoint when the requested visit is
+                # already the trek's geographic centre. This was blocking the ORS
+                # round-trip fallback for requests such as Mont-Saint-Michel.
+                region_point = _geocode_one(effective_region) if effective_region else None
+                separation = _distance_km(region_point, anchor_point)
+                if separation is None or separation > 3.0:
+                    forced_waypoint = anchor_name
+                else:
+                    reason = reason + "+visit-near-region"
 
     effective_prompt = prompt
     if forced_waypoint:
