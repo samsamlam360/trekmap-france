@@ -117,7 +117,12 @@ try:
     assert effective.region == "Mont Saint-Michel", (effective.region, resolution)
     assert effective.days == 4, effective
     assert effective.route_type == "Boucle", effective
-    assert "passer par Mont Saint-Michel" in effective.prompt, effective.prompt
+    # An evening visit after the day's hike identifies the right area but must
+    # not become a mandatory walking waypoint. That distinction is what keeps
+    # the ORS round-trip recovery usable.
+    assert "passer par Mont Saint-Michel" not in effective.prompt, effective.prompt
+    assert resolution["forced_waypoint"] is None, resolution
+    assert "Mont Saint-Michel" in resolution["after_trip_places"], resolution
     assert resolution["region_overridden"] is True, resolution
     assert resolution["reason"] == "stale-form-region-conflict", resolution
 
