@@ -36,7 +36,9 @@ if TREKBRAIN_VERSION == "v9":
     # 6) trim redundant expensive hypotheses and bound network timeouts;
     # 7) stop retry storms when a public service has just timed out;
     # 8) recover simple loops directly with ORS if the advanced solver fails;
-    # 9) surface the real geographic/routing error instead of a generic 422.
+    # 9) if the first fallback loop misses campsites, try a couple of genuinely
+    #    different ORS loop shapes and keep the first campsite-compatible one;
+    # 10) surface the real geographic/routing error instead of a generic 422.
     from . import smart_planner_v7 as _planner_v7
     from . import smart_planner_v5 as _planner_v5
     from . import smart_planner_v9 as _planner_v9
@@ -51,6 +53,7 @@ if TREKBRAIN_VERSION == "v9":
     from .trekbrain_distance_tolerance_v9 import install_distance_tolerance
     from .trekbrain_speed_v9 import install_fast_planning
     from .trekbrain_circuit_breaker_v9 import install_circuit_breakers
+    from .trekbrain_campsite_loop_v9 import install_campsite_aware_roundtrip
     from .trekbrain_roundtrip_v9 import install_roundtrip_fallback
     from .trekbrain_failure_diagnostics_v9 import install_failure_diagnostics
 
@@ -61,6 +64,7 @@ if TREKBRAIN_VERSION == "v9":
     install_distance_tolerance(_planner_v7.v5.v3)
     install_fast_planning(_planner_v7.v5.v3, _planner_v5, _planner_v9)
     install_circuit_breakers(_planner_v7.v5.v3, _ors, _roundtrip_v9)
+    install_campsite_aware_roundtrip(_planner_v7.v5.v3, _roundtrip_v9, _ors)
     install_roundtrip_fallback(_planner_v7.v5.v3)
     install_failure_diagnostics(_planner_v7.v5.v3, _planner_v5, _planner_v7)
 
