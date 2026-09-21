@@ -4,8 +4,14 @@ The recovery must not depend on generating more ORS round-trip seeds.  It should
 choose real campsites from one broad pool, solve the overnight order with a real
 walking matrix, then request one final route.
 """
+from pathlib import Path
 from types import SimpleNamespace
 import math
+import sys
+
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
 
 from backend import trekbrain_campsite_loop_v9 as recovery
 
