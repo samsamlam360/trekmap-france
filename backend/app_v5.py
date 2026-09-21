@@ -36,8 +36,8 @@ if TREKBRAIN_VERSION == "v9":
     # 6) trim redundant expensive hypotheses and bound network timeouts;
     # 7) stop retry storms when a public service has just timed out;
     # 8) recover simple loops directly with ORS if the advanced solver fails;
-    # 9) if the first fallback loop misses campsites, try a couple of genuinely
-    #    different ORS loop shapes and keep the first campsite-compatible one;
+    # 9) if that loop misses campsites, switch to campsite-first recovery:
+    #    choose nights with one ORS walking matrix, then route through them once;
     # 10) surface the real geographic/routing error instead of a generic 422.
     from . import smart_planner_v7 as _planner_v7
     from . import smart_planner_v5 as _planner_v5
