@@ -138,12 +138,42 @@ def _nearest_unique_stays(v3, anchors, category: str, max_km: float = 2.6):
     return chosen
 
 
+def _constraint_near_start(v3, query: str, location: str, start: dict, max_km: float = 3.0) -> bool:
+    """Return True when an allegedly forced point is just the loop's own centre.
+
+    Natural-language reconciliation can legitimately produce variants such as
+    "Mont st Michel" versus "Mont Saint-Michel". Such a redundant waypoint
+    should never disable ORS round-trip recovery.
+    """
+    query = str(query or "").strip()
+    if not query:
+        return True
+    rows = []
+    for candidate in (f"{query}, {location}, France", f"{query}, France", query):
+        try:
+            rows = v3._geocode(candidate) or []
+        except Exception:
+            rows = []
+        if rows:
+            break
+    if not rows:
+        return False
+    try:
+        return float(v3._dist(start, rows[0])) <= max_km
+    except Exception:
+        try:
+            return _haversine(
+                [float(start["lat"]), float(start["lon"])],
+                [float(rows[0]["lat"]), float(rows[0]["lon"])],
+            ) <= max_km
+        except Exception:
+            return False
+
+
 def _build_roundtrip(data, legacy_main, v3):
     intent = v3._parse_intent(data)
     if v3._fold(intent.get("route_type") or "") != "boucle":
         raise HTTPException(status_code=422, detail="Le mode de secours round-trip ne s'applique qu'aux boucles.")
-    if intent.get("via_query") or intent.get("end_query"):
-        raise HTTPException(status_code=422, detail="La boucle de secours ne peut pas ignorer un passage ou une arrivée imposés.")
 
     location = v3._location(data)
     geo = v3._geocode(f"{location}, France") or v3._geocode(location)
@@ -156,6 +186,21 @@ def _build_roundtrip(data, legacy_main, v3):
         "lon": float(center["lon"]),
         "category": "place",
     }
+
+    # Only genuinely different mandatory places block a one-point ORS round trip.
+    # A parser-generated "passer par Mont-Saint-Michel" while the loop already
+    # starts around Mont-Saint-Michel is redundant and must not kill recovery.
+    forced = []
+    for key, label in (("via_query", "passage"), ("end_query", "arrivée")):
+        query = str(intent.get(key) or "").strip()
+        if query and not _constraint_near_start(v3, query, location, start):
+            forced.append((label, query))
+    if forced:
+        rendered = ", ".join(f"{label} « {query} »" for label, query in forced)
+        raise HTTPException(
+            status_code=422,
+            detail=f"La boucle de secours ne peut pas ignorer une contrainte réellement distincte : {rendered}.",
+        )
 
     days = max(1, int(intent.get("days") or data.days))
     target_km = float(intent.get("total_target") or float(intent.get("daily_target") or data.daily_km) * days)
@@ -298,4 +343,4 @@ def install_roundtrip_fallback(v3) -> None:
     v3._build = build
 
 
-__all__ = ["install_roundtrip_fallback", "_build_roundtrip", "_equal_anchors", "_best_roundtrip"]
+__all__ = ["install_roundtrip_fallback", "_build_roundtrip", "_equal_anchors", "_best_roundtrip", "_constraint_near_start"]
