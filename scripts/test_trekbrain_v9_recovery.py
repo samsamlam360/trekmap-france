@@ -10,6 +10,7 @@ if str(ROOT) not in sys.path:
 from fastapi import HTTPException
 from backend import trekbrain_roundtrip_v9 as roundtrip
 from backend import trekbrain_failure_diagnostics_v9 as diagnostics
+from backend import trekbrain_request_v9 as request_v9
 
 
 # ---------------------------------------------------------------------------
@@ -108,6 +109,59 @@ assert result["start"]["lon"] == result["end"]["lon"], result
 assert len(result["stages"]) == 4, result
 assert [x["distance_km"] for x in result["stages"]] == [20.0, 20.0, 20.0, 20.0], result
 print("ORS round-trip recovery: OK")
+
+
+# ---------------------------------------------------------------------------
+# 1b. The real Mont-Saint-Michel wording must not become a hard hiking waypoint.
+#     "visiter ... un soir après la randonnée" is an evening objective, not an
+#     instruction to force the walking geometry through the monument.
+# ---------------------------------------------------------------------------
+
+places = request_v9._extract_prompt_places(
+    "Je souhaite faire un trek de 4 jours et je veux visiter le mont st Michel un soir après la randonnée. "
+    "Je veux que ce soit une boucle et je veux des campings tous les jours"
+)
+visit = next((x for x in places if x.get("kind") == "visit"), None)
+assert visit is not None, places
+assert request_v9._fold(visit["place"]) in {"mont st michel", "mont saint-michel"}, visit
+assert visit["after_trip"] is True, visit
+print("Evening Mont-Saint-Michel visit stays off the hiking trace: OK")
+
+
+# ---------------------------------------------------------------------------
+# 1c. Even if an older/enriched prompt still contains "passer par" for the same
+#     place as the loop centre, round-trip recovery must treat it as redundant.
+# ---------------------------------------------------------------------------
+
+class RedundantViaV3(FakeV3):
+    @staticmethod
+    def _parse_intent(data):
+        intent = dict(FakeV3._parse_intent(data))
+        intent["via_query"] = "Mont Saint-Michel"
+        return intent
+
+    @staticmethod
+    def _geocode(query):
+        return [{"name": "Mont Saint-Michel", "lat": 48.6361, "lon": -1.5115}]
+
+    @staticmethod
+    def _dist(a, b):
+        return 0.0
+
+mont_request = SimpleNamespace(**{**request.__dict__, "region": "Mont st Michel"})
+roundtrip._roundtrip_request = lambda start, target_km, seed: ({
+    "coords": fake_coords,
+    "distance": 80.0,
+    "fallback": False,
+    "profile": "foot-hiking",
+    "routing_mode": "ors-round-trip",
+}, None)
+try:
+    redundant_result = roundtrip._build_roundtrip(mont_request, legacy, RedundantViaV3)
+finally:
+    roundtrip._roundtrip_request = real_roundtrip_request
+assert redundant_result["planner_fallback"] == "ors-round-trip", redundant_result
+print("Redundant loop-centre waypoint no longer blocks ORS recovery: OK")
 
 
 # ---------------------------------------------------------------------------
