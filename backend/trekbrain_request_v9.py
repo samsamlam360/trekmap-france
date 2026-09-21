@@ -33,8 +33,6 @@ def _clean_place(value: str) -> str:
     value = re.sub(r"\s+(?:apres|après|avant|pendant)\s+(?:la|le|mon|notre)\b.*$", "", value, flags=re.I)
     value = re.sub(r"\s+en\s+\d{1,2}\s*(?:jours?|j)\b.*$", "", value, flags=re.I)
     value = re.sub(r"\s+", " ", value).strip(" ,.;:-")
-    # Common spoken abbreviation. Keep this intentionally narrow rather than
-    # rewriting every French place that happens to contain "st".
     if re.fullmatch(r"mont\s+st[ .-]*michel", _fold(value)):
         return "Mont Saint-Michel"
     return value[:100]
@@ -43,9 +41,9 @@ def _clean_place(value: str) -> str:
 def _extract_prompt_places(prompt: str) -> list[dict[str, Any]]:
     """Return likely geographic anchors in strongest-to-weakest order.
 
-    Evening/post-hike visits are deliberately marked as non-routing objectives.
-    Visiting a monument after the day's walk must not silently become a hard
-    hiking waypoint and make an otherwise valid loop impossible.
+    Evening/post-hike visits can still identify the correct geographic area, but
+    they are marked as non-routing objectives so they do not silently become
+    mandatory hiking waypoints.
     """
     text = re.sub(r"\s+", " ", str(prompt or "")).strip()
     if not text:
@@ -80,7 +78,6 @@ def _extract_prompt_places(prompt: str) -> list[dict[str, Any]]:
             key = _fold(place)
             if len(place) < 3 or key in seen:
                 continue
-            # Avoid treating generic planning vocabulary as a place name.
             if key in {"camping", "campings", "refuge", "refuges", "gare", "train", "bus", "boucle"}:
                 continue
             seen.add(key)
@@ -97,8 +94,6 @@ def _extract_prompt_places(prompt: str) -> list[dict[str, Any]]:
             found.append({
                 "kind": kind,
                 "place": place,
-                # Historical field name retained for compatibility. It now also
-                # means "visit outside the hiking trace", such as an evening visit.
                 "after_trip": bool(kind == "visit" and (after_trip_global or after_daily_hike)),
             })
     return found[:6]
@@ -128,19 +123,15 @@ def _distance_km(a: dict[str, Any] | None, b: dict[str, Any] | None) -> float | 
 
 
 def reconcile_request(data):
-    """Reconcile stale form geography with an explicit natural-language request.
-
-    Returns ``(effective_request, metadata)``. Other form fields are intentionally
-    left untouched here; TrekBrain's existing intent parser remains the single
-    source of truth for days, distance, difficulty and route type.
-    """
     prompt = str(getattr(data, "prompt", "") or "").strip()
     form_region = str(getattr(data, "region", "") or "").strip()
     places = _extract_prompt_places(prompt)
     form_in_prompt = bool(form_region and _fold(form_region) in _fold(prompt))
 
-    explicit_area = next((x for x in places if x["kind"] == "route_area" and not x["after_trip"]), None)
-    visit = next((x for x in places if x["kind"] == "visit" and not x["after_trip"]), None)
+    explicit_area = next((x for x in places if x["kind"] == "route_area"), None)
+    # A visit can identify the right region even when it happens after the day's
+    # hike. Whether it becomes a mandatory waypoint is decided separately below.
+    visit = next((x for x in places if x["kind"] == "visit"), None)
     selected = explicit_area or visit
 
     effective_region = form_region
@@ -165,17 +156,12 @@ def reconcile_request(data):
             elif not form_in_prompt:
                 form_point = _geocode_one(form_region)
                 separation = _distance_km(form_point, anchor_point)
-                # A large conflict combined with an absent form-region mention is
-                # the characteristic stale-form case seen on mobile.
                 if form_point is None or separation is None or separation >= 35.0:
                     effective_region = anchor_name
                     region_overridden = _fold(effective_region) != _fold(form_region)
                     reason = "stale-form-region-conflict"
 
             if selected["kind"] == "visit" and not selected["after_trip"]:
-                # Do not manufacture a hard waypoint when the requested visit is
-                # already the trek's geographic centre. This was blocking the ORS
-                # round-trip fallback for requests such as Mont-Saint-Michel.
                 region_point = _geocode_one(effective_region) if effective_region else None
                 separation = _distance_km(region_point, anchor_point)
                 if separation is None or separation > 3.0:
