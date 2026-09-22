@@ -1,8 +1,8 @@
 """High-confidence place guards for TrekBrain v9.
 
 Some French place names are ambiguous enough that a generic geocoder can return
-an entirely different place.  This module only hardens a very small list of
-well-known ambiguous anchors where the user's wording is explicit.
+an entirely different place. This module hardens a very small list of anchors
+where the hiking context makes the intended place unambiguous.
 """
 from __future__ import annotations
 
@@ -30,8 +30,14 @@ def _fold(value: str) -> str:
 
 
 def _is_belle_ile_en_mer(value: str) -> bool:
+    """Recognise both the official name and the common short form Belle-Île."""
     text = _fold(value)
-    return "belle ile en mer" in text
+    if not re.search(r"\bbelle ile(?: en mer)?\b", text):
+        return False
+    # Do not hijack an explicitly disambiguated homonym.
+    if any(word in text for word in ("chelles", "seine et marne")):
+        return False
+    return True
 
 
 def guarded_geocode_factory(original):
