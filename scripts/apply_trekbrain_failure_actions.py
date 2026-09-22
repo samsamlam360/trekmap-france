@@ -23,6 +23,7 @@ block = r'''<!-- TREKMAP_FAILURE_ACTIONS_V93_START -->
 .tm-ai-failure-actions-note{font-size:10px;line-height:1.45;color:#77684d;margin-bottom:10px}
 .tm-ai-failure-buttons{display:grid;grid-template-columns:1fr 1fr;gap:8px}
 .tm-ai-failure-buttons button{min-height:43px;border-radius:11px;padding:8px 10px;font-size:11px;font-weight:900;cursor:pointer}
+.tm-ai-failure-buttons button:disabled{opacity:.5;cursor:not-allowed}
 #tm-ai-failure-view{grid-column:1/-1;border:0;background:#116b49;color:#fff}
 #tm-ai-failure-edit{border:1px solid #cddfd6;background:#fff;color:#315b49}
 #tm-ai-failure-reset{border:1px solid #e2caca;background:#fff;color:#884747}
@@ -63,11 +64,12 @@ block = r'''<!-- TREKMAP_FAILURE_ACTIONS_V93_START -->
     if(!content||!lastFailure||content.querySelector('#tm-ai-failure-actions'))return;
     const text=String(content.textContent||'').toLowerCase();
     if(!text.includes('impossible')&&!content.querySelector('.tm-ai-warning'))return;
+    const hasPreview=!!(lastFailure.preview&&Array.isArray(lastFailure.preview.coords)&&lastFailure.preview.coords.length>=2);
     const box=document.createElement('section');box.id='tm-ai-failure-actions';box.className='tm-ai-failure-actions';
     box.innerHTML=`<div class="tm-ai-failure-actions-title">Que faire maintenant ?</div>
       <div class="tm-ai-failure-actions-note">Le premier bouton montre uniquement le dernier tracé provisoire calculé. Il peut être incomplet ou ne pas respecter toutes les contraintes et ne doit pas être considéré comme un itinéraire validé.</div>
       <div class="tm-ai-failure-buttons">
-        <button id="tm-ai-failure-view" type="button">🗺️ Voir quand même le trek</button>
+        <button id="tm-ai-failure-view" type="button" ${hasPreview?'':'disabled'}>${hasPreview?'🗺️ Voir quand même le trek':'🗺️ Aucun tracé provisoire disponible'}</button>
         <button id="tm-ai-failure-edit" type="button">✏️ Modifier la requête</button>
         <button id="tm-ai-failure-reset" type="button">🗑️ Nouvelle requête</button>
       </div>`;
@@ -80,6 +82,11 @@ block = r'''<!-- TREKMAP_FAILURE_ACTIONS_V93_START -->
     const side=document.querySelector('#tm-ai-overlay .tm-ai-side');
     try{side?.scrollTo({top:0,behavior:'smooth'})}catch(_){}
     setTimeout(()=>$('tm-ai-prompt')?.focus(),80);
+  }
+
+  function closeOverlayForMap(){
+    const overlay=$('tm-ai-overlay');
+    if(overlay){overlay.classList.remove('open');overlay.setAttribute('aria-hidden','true')}
   }
 
   function resetRequest(){
@@ -108,25 +115,36 @@ block = r'''<!-- TREKMAP_FAILURE_ACTIONS_V93_START -->
       if(typeof toast==='function')toast('La carte n’est pas encore disponible.');
       return;
     }
-    clearFailedMap();
-    failedLayer=L.layerGroup();
-    const line=L.polyline(p.coords,{weight:5,opacity:.9,dashArray:'9 7'}).addTo(failedLayer);
-    failedLayer.addTo(map);
-    try{map.fitBounds(line.getBounds().pad(.08),{padding:[24,24]})}catch(_){}
-    failedBanner=L.control({position:'topright'});
-    failedBanner.onAdd=()=>{const div=L.DomUtil.create('div','tm-failed-preview-banner');div.textContent='⚠️ Tracé provisoire non validé';L.DomEvent.disableClickPropagation(div);return div};
-    failedBanner.addTo(map);
-    $('tm-ai-close')?.click();
-    setTimeout(()=>{try{map.invalidateSize()}catch(_){}},120);
-    const km=Number(p.distance_km);
-    const suffix=Number.isFinite(km)&&km>0?` · ${km.toFixed(1)} km`:'';
-    if(typeof toast==='function')toast(`Tracé provisoire affiché${suffix}. Vérifie-le avant toute utilisation.`);
+    try{
+      clearFailedMap();
+      failedLayer=L.layerGroup();
+      const candidateOnly=!!p.candidate_only;
+      const line=L.polyline(p.coords,{weight:candidateOnly?4:5,opacity:candidateOnly?.72:.9,dashArray:candidateOnly?'5 9':'9 7'}).addTo(failedLayer);
+      failedLayer.addTo(map);
+      failedBanner=L.control({position:'topright'});
+      failedBanner.onAdd=()=>{const div=L.DomUtil.create('div','tm-failed-preview-banner');div.textContent=candidateOnly?'⚠️ Aperçu candidat non routé':'⚠️ Tracé provisoire non validé';L.DomEvent.disableClickPropagation(div);return div};
+      failedBanner.addTo(map);
+      closeOverlayForMap();
+      setTimeout(()=>{
+        try{map.invalidateSize();map.fitBounds(line.getBounds().pad(.08),{padding:[24,24],maxZoom:15})}catch(_){}
+      },90);
+      const km=Number(p.distance_km);
+      const suffix=Number.isFinite(km)&&km>0?` · ${km.toFixed(1)} km`:'';
+      const wording=candidateOnly?'Aperçu candidat affiché':'Tracé provisoire affiché';
+      if(typeof toast==='function')toast(`${wording}${suffix}. Ce n’est pas un itinéraire validé.`);
+    }catch(err){
+      console.warn('Aperçu provisoire indisponible',err);
+      if(typeof toast==='function')toast('Impossible d’afficher le tracé provisoire sur la carte.');
+    }
   }
 
   document.addEventListener('click',event=>{
-    const view=event.target.closest('#tm-ai-failure-view');if(view){event.preventDefault();showFailedPreview();return}
-    const edit=event.target.closest('#tm-ai-failure-edit');if(edit){event.preventDefault();backToForm();return}
-    const reset=event.target.closest('#tm-ai-failure-reset');if(reset){event.preventDefault();resetRequest()}
+    const view=event.target.closest('#tm-ai-failure-view');
+    if(view){event.preventDefault();event.stopPropagation();if(!view.disabled)showFailedPreview();return}
+    const edit=event.target.closest('#tm-ai-failure-edit');
+    if(edit){event.preventDefault();event.stopPropagation();backToForm();return}
+    const reset=event.target.closest('#tm-ai-failure-reset');
+    if(reset){event.preventDefault();event.stopPropagation();resetRequest()}
   },true);
 
   const previous=window.fetch.bind(window);
