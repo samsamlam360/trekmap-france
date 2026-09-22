@@ -10,6 +10,7 @@ from fastapi import Body, Depends, HTTPException
 from . import smart_planner_v7 as v7
 from .trekbrain_request_v9 import reconcile_request
 from .trekbrain_failed_preview_v9 import clear_failed_preview, get_failed_preview
+from .trekbrain_error_codes_v9 import classify_failure
 
 
 def _effective_payload(data):
@@ -81,21 +82,32 @@ def _wrap_post(app, path: str, legacy_main, *, add_note: bool):
         except HTTPException as exc:
             if path != "/ai/plan":
                 raise
+
+            # Always return a structured diagnostic, even when there is no
+            # provisional geometry. Previously the most frustrating failures
+            # were exactly the ones that fell back to a bare "HTTP 500" string.
             preview = get_failed_preview()
-            if not preview:
-                raise
-            # Keep the original status code and human-readable cause while
-            # attaching only request-local diagnostic geometry. The frontend
-            # must display this as provisional and never as a validated trek.
+            message = _error_message(exc.detail)
+            detail = {
+                "message": message,
+                "diagnostic": classify_failure(
+                    exc.detail,
+                    api_status=exc.status_code,
+                    preview=preview,
+                ),
+                "effective_request": _public_effective(effective),
+                "request_resolution": dict(meta),
+            }
+            if preview:
+                # Request-local diagnostic geometry only. The frontend must
+                # continue to label it provisional and never as a validated trek.
+                detail["failed_preview"] = preview
             raise HTTPException(
                 status_code=exc.status_code,
-                detail={
-                    "message": _error_message(exc.detail),
-                    "failed_preview": preview,
-                    "effective_request": _public_effective(effective),
-                },
+                detail=detail,
                 headers=exc.headers,
             ) from exc
+
         if not isinstance(result, dict):
             return result
         result["effective_request"] = _public_effective(effective)
