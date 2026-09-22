@@ -81,7 +81,7 @@ if TREKBRAIN_VERSION == "v9":
     install_distance_tolerance(_planner_v7.v5.v3)
     install_fast_planning(_planner_v7.v5.v3, _planner_v5, _planner_v9)
     install_ors_resilience(_ors)
-    install_failed_preview_capture(_ors)
+    install_failed_preview_capture(_ors, _roundtrip_v9)
     install_circuit_breakers(_planner_v7.v5.v3, _ors, _roundtrip_v9)
     install_stay_lookup_rescue(_planner_v7.v5.v3, _campsite_loop_v9, _roundtrip_v9)
     install_matrix_resilience(_campsite_loop_v9, _roundtrip_v9)
