@@ -28,29 +28,32 @@ else:
 install_smart_planner(app, legacy_main)
 if TREKBRAIN_VERSION == "v9":
     # V9 architecture, in order:
-    # 1) understand hiking relations;
-    # 2) allow short campsite branches;
-    # 3) synthesize loops from several walking corridors;
-    # 4) solve overnight choices on a real ORS walking-distance matrix;
-    # 5) interpret a daily-km value as a target unless explicit bounds are given;
-    # 6) trim redundant expensive hypotheses and bound network timeouts;
-    # 7) stop retry storms when a public service has just timed out;
-    # 8) recover missing stays with dedicated Overpass/Photon/Nominatim lookups;
-    # 9) recover simple loops directly with ORS if the advanced solver fails;
-    # 10) if that loop misses campsites, switch to campsite-first recovery:
-    #     choose nights with one ORS walking matrix, then route through them once;
-    # 11) if Matrix returns HTTP 5xx, rank a few cycles locally then validate
+    # 1) pin high-confidence ambiguous places before any geographic work;
+    # 2) understand hiking relations;
+    # 3) allow short campsite branches;
+    # 4) synthesize loops from several walking corridors;
+    # 5) solve overnight choices on a real ORS walking-distance matrix;
+    # 6) interpret a daily-km value as a target unless explicit bounds are given;
+    # 7) trim redundant expensive hypotheses and bound network timeouts;
+    # 8) stop retry storms when a public service has just timed out;
+    # 9) recover missing stays with dedicated Overpass/Photon/Nominatim lookups;
+    # 10) recover simple loops directly with ORS if the advanced solver fails;
+    # 11) if that loop misses campsites, switch to campsite-first recovery;
+    # 12) if Matrix returns HTTP 5xx, rank a few cycles locally then validate
     #     them with ORS Directions; long fallback loops use 2-3 validated lobes;
-    # 12) surface the real geographic/routing error instead of a generic 422;
-    # 13) keep water as display-only map context, never as a forced waypoint.
+    # 13) surface the real geographic/routing error instead of a generic 422;
+    # 14) discover water after routing and keep it display-only on the map.
     from . import smart_planner_v7 as _planner_v7
     from . import smart_planner_v5 as _planner_v5
     from . import smart_planner_v9 as _planner_v9
+    from . import free_planner_v2 as _geo_v2
+    from . import trekbrain_request_v9 as _request_v9
     from . import trekbrain_gr_v9 as _gr_v9
     from . import trekbrain_network_v9 as _network_v9
     from . import trekbrain_roundtrip_v9 as _roundtrip_v9
     from . import trekbrain_campsite_loop_v9 as _campsite_loop_v9
     from . import ors as _ors
+    from .trekbrain_place_guard_v9 import install_place_guard
     from .trekbrain_gr_v9 import install_gr_guidance
     from .trekbrain_gr_detours_v9 import install_gr_detours
     from .trekbrain_network_v9 import install_path_network
@@ -64,6 +67,7 @@ if TREKBRAIN_VERSION == "v9":
     from .trekbrain_roundtrip_v9 import install_roundtrip_fallback
     from .trekbrain_failure_diagnostics_v9 import install_failure_diagnostics
 
+    install_place_guard(_planner_v7.v5.v3, _geo_v2, _request_v9)
     install_gr_guidance(_planner_v7.v5.v3)
     install_gr_detours(_planner_v7.v5.v3, _gr_v9)
     install_path_network(_planner_v7.v5.v3, _gr_v9)
@@ -77,12 +81,14 @@ if TREKBRAIN_VERSION == "v9":
     install_roundtrip_fallback(_planner_v7.v5.v3)
     install_failure_diagnostics(_planner_v7.v5.v3, _planner_v5, _planner_v7)
 
-    # Geographic safety/resources remain final authorities. Water is installed
-    # as display-only context before the resource endpoint wrapper is created.
+    # Geographic safety/resources remain final authorities. Water discovery is
+    # post-route and then explicitly marked display-only before the public wrapper.
     from . import trekbrain_resources_v9 as _resources_v9
     from .trekbrain_resources_v9 import install_resource_overlay
+    from .trekbrain_water_discovery_v9 import install_water_discovery
     from .trekbrain_water_display_v9 import install_water_display_only
     from .trekbrain_request_overlay_v9 import install_request_overlay
+    install_water_discovery(_planner_v7.v5.v3, _resources_v9)
     install_water_display_only(_planner_v7.v5.v3, _resources_v9)
     install_resource_overlay(app, legacy_main)
     install_request_overlay(app, legacy_main)
