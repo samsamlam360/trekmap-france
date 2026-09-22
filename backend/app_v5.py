@@ -35,16 +35,19 @@ if TREKBRAIN_VERSION == "v9":
     # 5) interpret a daily-km value as a target unless explicit bounds are given;
     # 6) trim redundant expensive hypotheses and bound network timeouts;
     # 7) stop retry storms when a public service has just timed out;
-    # 8) recover simple loops directly with ORS if the advanced solver fails;
-    # 9) if that loop misses campsites, switch to campsite-first recovery:
-    #    choose nights with one ORS walking matrix, then route through them once;
-    # 10) surface the real geographic/routing error instead of a generic 422.
+    # 8) if a broad OSM query failed, retry only the required accommodation
+    #    category with one tiny bounded Overpass request;
+    # 9) recover simple loops directly with ORS if the advanced solver fails;
+    # 10) if that loop misses campsites, switch to campsite-first recovery:
+    #     choose nights with one ORS walking matrix, then route through them once;
+    # 11) surface the real geographic/routing error instead of a generic 422.
     from . import smart_planner_v7 as _planner_v7
     from . import smart_planner_v5 as _planner_v5
     from . import smart_planner_v9 as _planner_v9
     from . import trekbrain_gr_v9 as _gr_v9
     from . import trekbrain_network_v9 as _network_v9
     from . import trekbrain_roundtrip_v9 as _roundtrip_v9
+    from . import trekbrain_campsite_loop_v9 as _campsite_loop_v9
     from . import ors as _ors
     from .trekbrain_gr_v9 import install_gr_guidance
     from .trekbrain_gr_detours_v9 import install_gr_detours
@@ -53,6 +56,7 @@ if TREKBRAIN_VERSION == "v9":
     from .trekbrain_distance_tolerance_v9 import install_distance_tolerance
     from .trekbrain_speed_v9 import install_fast_planning
     from .trekbrain_circuit_breaker_v9 import install_circuit_breakers
+    from .trekbrain_stays_rescue_v9 import install_stay_lookup_rescue
     from .trekbrain_campsite_loop_v9 import install_campsite_aware_roundtrip
     from .trekbrain_roundtrip_v9 import install_roundtrip_fallback
     from .trekbrain_failure_diagnostics_v9 import install_failure_diagnostics
@@ -64,6 +68,7 @@ if TREKBRAIN_VERSION == "v9":
     install_distance_tolerance(_planner_v7.v5.v3)
     install_fast_planning(_planner_v7.v5.v3, _planner_v5, _planner_v9)
     install_circuit_breakers(_planner_v7.v5.v3, _ors, _roundtrip_v9)
+    install_stay_lookup_rescue(_planner_v7.v5.v3, _campsite_loop_v9, _roundtrip_v9)
     install_campsite_aware_roundtrip(_planner_v7.v5.v3, _roundtrip_v9, _ors)
     install_roundtrip_fallback(_planner_v7.v5.v3)
     install_failure_diagnostics(_planner_v7.v5.v3, _planner_v5, _planner_v7)
