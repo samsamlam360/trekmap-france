@@ -119,7 +119,7 @@ block = r'''<!-- TREKMAP_FAILURE_ACTIONS_V93_START -->
       clearFailedMap();
       failedLayer=L.layerGroup();
       const candidateOnly=!!p.candidate_only;
-      const line=L.polyline(p.coords,{weight:candidateOnly?4:5,opacity:candidateOnly?.72:.9,dashArray:candidateOnly?'5 9':'9 7'}).addTo(failedLayer);
+      const line=L.polyline(p.coords,{weight:candidateOnly?4:5,opacity:candidateOnly?0.72:0.9,dashArray:candidateOnly?'5 9':'9 7'}).addTo(failedLayer);
       failedLayer.addTo(map);
       failedBanner=L.control({position:'topright'});
       failedBanner.onAdd=()=>{const div=L.DomUtil.create('div','tm-failed-preview-banner');div.textContent=candidateOnly?'⚠️ Aperçu candidat non routé':'⚠️ Tracé provisoire non validé';L.DomEvent.disableClickPropagation(div);return div};
