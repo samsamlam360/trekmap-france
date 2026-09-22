@@ -30,6 +30,18 @@ assert d["retryable"] is True
 assert d["preview_available"] is False
 assert len(d["id"]) == 10
 
+# If ORS and the independent provider both fail, do not lie by reporting only
+# the primary router. This code tells the next debugging pass exactly where the
+# recovery chain stopped.
+dual = classify_failure(
+    "OpenRouteService indisponible temporairement (HTTP 500). Secours Valhalla: Valhalla HTTP 503.",
+    api_status=503,
+)
+assert dual["code"] == "TB-ROUTING-DUAL-500"
+assert dual["service"] == "OpenRouteService + Valhalla"
+assert dual["stage"] == "routage pédestre de secours"
+assert dual["retryable"] is True
+
 matrix = classify_failure("OpenRouteService Matrix HTTP 500.", api_status=422)
 assert matrix["code"] == "TB-ORS-MATRIX-500"
 assert "nuitées" in matrix["stage"]
