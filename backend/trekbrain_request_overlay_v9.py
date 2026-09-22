@@ -56,6 +56,24 @@ def _error_message(detail) -> str:
     return "La préparation du trek a échoué."
 
 
+def _failure_detail(exc: HTTPException, effective, meta: dict, preview=None) -> dict:
+    """Build the public diagnostic payload, including failures with no preview."""
+    message = _error_message(exc.detail)
+    detail = {
+        "message": message,
+        "diagnostic": classify_failure(
+            exc.detail,
+            api_status=exc.status_code,
+            preview=preview,
+        ),
+        "effective_request": _public_effective(effective),
+        "request_resolution": dict(meta or {}),
+    }
+    if preview:
+        detail["failed_preview"] = preview
+    return detail
+
+
 def _wrap_post(app, path: str, legacy_main, *, add_note: bool):
     original = next(
         (
@@ -87,24 +105,9 @@ def _wrap_post(app, path: str, legacy_main, *, add_note: bool):
             # provisional geometry. Previously the most frustrating failures
             # were exactly the ones that fell back to a bare "HTTP 500" string.
             preview = get_failed_preview()
-            message = _error_message(exc.detail)
-            detail = {
-                "message": message,
-                "diagnostic": classify_failure(
-                    exc.detail,
-                    api_status=exc.status_code,
-                    preview=preview,
-                ),
-                "effective_request": _public_effective(effective),
-                "request_resolution": dict(meta),
-            }
-            if preview:
-                # Request-local diagnostic geometry only. The frontend must
-                # continue to label it provisional and never as a validated trek.
-                detail["failed_preview"] = preview
             raise HTTPException(
                 status_code=exc.status_code,
-                detail=detail,
+                detail=_failure_detail(exc, effective, meta, preview),
                 headers=exc.headers,
             ) from exc
 
@@ -143,3 +146,10 @@ def install_request_overlay(app, legacy_main):
     # outermost layer, so even island bounds see the corrected region.
     _wrap_post(app, "/ai/clarify", legacy_main, add_note=False)
     _wrap_post(app, "/ai/plan", legacy_main, add_note=True)
+
+
+__all__ = [
+    "install_request_overlay",
+    "_error_message",
+    "_failure_detail",
+]
