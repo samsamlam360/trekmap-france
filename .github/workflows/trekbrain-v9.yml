@@ -60,6 +60,8 @@ jobs:
         run: python scripts/test_trekbrain_v9_stays_rescue.py
       - name: Matrix HTTP 500 and long-loop regression
         run: python scripts/test_trekbrain_v9_matrix_rescue.py
+      - name: ORS Directions HTTP 5xx resilience regression
+        run: python scripts/test_trekbrain_v9_ors_resilience.py
       - name: Belle-Ile and water marker regression
         run: python scripts/test_trekbrain_v9_place_water.py
       - name: Display-only water regression
