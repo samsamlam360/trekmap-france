@@ -43,8 +43,9 @@ relation = {
     "relation_source_url": "https://www.openstreetmap.org/relation/6850120",
 }
 
-# Three nights slightly off the GR. Each local request is deliberately returned
-# as anchor -> stay -> anchor, proving the main loop itself never needs rerouting.
+# Four nights slightly off the GR. Each local request is deliberately returned
+# as a dense anchor -> stay -> anchor path, proving the main loop itself never
+# needs to be re-routed through sparse island-wide waypoints.
 stays = []
 for idx, offset in ((70, 0.010), (150, -0.010), (240, 0.010), (300, -0.008)):
     anchor = base[idx]
@@ -63,9 +64,13 @@ class FakeORS:
     def get_route(points, _distance_gps):
         calls.append(points)
         a, stay, _a2 = points
-        middle1 = [(a[0] + stay[0]) / 2, (a[1] + stay[1]) / 2]
-        middle2 = [(stay[0] + a[0]) / 2, (stay[1] + a[1]) / 2]
-        coords = [list(a), middle1, list(stay), middle2, list(a)]
+        coords = []
+        for n in range(5):
+            t = n / 4
+            coords.append([a[0] + (stay[0] - a[0]) * t, a[1] + (stay[1] - a[1]) * t])
+        for n in range(1, 5):
+            t = n / 4
+            coords.append([stay[0] + (a[0] - stay[0]) * t, stay[1] + (a[1] - stay[1]) * t])
         return {
             "coords": coords,
             "distance": stitch._length(coords),
