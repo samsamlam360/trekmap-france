@@ -5,10 +5,11 @@ resolved before clarification, island filtering, Web research and routing start.
 """
 from __future__ import annotations
 
-from fastapi import Body, Depends
+from fastapi import Body, Depends, HTTPException
 
 from . import smart_planner_v7 as v7
 from .trekbrain_request_v9 import reconcile_request
+from .trekbrain_failed_preview_v9 import clear_failed_preview, get_failed_preview
 
 
 def _effective_payload(data):
@@ -43,6 +44,17 @@ def _public_effective(data):
     }
 
 
+def _error_message(detail) -> str:
+    if isinstance(detail, str):
+        return detail
+    if isinstance(detail, dict):
+        for key in ("message", "msg", "detail"):
+            value = detail.get(key)
+            if isinstance(value, str) and value.strip():
+                return value.strip()
+    return "La préparation du trek a échoué."
+
+
 def _wrap_post(app, path: str, legacy_main, *, add_note: bool):
     original = next(
         (
@@ -62,7 +74,28 @@ def _wrap_post(app, path: str, legacy_main, *, add_note: bool):
         user=Depends(legacy_main.current_user),
     ):
         effective, meta = _effective_payload(data)
-        result = endpoint(effective, user)
+        if path == "/ai/plan":
+            clear_failed_preview()
+        try:
+            result = endpoint(effective, user)
+        except HTTPException as exc:
+            if path != "/ai/plan":
+                raise
+            preview = get_failed_preview()
+            if not preview:
+                raise
+            # Keep the original status code and human-readable cause while
+            # attaching only request-local diagnostic geometry.  The frontend
+            # must display this as provisional and never as a validated trek.
+            raise HTTPException(
+                status_code=exc.status_code,
+                detail={
+                    "message": _error_message(exc.detail),
+                    "failed_preview": preview,
+                    "effective_request": _public_effective(effective),
+                },
+                headers=exc.headers,
+            ) from exc
         if not isinstance(result, dict):
             return result
         result["effective_request"] = _public_effective(effective)
