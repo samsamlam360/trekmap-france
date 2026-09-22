@@ -37,16 +37,18 @@ if TREKBRAIN_VERSION == "v9":
     # 7) trim redundant expensive hypotheses and bound network timeouts;
     # 8) recover transient ORS Directions HTTP 5xx with one retry and, for
     #    complex routes, bounded segmented pedestrian routing;
-    # 9) keep the latest request-local route candidate for an explicitly
-    #    provisional map preview if the overall plan ultimately fails;
-    # 10) stop retry storms when a public service has just timed out;
-    # 11) recover missing stays with dedicated Overpass/Photon/Nominatim lookups;
-    # 12) recover simple loops directly with ORS if the advanced solver fails;
-    # 13) if that loop misses campsites, switch to campsite-first recovery;
-    # 14) if Matrix returns HTTP 5xx, rank a few cycles locally then validate
+    # 9) before asking ORS to invent a generic round trip, reuse a real closed
+    #    GR/GRP hiking relation when one already matches the requested loop;
+    # 10) keep the latest request-local route candidate for an explicitly
+    #     provisional map preview if the overall plan ultimately fails;
+    # 11) stop retry storms when a public service has just timed out;
+    # 12) recover missing stays with dedicated Overpass/Photon/Nominatim lookups;
+    # 13) recover simple loops directly with ORS if the advanced solver fails;
+    # 14) if that loop misses campsites, switch to campsite-first recovery;
+    # 15) if Matrix returns HTTP 5xx, rank a few cycles locally then validate
     #     them with ORS Directions; long fallback loops use 2-3 validated lobes;
-    # 15) surface the real geographic/routing error instead of a generic 422;
-    # 16) discover water after routing and keep it display-only on the map.
+    # 16) surface the real geographic/routing error instead of a generic 422;
+    # 17) discover water after routing and keep it display-only on the map.
     from . import smart_planner_v7 as _planner_v7
     from . import smart_planner_v5 as _planner_v5
     from . import smart_planner_v9 as _planner_v9
@@ -65,6 +67,7 @@ if TREKBRAIN_VERSION == "v9":
     from .trekbrain_distance_tolerance_v9 import install_distance_tolerance
     from .trekbrain_speed_v9 import install_fast_planning
     from .trekbrain_ors_resilience_v9 import install_ors_resilience
+    from .trekbrain_trail_loop_rescue_v9 import install_trail_loop_rescue
     from .trekbrain_failed_preview_v9 import install_failed_preview_capture
     from .trekbrain_circuit_breaker_v9 import install_circuit_breakers
     from .trekbrain_stays_rescue_v9 import install_stay_lookup_rescue
@@ -81,6 +84,7 @@ if TREKBRAIN_VERSION == "v9":
     install_distance_tolerance(_planner_v7.v5.v3)
     install_fast_planning(_planner_v7.v5.v3, _planner_v5, _planner_v9)
     install_ors_resilience(_ors)
+    install_trail_loop_rescue(_roundtrip_v9, _gr_v9)
     install_failed_preview_capture(_ors, _roundtrip_v9)
     install_circuit_breakers(_planner_v7.v5.v3, _ors, _roundtrip_v9)
     install_stay_lookup_rescue(_planner_v7.v5.v3, _campsite_loop_v9, _roundtrip_v9)
