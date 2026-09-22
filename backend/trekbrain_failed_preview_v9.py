@@ -47,6 +47,21 @@ def _clean_coords(value):
     return out
 
 
+def _allowed_in_active_region(coords) -> bool:
+    """Do not retain a mainland/sea-crossing diagnostic for an island trek."""
+    try:
+        from .trekbrain_geo_safety_v9 import _ACTIVE_BOUNDS, _inside_bounds
+        bounds = _ACTIVE_BOUNDS.get()
+    except Exception:
+        return True
+    if not bounds:
+        return True
+    return bool(coords) and all(
+        _inside_bounds({"lat": point[0], "lon": point[1]}, bounds)
+        for point in coords
+    )
+
+
 def _safe_distance(coords, distance_gps) -> float:
     try:
         value = float(distance_gps(coords))
@@ -63,7 +78,7 @@ def _capture_candidate(coords, distance_gps) -> None:
     A later successful/fallback routing result will overwrite it with richer data.
     """
     clean = _clean_coords(coords)
-    if len(clean) < 2:
+    if len(clean) < 2 or not _allowed_in_active_region(clean):
         return
     _LAST_PREVIEW.set({
         "coords": clean,
@@ -84,7 +99,7 @@ def capture_failed_preview(result) -> None:
     if not isinstance(result, dict):
         return
     coords = _clean_coords(result.get("coords"))
-    if len(coords) < 2:
+    if len(coords) < 2 or not _allowed_in_active_region(coords):
         return
     try:
         distance = round(float(result.get("distance") or 0), 2)
