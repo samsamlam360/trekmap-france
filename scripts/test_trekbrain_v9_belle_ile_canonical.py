@@ -3,8 +3,14 @@
 Checks both plain GR use and the production bug where normal POI lookup returns
 zero campsites although accommodation-only discovery can find them on the island.
 """
+from pathlib import Path
 from types import SimpleNamespace
 import math
+import sys
+
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
 
 from backend import trekbrain_belle_ile_canonical_v9 as canonical
 from backend import trekbrain_roundtrip_v9 as real_roundtrip
@@ -54,7 +60,6 @@ class FakeV3:
 
     @staticmethod
     def _nearby(*args, **kwargs):
-        # Reproduces production: the broad/normal POI path returns zero.
         return []
 
 
@@ -84,7 +89,6 @@ class FakeBelle:
 
 
 def synthetic_gr340():
-    # Dense ~90 km closed loop around a Belle-Ile-like centre.
     centre_lat, centre_lon = 47.31, -3.18
     radius_lat, radius_lon = 0.13, 0.19
     coords = []
@@ -128,7 +132,6 @@ class FakeLegacy:
         return 600
 
 
-# Plain GR 340 must remain stable for 18 and 22 km/day.
 for daily in (18, 22):
     data = FakeData()
     data.daily_km = daily
@@ -150,9 +153,6 @@ for daily in (18, 22):
     assert result["distance_km"] == 90.0
     assert len(result["stages"]) == 5
 
-
-# Camping regression: normal _nearby() finds zero, but dedicated accommodation
-# lookup finds four real campsite candidates along the full GR corridor.
 coords = synthetic_gr340()
 camps = []
 for n, idx in enumerate((20, 40, 60, 80), start=1):
