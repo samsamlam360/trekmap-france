@@ -64,6 +64,8 @@ jobs:
         run: python scripts/test_trekbrain_v9_ors_resilience.py
       - name: Failed-plan provisional preview regression
         run: python scripts/test_trekbrain_v9_failed_preview.py
+      - name: Structured error-code diagnostics regression
+        run: python scripts/test_trekbrain_v9_error_codes.py
       - name: Belle-Ile and water marker regression
         run: python scripts/test_trekbrain_v9_place_water.py
       - name: Display-only water regression
@@ -111,6 +113,8 @@ jobs:
             'TREKMAP_FAILURE_ACTIONS_V93_START','trekmap-failure-actions-v93-js',
             'Voir quand même le trek','Modifier la requête','Nouvelle requête',
             'Tracé provisoire non validé',
+            'TREKMAP_ERROR_DIAGNOSTICS_V95_START','trekmap-error-diagnostics-v95-js',
+            'Diagnostic technique','Copier le diagnostic','Demande comprise',
             'TREKMAP_ROUTE_DAY_VISUALS_START','trekmap-route-day-visuals-js',
             'TREKMAP_ROUTE_DAY_CLARITY_V94','tm-route-day-label','segmentLabelPoint',
             'tm-route-day-chip','Étapes du trek','Départ','Arrivée','Jour ${i+1}'
@@ -121,24 +125,27 @@ jobs:
           if html.count('TREKMAP_TREKBRAIN_V9_UI_START')!=1: raise SystemExit('V9 UI duplicated')
           if html.count('TREKMAP_TREKBRAIN_V91_MAP_START')!=1: raise SystemExit('V9.1 map UI duplicated')
           if html.count('TREKMAP_FAILURE_ACTIONS_V93_START')!=1: raise SystemExit('Failure actions UI duplicated')
+          if html.count('TREKMAP_ERROR_DIAGNOSTICS_V95_START')!=1: raise SystemExit('Error diagnostics UI duplicated')
           if html.count('TREKMAP_ROUTE_DAY_VISUALS_START')!=1: raise SystemExit('Daily route visuals duplicated')
           if html.count('TREKMAP_ROUTE_DAY_CLARITY_V94')!=1: raise SystemExit('Daily route clarity layer missing or duplicated')
           scripts={
               'v9':'trekmap-trekbrain-v9-js',
               'v91-map':'trekmap-trekbrain-v91-map-js',
               'failure-actions':'trekmap-failure-actions-v93-js',
+              'error-diagnostics':'trekmap-error-diagnostics-v95-js',
               'route-days':'trekmap-route-day-visuals-js',
           }
           for name,sid in scripts.items():
               m=re.search(r'<script id="'+re.escape(sid)+r'">(.*?)</script>',html,re.S)
               if not m: raise SystemExit('JavaScript missing: '+sid)
               Path('/tmp/trekbrain-'+name+'.js').write_text(m.group(1),encoding='utf-8')
-          print('TrekBrain v9.1 frontend + clear daily route labels: OK')
+          print('TrekBrain v9.1 frontend + diagnostics + clear daily route labels: OK')
       - name: Check v9 JavaScript
         run: |
           node --check /tmp/trekbrain-v9.js
           node --check /tmp/trekbrain-v91-map.js
           node --check /tmp/trekbrain-failure-actions.js
+          node --check /tmp/trekbrain-error-diagnostics.js
           node --check /tmp/trekbrain-route-days.js
       - name: Check inherited research panel stability
         run: node scripts/test_trekbrain_v9_ui.mjs frontend/index.html
