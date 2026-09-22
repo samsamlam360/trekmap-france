@@ -85,7 +85,7 @@ def _wrap_post(app, path: str, legacy_main, *, add_note: bool):
             if not preview:
                 raise
             # Keep the original status code and human-readable cause while
-            # attaching only request-local diagnostic geometry.  The frontend
+            # attaching only request-local diagnostic geometry. The frontend
             # must display this as provisional and never as a validated trek.
             raise HTTPException(
                 status_code=exc.status_code,
@@ -100,14 +100,29 @@ def _wrap_post(app, path: str, legacy_main, *, add_note: bool):
             return result
         result["effective_request"] = _public_effective(effective)
         result["request_resolution"] = meta
-        if add_note and meta.get("region_overridden"):
+        if add_note:
             notes = result.setdefault("advisor_notes", [])
-            note = (
-                f"🧭 J’ai remplacé la région du formulaire « {meta.get('original_region') or 'vide'} » "
-                f"par « {meta.get('effective_region')} », car ta demande écrite indique clairement ce lieu."
-            )
-            if note not in notes:
-                notes.insert(0, note)
+            if meta.get("region_overridden"):
+                note = (
+                    f"🧭 J’ai remplacé la région du formulaire « {meta.get('original_region') or 'vide'} » "
+                    f"par « {meta.get('effective_region')} », car ta demande écrite indique clairement ce lieu."
+                )
+                if note not in notes:
+                    notes.insert(0, note)
+            if meta.get("route_type_overridden"):
+                note = (
+                    f"🔁 J’ai interprété ta demande comme « {meta.get('effective_route_type')} » "
+                    f"même si le formulaire indiquait « {meta.get('original_route_type')} »."
+                )
+                if note not in notes:
+                    notes.insert(0, note)
+            if meta.get("island_access_mode") == "transport-then-hike":
+                note = (
+                    "🏝️ Belle-Île : le bateau est traité comme un accès à l’île, pas comme une étape pédestre. "
+                    "Le trek est calculé en boucle sur l’île, en privilégiant le GR 340."
+                )
+                if note not in notes:
+                    notes.insert(0, note)
         return result
 
 
