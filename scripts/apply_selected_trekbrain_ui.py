@@ -12,6 +12,7 @@ if version == "v9":
     runpy.run_path(str(base.with_name("apply_trekbrain_v9_ui.py")), run_name="__main__")
     runpy.run_path(str(base.with_name("apply_trekbrain_v9_map_ui.py")), run_name="__main__")
     runpy.run_path(str(base.with_name("apply_trekbrain_error_guard.py")), run_name="__main__")
+    runpy.run_path(str(base.with_name("apply_trekbrain_failure_actions.py")), run_name="__main__")
 elif version != "v8":
     raise SystemExit("TREKBRAIN_VERSION doit valoir v8 ou v9.")
 else:
