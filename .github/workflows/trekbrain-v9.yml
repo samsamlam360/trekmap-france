@@ -96,6 +96,7 @@ jobs:
           python scripts/apply_trekbrain_ui.py
           python scripts/apply_selected_trekbrain_ui.py
           python scripts/apply_route_day_visuals.py
+          python scripts/apply_route_day_clarity.py
       - name: Check v9 frontend
         shell: python
         run: |
@@ -111,7 +112,8 @@ jobs:
             'Voir quand même le trek','Modifier la requête','Nouvelle requête',
             'Tracé provisoire non validé',
             'TREKMAP_ROUTE_DAY_VISUALS_START','trekmap-route-day-visuals-js',
-            'Étapes du trek','Départ','Arrivée','Jour ${i+1}'
+            'TREKMAP_ROUTE_DAY_CLARITY_V94','tm-route-day-label','segmentLabelPoint',
+            'tm-route-day-chip','Étapes du trek','Départ','Arrivée','Jour ${i+1}'
           ]
           missing=[x for x in required if x not in html]
           if missing: raise SystemExit('Missing V9.1 UI: '+', '.join(missing))
@@ -120,6 +122,7 @@ jobs:
           if html.count('TREKMAP_TREKBRAIN_V91_MAP_START')!=1: raise SystemExit('V9.1 map UI duplicated')
           if html.count('TREKMAP_FAILURE_ACTIONS_V93_START')!=1: raise SystemExit('Failure actions UI duplicated')
           if html.count('TREKMAP_ROUTE_DAY_VISUALS_START')!=1: raise SystemExit('Daily route visuals duplicated')
+          if html.count('TREKMAP_ROUTE_DAY_CLARITY_V94')!=1: raise SystemExit('Daily route clarity layer missing or duplicated')
           scripts={
               'v9':'trekmap-trekbrain-v9-js',
               'v91-map':'trekmap-trekbrain-v91-map-js',
@@ -130,7 +133,7 @@ jobs:
               m=re.search(r'<script id="'+re.escape(sid)+r'">(.*?)</script>',html,re.S)
               if not m: raise SystemExit('JavaScript missing: '+sid)
               Path('/tmp/trekbrain-'+name+'.js').write_text(m.group(1),encoding='utf-8')
-          print('TrekBrain v9.1 frontend + failure actions + daily route visuals: OK')
+          print('TrekBrain v9.1 frontend + clear daily route labels: OK')
       - name: Check v9 JavaScript
         run: |
           node --check /tmp/trekbrain-v9.js
