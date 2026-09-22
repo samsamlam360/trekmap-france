@@ -45,6 +45,8 @@ if TREKBRAIN_VERSION == "v9":
     # 9c) when a real hiking relation is already the backbone, preserve that
     #     geometry and route only the small overnight branches locally;
     # 9d) Belle-Île uses a canonical GR 340 planner before the generic builder;
+    # 9e) route-first logistics then becomes the global policy, including treks
+    #     without GR: build the pedestrian line first, solve lodging second;
     # 10) keep the latest request-local route candidate for an explicitly
     #     provisional map preview if the overall plan ultimately fails;
     # 11) stop retry storms when a public service has just timed out;
@@ -67,6 +69,8 @@ if TREKBRAIN_VERSION == "v9":
     from . import trekbrain_trail_loop_rescue_v9 as _trail_loop_v9
     from . import trekbrain_belle_ile_gr340_v9 as _belle_gr340_v9
     from . import trekbrain_relation_stitch_v9 as _relation_stitch_v9
+    from . import trekbrain_stays_rescue_v9 as _stay_rescue_v9
+    from . import trekbrain_geo_safety_v9 as _safety_v9
     from . import ors as _ors
     from .trekbrain_place_guard_v9 import install_place_guard
     from .trekbrain_gr_v9 import install_gr_guidance
@@ -81,6 +85,10 @@ if TREKBRAIN_VERSION == "v9":
     from .trekbrain_belle_ile_gr340_v9 import install_belle_ile_gr340_priority
     from .trekbrain_relation_stitch_v9 import install_relation_stitch
     from .trekbrain_belle_ile_canonical_v9 import install_belle_ile_canonical
+    from .trekbrain_route_logistics_v9 import (
+        install_route_first_logistics,
+        install_logistics_safety_semantics,
+    )
     from .trekbrain_failed_preview_v9 import install_failed_preview_capture
     from .trekbrain_circuit_breaker_v9 import install_circuit_breakers
     from .trekbrain_stays_rescue_v9 import install_stay_lookup_rescue
@@ -116,6 +124,13 @@ if TREKBRAIN_VERSION == "v9":
         _ors,
         _belle_gr340_v9,
     )
+    install_route_first_logistics(
+        _planner_v7.v5.v3,
+        _roundtrip_v9,
+        _stay_rescue_v9,
+        _ors,
+    )
+    install_logistics_safety_semantics(_safety_v9)
     install_failure_diagnostics(_planner_v7.v5.v3, _planner_v5, _planner_v7)
 
     # Geographic safety/resources remain final authorities. Water discovery is
@@ -125,6 +140,10 @@ if TREKBRAIN_VERSION == "v9":
     from .trekbrain_water_discovery_v9 import install_water_discovery
     from .trekbrain_water_display_v9 import install_water_display_only
     from .trekbrain_request_overlay_v9 import install_request_overlay
+    # Route-first logistics may legitimately keep a campsite a few kilometres
+    # off the hiking backbone. Keep it visible as a logistics marker on the map.
+    _resources_v9.RESOURCE_LIMITS["camping"] = 6.2
+    _resources_v9.RESOURCE_LIMITS["refuge"] = 6.2
     install_water_discovery(_planner_v7.v5.v3, _resources_v9)
     install_water_display_only(_planner_v7.v5.v3, _resources_v9)
     install_resource_overlay(app, legacy_main)
