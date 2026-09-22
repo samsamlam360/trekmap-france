@@ -48,6 +48,8 @@ jobs:
         run: python scripts/test_trekbrain_v9_trail_loop_rescue.py
       - name: Belle-Ile targeted GR 340 regression
         run: python scripts/test_trekbrain_v9_belle_ile_gr340.py
+      - name: Belle-Ile canonical planner and campsite regression
+        run: python scripts/test_trekbrain_v9_belle_ile_canonical.py
       - name: GR backbone campsite stitch regression
         run: python scripts/test_trekbrain_v9_relation_stitch.py
       - name: Multi-trail path-network regressions
