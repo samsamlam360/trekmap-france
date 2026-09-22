@@ -1,6 +1,7 @@
 """Regression: Belle-Île loops must recover GR 340 even when Overpass is unavailable."""
 from pathlib import Path
 from types import SimpleNamespace
+import runpy
 import sys
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -126,3 +127,7 @@ assert route3["routing_mode"] == "ors-round-trip"
 assert len(generic_calls) == 1
 
 print("Belle-Île GR 340 survives an open Overpass circuit: OK")
+
+# Also run the canonical end-to-end planner regression for the exact daily
+# targets seen in production (18 and 22 km/day).
+runpy.run_path(str(ROOT / "scripts" / "test_trekbrain_v9_belle_ile_canonical.py"), run_name="__main__")
