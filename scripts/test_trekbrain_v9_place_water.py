@@ -1,4 +1,11 @@
 """Regressions for Belle-Île geocoding and post-route water discovery."""
+from pathlib import Path
+import sys
+
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
 from backend.trekbrain_place_guard_v9 import guarded_geocode_factory, install_place_guard
 from backend.trekbrain_water_discovery_v9 import discover_water_points
 from backend import trekbrain_resources_v9 as resources
