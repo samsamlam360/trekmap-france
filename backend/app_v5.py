@@ -35,14 +35,16 @@ if TREKBRAIN_VERSION == "v9":
     # 5) solve overnight choices on a real ORS walking-distance matrix;
     # 6) interpret a daily-km value as a target unless explicit bounds are given;
     # 7) trim redundant expensive hypotheses and bound network timeouts;
-    # 8) stop retry storms when a public service has just timed out;
-    # 9) recover missing stays with dedicated Overpass/Photon/Nominatim lookups;
-    # 10) recover simple loops directly with ORS if the advanced solver fails;
-    # 11) if that loop misses campsites, switch to campsite-first recovery;
-    # 12) if Matrix returns HTTP 5xx, rank a few cycles locally then validate
+    # 8) recover transient ORS Directions HTTP 5xx with one retry and, for
+    #    complex routes, bounded segmented pedestrian routing;
+    # 9) stop retry storms when a public service has just timed out;
+    # 10) recover missing stays with dedicated Overpass/Photon/Nominatim lookups;
+    # 11) recover simple loops directly with ORS if the advanced solver fails;
+    # 12) if that loop misses campsites, switch to campsite-first recovery;
+    # 13) if Matrix returns HTTP 5xx, rank a few cycles locally then validate
     #     them with ORS Directions; long fallback loops use 2-3 validated lobes;
-    # 13) surface the real geographic/routing error instead of a generic 422;
-    # 14) discover water after routing and keep it display-only on the map.
+    # 14) surface the real geographic/routing error instead of a generic 422;
+    # 15) discover water after routing and keep it display-only on the map.
     from . import smart_planner_v7 as _planner_v7
     from . import smart_planner_v5 as _planner_v5
     from . import smart_planner_v9 as _planner_v9
@@ -60,6 +62,7 @@ if TREKBRAIN_VERSION == "v9":
     from .trekbrain_matrix_v9 import install_matrix_planner
     from .trekbrain_distance_tolerance_v9 import install_distance_tolerance
     from .trekbrain_speed_v9 import install_fast_planning
+    from .trekbrain_ors_resilience_v9 import install_ors_resilience
     from .trekbrain_circuit_breaker_v9 import install_circuit_breakers
     from .trekbrain_stays_rescue_v9 import install_stay_lookup_rescue
     from .trekbrain_matrix_rescue_v9 import install_matrix_resilience
@@ -74,6 +77,7 @@ if TREKBRAIN_VERSION == "v9":
     install_matrix_planner(_planner_v7.v5.v3, _ors, _network_v9)
     install_distance_tolerance(_planner_v7.v5.v3)
     install_fast_planning(_planner_v7.v5.v3, _planner_v5, _planner_v9)
+    install_ors_resilience(_ors)
     install_circuit_breakers(_planner_v7.v5.v3, _ors, _roundtrip_v9)
     install_stay_lookup_rescue(_planner_v7.v5.v3, _campsite_loop_v9, _roundtrip_v9)
     install_matrix_resilience(_campsite_loop_v9, _roundtrip_v9)
