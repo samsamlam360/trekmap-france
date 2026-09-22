@@ -41,6 +41,8 @@ if TREKBRAIN_VERSION == "v9":
     #    GR/GRP hiking relation when one already matches the requested loop;
     # 9b) on Belle-Île, query GR 340 directly before generic relation discovery
     #     or ORS round-trip generation;
+    # 9c) when a real hiking relation is already the backbone, preserve that
+    #     geometry and route only the small overnight branches locally;
     # 10) keep the latest request-local route candidate for an explicitly
     #     provisional map preview if the overall plan ultimately fails;
     # 11) stop retry storms when a public service has just timed out;
@@ -72,6 +74,7 @@ if TREKBRAIN_VERSION == "v9":
     from .trekbrain_ors_resilience_v9 import install_ors_resilience
     from .trekbrain_trail_loop_rescue_v9 import install_trail_loop_rescue
     from .trekbrain_belle_ile_gr340_v9 import install_belle_ile_gr340_priority
+    from .trekbrain_relation_stitch_v9 import install_relation_stitch
     from .trekbrain_failed_preview_v9 import install_failed_preview_capture
     from .trekbrain_circuit_breaker_v9 import install_circuit_breakers
     from .trekbrain_stays_rescue_v9 import install_stay_lookup_rescue
@@ -90,6 +93,7 @@ if TREKBRAIN_VERSION == "v9":
     install_ors_resilience(_ors)
     install_trail_loop_rescue(_roundtrip_v9, _gr_v9)
     install_belle_ile_gr340_priority(_roundtrip_v9, _gr_v9, _trail_loop_v9)
+    install_relation_stitch(_roundtrip_v9, _ors, _planner_v7.v5.v3)
     install_failed_preview_capture(_ors, _roundtrip_v9)
     install_circuit_breakers(_planner_v7.v5.v3, _ors, _roundtrip_v9)
     install_stay_lookup_rescue(_planner_v7.v5.v3, _campsite_loop_v9, _roundtrip_v9)
