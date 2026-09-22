@@ -46,6 +46,8 @@ jobs:
         run: python scripts/test_trekbrain_v9_gr.py
       - name: Closed GR loop rescue regression
         run: python scripts/test_trekbrain_v9_trail_loop_rescue.py
+      - name: Belle-Ile targeted GR 340 regression
+        run: python scripts/test_trekbrain_v9_belle_ile_gr340.py
       - name: Multi-trail path-network regressions
         run: python scripts/test_trekbrain_v9_network.py
       - name: Matrix-first constraint regressions
