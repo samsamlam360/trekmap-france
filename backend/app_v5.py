@@ -39,8 +39,10 @@ if TREKBRAIN_VERSION == "v9":
     # 9) recover simple loops directly with ORS if the advanced solver fails;
     # 10) if that loop misses campsites, switch to campsite-first recovery:
     #     choose nights with one ORS walking matrix, then route through them once;
-    # 11) surface the real geographic/routing error instead of a generic 422;
-    # 12) keep water as display-only map context, never as a forced waypoint.
+    # 11) if Matrix returns HTTP 5xx, rank a few cycles locally then validate
+    #     them with ORS Directions; long fallback loops use 2-3 validated lobes;
+    # 12) surface the real geographic/routing error instead of a generic 422;
+    # 13) keep water as display-only map context, never as a forced waypoint.
     from . import smart_planner_v7 as _planner_v7
     from . import smart_planner_v5 as _planner_v5
     from . import smart_planner_v9 as _planner_v9
@@ -57,6 +59,7 @@ if TREKBRAIN_VERSION == "v9":
     from .trekbrain_speed_v9 import install_fast_planning
     from .trekbrain_circuit_breaker_v9 import install_circuit_breakers
     from .trekbrain_stays_rescue_v9 import install_stay_lookup_rescue
+    from .trekbrain_matrix_rescue_v9 import install_matrix_resilience
     from .trekbrain_campsite_loop_v9 import install_campsite_aware_roundtrip
     from .trekbrain_roundtrip_v9 import install_roundtrip_fallback
     from .trekbrain_failure_diagnostics_v9 import install_failure_diagnostics
@@ -69,6 +72,7 @@ if TREKBRAIN_VERSION == "v9":
     install_fast_planning(_planner_v7.v5.v3, _planner_v5, _planner_v9)
     install_circuit_breakers(_planner_v7.v5.v3, _ors, _roundtrip_v9)
     install_stay_lookup_rescue(_planner_v7.v5.v3, _campsite_loop_v9, _roundtrip_v9)
+    install_matrix_resilience(_campsite_loop_v9, _roundtrip_v9)
     install_campsite_aware_roundtrip(_planner_v7.v5.v3, _roundtrip_v9, _ors)
     install_roundtrip_fallback(_planner_v7.v5.v3)
     install_failure_diagnostics(_planner_v7.v5.v3, _planner_v5, _planner_v7)
