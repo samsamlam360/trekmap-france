@@ -1,10 +1,14 @@
 """Request-local provisional route capture for failed TrekBrain v9 plans.
 
 When planning ultimately fails, the user may still want to inspect the last route
-candidate that reached the routing layer.  This module captures that candidate in
-a ContextVar so it cannot leak between concurrent requests/users.  A captured
-route is diagnostic only: it may violate requested constraints or come from an
-unvalidated direct fallback, so the frontend must label it as provisional.
+candidate that reached the routing layer. This module captures both the candidate
+waypoints *before* a routing call and any better ORS geometry returned afterwards.
+That matters when ORS itself raises/fails before producing a normal result: the UI
+can still show what TrekBrain was trying to build instead of exposing a dead button.
+
+Everything stored here is diagnostic only and request-local. A candidate-only
+preview may connect sparse waypoints and must never be presented as a validated
+walking route.
 """
 from __future__ import annotations
 
@@ -43,7 +47,40 @@ def _clean_coords(value):
     return out
 
 
-def _capture(result) -> None:
+def _safe_distance(coords, distance_gps) -> float:
+    try:
+        value = float(distance_gps(coords))
+        return round(value, 2) if value >= 0 else 0.0
+    except Exception:
+        return 0.0
+
+
+def _capture_candidate(coords, distance_gps) -> None:
+    """Store route inputs before calling ORS.
+
+    This is intentionally lower confidence than a routed geometry. It is only a
+    visual explanation of the candidate TrekBrain was attempting to validate.
+    A later successful/fallback routing result will overwrite it with richer data.
+    """
+    clean = _clean_coords(coords)
+    if len(clean) < 2:
+        return
+    _LAST_PREVIEW.set({
+        "coords": clean,
+        "distance_km": _safe_distance(clean, distance_gps),
+        "routing_mode": "candidate-waypoints",
+        "routing_validated": False,
+        "candidate_only": True,
+        "warning": (
+            "Aperçu des points candidats avant validation du routage. "
+            "Les segments entre ces points ne sont pas un itinéraire pédestre validé."
+        ),
+        "provisional": True,
+    })
+
+
+def capture_failed_preview(result) -> None:
+    """Capture the best geometry produced so far by a routing layer."""
     if not isinstance(result, dict):
         return
     coords = _clean_coords(result.get("coords"))
@@ -58,12 +95,14 @@ def _capture(result) -> None:
         "distance_km": distance,
         "routing_mode": str(result.get("routing_mode") or "provisional"),
         "routing_validated": result.get("fallback") is False,
+        "candidate_only": False,
         "warning": str(result.get("warning") or "").strip()[:500],
         "provisional": True,
     })
 
 
-def install_failed_preview_capture(ors) -> None:
+def install_failed_preview_capture(ors, roundtrip=None) -> None:
+    """Capture normal ORS candidates plus direct ORS round-trip geometry."""
     global _INSTALLED
     if _INSTALLED:
         return
@@ -72,15 +111,34 @@ def install_failed_preview_capture(ors) -> None:
     current_get_route = ors.get_route
 
     def captured_get_route(coords, distance_gps):
+        # Capture first. If a wrapper unexpectedly raises on HTTP 5xx, the
+        # failure screen still has something useful to display.
+        _capture_candidate(coords, distance_gps)
         result = current_get_route(coords, distance_gps)
-        _capture(result)
+        capture_failed_preview(result)
         return result
 
     ors.get_route = captured_get_route
+
+    # trekbrain_roundtrip_v9 talks to ORS directly instead of ors.get_route.
+    # Without this hook a perfectly real round-trip could be rejected later by
+    # the daily-distance gate, yet the "Voir quand même" button received no
+    # geometry at all.
+    if roundtrip is not None and hasattr(roundtrip, "_roundtrip_request"):
+        current_roundtrip_request = roundtrip._roundtrip_request
+
+        def captured_roundtrip_request(start, target_km, seed):
+            result, warning = current_roundtrip_request(start, target_km, seed)
+            if isinstance(result, dict):
+                capture_failed_preview(result)
+            return result, warning
+
+        roundtrip._roundtrip_request = captured_roundtrip_request
 
 
 __all__ = [
     "install_failed_preview_capture",
     "clear_failed_preview",
     "get_failed_preview",
+    "capture_failed_preview",
 ]
