@@ -48,7 +48,23 @@ def classify_failure(detail: Any, *, api_status: int | None = None, preview: Any
     retryable = False
     next_check = "Vérifier le message complet et l’étape de planification indiquée."
 
-    if "openrouteservice" in folded and "matrix" in folded:
+    # Keep this before the generic ORS branch. Once both providers have been
+    # attempted, reporting only TB-ORS-DIR-500 hides the most useful fact.
+    dual_router_failure = (
+        "openrouteservice" in folded
+        and any(token in folded for token in ("valhalla", "routeur secondaire", "secours pédestre"))
+    )
+    if dual_router_failure:
+        suffix = str(provider_status or "ERR")
+        code = f"TB-ROUTING-DUAL-{suffix}"
+        stage = "routage pédestre de secours"
+        service = "OpenRouteService + Valhalla"
+        retryable = True
+        next_check = (
+            "Les deux routeurs pédestres ont échoué. Vérifier le secours GR/GRP, "
+            "la continuité de la relation OSM et le détail du fournisseur secondaire."
+        )
+    elif "openrouteservice" in folded and "matrix" in folded:
         suffix = str(provider_status or "ERR")
         code = f"TB-ORS-MATRIX-{suffix}"
         stage = "équilibrage des étapes et nuitées"
@@ -79,7 +95,10 @@ def classify_failure(detail: Any, *, api_status: int | None = None, preview: Any
             stage = "routage pédestre"
             service = "OpenRouteService Directions"
             retryable = provider_status is None or provider_status >= 500
-            next_check = "Le calcul de géométrie pédestre a échoué. Vérifier le retry 5xx, le snap et le routage segmenté."
+            next_check = (
+                "Le calcul de géométrie pédestre a échoué avant validation du secours. "
+                "Vérifier le retry 5xx, le routage segmenté puis le secours GR/GRP."
+            )
     elif "overpass" in folded or "openstreetmap" in folded:
         suffix = str(provider_status or "ERR")
         code = f"TB-OSM-OVERPASS-{suffix}"
