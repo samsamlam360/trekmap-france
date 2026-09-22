@@ -58,6 +58,8 @@ jobs:
         run: python scripts/test_trekbrain_v9_campsite_loop.py
       - name: Campsite lookup rescue regression
         run: python scripts/test_trekbrain_v9_stays_rescue.py
+      - name: Display-only water regression
+        run: python scripts/test_trekbrain_v9_water_display.py
       - name: Interactive latency regressions
         run: python scripts/test_trekbrain_v9_speed.py
       - name: Timeout circuit breaker regression
