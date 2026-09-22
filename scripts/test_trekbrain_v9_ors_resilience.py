@@ -14,8 +14,10 @@ def distance_gps(_coords):
     return 1.0
 
 
-# Complex request fails twice with HTTP 500, but every two-point leg succeeds.
+# Complex request fails twice with HTTP 500, but every two-point ORS leg works.
+# The secondary provider must not be called when ORS segmented recovery succeeds.
 calls = []
+secondary_calls = []
 
 def raw_request(coords, _distance_gps, snap_radius_m=None):
     calls.append((len(coords), snap_radius_m))
@@ -34,7 +36,9 @@ ors = SimpleNamespace(_request_route=raw_request, ORS_PROFILE="foot-hiking")
 resilience._INSTALLED = False
 resilience._CACHE.clear()
 real_sleep = resilience.time.sleep
+real_secondary = resilience._secondary_route
 resilience.time.sleep = lambda _seconds: None
+resilience._secondary_route = lambda coords: (secondary_calls.append(coords) or None, "should not run")
 try:
     resilience.install_ors_resilience(ors)
     coords = [[48.60, -1.50], [48.65, -1.42], [48.70, -1.35], [48.75, -1.28]]
@@ -46,6 +50,7 @@ try:
     assert route["segments"] == 3
     assert route["distance"] == 15.0
     assert len(route["coords"]) == 4
+    assert not secondary_calls, secondary_calls
     # 2 failed full requests + 3 successful legs.
     assert len(calls) == 5, calls
 
@@ -57,29 +62,50 @@ try:
     assert len(calls) == before, calls
 finally:
     resilience.time.sleep = real_sleep
+    resilience._secondary_route = real_secondary
 
 
-# A real global outage must stop after the first failed segment probe rather
-# than exploding into one request per waypoint.
+# Reproduce the production diagnostic TB-ORS-DIR-500: full ORS request + retry
+# + first tiny segment all return HTTP 500. TrekBrain must then switch to the
+# independent pedestrian router once, rather than returning the ORS failure.
 outage_calls = []
+secondary_calls = []
 def outage_request(coords, _distance_gps, snap_radius_m=None):
     outage_calls.append(len(coords))
     return None, "OpenRouteService indisponible temporairement (HTTP 500).", 500
+
+def secondary_route(coords):
+    secondary_calls.append([list(x) for x in coords])
+    return {
+        "coords": [list(x) for x in coords],
+        "distance": 72.4,
+        "fallback": False,
+        "routing_mode": "valhalla-pedestrian-fallback",
+        "provider": "Valhalla/OpenStreetMap",
+        "secondary_router": True,
+    }, None
 
 ors2 = SimpleNamespace(_request_route=outage_request, ORS_PROFILE="foot-hiking")
 resilience._INSTALLED = False
 resilience._CACHE.clear()
 real_sleep = resilience.time.sleep
+real_secondary = resilience._secondary_route
 resilience.time.sleep = lambda _seconds: None
+resilience._secondary_route = secondary_route
 try:
     resilience.install_ors_resilience(ors2)
-    coords = [[48.60, -1.50], [48.65, -1.42], [48.70, -1.35], [48.75, -1.28], [48.80, -1.20]]
+    coords = [[47.31, -3.23], [47.34, -3.18], [47.32, -3.10], [47.29, -3.14], [47.31, -3.23]]
     route, warning, status = ors2._request_route(coords, distance_gps)
-    assert route is None and status == 500
-    assert "segment pédestre 1/4" in warning
-    # Full request + one retry + first leg + one leg retry, then stop.
+    assert status == 200 and warning is None, (status, warning)
+    assert route is not None and route["fallback"] is False
+    assert route["routing_mode"] == "valhalla-pedestrian-fallback", route
+    assert route["provider"] == "Valhalla/OpenStreetMap"
+    assert route["recovered_from_ors_5xx"] is True
+    assert len(secondary_calls) == 1, secondary_calls
+    # Full request + one retry + first leg + one leg retry, then provider switch.
     assert len(outage_calls) == 4, outage_calls
 finally:
     resilience.time.sleep = real_sleep
+    resilience._secondary_route = real_secondary
 
-print("ORS HTTP 5xx retry + bounded segmented recovery: OK")
+print("ORS HTTP 5xx retry + segmented recovery + secondary pedestrian fallback: OK")
