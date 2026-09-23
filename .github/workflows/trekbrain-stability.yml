@@ -2,7 +2,7 @@ name: TrekBrain v9 stability gate
 
 on:
   push:
-    branches: [trekbrain-v9-stability-gate]
+    branches: [trekbrain-v9-stability-gate, trekbrain-v9-pipeline-core]
   pull_request:
     branches: [main]
 
@@ -27,6 +27,8 @@ jobs:
         run: pip install -r requirements.txt
       - name: Syntax
         run: python -m compileall -q backend scripts
+      - name: Explicit route-logistics pipeline
+        run: python scripts/test_trekbrain_v9_pipeline_core.py
       - name: Five reference scenarios in one wired process
         run: python scripts/test_trekbrain_v9_stability_gate.py
       - name: Existing high-risk regressions

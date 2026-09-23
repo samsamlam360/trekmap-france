@@ -44,11 +44,9 @@ if TREKBRAIN_VERSION == "v9":
     #     or ORS round-trip generation;
     # 9c) when a real hiking relation is already the backbone, preserve that
     #     geometry and route only the small overnight branches locally;
-    # 9d) Belle-Île uses a canonical GR 340 planner before the generic builder;
-    # 9e) route-first logistics then becomes the global policy, including treks
-    #     without GR: build the pedestrian line first, solve lodging second;
-    # 9f) lodging post-processing is fail-open: a technical lodging failure must
-    #     not destroy an already valid pedestrian route;
+    # 9d) one explicit route/logistics pipeline now owns canonical Belle-Île,
+    #     generic route dispatch, route-first lodging and lodging degradation;
+    #     those responsibilities no longer stack three independent _build wrappers;
     # 10) keep the latest request-local route candidate for an explicitly
     #     provisional map preview if the overall plan ultimately fails;
     # 11) stop retry storms when a public service has just timed out;
@@ -70,8 +68,11 @@ if TREKBRAIN_VERSION == "v9":
     from . import trekbrain_campsite_loop_v9 as _campsite_loop_v9
     from . import trekbrain_trail_loop_rescue_v9 as _trail_loop_v9
     from . import trekbrain_belle_ile_gr340_v9 as _belle_gr340_v9
+    from . import trekbrain_belle_ile_canonical_v9 as _canonical_v9
     from . import trekbrain_relation_stitch_v9 as _relation_stitch_v9
     from . import trekbrain_stays_rescue_v9 as _stay_rescue_v9
+    from . import trekbrain_route_logistics_v9 as _logistics_v9
+    from . import trekbrain_route_logistics_guard_v9 as _logistics_guard_v9
     from . import trekbrain_geo_safety_v9 as _safety_v9
     from . import ors as _ors
     from .trekbrain_place_guard_v9 import install_place_guard
@@ -86,12 +87,8 @@ if TREKBRAIN_VERSION == "v9":
     from .trekbrain_trail_loop_rescue_v9 import install_trail_loop_rescue
     from .trekbrain_belle_ile_gr340_v9 import install_belle_ile_gr340_priority
     from .trekbrain_relation_stitch_v9 import install_relation_stitch
-    from .trekbrain_belle_ile_canonical_v9 import install_belle_ile_canonical
-    from .trekbrain_route_logistics_v9 import (
-        install_route_first_logistics,
-        install_logistics_safety_semantics,
-    )
-    from .trekbrain_route_logistics_guard_v9 import install_route_logistics_guard
+    from .trekbrain_pipeline_core_v9 import install_planning_pipeline
+    from .trekbrain_route_logistics_v9 import install_logistics_safety_semantics
     from .trekbrain_failed_preview_v9 import install_failed_preview_capture
     from .trekbrain_circuit_breaker_v9 import install_circuit_breakers
     from .trekbrain_stays_rescue_v9 import install_stay_lookup_rescue
@@ -118,7 +115,10 @@ if TREKBRAIN_VERSION == "v9":
     install_matrix_resilience(_campsite_loop_v9, _roundtrip_v9)
     install_campsite_aware_roundtrip(_planner_v7.v5.v3, _roundtrip_v9, _ors)
     install_roundtrip_fallback(_planner_v7.v5.v3)
-    install_belle_ile_canonical(
+
+    # One owner for the route -> logistics boundary. This replaces the previous
+    # canonical -> route-first -> fail-open wrapper nesting.
+    install_planning_pipeline(
         _planner_v7.v5.v3,
         _gr_v9,
         _trail_loop_v9,
@@ -126,14 +126,11 @@ if TREKBRAIN_VERSION == "v9":
         _relation_stitch_v9,
         _ors,
         _belle_gr340_v9,
-    )
-    install_route_first_logistics(
-        _planner_v7.v5.v3,
-        _roundtrip_v9,
         _stay_rescue_v9,
-        _ors,
+        _logistics_v9,
+        _logistics_guard_v9,
+        _canonical_v9,
     )
-    install_route_logistics_guard(_planner_v7.v5.v3)
     install_logistics_safety_semantics(_safety_v9)
     install_failure_diagnostics(_planner_v7.v5.v3, _planner_v5, _planner_v7)
 
