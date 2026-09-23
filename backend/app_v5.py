@@ -47,6 +47,8 @@ if TREKBRAIN_VERSION == "v9":
     # 9d) Belle-Île uses a canonical GR 340 planner before the generic builder;
     # 9e) route-first logistics then becomes the global policy, including treks
     #     without GR: build the pedestrian line first, solve lodging second;
+    # 9f) lodging post-processing is fail-open: a technical lodging failure must
+    #     not destroy an already valid pedestrian route;
     # 10) keep the latest request-local route candidate for an explicitly
     #     provisional map preview if the overall plan ultimately fails;
     # 11) stop retry storms when a public service has just timed out;
@@ -89,6 +91,7 @@ if TREKBRAIN_VERSION == "v9":
         install_route_first_logistics,
         install_logistics_safety_semantics,
     )
+    from .trekbrain_route_logistics_guard_v9 import install_route_logistics_guard
     from .trekbrain_failed_preview_v9 import install_failed_preview_capture
     from .trekbrain_circuit_breaker_v9 import install_circuit_breakers
     from .trekbrain_stays_rescue_v9 import install_stay_lookup_rescue
@@ -130,6 +133,7 @@ if TREKBRAIN_VERSION == "v9":
         _stay_rescue_v9,
         _ors,
     )
+    install_route_logistics_guard(_planner_v7.v5.v3)
     install_logistics_safety_semantics(_safety_v9)
     install_failure_diagnostics(_planner_v7.v5.v3, _planner_v5, _planner_v7)
 
