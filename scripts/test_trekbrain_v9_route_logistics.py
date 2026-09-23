@@ -1,13 +1,13 @@
 """Regression: lodging must not reshape the hiking route, with or without a GR."""
 from pathlib import Path
 import sys
-from types import SimpleNamespace
 
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from backend import trekbrain_route_logistics_v9 as logistics
+from backend import trekbrain_route_logistics_guard_v9 as logistics_guard
 
 
 class Data:
@@ -153,4 +153,36 @@ assert night3["name"] == "Camping C"
 assert night3["access_mode"] == "transfer", night3
 assert "transfert" in result["stages"][2]["overnight"].casefold()
 
-print("Route-first lodging logistics, including non-GR routes: OK")
+# Production guard: even if lodging post-processing throws an unexpected Python
+# exception, a valid pedestrian route must still be returned instead of
+# TB-INTERNAL-500.
+v3_guard = FakeV3()
+
+def base_build_guard(data, legacy):
+    return {**base_result, "route_preview": dict(base_result["route_preview"]), "stages": [dict(x) for x in base_result["stages"]], "advisor_notes": [], "planner": {}}
+
+v3_guard._build = base_build_guard
+logistics._INSTALLED = False
+logistics_guard._INSTALLED = False
+logistics.install_route_first_logistics(v3_guard, FakeRoundtrip, FakeStayRescue, FakeORS)
+wrapped_route_first = v3_guard._build
+
+# Force the exact post-route failure class seen in production: the route exists,
+# then lodging enrichment crashes for an unrelated reason.
+real_attach = logistics._attach_logistics
+try:
+    def boom(*args, **kwargs):
+        raise RuntimeError("synthetic lodging crash")
+    logistics._attach_logistics = boom
+    logistics_guard.install_route_logistics_guard(v3_guard)
+    degraded = v3_guard._build(Data(), FakeLegacy())
+finally:
+    logistics._attach_logistics = real_attach
+
+assert degraded["route_preview"]["coords"] == coords
+assert degraded["route_preview"]["fallback"] is False
+assert degraded["logistics"]["status"] == "degraded"
+assert degraded["logistics"]["error_code"] == "TB-LOGISTICS-DEGRADED"
+assert degraded["planner"]["lodging_does_not_shape_route"] is True
+
+print("Route-first lodging logistics + fail-open recovery: OK")
