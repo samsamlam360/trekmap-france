@@ -54,12 +54,13 @@ def wrapped_chain(fn):
     return rows
 
 
+# The old canonical -> route-first -> fail-open nesting has deliberately been
+# collapsed. Failure diagnostics may wrap the one explicit pipeline, but the
+# three retired responsibilities must not reappear as production _build wrappers.
 chain = wrapped_chain(v7.v5.v3._build)
 critical = [
     "backend.trekbrain_failure_diagnostics_v9",
-    "backend.trekbrain_route_logistics_guard_v9",
-    "backend.trekbrain_route_logistics_v9",
-    "backend.trekbrain_belle_ile_canonical_v9",
+    "backend.trekbrain_pipeline_core_v9",
 ]
 positions = {}
 for module in critical:
@@ -67,6 +68,14 @@ for module in critical:
     assert matches, f"Missing critical wrapper {module}. Chain: {chain}"
     positions[module] = matches[0]
 assert [positions[x] for x in critical] == sorted(positions[x] for x in critical), chain
+for retired in (
+    "backend.trekbrain_route_logistics_guard_v9",
+    "backend.trekbrain_route_logistics_v9",
+    "backend.trekbrain_belle_ile_canonical_v9",
+):
+    assert not any(row.startswith(retired + ".") for row in chain), (
+        f"Retired nested wrapper came back: {retired}. Chain: {chain}"
+    )
 
 
 real_geocode = request_v9.geo._geocode
@@ -193,4 +202,4 @@ assert_reference("generic-traverse-no-gr", {
     "stages": stages([17, 18, 19]), "water": [],
 })
 
-print("TrekBrain v9 stability gate: 5 reference cases + wrapper topology OK")
+print("TrekBrain v9 stability gate: 5 reference cases + simplified pipeline topology OK")
