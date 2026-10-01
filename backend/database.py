@@ -10,6 +10,16 @@ if not DATABASE_URL:
         "postgresql+psycopg2://postgres:motdepasse@localhost:5432/trekmap"
     )
 
+# Render fournit généralement une URL PostgreSQL sans pilote explicite
+# (postgres:// ou postgresql://). Avec les versions récentes de SQLAlchemy,
+# ce schéma peut sélectionner psycopg v3, alors que TrekMap utilise
+# volontairement psycopg2-binary. Normaliser l'URL rend le build et le runtime
+# identiques sur Render, en CI et en local.
+if DATABASE_URL.startswith("postgres://"):
+    DATABASE_URL = "postgresql+psycopg2://" + DATABASE_URL[len("postgres://"):]
+elif DATABASE_URL.startswith("postgresql://"):
+    DATABASE_URL = "postgresql+psycopg2://" + DATABASE_URL[len("postgresql://"):]
+
 def env_int(name, default, minimum=0, maximum=100000):
     raw = os.getenv(name, str(default)).strip()
     try:
