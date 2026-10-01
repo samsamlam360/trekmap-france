@@ -1,0 +1,198 @@
+name: Render strict preflight
+
+on:
+  push:
+    branches: [render-strict-preflight]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  render-preflight:
+    name: Render preflight Python ${{ matrix.python-version }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ['3.11', '3.14']
+
+    services:
+      postgres:
+        image: postgis/postgis:17-3.5
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: trekmap_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d trekmap_ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+
+    env:
+      DATABASE_URL: postgresql+psycopg2://postgres:postgres@127.0.0.1:5432/trekmap_ci
+      TREKMAP_ENV: production
+      FRONTEND_ORIGINS: https://trekmap-france.onrender.com
+      ORS_API_KEY: ci-placeholder
+      TREKBRAIN_VERSION: v9
+      TREKBRAIN_FREE_MODE: '1'
+      TREKBRAIN_V9_RETRY_THRESHOLD: '80'
+      TREKBRAIN_GEMINI_AUDIT: '1'
+      ADMIN_USERNAME: ci-admin
+      ADMIN_EMAIL: ci-admin@example.invalid
+      ADMIN_PASSWORD: ci-password-strong-123
+      MAX_GPX_BYTES: '26214400'
+      MAX_GPX_INPUT_POINTS: '300000'
+      SESSION_DURATION_DAYS: '30'
+
+    steps:
+      - name: Checkout exact repository
+        uses: actions/checkout@v4
+
+      - name: Install Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+
+      - name: Show runtime
+        run: |
+          python --version
+          python -c "import sys,platform; print(sys.executable); print(platform.platform())"
+
+      - name: Install exact application dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+          python -m pip check
+
+      - name: Compile every Python file
+        run: python -m compileall -q backend scripts
+
+      - name: Reproduce Render frontend build exactly
+        run: |
+          python scripts/apply_ui_remodel.py
+          python scripts/apply_unified_experience.py
+          python scripts/finalize_unified_build.py
+          python scripts/apply_mobile_experience.py
+          python scripts/apply_map_polish.py
+          python scripts/apply_ai_planner.py
+          python scripts/apply_free_planner_labels.py
+          python scripts/apply_language_learning_ui.py
+          python scripts/apply_reasoning_agent_ui.py
+          python scripts/apply_trekbrain_ui.py
+          python scripts/apply_selected_trekbrain_ui.py
+          python scripts/apply_route_day_visuals.py
+          python scripts/apply_route_day_clarity.py
+          python scripts/apply_trekbrain_scroll_ui.py
+
+      - name: Validate generated production frontend
+        shell: python
+        run: |
+          from pathlib import Path
+          p=Path('frontend/index.html')
+          if not p.exists() or p.stat().st_size < 10000:
+              raise SystemExit('frontend/index.html absent ou anormalement petit')
+          html=p.read_text(encoding='utf-8')
+          required=[
+              'TREKMAP_UNIFIED_EXPERIENCE_START',
+              'TREKMAP_AI_EXPERIENCE_START',
+              'TREKMAP_TREKBRAIN_V9_UI_START',
+              'TREKMAP_ROUTE_DAY_CLARITY_V94',
+              'TREKMAP_TREKBRAIN_SCROLL_UI_START',
+          ]
+          missing=[x for x in required if x not in html]
+          if missing:
+              raise SystemExit('Couches UI manquantes: '+', '.join(missing))
+          for marker in required:
+              if html.count(marker) != 1:
+                  raise SystemExit(f'Couche dupliquée: {marker} x{html.count(marker)}')
+          print('Production frontend OK:', p.stat().st_size, 'bytes')
+
+      - name: Import every backend module
+        shell: python
+        run: |
+          import importlib, pkgutil, backend
+          errors=[]
+          modules=sorted(m.name for m in pkgutil.iter_modules(backend.__path__))
+          for name in modules:
+              full='backend.'+name
+              try:
+                  importlib.import_module(full)
+              except Exception as exc:
+                  errors.append((full, type(exc).__name__, str(exc)))
+          print('Backend modules checked:', len(modules))
+          if errors:
+              for row in errors:
+                  print('IMPORT ERROR:', *row)
+              raise SystemExit(f'{len(errors)} backend module(s) fail to import')
+
+      - name: Import active production app and validate critical routes
+        shell: python
+        run: |
+          import backend.app_v5 as app_v5
+          assert app_v5.TREKBRAIN_VERSION == 'v9'
+          paths=[r.path for r in app_v5.app.routes]
+          required={'/','/health/ready','/ai/status','/ai/plan','/ai/clarify','/ai/feedback','/treks/{trek_id}/ai-redraw'}
+          missing=required-set(paths)
+          if missing:
+              raise SystemExit('Routes manquantes: '+', '.join(sorted(missing)))
+          duplicated=[p for p in required if paths.count(p)!=1]
+          if duplicated:
+              raise SystemExit('Routes dupliquées: '+', '.join(sorted(duplicated)))
+          print('Production app import + routes OK')
+
+      - name: Start the exact Render Uvicorn entrypoint
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m uvicorn backend.app_v5:app --host 127.0.0.1 --port 10000 >/tmp/trekmap-uvicorn.log 2>&1 &
+          echo $! >/tmp/trekmap-uvicorn.pid
+          for i in $(seq 1 45); do
+            if curl -fsS http://127.0.0.1:10000/health/ready >/tmp/health.json; then
+              echo "Ready after $i attempt(s)"
+              cat /tmp/health.json
+              exit 0
+            fi
+            if ! kill -0 "$(cat /tmp/trekmap-uvicorn.pid)" 2>/dev/null; then
+              echo 'Uvicorn exited before becoming ready'
+              cat /tmp/trekmap-uvicorn.log
+              exit 1
+            fi
+            sleep 1
+          done
+          echo 'Health check timeout'
+          cat /tmp/trekmap-uvicorn.log
+          exit 1
+
+      - name: Smoke production endpoints
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fsS http://127.0.0.1:10000/ >/tmp/root.html
+          test -s /tmp/root.html
+          curl -fsS http://127.0.0.1:10000/ai/status >/tmp/ai-status.json
+          python - <<'PY'
+          import json
+          d=json.load(open('/tmp/ai-status.json',encoding='utf-8'))
+          assert d.get('configured') is True, d
+          print('AI status:', d.get('model'), d.get('engine'))
+          PY
+          curl -fsS http://127.0.0.1:10000/statistics >/tmp/statistics.json
+          python -m json.tool /tmp/statistics.json >/dev/null
+
+      - name: Show server log
+        if: always()
+        run: cat /tmp/trekmap-uvicorn.log 2>/dev/null || true
+
+      - name: Stop server
+        if: always()
+        shell: bash
+        run: |
+          if [ -f /tmp/trekmap-uvicorn.pid ]; then
+            kill "$(cat /tmp/trekmap-uvicorn.pid)" 2>/dev/null || true
+          fi
