@@ -30,19 +30,28 @@ def _route_type_from_prompt(prompt: str) -> str | None:
     """Return an explicit route shape stated in natural language.
 
     A phrase such as "faire le tour de Belle-Île" is a loop request even when
-    the stale form still says "Traversée".  This was the source of routes trying
-    to walk from the mainland to an island.
+    the stale form still says "Traversée". Conversely, an explicit negation such
+    as "ce n'est pas une boucle" must beat the mere presence of the word
+    "boucle"; this matters for natural point-to-point prompts like Tours -> Chinon.
     """
     text = _fold(prompt).replace("’", "'")
+
+    # Strong explicit shapes first. In particular, do not let the token
+    # "boucle" inside "ce n'est pas une boucle" turn a traverse into a loop.
+    if re.search(r"\baller[- ]retour\b", text):
+        return "Aller-retour"
+    if re.search(r"\b(?:traversee|itin[eé]rance\s+lineaire|itinerance\s+lineaire)\b", text):
+        return "Traversée"
+    if re.search(
+        r"\b(?:(?:ce\s+)?n[' ]?est\s+pas\s+(?:une?\s+)?boucle|pas\s+(?:en\s+|une?\s+)?boucle)\b",
+        text,
+    ):
+        return "Traversée"
     if (
         re.search(r"\b(?:faire\s+)?(?:le\s+)?tour\s+(?:de|du|des|d[' ]?)\b", text)
         or re.search(r"\b(?:boucle|circuit)\b", text)
     ):
         return "Boucle"
-    if re.search(r"\b(?:traversee|itin[eé]rance\s+lineaire|itinerance\s+lineaire)\b", text):
-        return "Traversée"
-    if re.search(r"\baller[- ]retour\b", text):
-        return "Aller-retour"
     return None
 
 
