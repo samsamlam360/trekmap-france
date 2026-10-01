@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import os
 import platform
+import sys
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -19,6 +20,14 @@ def fail(message: str) -> None:
 
 def main() -> None:
     root = Path(__file__).resolve().parents[1]
+    # When Render executes `python scripts/render_preflight.py`, Python puts the
+    # scripts/ directory at sys.path[0] instead of the repository root. Add the
+    # root explicitly so `import backend...` behaves exactly like the Uvicorn
+    # start command that Render runs from the repository root.
+    root_str = str(root)
+    if root_str not in sys.path:
+        sys.path.insert(0, root_str)
+
     required_files = [
         root / "backend" / "app_v5.py",
         root / "frontend" / "index.html",
