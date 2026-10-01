@@ -39,6 +39,37 @@ class StabilityCase:
     island_bounds: tuple[float, float, float, float] | None = None
 
 
+# These are the five prompts manually validated by the product owner. They are
+# intentionally stored verbatim so future parser or UI changes cannot quietly
+# change what the stable release is expected to understand.
+REFERENCE_PROMPTS: dict[str, str] = {
+    "belle-ile-basic": (
+        "Je veux faire le tour de Belle-Île-en-Mer en boucle sur 5 jours, environ 18 km par jour. "
+        "Je veux suivre au maximum les vrais sentiers de randonnée et le GR 340 quand il existe."
+    ),
+    "belle-ile-camping": (
+        "Je veux faire le tour de Belle-Île-en-Mer en boucle sur 5 jours, environ 18 km par jour, "
+        "avec un camping pour dormir chaque soir. Je veux suivre au maximum le GR 340. "
+        "Les campings peuvent nécessiter de petits détours mais ils ne doivent pas déformer le parcours principal."
+    ),
+    "mont-saint-michel-loop": (
+        "Je veux une boucle de 4 jours autour du Mont-Saint-Michel, environ 18 km par jour, "
+        "en privilégiant les vrais chemins de randonnée et les beaux paysages. "
+        "Je veux des étapes cohérentes et éviter les passages non praticables à pied."
+    ),
+    "generic-loop-no-gr": (
+        "Je veux une boucle de randonnée de 4 jours autour de Chartres, environ 20 km par jour. "
+        "Il n'est pas obligatoire de suivre un GR : construis le meilleur itinéraire possible "
+        "avec les vrais chemins pédestres et des étapes équilibrées."
+    ),
+    "generic-traverse-no-gr": (
+        "Je veux faire un trek de Tours à Chinon en 3 jours, environ 25 km par jour. Ce n'est pas une boucle. "
+        "Je veux suivre au maximum les vrais chemins de randonnée et les GR quand ils sont intéressants, "
+        "avec des étapes cohérentes jusqu'à Chinon."
+    ),
+}
+
+
 REFERENCE_CASES: dict[str, StabilityCase] = {
     "belle-ile-basic": StabilityCase(
         case_id="belle-ile-basic",
@@ -69,7 +100,7 @@ REFERENCE_CASES: dict[str, StabilityCase] = {
         case_id="mont-saint-michel-loop",
         route_type="Boucle",
         days=4,
-        daily_target=20.0,
+        daily_target=18.0,
         # A deliberately short first day can be sensible around the bay. The
         # target is a preference, not a command to invent mileage.
         daily_min=8.0,
@@ -90,9 +121,9 @@ REFERENCE_CASES: dict[str, StabilityCase] = {
         case_id="generic-traverse-no-gr",
         route_type="Traversée",
         days=3,
-        daily_target=18.0,
-        daily_min=13.0,
-        daily_max=23.0,
+        daily_target=25.0,
+        daily_min=18.0,
+        daily_max=30.0,
         must_not_close=True,
     ),
 }
@@ -225,4 +256,10 @@ def assert_reference(case_id: str, result: dict[str, Any]) -> None:
         raise AssertionError(f"{case_id}: " + " | ".join(issues))
 
 
-__all__ = ["StabilityCase", "REFERENCE_CASES", "validate_result", "assert_reference"]
+__all__ = [
+    "StabilityCase",
+    "REFERENCE_PROMPTS",
+    "REFERENCE_CASES",
+    "validate_result",
+    "assert_reference",
+]
