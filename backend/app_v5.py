@@ -56,7 +56,8 @@ if TREKBRAIN_VERSION == "v9":
     # 15) if Matrix returns HTTP 5xx, rank a few cycles locally then validate
     #     them with ORS Directions; long fallback loops use 2-3 validated lobes;
     # 16) surface the real geographic/routing error instead of a generic 422;
-    # 17) discover water after routing and keep it display-only on the map.
+    # 17) discover water after routing and keep it display-only on the map;
+    # 18) expose the stable release channel and exact deployed Git commit.
     from . import smart_planner_v7 as _planner_v7
     from . import smart_planner_v5 as _planner_v5
     from . import smart_planner_v9 as _planner_v9
@@ -96,6 +97,7 @@ if TREKBRAIN_VERSION == "v9":
     from .trekbrain_campsite_loop_v9 import install_campsite_aware_roundtrip
     from .trekbrain_roundtrip_v9 import install_roundtrip_fallback
     from .trekbrain_failure_diagnostics_v9 import install_failure_diagnostics
+    from .trekbrain_release_status_v9 import install_release_status
 
     install_place_guard(_planner_v7.v5.v3, _geo_v2, _request_v9)
     install_gr_guidance(_planner_v7.v5.v3)
@@ -133,6 +135,7 @@ if TREKBRAIN_VERSION == "v9":
     )
     install_logistics_safety_semantics(_safety_v9)
     install_failure_diagnostics(_planner_v7.v5.v3, _planner_v5, _planner_v7)
+    install_release_status(app)
 
     # Geographic safety/resources remain final authorities. Water discovery is
     # post-route and then explicitly marked display-only before the public wrapper.
