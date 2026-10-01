@@ -16,7 +16,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: ['3.11', '3.14']
+        python-version: ['3.11', '3.14.7']
 
     services:
       postgres:
@@ -114,6 +114,30 @@ jobs:
                   raise SystemExit(f'Couche dupliquée: {marker} x{html.count(marker)}')
           print('Production frontend OK:', p.stat().st_size, 'bytes')
 
+      - name: Validate Render deployment configuration
+        shell: python
+        run: |
+          from pathlib import Path
+          py = Path('.python-version').read_text(encoding='utf-8').strip()
+          assert py == '3.14.7', py
+          cfg = Path('render.yaml').read_text(encoding='utf-8')
+          required = [
+              'healthCheckPath: /',
+              'python -m uvicorn backend.app_v5:app',
+              'python scripts/render_preflight.py',
+              '- key: PYTHON_VERSION',
+              'value: 3.14.7',
+              'name: trekmap-france-db',
+              'property: connectionString',
+          ]
+          missing=[item for item in required if item not in cfg]
+          if missing:
+              raise SystemExit('Configuration Render incomplète: '+', '.join(missing))
+          print('render.yaml + .python-version: OK')
+
+      - name: Run Render configuration preflight
+        run: python scripts/render_preflight.py
+
       - name: Import every backend module
         shell: python
         run: |
@@ -154,28 +178,28 @@ jobs:
           python -m uvicorn backend.app_v5:app --host 127.0.0.1 --port 10000 >/tmp/trekmap-uvicorn.log 2>&1 &
           echo $! >/tmp/trekmap-uvicorn.pid
           for i in $(seq 1 45); do
-            if curl -fsS http://127.0.0.1:10000/health/ready >/tmp/health.json; then
-              echo "Ready after $i attempt(s)"
-              cat /tmp/health.json
+            if curl -fsS http://127.0.0.1:10000/ >/tmp/root.html; then
+              echo "Web process alive after $i attempt(s)"
               exit 0
             fi
             if ! kill -0 "$(cat /tmp/trekmap-uvicorn.pid)" 2>/dev/null; then
-              echo 'Uvicorn exited before becoming ready'
+              echo 'Uvicorn exited before becoming healthy'
               cat /tmp/trekmap-uvicorn.log
               exit 1
             fi
             sleep 1
           done
-          echo 'Health check timeout'
+          echo 'Render-style health check timeout'
           cat /tmp/trekmap-uvicorn.log
           exit 1
 
-      - name: Smoke production endpoints
+      - name: Smoke production endpoints and DB readiness
         shell: bash
         run: |
           set -euo pipefail
-          curl -fsS http://127.0.0.1:10000/ >/tmp/root.html
           test -s /tmp/root.html
+          curl -fsS http://127.0.0.1:10000/health/ready >/tmp/health.json
+          python -m json.tool /tmp/health.json >/dev/null
           curl -fsS http://127.0.0.1:10000/ai/status >/tmp/ai-status.json
           python - <<'PY'
           import json
