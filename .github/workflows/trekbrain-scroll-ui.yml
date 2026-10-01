@@ -1,0 +1,65 @@
+name: TrekBrain scroll UI regression
+
+on:
+  push:
+    branches: [main, ui-trekbrain-scroll-readability]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  scroll-ui:
+    runs-on: ubuntu-latest
+    env:
+      TREKBRAIN_VERSION: v9
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build production UI chain
+        run: |
+          python scripts/apply_ui_remodel.py
+          python scripts/apply_unified_experience.py
+          python scripts/finalize_unified_build.py
+          python scripts/apply_mobile_experience.py
+          python scripts/apply_map_polish.py
+          python scripts/apply_ai_planner.py
+          python scripts/apply_free_planner_labels.py
+          python scripts/apply_language_learning_ui.py
+          python scripts/apply_reasoning_agent_ui.py
+          python scripts/apply_trekbrain_ui.py
+          python scripts/apply_selected_trekbrain_ui.py
+          python scripts/apply_route_day_visuals.py
+          python scripts/apply_route_day_clarity.py
+          python scripts/apply_trekbrain_scroll_ui.py
+
+      - name: Verify scroll and TrekBrain UI remain together
+        shell: python
+        run: |
+          from pathlib import Path
+          html = Path('frontend/index.html').read_text(encoding='utf-8')
+          required = [
+              'TREKMAP_TREKBRAIN_V9_UI_START',
+              'TREKMAP_ROUTE_DAY_CLARITY_V94',
+              'TREKMAP_TREKBRAIN_SCROLL_UI_START',
+              'id="trekmap-trekbrain-scroll-css"',
+              'overflow-y:auto!important',
+              'overflow-x:hidden!important',
+              'scrollbar-gutter:stable',
+              'scrollbar-color:#829b8f #edf3ef',
+              'height:min(92dvh,900px)',
+              '.tm-ai-result::-webkit-scrollbar',
+          ]
+          missing = [item for item in required if item not in html]
+          if missing:
+              raise SystemExit('TrekBrain scroll UI incomplete: ' + ', '.join(missing))
+          if html.count('TREKMAP_TREKBRAIN_SCROLL_UI_START') != 1:
+              raise SystemExit('TrekBrain scroll layer duplicated')
+          if html.count('id="trekmap-trekbrain-scroll-css"') != 1:
+              raise SystemExit('TrekBrain scroll CSS duplicated')
+          print('TrekBrain independent scrolling + existing V9 UI: OK')
+
+      - name: Python syntax
+        run: python -m compileall -q backend scripts
