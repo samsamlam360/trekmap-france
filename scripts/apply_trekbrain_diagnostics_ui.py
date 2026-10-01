@@ -25,6 +25,7 @@ block = r'''<!-- TREKMAP_ERROR_DIAGNOSTICS_V95_START -->
 .tm-ai-diagnostic-grid{display:grid;grid-template-columns:auto 1fr;gap:5px 9px;font-size:10px;line-height:1.4}
 .tm-ai-diagnostic-grid b{color:#617086}.tm-ai-diagnostic-grid span{color:#263548;overflow-wrap:anywhere}
 .tm-ai-diagnostic-next{margin-top:8px;padding:8px;border-radius:9px;background:#eef3f8;font-size:10px;line-height:1.45;color:#42536a}
+.tm-ai-build-info{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;overflow-wrap:anywhere}
 .tm-ai-diagnostic-copy{margin-top:8px;width:100%;border:1px solid #cad5e2;border-radius:9px;background:#fff;color:#334155;padding:8px;font-size:10px;font-weight:900;cursor:pointer}
 @media(max-width:520px){.tm-ai-diagnostic{padding:10px}.tm-ai-diagnostic-grid{grid-template-columns:88px 1fr}}
 </style>
@@ -32,6 +33,7 @@ block = r'''<!-- TREKMAP_ERROR_DIAGNOSTICS_V95_START -->
 (function(){
   if(window.__trekmapErrorDiagnosticsV95)return;window.__trekmapErrorDiagnosticsV95=true;
   let latest=null;
+  let buildInfo=null;
   const $=id=>document.getElementById(id);
   const clean=value=>String(value??'').trim();
 
@@ -66,6 +68,19 @@ block = r'''<!-- TREKMAP_ERROR_DIAGNOSTICS_V95_START -->
     return parts.join(' · ');
   }
 
+  function buildLabel(){
+    if(!buildInfo)return 'chargement…';
+    const release=clean(buildInfo.release_channel||buildInfo.release?.channel||'v9');
+    const pipeline=clean(buildInfo.pipeline_version||buildInfo.release?.pipeline_version||'');
+    const build=clean(buildInfo.build_short||buildInfo.release?.build_short||'unknown');
+    return [release,pipeline,`build ${build}`].filter(Boolean).join(' · ');
+  }
+
+  function refreshBuildInfo(){
+    const node=$('tm-ai-build-info');
+    if(node)node.textContent='Version backend : '+buildLabel();
+  }
+
   function diagnosticText(payload){
     if(!payload)return '';
     const d=payload.diagnostic||{};
@@ -79,6 +94,7 @@ block = r'''<!-- TREKMAP_ERROR_DIAGNOSTICS_V95_START -->
       `Réessayable: ${d.retryable?'oui':'non'}`,
       `Aperçu disponible: ${d.preview_available?'oui':'non'}`,
       `Interprétation: ${interpretation(payload)||'n/a'}`,
+      `Backend: ${buildLabel()}`,
       `Message: ${payload.message||'n/a'}`,
       `À vérifier: ${clean(d.next_check)||'n/a'}`
     ].join('\n');
@@ -118,6 +134,9 @@ block = r'''<!-- TREKMAP_ERROR_DIAGNOSTICS_V95_START -->
     addRow(grid,'ID',clean(d.id));
     box.appendChild(grid);
 
+    const build=document.createElement('div');build.id='tm-ai-build-info';build.className='tm-ai-diagnostic-next tm-ai-build-info';
+    build.textContent='Version backend : '+buildLabel();box.appendChild(build);
+
     if(clean(d.next_check)){
       const next=document.createElement('div');next.className='tm-ai-diagnostic-next';
       next.textContent='À vérifier : '+clean(d.next_check);box.appendChild(next);
@@ -129,6 +148,11 @@ block = r'''<!-- TREKMAP_ERROR_DIAGNOSTICS_V95_START -->
   }
 
   const previous=window.fetch.bind(window);
+  previous('/ai/status',{credentials:'same-origin',cache:'no-store'})
+    .then(response=>response.ok?response.json():null)
+    .then(data=>{if(data&&typeof data==='object'){buildInfo=data;refreshBuildInfo();}})
+    .catch(()=>{});
+
   window.fetch=async function(input,init){
     const response=await previous(input,init);
     try{
