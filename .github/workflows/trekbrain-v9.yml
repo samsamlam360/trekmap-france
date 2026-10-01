@@ -14,6 +14,7 @@ jobs:
       FRONTEND_ORIGINS: http://127.0.0.1:5500,http://localhost:5500
       ORS_API_KEY: ci-placeholder
       TREKBRAIN_VERSION: v9
+      TREKBRAIN_RELEASE_CHANNEL: v9-stable
       TREKBRAIN_FREE_MODE: '1'
     steps:
       - name: Checkout
@@ -28,7 +29,7 @@ jobs:
         run: python -m compileall -q backend scripts
       - name: Import active app
         run: python -c "import backend.app_v5 as app; assert app.TREKBRAIN_VERSION == 'v9'; print('TrekBrain v9 import OK')"
-      - name: Check v9 endpoints
+      - name: Check v9 endpoints and stable release metadata
         run: |
           python - <<'PY'
           import backend.app_v5 as app_v5
@@ -38,8 +39,20 @@ jobs:
           if missing: raise SystemExit('Missing endpoints: '+', '.join(sorted(missing)))
           for path in required:
               if paths.count(path)!=1: raise SystemExit(f'Duplicate endpoint: {path} ({paths.count(path)})')
-          print('TrekBrain v9.1 endpoints: OK')
+          status_route=next(r for r in app_v5.app.routes if r.path=='/ai/status')
+          payload=status_route.endpoint()
+          assert payload['release_channel']=='v9-stable', payload
+          assert payload['golden_prompt_count']==5, payload
+          assert payload['stability_gate']=='required', payload
+          assert str(payload['pipeline_version']).startswith('v9-explicit-'), payload
+          print('TrekBrain v9 stable endpoints + build metadata: OK')
           PY
+      - name: Stable pipeline topology
+        run: python scripts/test_trekbrain_v9_pipeline_core.py
+      - name: Five golden prompt stability gate
+        run: python scripts/test_trekbrain_v9_stability_gate.py
+      - name: Geographic safety hard-case gate
+        run: python scripts/test_trekbrain_v9_geo_safety.py
       - name: Precision tests
         run: python scripts/test_trekbrain_v9.py
       - name: GR corridor regressions
@@ -125,6 +138,7 @@ jobs:
             'Tracé provisoire non validé',
             'TREKMAP_ERROR_DIAGNOSTICS_V95_START','trekmap-error-diagnostics-v95-js',
             'Diagnostic technique','Copier le diagnostic','Demande comprise',
+            'Version backend','tm-ai-build-info','build_short',
             'TREKMAP_ROUTE_DAY_VISUALS_START','trekmap-route-day-visuals-js',
             'TREKMAP_ROUTE_DAY_CLARITY_V94','tm-route-day-label','segmentLabelPoint',
             'tm-route-day-chip','Étapes du trek','Départ','Arrivée','Jour ${i+1}'
@@ -149,7 +163,7 @@ jobs:
               m=re.search(r'<script id="'+re.escape(sid)+r'">(.*?)</script>',html,re.S)
               if not m: raise SystemExit('JavaScript missing: '+sid)
               Path('/tmp/trekbrain-'+name+'.js').write_text(m.group(1),encoding='utf-8')
-          print('TrekBrain v9.1 frontend + diagnostics + clear daily route labels: OK')
+          print('TrekBrain v9 stable frontend + build diagnostics + clear daily route labels: OK')
       - name: Check v9 JavaScript
         run: |
           node --check /tmp/trekbrain-v9.js
