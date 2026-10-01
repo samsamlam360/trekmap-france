@@ -2,6 +2,7 @@
 
 The fully wired app is imported once so this catches wrapper-order regressions,
 then the five product reference cases are checked without live network calls.
+The exact prompts are the same prompts manually validated in production.
 """
 from __future__ import annotations
 
@@ -22,9 +23,19 @@ from backend import app_v5  # noqa: E402
 from backend import smart_planner_v7 as v7  # noqa: E402
 from backend import trekbrain_request_v9 as request_v9  # noqa: E402
 from backend.free_planner_v2 import AIPlanRequest  # noqa: E402
-from backend.trekbrain_stability_contract_v9 import assert_reference  # noqa: E402
+from backend.trekbrain_stability_contract_v9 import (  # noqa: E402
+    REFERENCE_PROMPTS,
+    assert_reference,
+)
 
 assert app_v5.TREKBRAIN_VERSION == "v9"
+assert set(REFERENCE_PROMPTS) == {
+    "belle-ile-basic",
+    "belle-ile-camping",
+    "mont-saint-michel-loop",
+    "generic-loop-no-gr",
+    "generic-traverse-no-gr",
+}
 
 
 def wrapped_chain(fn):
@@ -100,7 +111,7 @@ def fake_geocode(query):
 request_v9.geo._geocode = fake_geocode
 try:
     belle = AIPlanRequest(
-        prompt="Je veux faire le tour de Belle-Île en 5 jours, environ 18 km par jour",
+        prompt=REFERENCE_PROMPTS["belle-ile-basic"],
         region="Bretagne", days=5, daily_km=18, route_type="Traversée",
         require_accommodation=False,
     )
@@ -111,7 +122,7 @@ try:
     assert meta["island_access_mode"] == "transport-then-hike"
 
     belle_camp = AIPlanRequest(
-        prompt="Je veux faire le tour de Belle-Île en 5 jours à environ 18 km par jour avec des campings tous les soirs",
+        prompt=REFERENCE_PROMPTS["belle-ile-camping"],
         region="Bretagne", days=5, daily_km=18, route_type="Traversée",
         require_accommodation=True,
     )
@@ -120,10 +131,11 @@ try:
     assert resolved.route_type == "Boucle"
     assert intent["accommodation"] == "camping"
     assert int(intent["days"]) == 5
+    assert abs(float(intent["daily_target"]) - 18.0) < 0.1
 
     mont = AIPlanRequest(
-        prompt="Je veux faire un trek de 4 jours autour du Mont St Michel, en boucle, environ 20 km par jour",
-        region="Belle-Île-en-Mer", days=5, daily_km=18, route_type="Traversée",
+        prompt=REFERENCE_PROMPTS["mont-saint-michel-loop"],
+        region="Belle-Île-en-Mer", days=5, daily_km=22, route_type="Traversée",
         require_accommodation=False,
     )
     resolved, meta = request_v9.reconcile_request(mont)
@@ -131,10 +143,10 @@ try:
     assert resolved.region == "Mont Saint-Michel", (resolved.region, meta)
     assert resolved.route_type == "Boucle"
     assert int(intent["days"]) == 4
-    assert abs(float(intent["daily_target"]) - 20.0) < 0.1
+    assert abs(float(intent["daily_target"]) - 18.0) < 0.1
 
     loop = AIPlanRequest(
-        prompt="Je veux une boucle de 4 jours autour de Chartres à environ 20 km par jour",
+        prompt=REFERENCE_PROMPTS["generic-loop-no-gr"],
         region="Chartres", days=4, daily_km=20, route_type="Boucle",
         require_accommodation=False,
     )
@@ -144,14 +156,14 @@ try:
     assert int(intent["days"]) == 4 and abs(float(intent["daily_target"]) - 20.0) < 0.1
 
     traverse = AIPlanRequest(
-        prompt="Je veux une traversée de 3 jours entre Tours et Chinon à environ 18 km par jour",
-        region="Tours", days=3, daily_km=18, route_type="Traversée",
+        prompt=REFERENCE_PROMPTS["generic-traverse-no-gr"],
+        region="Tours", days=3, daily_km=18, route_type="Boucle",
         require_accommodation=False,
     )
     resolved, _ = request_v9.reconcile_request(traverse)
     intent = v7.v5.v3._parse_intent(resolved)
     assert resolved.route_type == "Traversée"
-    assert int(intent["days"]) == 3 and abs(float(intent["daily_target"]) - 18.0) < 0.1
+    assert int(intent["days"]) == 3 and abs(float(intent["daily_target"]) - 25.0) < 0.1
 finally:
     request_v9.geo._geocode = real_geocode
 
@@ -187,7 +199,7 @@ assert_reference("mont-saint-michel-loop", {
     "description": "Boucle pédestre autour du Mont Saint-Michel", "route_type": "Boucle",
     "start": {"lat": 48.6361, "lon": -1.5115}, "end": {"lat": 48.6361, "lon": -1.5115},
     "route_preview": {"coords": [[48.6361, -1.5115], [48.58, -1.45], [48.61, -1.57], [48.6361, -1.5115]], "fallback": False},
-    "stages": stages([9, 21, 20, 20]), "water": [],
+    "stages": stages([14, 18, 19, 20]), "water": [],
 })
 assert_reference("generic-loop-no-gr", {
     "name": "Boucle test sans GR", "region": "Chartres", "route_type": "Boucle",
@@ -199,7 +211,7 @@ assert_reference("generic-traverse-no-gr", {
     "name": "Traversée Tours Chinon", "region": "Touraine", "route_type": "Traversée",
     "start": {"lat": 47.3941, "lon": 0.6848}, "end": {"lat": 47.1670, "lon": 0.2428},
     "route_preview": {"coords": [[47.3941, 0.6848], [47.31, 0.55], [47.24, 0.39], [47.1670, 0.2428]], "fallback": False},
-    "stages": stages([17, 18, 19]), "water": [],
+    "stages": stages([24, 25, 26]), "water": [],
 })
 
-print("TrekBrain v9 stability gate: 5 reference cases + simplified pipeline topology OK")
+print("TrekBrain v9 stability gate: 5 production golden prompts + simplified pipeline topology OK")
