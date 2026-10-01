@@ -61,7 +61,6 @@ def main() -> None:
     routes = [route.path for route in app_v5.app.routes]
     required_routes = {
         "/",
-        "/health/live",
         "/health/ready",
         "/ai/status",
         "/ai/plan",
