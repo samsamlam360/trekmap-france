@@ -34,6 +34,7 @@ jobs:
           --health-retries 20
 
     env:
+      PYTHONPATH: ${{ github.workspace }}
       DATABASE_URL: postgresql+psycopg2://postgres:postgres@127.0.0.1:5432/trekmap_ci
       TREKMAP_ENV: production
       FRONTEND_ORIGINS: https://trekmap-france.onrender.com
