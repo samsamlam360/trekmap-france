@@ -59,6 +59,9 @@ def _effective_request(data):
         "days": intent["days"], "daily_km": intent["daily_target"],
         "route_type": intent["route_type"], "difficulty": intent["difficulty"],
         "require_transit": intent["transit"],
+        "require_water": intent["water"],
+        "require_food": intent["food"],
+        "require_accommodation": intent["sleep"],
     })
 
 

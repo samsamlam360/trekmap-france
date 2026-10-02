@@ -31,3 +31,19 @@ jobs:
               raise SystemExit('La route /treks ne renvoie plus une liste')
           print(f'{len(data)} trek(s) accessibles')
           PY
+
+
+      - name: Vérifier TrekBrain v9 stable en production
+        run: |
+          python - <<'PY'
+          import json, urllib.request
+          with urllib.request.urlopen('https://trekmap-france.onrender.com/ai/status', timeout=30) as r:
+              data=json.load(r)
+          assert data.get('release_channel') == 'v9-stable', data
+          assert data.get('stability_gate') == 'required', data
+          assert data.get('field_suite') == 'required', data
+          assert data.get('golden_prompt_count') == 5, data
+          assert data.get('field_scenario_count') == 40, data
+          assert str(data.get('pipeline_version', '')).startswith('v9-explicit-'), data
+          print('TrekBrain production:', data.get('build_short'), data.get('pipeline_version'), '40 field scenarios')
+          PY

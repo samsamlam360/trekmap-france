@@ -110,7 +110,11 @@ def _parse_intent(data: AIPlanRequest) -> dict[str, Any]:
     if m:
         days = max(1, min(int(m.group(1)), 21))
 
-    m = re.search(r"\b(\d{1,2}(?:[.,]\d+)?)\s*(?:a|-|jusqu[' ]?a)\s*(\d{1,2}(?:[.,]\d+)?)\s*km(?:\s*(?:par\s*jour|/\s*j|/\s*jour))?", text)
+    m = re.search(
+        r"\b(?:entre\s+)?(\d{1,2}(?:[.,]\d+)?)\s*(?:a|-|jusqu[' ]?a|et)\s*"
+        r"(\d{1,2}(?:[.,]\d+)?)\s*km(?:\s*(?:par\s*jour|/\s*j|/\s*jour))?",
+        text,
+    )
     if m:
         daily_min, daily_max = sorted((_num(m.group(1)), _num(m.group(2))))
         daily_min = max(3.0, daily_min)
@@ -150,16 +154,32 @@ def _parse_intent(data: AIPlanRequest) -> dict[str, Any]:
             max_dplus_day = max(100, min(int(m.group(1)), 3000))
             break
 
-    if any(k in text for k in ("boucle", "circuit")):
-        route_type = "Boucle"
-    elif any(k in text for k in ("traversee", "itinérance lineaire", "itinerance lineaire")):
-        route_type = "Traversée"
-    elif any(k in text for k in ("aller-retour", "aller retour")):
+    loop_negated = bool(re.search(
+        r"\b(?:(?:ce\s+)?n[' ]?est\s+pas\s+(?:une?\s+)?boucle|"
+        r"pas\s+(?:en\s+|une?\s+)?boucle|sans\s+boucle)\b",
+        text,
+    ))
+    shape_explicit = False
+    if any(k in text for k in ("aller-retour", "aller retour")):
         route_type = "Aller-retour"
+        shape_explicit = True
+    elif (
+        loop_negated
+        or any(k in text for k in (
+            "traversee", "itinerance lineaire", "itineraire lineaire",
+            "point a point", "point-a-point",
+        ))
+    ):
+        route_type = "Traversée"
+        shape_explicit = True
+    elif any(k in text for k in ("boucle", "circuit")):
+        route_type = "Boucle"
+        shape_explicit = True
     elif "itinerance" in text:
         route_type = "Itinérance"
+        shape_explicit = True
 
-    if any(k in text for k in ("facile", "tranquille", "debutant", "peu difficile")):
+    if any(k in text for k in ("facile", "tranquille", "debutant", "peu difficile", "pas difficile", "sans difficulte")):
         difficulty = "easy"
     elif any(k in text for k in ("difficile", "sportif", "sportive", "soutenu")):
         difficulty = "hard"
@@ -184,6 +204,8 @@ def _parse_intent(data: AIPlanRequest) -> dict[str, Any]:
             r"\bvia\s+(.+?)(?=\s+(?:puis|ensuite|avec|pour|sur|en)\b|[,.;\n]|$)",
         ],
     )
+    if start_query and end_query and not shape_explicit:
+        route_type = "Traversée"
 
     priorities = {
         "viewpoint": 2.5,
@@ -218,16 +240,37 @@ def _parse_intent(data: AIPlanRequest) -> dict[str, Any]:
             avoid.add(cat)
 
     accommodation = "balanced"
-    if any(k in text for k in ("bivouac", "tente sauvage")):
+    no_bivouac = any(k in text for k in ("sans bivouac", "pas de bivouac", "eviter le bivouac"))
+    no_camping = any(k in text for k in ("sans camping", "pas de camping", "eviter les campings", "eviter le camping"))
+    no_refuge = any(k in text for k in ("sans refuge", "pas de refuge", "eviter les refuges"))
+    if not no_bivouac and any(k in text for k in ("bivouac", "tente sauvage")):
         accommodation = "bivouac"
-    elif any(k in text for k in ("camping", "campings", "tente")):
+    elif not no_camping and any(k in text for k in ("camping", "campings", "tente")):
         accommodation = "camping"
-    elif any(k in text for k in ("refuge", "refuges", "gite", "gîte")):
+    elif not no_refuge and any(k in text for k in ("refuge", "refuges", "gite", "gîte")):
         accommodation = "refuge"
 
     transit = bool(data.require_transit or any(k in text for k in ("train", "gare", "bus", "transport en commun")))
-    if any(k in text for k in ("sans train", "sans bus", "sans transport", "voiture uniquement")):
+    if any(k in text for k in ("sans train", "sans bus", "sans transport", "voiture uniquement", "pas besoin de transport")):
         transit = False
+
+    water = bool(data.require_water)
+    if any(k in text for k in ("pas besoin de point d'eau", "pas besoin de points d'eau", "sans point d'eau", "sans points d'eau")):
+        water = False
+    elif any(k in text for k in ("point d'eau", "points d'eau", "eau potable", "fontaine", "fontaines")):
+        water = True
+
+    food = bool(data.require_food)
+    if any(k in text for k in ("sans ravitaillement", "pas besoin de ravitaillement", "sans commerce", "sans commerces")):
+        food = False
+    elif any(k in text for k in ("ravitaillement", "epicerie", "épicerie", "boulangerie", "supermarche", "supermarché", "commerce")):
+        food = True
+
+    sleep = bool(data.require_accommodation)
+    if any(k in text for k in ("sans hebergement", "sans hébergement", "pas besoin d'hebergement", "pas besoin d'hébergement")):
+        sleep = False
+    elif any(k in text for k in ("hebergement", "hébergement", "camping", "refuge", "gite", "gîte", "bivouac")):
+        sleep = True
 
     if data.current_plan:
         if any(k in text for k in ("plus court", "raccourc", "moins long")):
@@ -261,9 +304,9 @@ def _parse_intent(data: AIPlanRequest) -> dict[str, Any]:
         "avoid": avoid,
         "accommodation": accommodation,
         "transit": transit,
-        "water": bool(data.require_water),
-        "food": bool(data.require_food),
-        "sleep": bool(data.require_accommodation),
+        "water": water,
+        "food": food,
+        "sleep": sleep,
         "raw": original,
     }
 

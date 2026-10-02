@@ -11,6 +11,7 @@ from typing import Any
 
 from .trekbrain_pipeline_core_v9 import PIPELINE_VERSION
 from .trekbrain_stability_contract_v9 import REFERENCE_PROMPTS
+from .trekbrain_field_contract_v9 import FIELD_SCENARIO_COUNT
 
 _RELEASE = "v9-stable"
 _INSTALLED = False
@@ -31,6 +32,8 @@ def release_metadata() -> dict[str, Any]:
         "build_commit": commit,
         "build_short": commit[:10] if commit != "unknown" else "unknown",
         "golden_prompt_count": len(REFERENCE_PROMPTS),
+        "field_scenario_count": FIELD_SCENARIO_COUNT,
+        "field_suite": "required",
         "stability_gate": "required",
     }
 
@@ -64,6 +67,8 @@ def install_release_status(app) -> None:
         payload["build_short"] = meta["build_short"]
         payload["stability_gate"] = meta["stability_gate"]
         payload["golden_prompt_count"] = meta["golden_prompt_count"]
+        payload["field_scenario_count"] = meta["field_scenario_count"]
+        payload["field_suite"] = meta["field_suite"]
         return payload
 
 

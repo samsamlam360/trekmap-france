@@ -43,6 +43,8 @@ jobs:
           payload=status_route.endpoint()
           assert payload['release_channel']=='v9-stable', payload
           assert payload['golden_prompt_count']==5, payload
+          assert payload['field_scenario_count']==40, payload
+          assert payload['field_suite']=='required', payload
           assert payload['stability_gate']=='required', payload
           assert str(payload['pipeline_version']).startswith('v9-explicit-'), payload
           print('TrekBrain v9 stable endpoints + build metadata: OK')
@@ -51,6 +53,8 @@ jobs:
         run: python scripts/test_trekbrain_v9_pipeline_core.py
       - name: Five golden prompt stability gate
         run: python scripts/test_trekbrain_v9_stability_gate.py
+      - name: Forty realistic field scenarios
+        run: python scripts/test_trekbrain_v9_field_suite.py
       - name: Geographic safety hard-case gate
         run: python scripts/test_trekbrain_v9_geo_safety.py
       - name: Precision tests

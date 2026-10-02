@@ -117,6 +117,11 @@ def main() -> None:
             fail(f"stability_gate invalide: {status.get('stability_gate')!r}")
         if status.get("golden_prompt_count") != 5:
             fail(f"golden_prompt_count invalide: {status.get('golden_prompt_count')!r}")
+        if status.get("field_scenario_count") != 40 or status.get("field_suite") != "required":
+            fail(
+                "La gate terrain v9 doit annoncer 40 scénarios obligatoires "
+                f"(count={status.get('field_scenario_count')!r}, suite={status.get('field_suite')!r})."
+            )
         if not str(status.get("pipeline_version", "")).startswith("v9-explicit-"):
             fail(f"pipeline_version v9 inattendue: {status.get('pipeline_version')!r}")
 
