@@ -40,10 +40,15 @@ def _route_type_from_prompt(prompt: str) -> str | None:
     # "boucle" inside "ce n'est pas une boucle" turn a traverse into a loop.
     if re.search(r"\baller[- ]retour\b", text):
         return "Aller-retour"
-    if re.search(r"\b(?:traversee|itin[eé]rance\s+lineaire|itinerance\s+lineaire)\b", text):
+    if re.search(
+        r"\b(?:traversee|itin[eé]rance\s+lineaire|itinerance\s+lineaire|"
+        r"itineraire\s+lineaire|point[- ]a[- ]point)\b",
+        text,
+    ):
         return "Traversée"
     if re.search(
-        r"\b(?:(?:ce\s+)?n[' ]?est\s+pas\s+(?:une?\s+)?boucle|pas\s+(?:en\s+|une?\s+)?boucle)\b",
+        r"\b(?:(?:ce\s+)?n[' ]?est\s+pas\s+(?:une?\s+)?boucle|"
+        r"pas\s+(?:en\s+|une?\s+)?boucle|sans\s+boucle)\b",
         text,
     ):
         return "Traversée"
@@ -52,6 +57,15 @@ def _route_type_from_prompt(prompt: str) -> str | None:
         or re.search(r"\b(?:boucle|circuit)\b", text)
     ):
         return "Boucle"
+    # Explicit start + explicit finish is point-to-point unless a stronger
+    # shape above says otherwise. This also defeats a stale "Boucle" form value.
+    if (
+        re.search(r"\b(?:depart|partir|commencer|debuter)\b", text)
+        and re.search(r"\b(?:arrivee|finir|terminer)\b", text)
+    ):
+        return "Traversée"
+    if re.search(r"\bitinerance\b", text):
+        return "Itinérance"
     return None
 
 

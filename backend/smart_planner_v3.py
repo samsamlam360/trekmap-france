@@ -187,7 +187,7 @@ def _parse_intent(data: AIPlanRequest) -> dict[str, Any]:
     start_query = _phrase_after(
         original,
         [
-            r"(?:départ|depart|partir)\s+(?:de|depuis|à|a)\s+(.+?)(?=\s+(?:et\s+)?(?:arriv|retour|avec|pour|sur|en)\b|[,.;\n]|$)",
+            r"(?:départ|depart|partir)\s+(?:de|depuis|à|a)\s+(.+?)(?=\s+(?:et\s+)?(?:arriv(?:ee|ée|e)?|retour|avec|pour|sur|en)\b|[,.;\n]|$)",
             r"(?:commencer|débuter|debuter)\s+(?:à|a|par)\s+(.+?)(?=\s+(?:et\s+)?(?:arriv|retour|avec|pour|sur|en)\b|[,.;\n]|$)",
         ],
     )
