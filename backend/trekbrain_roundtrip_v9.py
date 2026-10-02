@@ -219,6 +219,12 @@ def _shortcut_oversized_loop(route, start, target_km: float, daily_min: float, d
     matrix_result = ors.get_distance_matrix([row[2] for row in sampled])
     matrix = matrix_result.get("distances") if isinstance(matrix_result, dict) else None
     if not isinstance(matrix, list) or len(matrix) != len(sampled):
+        warning = str((matrix_result or {}).get("warning") or "")[:120] if isinstance(matrix_result, dict) else ""
+        print(
+            f"[TrekBrain v9][matrix-shortcut] matrix=unavailable "
+            f"route_km={routed_total:.1f} target_km={float(target_km):.1f} "
+            f"samples={len(sampled)} warning={warning!r}"
+        )
         return []
 
     predicted = []
@@ -259,8 +265,18 @@ def _shortcut_oversized_loop(route, start, target_km: float, daily_min: float, d
             ))
 
     if not predicted:
+        print(
+            f"[TrekBrain v9][matrix-shortcut] matrix=ok candidates=0 "
+            f"route_km={routed_total:.1f} target_km={float(target_km):.1f} "
+            f"samples={len(sampled)}"
+        )
         return []
     predicted.sort(key=lambda row: row[0])
+    print(
+        f"[TrekBrain v9][matrix-shortcut] matrix=ok candidates={len(predicted)} "
+        f"route_km={routed_total:.1f} target_km={float(target_km):.1f} "
+        f"best_predicted_km={float(predicted[0][8]):.1f}"
+    )
 
     start_coord = [float(start["lat"]), float(start["lon"])]
     variants = []
@@ -316,6 +332,18 @@ def _shortcut_oversized_loop(route, start, target_km: float, daily_min: float, d
         })
         if feasible_low * 0.90 <= total <= feasible_high + 0.35 and retrace <= 0.40:
             break
+    if variants:
+        best = min(variants, key=lambda row: abs(float(row.get("distance") or 0) - float(target_km)))
+        print(
+            f"[TrekBrain v9][matrix-shortcut] rendered={len(variants)} "
+            f"best_actual_km={float(best.get('distance') or 0):.1f} "
+            f"best_retrace={float(best.get('shortcut_retrace_ratio') or 0):.3f}"
+        )
+    else:
+        print(
+            f"[TrekBrain v9][matrix-shortcut] rendered=0 "
+            f"route_km={routed_total:.1f} target_km={float(target_km):.1f}"
+        )
     return variants
 
 
