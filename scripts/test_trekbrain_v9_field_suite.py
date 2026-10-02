@@ -199,6 +199,8 @@ try:
         failures.append(f"waypoint-loop regression: bad mode {polygon[0]!r}")
     elif roundtrip_v9._haversine(polygon[0]["coords"][0], polygon[0]["coords"][-1]) > 0.15:
         failures.append("waypoint-loop regression: route is not closed")
+    elif "waypoint_retrace_ratio" not in polygon[0]:
+        failures.append("waypoint-loop regression: missing retrace metadata")
 finally:
     roundtrip_v9.ors.get_route = old_get_route
 

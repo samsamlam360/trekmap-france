@@ -143,13 +143,11 @@ def _polygon_loop_candidates(start, target_km: float, daily_min: float, daily_ma
         if _haversine(coords[-1], start_coord) > 0.15:
             continue
         retrace = float(v3._route_retrace_ratio(coords)) if hasattr(v3, "_route_retrace_ratio") else 0.0
-        if retrace > 0.52:
-            continue
-        # Keep a slightly wider lower bound here. The final selection still
-        # prioritises the normal requested window, while a near-feasible routed
-        # loop is more useful than falling back to a known 50–80 km overshoot.
-        if distance < feasible_low * 0.82 or distance > feasible_high * 1.08:
-            continue
+        # Do not duplicate the central distance/retrace gates here. ORS may
+        # produce a perfectly valid loop that looks mediocre to this local
+        # heuristic but is still the closest feasible option. Keep every closed,
+        # routed candidate and let _best_roundtrip apply the common scoring and
+        # hard distance preference consistently.
         candidate = dict(routed)
         candidate.update({
             "distance": round(distance, 2),
@@ -161,6 +159,7 @@ def _polygon_loop_candidates(start, target_km: float, daily_min: float, daily_ma
             "waypoint_orientation_deg": round(orientation, 1),
             "waypoint_radius_km": round(r, 2),
             "requested_total_km": round(float(target_km), 2),
+            "waypoint_retrace_ratio": round(retrace, 4),
         })
         variants.append(candidate)
         if feasible_low * 0.90 <= distance <= feasible_high + 0.35:
