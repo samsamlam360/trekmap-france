@@ -167,7 +167,7 @@ jobs:
           import backend.app_v5 as app_v5
           assert app_v5.TREKBRAIN_VERSION == 'v9'
           paths=[r.path for r in app_v5.app.routes]
-          required={'/','/health/ready','/ai/status','/ai/plan','/ai/clarify','/ai/feedback','/treks/{trek_id}/ai-redraw'}
+          required={'/','/health/ready','/auth/account','/ai/status','/ai/plan','/ai/clarify','/ai/feedback','/treks/{trek_id}/ai-redraw'}
           missing=required-set(paths)
           if missing:
               raise SystemExit('Routes manquantes: '+', '.join(sorted(missing)))

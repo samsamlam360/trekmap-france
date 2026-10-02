@@ -133,6 +133,10 @@ class PasswordPayload(BaseModel):
     old_password: str = Field(min_length=1, max_length=200)
     new_password: str = Field(min_length=8, max_length=200)
 
+class DeleteAccountPayload(BaseModel):
+    password: str = Field(min_length=1, max_length=200)
+    confirmation: str = Field(min_length=9, max_length=20)
+
 # -----------------------------
 # Schema / DB
 # -----------------------------
@@ -831,6 +835,46 @@ def logout(response: Response, user=Depends(current_user)):
         clear_session_cookies(response)
         return {"message":"Déconnecté"}
     finally: db.close()
+
+@app.delete("/auth/account")
+def delete_account(data: DeleteAccountPayload, response: Response, user=Depends(current_user)):
+    """Delete an empty non-admin account after password confirmation.
+
+    TrekBrain benchmark accounts use this endpoint so production E2E tests leave
+    neither sessions nor learning episodes behind. Real users are protected from
+    accidental data loss: accounts owning treks must delete those treks first.
+    """
+    if user["is_admin"]:
+        raise HTTPException(status_code=403, detail="Un compte administrateur ne peut pas être supprimé depuis cette route.")
+    if data.confirmation.strip().upper() != "SUPPRIMER":
+        raise HTTPException(status_code=400, detail="Confirmation de suppression invalide.")
+    db=db_or_503()
+    try:
+        row=db.execute(text("SELECT password_hash FROM users WHERE id=:u"),{"u":user["id"]}).first()
+        if not row or not verify_password(data.password,row.password_hash):
+            raise HTTPException(status_code=401,detail="Mot de passe incorrect.")
+        owned=int(db.execute(text("SELECT COUNT(*) FROM treks WHERE owner_id=:u"),{"u":user["id"]}).scalar() or 0)
+        if owned:
+            raise HTTPException(
+                status_code=409,
+                detail="Supprime d'abord les treks dont tu es propriétaire avant de supprimer le compte.",
+            )
+        # trek_brain_episodes is ON DELETE CASCADE. The personal model state is
+        # keyed by scope rather than a foreign key, so remove it explicitly.
+        if db.execute(text("SELECT to_regclass('public.trek_brain_states')")).scalar():
+            db.execute(text("DELETE FROM trek_brain_states WHERE scope=:scope"),{"scope":f"user:{int(user['id'])}"})
+        db.execute(text("DELETE FROM users WHERE id=:u"),{"u":user["id"]})
+        db.commit()
+        clear_session_cookies(response)
+        return {"deleted":True}
+    except HTTPException:
+        db.rollback()
+        raise
+    except Exception as exc:
+        db.rollback()
+        raise HTTPException(status_code=500, detail="Impossible de supprimer le compte.") from exc
+    finally:
+        db.close()
 
 @app.get("/auth/profile")
 def profile(user=Depends(current_user)):
