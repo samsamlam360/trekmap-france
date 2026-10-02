@@ -223,7 +223,8 @@ def _shortcut_oversized_loop(route, start, target_km: float, daily_min: float, d
         print(
             f"[TrekBrain v9][matrix-shortcut] matrix=unavailable "
             f"route_km={routed_total:.1f} target_km={float(target_km):.1f} "
-            f"samples={len(sampled)} warning={warning!r}"
+            f"samples={len(sampled)} warning={warning!r}",
+        flush=True,
         )
         return []
 
@@ -268,14 +269,16 @@ def _shortcut_oversized_loop(route, start, target_km: float, daily_min: float, d
         print(
             f"[TrekBrain v9][matrix-shortcut] matrix=ok candidates=0 "
             f"route_km={routed_total:.1f} target_km={float(target_km):.1f} "
-            f"samples={len(sampled)}"
+            f"samples={len(sampled)}",
+        flush=True,
         )
         return []
     predicted.sort(key=lambda row: row[0])
     print(
         f"[TrekBrain v9][matrix-shortcut] matrix=ok candidates={len(predicted)} "
         f"route_km={routed_total:.1f} target_km={float(target_km):.1f} "
-        f"best_predicted_km={float(predicted[0][8]):.1f}"
+        f"best_predicted_km={float(predicted[0][8]):.1f}",
+    flush=True,
     )
 
     start_coord = [float(start["lat"]), float(start["lon"])]
@@ -337,12 +340,14 @@ def _shortcut_oversized_loop(route, start, target_km: float, daily_min: float, d
         print(
             f"[TrekBrain v9][matrix-shortcut] rendered={len(variants)} "
             f"best_actual_km={float(best.get('distance') or 0):.1f} "
-            f"best_retrace={float(best.get('shortcut_retrace_ratio') or 0):.3f}"
+            f"best_retrace={float(best.get('shortcut_retrace_ratio') or 0):.3f}",
+        flush=True,
         )
     else:
         print(
             f"[TrekBrain v9][matrix-shortcut] rendered=0 "
-            f"route_km={routed_total:.1f} target_km={float(target_km):.1f}"
+            f"route_km={routed_total:.1f} target_km={float(target_km):.1f}",
+        flush=True,
         )
     return variants
 
