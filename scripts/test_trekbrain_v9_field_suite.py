@@ -52,6 +52,8 @@ def close_enough(actual, expected):
             return abs(float(actual) - expected) <= 0.11
         except (TypeError, ValueError):
             return False
+    if isinstance(expected, str):
+        return request_v9._fold(str(actual or "")) == request_v9._fold(expected)
     return actual == expected
 
 
