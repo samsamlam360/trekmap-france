@@ -192,11 +192,13 @@ try:
         }
 
     roundtrip_v9.ors.get_route = fake_arc_connector
-    centre = {"lat": 48.0, "lon": 1.0}
     ring = []
     for n in range(145):
         angle = 2 * math.pi * n / 144
         ring.append([48.0 + 0.11 * math.sin(angle), 1.0 + 0.16 * math.cos(angle)])
+    # A real ORS round trip starts and ends at the requested departure. The
+    # synthetic regression must preserve that invariant too.
+    centre = {"lat": ring[0][0], "lon": ring[0][1]}
     oversized = {"coords": ring, "distance": 58.0, "fallback": False, "profile": "foot-hiking"}
     shortcuts = roundtrip_v9._shortcut_oversized_loop(
         oversized, centre, 36.0, 12.0, 20.0, 2, v7.v5.v3
