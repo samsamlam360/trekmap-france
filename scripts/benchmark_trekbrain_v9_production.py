@@ -253,13 +253,30 @@ def evaluate(case, result, elapsed_s, clarify):
         if not str(transport.get("outbound") or "").strip() or not str(transport.get("return") or "").strip():
             warnings.append("transport aller/retour incomplet")
 
+    quality_blockers = ((result.get("trekbrain") or {}).get("quality") or {}).get("blockers") or []
+    critical_quality_blockers = {
+        "durée différente de la demande",
+        "distances manquantes ou invalides",
+        "distance maximale dépassée",
+        "routage dégradé",
+        "boucle mal refermée",
+        "fermeture de boucle invérifiable",
+    }
+    for blocker in quality_blockers:
+        if str(blocker) in critical_quality_blockers:
+            hard.append(f"audit TrekBrain: {blocker}")
+
     if quality is None:
         warnings.append("score TrekBrain absent")
     else:
         try:
             q = float(quality)
-            if q < 50:
-                hard.append(f"score TrekBrain très faible: {q:.1f}/100")
+            # This score is explicitly heuristic, not a success probability.
+            # Structural invariants above are the hard gate.
+            if q < 40:
+                hard.append(f"score TrekBrain extrêmement faible: {q:.1f}/100")
+            elif q < 60:
+                warnings.append(f"score TrekBrain faible: {q:.1f}/100")
             elif q < 76:
                 warnings.append(f"score TrekBrain à vérifier: {q:.1f}/100")
         except (TypeError, ValueError):

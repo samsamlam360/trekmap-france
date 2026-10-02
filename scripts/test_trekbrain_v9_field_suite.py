@@ -7,6 +7,7 @@ form values, natural-language distances, route shapes, resources and logistics.
 from __future__ import annotations
 
 import os
+import math
 from pathlib import Path
 import sys
 
@@ -22,6 +23,7 @@ from backend import smart_planner_v7 as v7  # noqa: E402
 from backend import trekbrain_request_v9 as request_v9  # noqa: E402
 from backend.language_engine import normalize_for_planner  # noqa: E402
 from backend.trekbrain_pipeline_core_v9 import _rebalance_stage_count  # noqa: E402
+from backend import trekbrain_roundtrip_v9 as roundtrip_v9  # noqa: E402
 from backend.free_planner_v2 import AIPlanRequest  # noqa: E402
 from backend.trekbrain_field_contract_v9 import FIELD_SCENARIOS, FIELD_SCENARIO_COUNT  # noqa: E402
 
@@ -139,6 +141,39 @@ fake = {
 _rebalance_stage_count(fake, {"days": 3})
 if len(fake.get("stages") or []) != 3 or fake.get("duration_days") != 3:
     failures.append(f"stage rebalance regression: {fake.get('stages')!r}")
+
+# Oversized-loop regression. The shortening layer must only return geometry
+# closed through a routed connector, never through a direct diagnostic segment.
+old_get_route = roundtrip_v9.ors.get_route
+try:
+    def fake_connector(points, distance_fn):
+        a, b = points
+        return {
+            "coords": [list(a), [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2], list(b)],
+            "distance": max(2.0, float(distance_fn(points)) * 1.15),
+            "fallback": False,
+            "routing_mode": "test-routed-connector",
+            "profile": "foot-hiking",
+        }
+
+    roundtrip_v9.ors.get_route = fake_connector
+    centre = {"lat": 48.0, "lon": 1.0}
+    ring = []
+    for n in range(73):
+        angle = 2 * math.pi * n / 72
+        ring.append([48.0 + 0.10 * math.sin(angle), 1.0 + 0.14 * math.cos(angle)])
+    oversized = {"coords": ring, "distance": 58.0, "fallback": False, "profile": "foot-hiking"}
+    variants = roundtrip_v9._shorten_oversized_loop(
+        oversized, centre, 36.0, 12.0, 20.0, 2, v7.v5.v3
+    )
+    if not variants or not all(x.get("fallback") is False for x in variants):
+        failures.append("round-trip shortening regression: no routed shortened loop")
+    elif not any(21.6 <= float(x.get("distance") or 0) <= 40.35 for x in variants):
+        failures.append(
+            f"round-trip shortening regression: bad distances {[x.get('distance') for x in variants]}"
+        )
+finally:
+    roundtrip_v9.ors.get_route = old_get_route
 
 if failures:
     raise AssertionError("TrekBrain v9 field suite failed:\\n- " + "\\n- ".join(failures))

@@ -68,6 +68,93 @@ def _equal_anchors(coords, days):
     return anchors
 
 
+def _polyline_haversine(coords) -> float:
+    return sum(_haversine(a, b) for a, b in zip(coords or [], (coords or [])[1:]))
+
+
+def _merge_coords(prefix, connector):
+    merged = [[float(p[0]), float(p[1])] for p in (prefix or []) if len(p) >= 2]
+    for point in connector or []:
+        row = [float(point[0]), float(point[1])]
+        if not merged or row != merged[-1]:
+            merged.append(row)
+    return merged
+
+
+def _shorten_oversized_loop(route, start, target_km: float, daily_min: float, daily_max: float, days: int, v3):
+    """Shorten a validated ORS loop without inventing straight-line geometry."""
+    coords = [
+        [float(p[0]), float(p[1])]
+        for p in (route.get("coords") or [])
+        if isinstance(p, (list, tuple)) and len(p) >= 2
+    ]
+    if len(coords) < 12:
+        return []
+
+    try:
+        routed_total = float(route.get("distance") or 0)
+    except (TypeError, ValueError):
+        return []
+    feasible_low = max(3.0, float(daily_min) * max(days, 1))
+    feasible_high = float(daily_max) * max(days, 1)
+    if routed_total <= feasible_high + 0.35:
+        return []
+
+    cumulative = _cumulative(coords)
+    geometric_total = float(cumulative[-1] or 0)
+    if geometric_total <= 0:
+        return []
+
+    ratio = max(0.20, min(0.90, float(target_km) / routed_total))
+    fractions = []
+    for factor in (0.78, 1.00, 1.20):
+        value = max(0.18, min(0.88, ratio * factor))
+        if all(abs(value - old) > 0.035 for old in fractions):
+            fractions.append(value)
+
+    start_coord = [float(start["lat"]), float(start["lon"])]
+    variants = []
+    for fraction in fractions:
+        idx = _route_index_for_progress(cumulative, geometric_total * fraction)
+        if idx <= 1 or idx >= len(coords) - 2:
+            continue
+        prefix = coords[: idx + 1]
+        prefix_distance = routed_total * (float(cumulative[idx]) / geometric_total)
+        connector = ors.get_route([coords[idx], start_coord], _polyline_haversine)
+        if not isinstance(connector, dict) or connector.get("fallback") is not False:
+            continue
+        connector_coords = connector.get("coords") or []
+        if len(connector_coords) < 2:
+            continue
+        try:
+            connector_distance = float(connector.get("distance") or 0)
+        except (TypeError, ValueError):
+            continue
+        total = prefix_distance + connector_distance
+        if total < feasible_low * 0.90 or total > feasible_high + 0.35:
+            continue
+
+        merged = _merge_coords(prefix, connector_coords[1:])
+        if len(merged) < 12 or _haversine(merged[-1], start_coord) > 0.12:
+            continue
+        retrace = float(v3._route_retrace_ratio(merged)) if hasattr(v3, "_route_retrace_ratio") else 0.0
+        if retrace > 0.42:
+            continue
+
+        variants.append({
+            "coords": merged,
+            "distance": round(total, 2),
+            "fallback": False,
+            "routing_mode": "ors-round-trip-shortened",
+            "profile": route.get("profile") or ors.ORS_PROFILE,
+            "provider": "OpenRouteService",
+            "shortened_from_km": round(routed_total, 2),
+            "shortening_fraction": round(fraction, 3),
+            "closing_route_km": round(connector_distance, 2),
+        })
+    return variants
+
+
 def _roundtrip_request(start, target_km: float, seed: int):
     if not ors.ORS_API_KEY:
         return None, "OpenRouteService non configuré : ORS_API_KEY est absente du serveur Render."
@@ -146,6 +233,24 @@ def _best_roundtrip(start, target_km: float, daily_min: float, daily_max: float,
             if abs(calibrated - target_km) >= 2.0:
                 for seed in (7, 19):
                     add_candidate(calibrated, seed)
+
+        if all(float(row[1].get("distance") or 0) > feasible_high + 0.35 for row in rows):
+            sources = sorted(
+                rows,
+                key=lambda row: abs(float(row[1].get("distance") or 0) - target_km),
+            )[:2]
+            for _score, source in sources:
+                for variant in _shorten_oversized_loop(
+                    source, start, target_km, daily_min, daily_max, days, v3
+                ):
+                    distance = float(variant.get("distance") or 0)
+                    per_day = distance / max(days, 1)
+                    retrace = float(v3._route_retrace_ratio(variant.get("coords") or [])) if hasattr(v3, "_route_retrace_ratio") else 0.0
+                    range_penalty = max(0.0, daily_min - per_day) * 5 + max(0.0, per_day - daily_max) * 8
+                    rows.append((
+                        abs(distance - target_km) + range_penalty + retrace * 80,
+                        variant,
+                    ))
 
     if not rows:
         detail = warnings[0] if warnings else "OpenRouteService n'a produit aucune boucle pédestre."
