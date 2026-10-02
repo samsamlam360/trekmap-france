@@ -175,44 +175,59 @@ try:
 finally:
     roundtrip_v9.ors.get_route = old_get_route
 
-# Internal-arc shortcut regression: endpoints are sampled on the validated loop
-# and only the replacement connector is re-routed.
+# Matrix-first internal-arc shortcut regression. The planner must evaluate many
+# on-route pairs with one Matrix call and render only the selected connector.
 old_get_route = roundtrip_v9.ors.get_route
+old_get_matrix = roundtrip_v9.ors.get_distance_matrix
 try:
+    def fake_arc_matrix(points):
+        n = len(points)
+        distances = []
+        for i in range(n):
+            row = []
+            for j in range(n):
+                if i == j:
+                    row.append(0.0)
+                else:
+                    # A usable network shortcut whose cost grows much more slowly
+                    # than the removed arc.
+                    row.append(2.0 + abs(j - i) * 1.25)
+            distances.append(row)
+        return {"distances": distances, "fallback": False, "routing_mode": "test-matrix"}
+
     def fake_arc_connector(points, distance_fn):
         a, b = points
-        direct = float(distance_fn(points))
         mid = [(a[0] + b[0]) / 2 + 0.002, (a[1] + b[1]) / 2]
         return {
             "coords": [list(a), mid, list(b)],
-            "distance": max(1.0, direct * 1.15),
+            "distance": max(2.0, float(distance_fn(points)) * 1.10),
             "fallback": False,
             "routing_mode": "test-arc-connector",
             "profile": "foot-hiking",
         }
 
+    roundtrip_v9.ors.get_distance_matrix = fake_arc_matrix
     roundtrip_v9.ors.get_route = fake_arc_connector
     ring = []
     for n in range(145):
         angle = 2 * math.pi * n / 144
         ring.append([48.0 + 0.11 * math.sin(angle), 1.0 + 0.16 * math.cos(angle)])
-    # A real ORS round trip starts and ends at the requested departure. The
-    # synthetic regression must preserve that invariant too.
     centre = {"lat": ring[0][0], "lon": ring[0][1]}
     oversized = {"coords": ring, "distance": 58.0, "fallback": False, "profile": "foot-hiking"}
     shortcuts = roundtrip_v9._shortcut_oversized_loop(
         oversized, centre, 36.0, 12.0, 20.0, 2, v7.v5.v3
     )
     if not shortcuts:
-        failures.append("arc-shortcut regression: no routed variant")
-    elif not all(x.get("routing_mode") == "ors-loop-arc-shortcut" for x in shortcuts):
-        failures.append(f"arc-shortcut regression: bad mode {shortcuts!r}")
-    elif not all(x.get("fallback") is False for x in shortcuts):
-        failures.append("arc-shortcut regression: diagnostic fallback accepted")
+        failures.append("matrix arc-shortcut regression: no routed variant")
+    elif not all(x.get("routing_mode") == "ors-matrix-arc-shortcut" for x in shortcuts):
+        failures.append(f"matrix arc-shortcut regression: bad mode {shortcuts!r}")
+    elif not all(x.get("matrix_shortcut") is True for x in shortcuts):
+        failures.append("matrix arc-shortcut regression: Matrix metadata missing")
     elif not any(float(x.get("distance") or 0) < 58.0 for x in shortcuts):
-        failures.append(f"arc-shortcut regression: loop was not shortened {shortcuts!r}")
+        failures.append(f"matrix arc-shortcut regression: loop was not shortened {shortcuts!r}")
 finally:
     roundtrip_v9.ors.get_route = old_get_route
+    roundtrip_v9.ors.get_distance_matrix = old_get_matrix
 
 # Routed waypoint-loop regression: when provider round-trip length is unreliable,
 # the fallback must be able to create a closed candidate from routed waypoints.

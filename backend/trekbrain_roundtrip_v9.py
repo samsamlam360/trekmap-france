@@ -170,12 +170,12 @@ def _polygon_loop_candidates(start, target_km: float, daily_min: float, daily_ma
 
 
 def _shortcut_oversized_loop(route, start, target_km: float, daily_min: float, daily_max: float, days: int, v3):
-    """Replace one long arc of an oversized real loop by a routed shortcut.
+    """Shorten one oversized real loop with one ORS Matrix + one Directions call.
 
-    Both shortcut endpoints are sampled *on the already validated ORS loop*.
-    This avoids the main weakness of synthetic waypoint generation: an invented
-    coordinate can be far from a routable footpath. The retained prefix, the
-    new connector and the retained suffix are all real routed geometry.
+    Candidate endpoints are sampled directly on the already validated loop.
+    ORS Matrix evaluates many possible network shortcuts in one request; only
+    the best predicted pair is then rendered as detailed pedestrian geometry.
+    This avoids the former burst of repeated Directions calls.
     """
     coords = [
         [float(p[0]), float(p[1])]
@@ -202,42 +202,72 @@ def _shortcut_oversized_loop(route, start, target_km: float, daily_min: float, d
     if geometric_total <= 0:
         return []
 
-    # Estimate how much of the original loop needs replacing. A network shortcut
-    # still has positive length, so the removed arc must be wider than the raw
-    # target reduction. Probe a few bounded spans around that estimate.
-    reduction_ratio = max(0.05, min(0.70, (routed_total - float(target_km)) / routed_total))
-    estimated_span = max(0.24, min(0.70, reduction_ratio / 0.66))
-    spans = []
-    for delta in (0.0, -0.09, 0.09, 0.16):
-        span = max(0.20, min(0.74, estimated_span + delta))
-        if all(abs(span - old) > 0.035 for old in spans):
-            spans.append(span)
-
-    variants = []
-    # Shift the removed arc slightly around the loop. Some apparent shortcuts
-    # are separated by rivers, cliffs or motorways and ORS must route around them.
-    centres = (0.50, 0.42, 0.58)
-    attempts = []
-    for span in spans:
-        for centre in centres:
-            a_fraction = centre - span / 2
-            b_fraction = centre + span / 2
-            if a_fraction < 0.08 or b_fraction > 0.92:
-                continue
-            key = (round(a_fraction, 3), round(b_fraction, 3))
-            if key not in attempts:
-                attempts.append(key)
-            if len(attempts) >= 7:
-                break
-        if len(attempts) >= 7:
-            break
-
-    for a_fraction, b_fraction in attempts:
-        a_idx = _route_index_for_progress(cumulative, geometric_total * a_fraction)
-        b_idx = _route_index_for_progress(cumulative, geometric_total * b_fraction)
-        if a_idx <= 1 or b_idx <= a_idx + 2 or b_idx >= len(coords) - 2:
+    # Thirteen internal points fit comfortably inside ORS Matrix limits and give
+    # dozens of possible arc replacements while keeping one network request.
+    fractions = [0.07 + 0.86 * i / 12 for i in range(13)]
+    sampled = []
+    for fraction in fractions:
+        idx = _route_index_for_progress(cumulative, geometric_total * fraction)
+        if idx <= 1 or idx >= len(coords) - 2:
             continue
+        if sampled and idx == sampled[-1][0]:
+            continue
+        sampled.append((idx, float(cumulative[idx]) / geometric_total, coords[idx]))
+    if len(sampled) < 5:
+        return []
 
+    matrix_result = ors.get_distance_matrix([row[2] for row in sampled])
+    matrix = matrix_result.get("distances") if isinstance(matrix_result, dict) else None
+    if not isinstance(matrix, list) or len(matrix) != len(sampled):
+        return []
+
+    predicted = []
+    for i in range(len(sampled) - 1):
+        a_idx, a_fraction, _a_coord = sampled[i]
+        for j in range(i + 1, len(sampled)):
+            b_idx, b_fraction, _b_coord = sampled[j]
+            arc_fraction = b_fraction - a_fraction
+            if arc_fraction < 0.18 or arc_fraction > 0.78:
+                continue
+            try:
+                shortcut_km = matrix[i][j]
+                shortcut_km = float(shortcut_km) if shortcut_km is not None else None
+            except (IndexError, TypeError, ValueError):
+                shortcut_km = None
+            if shortcut_km is None or not math.isfinite(shortcut_km) or shortcut_km <= 0:
+                continue
+
+            removed_km = routed_total * arc_fraction
+            # It must actually be a shortcut. A tiny saving is not worth
+            # reshaping a route and tends to create noisy candidates.
+            if shortcut_km >= removed_km - 0.8:
+                continue
+            retained_km = routed_total * (1.0 - arc_fraction)
+            total = retained_km + shortcut_km
+            distance_penalty = abs(total - float(target_km))
+            if total < feasible_low * 0.88:
+                distance_penalty += (feasible_low * 0.88 - total) * 4.0
+            if total > feasible_high + 0.35:
+                distance_penalty += (total - feasible_high) * 5.0
+            # Prefer meaningful shortcuts without throwing away almost the whole
+            # original loop.
+            shape_penalty = max(0.0, arc_fraction - 0.66) * 12.0
+            predicted.append((
+                distance_penalty + shape_penalty,
+                i, j, a_idx, b_idx, a_fraction, b_fraction,
+                shortcut_km, total,
+            ))
+
+    if not predicted:
+        return []
+    predicted.sort(key=lambda row: row[0])
+
+    start_coord = [float(start["lat"]), float(start["lon"])]
+    variants = []
+    # Usually the first pair is enough. A second render is allowed only if the
+    # matrix estimate and detailed Directions geometry disagree materially.
+    for row in predicted[:2]:
+        _score, _i, _j, a_idx, b_idx, a_fraction, b_fraction, matrix_shortcut_km, _predicted_total = row
         connector = ors.get_route([coords[a_idx], coords[b_idx]], _polyline_haversine)
         if not isinstance(connector, dict) or connector.get("fallback") is not False:
             continue
@@ -251,19 +281,20 @@ def _shortcut_oversized_loop(route, start, target_km: float, daily_min: float, d
         if not math.isfinite(connector_distance) or connector_distance <= 0:
             continue
 
-        retained_fraction = (
-            float(cumulative[a_idx]) + (geometric_total - float(cumulative[b_idx]))
-        ) / geometric_total
-        retained_distance = routed_total * max(0.0, min(1.0, retained_fraction))
+        retained_fraction = a_fraction + (1.0 - b_fraction)
+        retained_distance = routed_total * retained_fraction
         total = retained_distance + connector_distance
 
         prefix = coords[: a_idx + 1]
         suffix = coords[b_idx:]
         merged = _merge_coords(prefix, connector_coords[1:])
-        merged = _merge_coords(merged, suffix[1:] if suffix and merged and suffix[0] == merged[-1] else suffix)
+        if suffix:
+            merged = _merge_coords(
+                merged,
+                suffix[1:] if merged and suffix[0] == merged[-1] else suffix,
+            )
         if len(merged) < 16:
             continue
-        start_coord = [float(start["lat"]), float(start["lon"])]
         if _haversine(merged[0], start_coord) > 0.20 or _haversine(merged[-1], start_coord) > 0.20:
             continue
 
@@ -272,16 +303,18 @@ def _shortcut_oversized_loop(route, start, target_km: float, daily_min: float, d
             "coords": merged,
             "distance": round(total, 2),
             "fallback": False,
-            "routing_mode": "ors-loop-arc-shortcut",
+            "routing_mode": "ors-matrix-arc-shortcut",
             "profile": connector.get("profile") or route.get("profile") or ors.ORS_PROFILE,
             "provider": "OpenRouteService",
             "shortened_from_km": round(routed_total, 2),
             "shortcut_arc_start": round(a_fraction, 3),
             "shortcut_arc_end": round(b_fraction, 3),
+            "shortcut_matrix_km": round(matrix_shortcut_km, 2),
             "shortcut_connector_km": round(connector_distance, 2),
             "shortcut_retrace_ratio": round(retrace, 4),
+            "matrix_shortcut": True,
         })
-        if feasible_low * 0.90 <= total <= feasible_high + 0.35 and retrace <= 0.38:
+        if feasible_low * 0.90 <= total <= feasible_high + 0.35 and retrace <= 0.40:
             break
     return variants
 
@@ -432,55 +465,57 @@ def _best_roundtrip(start, target_km: float, daily_min: float, daily_max: float,
         feasible_high = float(daily_max) * max(days, 1)
         best_observed = min(rows, key=lambda row: abs(float(row[1].get("distance") or 0) - target_km))[1]
         observed = float(best_observed.get("distance") or 0)
-        if observed > 0 and (observed < feasible_low or observed > feasible_high):
+        # Calibration is useful when ORS undershoots. For oversized loops, the
+        # round-trip endpoint has repeatedly shown that smaller requested lengths
+        # can still return nearly the same large circuit. Go straight to the
+        # matrix shortcut instead of spending two more round-trip requests.
+        if observed > 0 and observed < feasible_low:
             correction = max(0.45, min(1.65, target_km / observed))
             calibrated = max(3.0, min(99.0, target_km * correction))
             if abs(calibrated - target_km) >= 2.0:
-                for seed in (7, 19):
-                    add_candidate(calibrated, seed)
+                add_candidate(calibrated, 7)
 
+        # Matrix-first recovery: compare dozens of on-network arc shortcuts in
+        # one request, then render at most two detailed connectors.
         if all(float(row[1].get("distance") or 0) > feasible_high + 0.35 for row in rows):
-            sources = sorted(
+            source = min(
                 rows,
                 key=lambda row: abs(float(row[1].get("distance") or 0) - target_km),
-            )[:2]
-            for _score, source in sources:
-                for variant in _shorten_oversized_loop(
-                    source, start, target_km, daily_min, daily_max, days, v3
-                ):
-                    distance = float(variant.get("distance") or 0)
-                    per_day = distance / max(days, 1)
-                    retrace = float(v3._route_retrace_ratio(variant.get("coords") or [])) if hasattr(v3, "_route_retrace_ratio") else 0.0
-                    range_penalty = max(0.0, daily_min - per_day) * 5 + max(0.0, per_day - daily_max) * 8
-                    rows.append((
-                        abs(distance - target_km) + range_penalty + retrace * 80,
-                        variant,
-                    ))
+            )[1]
+            for variant in _shortcut_oversized_loop(
+                source, start, target_km, daily_min, daily_max, days, v3
+            ):
+                distance = float(variant.get("distance") or 0)
+                per_day = distance / max(days, 1)
+                retrace = float(v3._route_retrace_ratio(variant.get("coords") or [])) if hasattr(v3, "_route_retrace_ratio") else 0.0
+                range_penalty = max(0.0, daily_min - per_day) * 5 + max(0.0, per_day - daily_max) * 8
+                rows.append((
+                    abs(distance - target_km) + range_penalty + retrace * 80,
+                    variant,
+                ))
 
-        # A more reliable second shortening strategy replaces an internal arc of
-        # the oversized ORS loop with another ORS pedestrian route. Its endpoints
-        # are guaranteed to lie on the existing network, unlike synthetic points.
+        # Keep the older cut-and-close recovery as a bounded fallback only when
+        # Matrix could not produce a feasible circuit.
         feasible_now = [
             row for row in rows
             if feasible_low * 0.90 <= float(row[1].get("distance") or 0) <= feasible_high + 0.35
         ]
         if not feasible_now:
-            sources = sorted(
+            source = min(
                 rows,
                 key=lambda row: abs(float(row[1].get("distance") or 0) - target_km),
-            )[:2]
-            for _score, source in sources:
-                for variant in _shortcut_oversized_loop(
-                    source, start, target_km, daily_min, daily_max, days, v3
-                ):
-                    distance = float(variant.get("distance") or 0)
-                    per_day = distance / max(days, 1)
-                    retrace = float(v3._route_retrace_ratio(variant.get("coords") or [])) if hasattr(v3, "_route_retrace_ratio") else 0.0
-                    range_penalty = max(0.0, daily_min - per_day) * 5 + max(0.0, per_day - daily_max) * 8
-                    rows.append((
-                        abs(distance - target_km) + range_penalty + retrace * 80,
-                        variant,
-                    ))
+            )[1]
+            for variant in _shorten_oversized_loop(
+                source, start, target_km, daily_min, daily_max, days, v3
+            ):
+                distance = float(variant.get("distance") or 0)
+                per_day = distance / max(days, 1)
+                retrace = float(v3._route_retrace_ratio(variant.get("coords") or [])) if hasattr(v3, "_route_retrace_ratio") else 0.0
+                range_penalty = max(0.0, daily_min - per_day) * 5 + max(0.0, per_day - daily_max) * 8
+                rows.append((
+                    abs(distance - target_km) + range_penalty + retrace * 80,
+                    variant,
+                ))
 
         # If even on-network arc shortcuts miss the requested window, try the
         # explicit waypoint fan as the last bounded routing fallback.
