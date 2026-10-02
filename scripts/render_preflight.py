@@ -65,6 +65,18 @@ def main() -> None:
     if trekbrain not in {"v8", "v9"}:
         fail(f"TREKBRAIN_VERSION invalide: {trekbrain!r}")
 
+    release_channel = os.getenv("TREKBRAIN_RELEASE_CHANNEL", "").strip()
+    if production and trekbrain != "v9":
+        fail(
+            "La production TrekMap est verrouillée sur TrekBrain v9. "
+            f"TREKBRAIN_VERSION={trekbrain!r} provoquerait un rollback silencieux."
+        )
+    if production and release_channel != "v9-stable":
+        fail(
+            "TREKBRAIN_RELEASE_CHANNEL doit valoir 'v9-stable' sur Render "
+            f"(valeur actuelle: {release_channel!r})."
+        )
+
     import backend.app_v5 as app_v5
 
     routes = [route.path for route in app_v5.app.routes]
@@ -89,6 +101,24 @@ def main() -> None:
             f"TrekBrain chargé en {app_v5.TREKBRAIN_VERSION!r} alors que "
             f"TREKBRAIN_VERSION={trekbrain!r}."
         )
+
+    if trekbrain == "v9":
+        status_route = next(
+            route
+            for route in app_v5.app.routes
+            if route.path == "/ai/status" and "GET" in (getattr(route, "methods", None) or set())
+        )
+        status = status_route.endpoint()
+        if not isinstance(status, dict):
+            fail("/ai/status ne renvoie pas un objet JSON exploitable.")
+        if status.get("release_channel") != "v9-stable":
+            fail(f"/ai/status n'annonce pas v9-stable: {status.get('release_channel')!r}")
+        if status.get("stability_gate") != "required":
+            fail(f"stability_gate invalide: {status.get('stability_gate')!r}")
+        if status.get("golden_prompt_count") != 5:
+            fail(f"golden_prompt_count invalide: {status.get('golden_prompt_count')!r}")
+        if not str(status.get("pipeline_version", "")).startswith("v9-explicit-"):
+            fail(f"pipeline_version v9 inattendue: {status.get('pipeline_version')!r}")
 
     print(
         "[Render preflight] OK | "

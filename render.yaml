@@ -27,6 +27,8 @@ services:
         value: gemini-3.8-flash
       - key: TREKBRAIN_VERSION
         value: v9
+      - key: TREKBRAIN_RELEASE_CHANNEL
+        value: v9-stable
       - key: TREKBRAIN_FREE_MODE
         value: "1"
       - key: TREKBRAIN_V9_RETRY_THRESHOLD

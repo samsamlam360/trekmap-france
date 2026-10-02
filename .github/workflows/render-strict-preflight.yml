@@ -40,6 +40,7 @@ jobs:
       FRONTEND_ORIGINS: https://trekmap-france.onrender.com
       ORS_API_KEY: ci-placeholder
       TREKBRAIN_VERSION: v9
+      TREKBRAIN_RELEASE_CHANNEL: v9-stable
       TREKBRAIN_FREE_MODE: '1'
       TREKBRAIN_V9_RETRY_THRESHOLD: '80'
       TREKBRAIN_GEMINI_AUDIT: '1'
@@ -127,6 +128,10 @@ jobs:
               'python scripts/render_preflight.py',
               '- key: PYTHON_VERSION',
               'value: 3.14.7',
+              '- key: TREKBRAIN_VERSION',
+              'value: v9',
+              '- key: TREKBRAIN_RELEASE_CHANNEL',
+              'value: v9-stable',
               'name: trekmap-france-db',
               'property: connectionString',
           ]
@@ -205,7 +210,11 @@ jobs:
           import json
           d=json.load(open('/tmp/ai-status.json',encoding='utf-8'))
           assert d.get('configured') is True, d
-          print('AI status:', d.get('model'), d.get('engine'))
+          assert d.get('release_channel') == 'v9-stable', d
+          assert d.get('stability_gate') == 'required', d
+          assert d.get('golden_prompt_count') == 5, d
+          assert str(d.get('pipeline_version', '')).startswith('v9-explicit-'), d
+          print('AI status:', d.get('model'), d.get('engine'), d.get('build_short'))
           PY
           curl -fsS http://127.0.0.1:10000/statistics >/tmp/statistics.json
           python -m json.tool /tmp/statistics.json >/dev/null
