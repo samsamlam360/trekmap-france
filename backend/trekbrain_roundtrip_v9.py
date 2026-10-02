@@ -81,6 +81,95 @@ def _merge_coords(prefix, connector):
     return merged
 
 
+def _destination(point, distance_km: float, bearing_deg: float):
+    """Destination point on a spherical Earth, returned as [lat, lon]."""
+    lat1 = math.radians(float(point[0]))
+    lon1 = math.radians(float(point[1]))
+    bearing = math.radians(float(bearing_deg))
+    angular = float(distance_km) / 6371.0088
+    sin_lat1, cos_lat1 = math.sin(lat1), math.cos(lat1)
+    sin_ang, cos_ang = math.sin(angular), math.cos(angular)
+    lat2 = math.asin(
+        sin_lat1 * cos_ang + cos_lat1 * sin_ang * math.cos(bearing)
+    )
+    lon2 = lon1 + math.atan2(
+        math.sin(bearing) * sin_ang * cos_lat1,
+        cos_ang - sin_lat1 * math.sin(lat2),
+    )
+    lon2 = (lon2 + 3 * math.pi) % (2 * math.pi) - math.pi
+    return [math.degrees(lat2), math.degrees(lon2)]
+
+
+def _polygon_loop_candidates(start, target_km: float, daily_min: float, daily_max: float, days: int, v3):
+    """Generate bounded waypoint loops and validate every metre through ORS.
+
+    ORS round_trip can overshoot its requested length badly on constrained path
+    networks. This fallback does not draw synthetic route geometry: it creates
+    only three *targets* around the departure, then asks the normal pedestrian
+    router to calculate the complete closed route through them.
+    """
+    start_coord = [float(start["lat"]), float(start["lon"])]
+    feasible_low = max(3.0, float(daily_min) * max(days, 1))
+    feasible_high = float(daily_max) * max(days, 1)
+    # A 3-point fan has a straight geometric perimeter of roughly 3.8*r.
+    # Dividing by ~5.5 leaves room for the normal network-vs-air inflation.
+    radius = max(2.0, min(18.0, float(target_km) / 5.6))
+    attempts = (
+        (90.0, 1.00),   # east-facing fan, useful on many western coasts
+        (180.0, 0.92),
+        (0.0, 0.92),
+        (270.0, 0.84),
+    )
+    variants = []
+    for orientation, scale in attempts:
+        r = radius * scale
+        bearings = (orientation - 55.0, orientation, orientation + 55.0)
+        targets = [_destination(start_coord, r, bearing) for bearing in bearings]
+        routed = ors.get_route(
+            [start_coord] + targets + [start_coord],
+            _polyline_haversine,
+        )
+        if not isinstance(routed, dict) or routed.get("fallback") is not False:
+            continue
+        coords = routed.get("coords") or []
+        if len(coords) < 4:
+            continue
+        try:
+            distance = float(routed.get("distance") or 0)
+        except (TypeError, ValueError):
+            continue
+        if not math.isfinite(distance) or distance <= 0:
+            continue
+        if _haversine(coords[-1], start_coord) > 0.15:
+            continue
+        retrace = float(v3._route_retrace_ratio(coords)) if hasattr(v3, "_route_retrace_ratio") else 0.0
+        if retrace > 0.52:
+            continue
+        # Keep a slightly wider lower bound here. The final selection still
+        # prioritises the normal requested window, while a near-feasible routed
+        # loop is more useful than falling back to a known 50–80 km overshoot.
+        if distance < feasible_low * 0.82 or distance > feasible_high * 1.08:
+            continue
+        candidate = dict(routed)
+        candidate.update({
+            "distance": round(distance, 2),
+            "fallback": False,
+            "routing_mode": "ors-waypoint-loop",
+            "profile": routed.get("profile") or ors.ORS_PROFILE,
+            "provider": "OpenRouteService",
+            "waypoint_loop": True,
+            "waypoint_orientation_deg": round(orientation, 1),
+            "waypoint_radius_km": round(r, 2),
+            "requested_total_km": round(float(target_km), 2),
+        })
+        variants.append(candidate)
+        if feasible_low * 0.90 <= distance <= feasible_high + 0.35:
+            # One genuinely feasible routed loop is enough to avoid wasting API
+            # budget. Candidate ranking will still compare it with other rows.
+            break
+    return variants
+
+
 def _shorten_oversized_loop(route, start, target_km: float, daily_min: float, daily_max: float, days: int, v3):
     """Shorten a validated ORS loop without inventing straight-line geometry."""
     coords = [
@@ -251,6 +340,27 @@ def _best_roundtrip(start, target_km: float, daily_min: float, daily_max: float,
                         abs(distance - target_km) + range_penalty + retrace * 80,
                         variant,
                     ))
+
+        # If the provider-generated loop and cut-and-close variants still miss
+        # the requested window, switch to explicit routed waypoints. This is the
+        # robust escape hatch for path networks where ORS round_trip consistently
+        # returns 40–70% too much distance.
+        feasible_now = [
+            row for row in rows
+            if feasible_low * 0.90 <= float(row[1].get("distance") or 0) <= feasible_high + 0.35
+        ]
+        if not feasible_now:
+            for variant in _polygon_loop_candidates(
+                start, target_km, daily_min, daily_max, days, v3
+            ):
+                distance = float(variant.get("distance") or 0)
+                per_day = distance / max(days, 1)
+                retrace = float(v3._route_retrace_ratio(variant.get("coords") or [])) if hasattr(v3, "_route_retrace_ratio") else 0.0
+                range_penalty = max(0.0, daily_min - per_day) * 5 + max(0.0, per_day - daily_max) * 8
+                rows.append((
+                    abs(distance - target_km) + range_penalty + retrace * 80,
+                    variant,
+                ))
 
     if not rows:
         detail = warnings[0] if warnings else "OpenRouteService n'a produit aucune boucle pédestre."

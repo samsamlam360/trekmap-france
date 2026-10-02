@@ -175,6 +175,33 @@ try:
 finally:
     roundtrip_v9.ors.get_route = old_get_route
 
+# Routed waypoint-loop regression: when provider round-trip length is unreliable,
+# the fallback must be able to create a closed candidate from routed waypoints.
+old_get_route = roundtrip_v9.ors.get_route
+try:
+    def fake_waypoint_route(points, distance_fn):
+        distance = float(distance_fn(points)) * 1.38
+        return {
+            "coords": [list(p) for p in points],
+            "distance": distance,
+            "fallback": False,
+            "routing_mode": "test-waypoint-routing",
+            "profile": "foot-hiking",
+        }
+
+    roundtrip_v9.ors.get_route = fake_waypoint_route
+    polygon = roundtrip_v9._polygon_loop_candidates(
+        {"lat": 48.0, "lon": 1.0}, 32.0, 12.0, 20.0, 2, v7.v5.v3
+    )
+    if not polygon:
+        failures.append("waypoint-loop regression: no routed candidate")
+    elif polygon[0].get("routing_mode") != "ors-waypoint-loop":
+        failures.append(f"waypoint-loop regression: bad mode {polygon[0]!r}")
+    elif roundtrip_v9._haversine(polygon[0]["coords"][0], polygon[0]["coords"][-1]) > 0.15:
+        failures.append("waypoint-loop regression: route is not closed")
+finally:
+    roundtrip_v9.ors.get_route = old_get_route
+
 # Candidate-selection regression: once a genuinely routed shortened loop is
 # available inside the distance window, a prettier but oversized ORS loop must
 # never win the final ranking.
