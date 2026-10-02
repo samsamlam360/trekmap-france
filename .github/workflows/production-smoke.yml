@@ -1,0 +1,99 @@
+name: TrekMap production smoke
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: trekmap-production-smoke
+  cancel-in-progress: true
+
+jobs:
+  production-smoke:
+    name: Verify deployed main commit
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+
+    steps:
+      - name: Wait for Render to publish this exact commit
+        shell: python
+        env:
+          EXPECTED_SHA: ${{ github.sha }}
+          BASE_URL: https://trekmap-france.onrender.com
+        run: |
+          import json
+          import os
+          import time
+          import urllib.error
+          import urllib.request
+
+          expected = os.environ["EXPECTED_SHA"].strip().lower()
+          base = os.environ["BASE_URL"].rstrip("/")
+          last = "aucune réponse"
+
+          for attempt in range(1, 31):
+              try:
+                  req = urllib.request.Request(
+                      base + "/ai/status",
+                      headers={"User-Agent": "TrekMap-production-smoke/1.0"},
+                  )
+                  with urllib.request.urlopen(req, timeout=20) as response:
+                      payload = json.load(response)
+                  build = str(payload.get("build_commit") or "").strip().lower()
+                  channel = payload.get("release_channel")
+                  pipeline = str(payload.get("pipeline_version") or "")
+                  last = f"HTTP 200 build={build[:10] or '?'} channel={channel} pipeline={pipeline}"
+                  if build == expected:
+                      print(f"Render sert le commit attendu après {attempt} tentative(s): {build[:10]}")
+                      break
+              except Exception as exc:
+                  last = f"{type(exc).__name__}: {exc}"
+              print(f"Tentative {attempt}/30: {last}")
+              time.sleep(10)
+          else:
+              raise SystemExit(
+                  "Render n'a pas publié le commit attendu dans la fenêtre de contrôle. "
+                  f"Attendu={expected[:10]}, dernier état={last}"
+              )
+
+          assert payload.get("release_channel") == "v9-stable", payload
+          assert payload.get("stability_gate") == "required", payload
+          assert payload.get("golden_prompt_count") == 5, payload
+          assert payload.get("field_scenario_count") == 40, payload
+          assert payload.get("field_suite") == "required", payload
+          assert pipeline.startswith("v9-explicit-"), payload
+
+      - name: Smoke public production endpoints
+        shell: python
+        env:
+          BASE_URL: https://trekmap-france.onrender.com
+        run: |
+          import json
+          import os
+          import urllib.request
+
+          base = os.environ["BASE_URL"].rstrip("/")
+          checks = [
+              ("/", "text"),
+              ("/health/ready", "json"),
+              ("/treks", "json"),
+              ("/ai/status", "json"),
+          ]
+
+          for path, kind in checks:
+              req = urllib.request.Request(
+                  base + path,
+                  headers={"User-Agent": "TrekMap-production-smoke/1.0"},
+              )
+              with urllib.request.urlopen(req, timeout=30) as response:
+                  body = response.read()
+                  if response.status != 200:
+                      raise SystemExit(f"{path}: HTTP {response.status}")
+                  if not body:
+                      raise SystemExit(f"{path}: réponse vide")
+                  if kind == "json":
+                      json.loads(body.decode("utf-8"))
+                  print(f"{path}: HTTP 200, {len(body)} octets")

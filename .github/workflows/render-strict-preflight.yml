@@ -213,6 +213,8 @@ jobs:
           assert d.get('release_channel') == 'v9-stable', d
           assert d.get('stability_gate') == 'required', d
           assert d.get('golden_prompt_count') == 5, d
+          assert d.get('field_scenario_count') == 40, d
+          assert d.get('field_suite') == 'required', d
           assert str(d.get('pipeline_version', '')).startswith('v9-explicit-'), d
           print('AI status:', d.get('model'), d.get('engine'), d.get('build_short'))
           PY
