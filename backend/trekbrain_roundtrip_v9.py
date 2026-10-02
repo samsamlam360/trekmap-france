@@ -169,6 +169,123 @@ def _polygon_loop_candidates(start, target_km: float, daily_min: float, daily_ma
     return variants
 
 
+def _shortcut_oversized_loop(route, start, target_km: float, daily_min: float, daily_max: float, days: int, v3):
+    """Replace one long arc of an oversized real loop by a routed shortcut.
+
+    Both shortcut endpoints are sampled *on the already validated ORS loop*.
+    This avoids the main weakness of synthetic waypoint generation: an invented
+    coordinate can be far from a routable footpath. The retained prefix, the
+    new connector and the retained suffix are all real routed geometry.
+    """
+    coords = [
+        [float(p[0]), float(p[1])]
+        for p in (route.get("coords") or [])
+        if isinstance(p, (list, tuple)) and len(p) >= 2
+    ]
+    if len(coords) < 24:
+        return []
+
+    try:
+        routed_total = float(route.get("distance") or 0)
+    except (TypeError, ValueError):
+        return []
+    if not math.isfinite(routed_total) or routed_total <= 0:
+        return []
+
+    feasible_low = max(3.0, float(daily_min) * max(days, 1))
+    feasible_high = float(daily_max) * max(days, 1)
+    if routed_total <= feasible_high + 0.35:
+        return []
+
+    cumulative = _cumulative(coords)
+    geometric_total = float(cumulative[-1] or 0)
+    if geometric_total <= 0:
+        return []
+
+    # Estimate how much of the original loop needs replacing. A network shortcut
+    # still has positive length, so the removed arc must be wider than the raw
+    # target reduction. Probe a few bounded spans around that estimate.
+    reduction_ratio = max(0.05, min(0.70, (routed_total - float(target_km)) / routed_total))
+    estimated_span = max(0.24, min(0.70, reduction_ratio / 0.66))
+    spans = []
+    for delta in (0.0, -0.09, 0.09, 0.16):
+        span = max(0.20, min(0.74, estimated_span + delta))
+        if all(abs(span - old) > 0.035 for old in spans):
+            spans.append(span)
+
+    variants = []
+    # Shift the removed arc slightly around the loop. Some apparent shortcuts
+    # are separated by rivers, cliffs or motorways and ORS must route around them.
+    centres = (0.50, 0.42, 0.58)
+    attempts = []
+    for span in spans:
+        for centre in centres:
+            a_fraction = centre - span / 2
+            b_fraction = centre + span / 2
+            if a_fraction < 0.08 or b_fraction > 0.92:
+                continue
+            key = (round(a_fraction, 3), round(b_fraction, 3))
+            if key not in attempts:
+                attempts.append(key)
+            if len(attempts) >= 7:
+                break
+        if len(attempts) >= 7:
+            break
+
+    for a_fraction, b_fraction in attempts:
+        a_idx = _route_index_for_progress(cumulative, geometric_total * a_fraction)
+        b_idx = _route_index_for_progress(cumulative, geometric_total * b_fraction)
+        if a_idx <= 1 or b_idx <= a_idx + 2 or b_idx >= len(coords) - 2:
+            continue
+
+        connector = ors.get_route([coords[a_idx], coords[b_idx]], _polyline_haversine)
+        if not isinstance(connector, dict) or connector.get("fallback") is not False:
+            continue
+        connector_coords = connector.get("coords") or []
+        if len(connector_coords) < 2:
+            continue
+        try:
+            connector_distance = float(connector.get("distance") or 0)
+        except (TypeError, ValueError):
+            continue
+        if not math.isfinite(connector_distance) or connector_distance <= 0:
+            continue
+
+        retained_fraction = (
+            float(cumulative[a_idx]) + (geometric_total - float(cumulative[b_idx]))
+        ) / geometric_total
+        retained_distance = routed_total * max(0.0, min(1.0, retained_fraction))
+        total = retained_distance + connector_distance
+
+        prefix = coords[: a_idx + 1]
+        suffix = coords[b_idx:]
+        merged = _merge_coords(prefix, connector_coords[1:])
+        merged = _merge_coords(merged, suffix[1:] if suffix and merged and suffix[0] == merged[-1] else suffix)
+        if len(merged) < 16:
+            continue
+        start_coord = [float(start["lat"]), float(start["lon"])]
+        if _haversine(merged[0], start_coord) > 0.20 or _haversine(merged[-1], start_coord) > 0.20:
+            continue
+
+        retrace = float(v3._route_retrace_ratio(merged)) if hasattr(v3, "_route_retrace_ratio") else 0.0
+        variants.append({
+            "coords": merged,
+            "distance": round(total, 2),
+            "fallback": False,
+            "routing_mode": "ors-loop-arc-shortcut",
+            "profile": connector.get("profile") or route.get("profile") or ors.ORS_PROFILE,
+            "provider": "OpenRouteService",
+            "shortened_from_km": round(routed_total, 2),
+            "shortcut_arc_start": round(a_fraction, 3),
+            "shortcut_arc_end": round(b_fraction, 3),
+            "shortcut_connector_km": round(connector_distance, 2),
+            "shortcut_retrace_ratio": round(retrace, 4),
+        })
+        if feasible_low * 0.90 <= total <= feasible_high + 0.35 and retrace <= 0.38:
+            break
+    return variants
+
+
 def _shorten_oversized_loop(route, start, target_km: float, daily_min: float, daily_max: float, days: int, v3):
     """Shorten a validated ORS loop without inventing straight-line geometry."""
     coords = [
@@ -340,10 +457,33 @@ def _best_roundtrip(start, target_km: float, daily_min: float, daily_max: float,
                         variant,
                     ))
 
-        # If the provider-generated loop and cut-and-close variants still miss
-        # the requested window, switch to explicit routed waypoints. This is the
-        # robust escape hatch for path networks where ORS round_trip consistently
-        # returns 40–70% too much distance.
+        # A more reliable second shortening strategy replaces an internal arc of
+        # the oversized ORS loop with another ORS pedestrian route. Its endpoints
+        # are guaranteed to lie on the existing network, unlike synthetic points.
+        feasible_now = [
+            row for row in rows
+            if feasible_low * 0.90 <= float(row[1].get("distance") or 0) <= feasible_high + 0.35
+        ]
+        if not feasible_now:
+            sources = sorted(
+                rows,
+                key=lambda row: abs(float(row[1].get("distance") or 0) - target_km),
+            )[:2]
+            for _score, source in sources:
+                for variant in _shortcut_oversized_loop(
+                    source, start, target_km, daily_min, daily_max, days, v3
+                ):
+                    distance = float(variant.get("distance") or 0)
+                    per_day = distance / max(days, 1)
+                    retrace = float(v3._route_retrace_ratio(variant.get("coords") or [])) if hasattr(v3, "_route_retrace_ratio") else 0.0
+                    range_penalty = max(0.0, daily_min - per_day) * 5 + max(0.0, per_day - daily_max) * 8
+                    rows.append((
+                        abs(distance - target_km) + range_penalty + retrace * 80,
+                        variant,
+                    ))
+
+        # If even on-network arc shortcuts miss the requested window, try the
+        # explicit waypoint fan as the last bounded routing fallback.
         feasible_now = [
             row for row in rows
             if feasible_low * 0.90 <= float(row[1].get("distance") or 0) <= feasible_high + 0.35

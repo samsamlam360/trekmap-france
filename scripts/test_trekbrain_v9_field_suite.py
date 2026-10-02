@@ -175,6 +175,43 @@ try:
 finally:
     roundtrip_v9.ors.get_route = old_get_route
 
+# Internal-arc shortcut regression: endpoints are sampled on the validated loop
+# and only the replacement connector is re-routed.
+old_get_route = roundtrip_v9.ors.get_route
+try:
+    def fake_arc_connector(points, distance_fn):
+        a, b = points
+        direct = float(distance_fn(points))
+        mid = [(a[0] + b[0]) / 2 + 0.002, (a[1] + b[1]) / 2]
+        return {
+            "coords": [list(a), mid, list(b)],
+            "distance": max(1.0, direct * 1.15),
+            "fallback": False,
+            "routing_mode": "test-arc-connector",
+            "profile": "foot-hiking",
+        }
+
+    roundtrip_v9.ors.get_route = fake_arc_connector
+    centre = {"lat": 48.0, "lon": 1.0}
+    ring = []
+    for n in range(145):
+        angle = 2 * math.pi * n / 144
+        ring.append([48.0 + 0.11 * math.sin(angle), 1.0 + 0.16 * math.cos(angle)])
+    oversized = {"coords": ring, "distance": 58.0, "fallback": False, "profile": "foot-hiking"}
+    shortcuts = roundtrip_v9._shortcut_oversized_loop(
+        oversized, centre, 36.0, 12.0, 20.0, 2, v7.v5.v3
+    )
+    if not shortcuts:
+        failures.append("arc-shortcut regression: no routed variant")
+    elif not all(x.get("routing_mode") == "ors-loop-arc-shortcut" for x in shortcuts):
+        failures.append(f"arc-shortcut regression: bad mode {shortcuts!r}")
+    elif not all(x.get("fallback") is False for x in shortcuts):
+        failures.append("arc-shortcut regression: diagnostic fallback accepted")
+    elif not any(float(x.get("distance") or 0) < 58.0 for x in shortcuts):
+        failures.append(f"arc-shortcut regression: loop was not shortened {shortcuts!r}")
+finally:
+    roundtrip_v9.ors.get_route = old_get_route
+
 # Routed waypoint-loop regression: when provider round-trip length is unreliable,
 # the fallback must be able to create a closed candidate from routed waypoints.
 old_get_route = roundtrip_v9.ors.get_route
