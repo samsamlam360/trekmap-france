@@ -255,8 +255,22 @@ def _best_roundtrip(start, target_km: float, daily_min: float, daily_max: float,
     if not rows:
         detail = warnings[0] if warnings else "OpenRouteService n'a produit aucune boucle pédestre."
         raise HTTPException(status_code=503, detail=detail)
-    rows.sort(key=lambda row: row[0])
-    return rows[0][1]
+
+    # Distance constraints are a hard feasibility gate, not merely one term in
+    # a soft score. A beautifully shaped 51 km loop must never beat a valid
+    # 35 km loop when the user asked for about 32 km. Score candidates only
+    # after preferring those that fit the requested multi-day distance window.
+    feasible_low = max(3.0, float(daily_min) * max(days, 1))
+    feasible_high = float(daily_max) * max(days, 1)
+    feasible = [
+        row for row in rows
+        if feasible_low * 0.90 <= float(row[1].get("distance") or 0) <= feasible_high + 0.35
+    ]
+    pool = feasible or rows
+    pool.sort(key=lambda row: row[0])
+    selected = pool[0][1]
+    selected["distance_window_preferred"] = bool(feasible)
+    return selected
 
 
 def _stay_key(stay: dict) -> str:

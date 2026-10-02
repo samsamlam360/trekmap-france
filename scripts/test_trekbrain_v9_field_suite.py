@@ -175,6 +175,39 @@ try:
 finally:
     roundtrip_v9.ors.get_route = old_get_route
 
+# Candidate-selection regression: once a genuinely routed shortened loop is
+# available inside the distance window, a prettier but oversized ORS loop must
+# never win the final ranking.
+old_roundtrip_request = roundtrip_v9._roundtrip_request
+old_shortener = roundtrip_v9._shorten_oversized_loop
+try:
+    def fake_roundtrip_request(start, requested_km, seed):
+        return {
+            "coords": [[48.0, 1.0], [48.1, 1.1], [48.0, 1.2], [48.0, 1.0]],
+            "distance": 52.0,
+            "fallback": False,
+            "routing_mode": "test-oversized",
+        }, None
+
+    def fake_shortener(route, start, target_km, daily_min, daily_max, days, v3):
+        return [{
+            "coords": [[48.0, 1.0], [48.08, 1.08], [48.02, 1.16], [48.0, 1.0]],
+            "distance": 34.0,
+            "fallback": False,
+            "routing_mode": "test-shortened",
+        }]
+
+    roundtrip_v9._roundtrip_request = fake_roundtrip_request
+    roundtrip_v9._shorten_oversized_loop = fake_shortener
+    selected = roundtrip_v9._best_roundtrip(
+        {"lat": 48.0, "lon": 1.0}, 32.0, 12.0, 20.0, 2, v7.v5.v3
+    )
+    if selected.get("routing_mode") != "test-shortened" or float(selected.get("distance") or 0) != 34.0:
+        failures.append(f"round-trip feasibility selection regression: {selected!r}")
+finally:
+    roundtrip_v9._roundtrip_request = old_roundtrip_request
+    roundtrip_v9._shorten_oversized_loop = old_shortener
+
 if failures:
     raise AssertionError("TrekBrain v9 field suite failed:\\n- " + "\\n- ".join(failures))
 
