@@ -114,17 +114,39 @@ def _best_roundtrip(start, target_km: float, daily_min: float, daily_max: float,
         )
     rows = []
     warnings = []
-    for seed in (3, 11, 29):
-        route, warning = _roundtrip_request(start, target_km, seed)
+
+    def add_candidate(requested_km: float, seed: int):
+        route, warning = _roundtrip_request(start, requested_km, seed)
         if route is None:
             if warning:
                 warnings.append(warning)
-            continue
+            return
         distance = float(route.get("distance") or 0)
         per_day = distance / max(days, 1)
         retrace = float(v3._route_retrace_ratio(route.get("coords") or [])) if hasattr(v3, "_route_retrace_ratio") else 0.0
         range_penalty = max(0.0, daily_min - per_day) * 5 + max(0.0, per_day - daily_max) * 8
+        route["round_trip_requested_km"] = round(float(requested_km), 2)
         rows.append((abs(distance - target_km) + range_penalty + retrace * 80, route))
+
+    for seed in (3, 11, 29):
+        add_candidate(target_km, seed)
+
+    # ORS round-trip length is a routing objective, not a guaranteed output.
+    # Mountain networks can overshoot it strongly. If all first attempts sit
+    # outside the feasible total range, calibrate one bounded second pass from
+    # the observed provider ratio rather than rejecting an otherwise valid loop.
+    if rows:
+        feasible_low = max(3.0, float(daily_min) * max(days, 1))
+        feasible_high = float(daily_max) * max(days, 1)
+        best_observed = min(rows, key=lambda row: abs(float(row[1].get("distance") or 0) - target_km))[1]
+        observed = float(best_observed.get("distance") or 0)
+        if observed > 0 and (observed < feasible_low or observed > feasible_high):
+            correction = max(0.45, min(1.65, target_km / observed))
+            calibrated = max(3.0, min(99.0, target_km * correction))
+            if abs(calibrated - target_km) >= 2.0:
+                for seed in (7, 19):
+                    add_candidate(calibrated, seed)
+
     if not rows:
         detail = warnings[0] if warnings else "OpenRouteService n'a produit aucune boucle pédestre."
         raise HTTPException(status_code=503, detail=detail)

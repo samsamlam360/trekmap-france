@@ -125,6 +125,10 @@ TYPO_VOCAB = {
     "village", "villages", "patrimoine", "nature", "sauvage", "tranquille",
     "difficile", "sportif", "facile", "denivele", "ravitaillement", "gare",
     "train", "transport", "depart", "arrivee", "kilometres", "jours",
+    # Valid French verbs around route constraints. Without these exclusions the
+    # fuzzy corrector can turn "ne pas traverser la baie" into "traversee",
+    # which falsely changes a clearly requested loop into a point-to-point trek.
+    "traverser", "traverse", "traversant",
 }
 
 

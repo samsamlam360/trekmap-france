@@ -20,6 +20,8 @@ os.environ.setdefault("ORS_API_KEY", "ci-placeholder")
 
 from backend import smart_planner_v7 as v7  # noqa: E402
 from backend import trekbrain_request_v9 as request_v9  # noqa: E402
+from backend.language_engine import normalize_for_planner  # noqa: E402
+from backend.trekbrain_pipeline_core_v9 import _rebalance_stage_count  # noqa: E402
 from backend.free_planner_v2 import AIPlanRequest  # noqa: E402
 from backend.trekbrain_field_contract_v9 import FIELD_SCENARIOS, FIELD_SCENARIO_COUNT  # noqa: E402
 
@@ -105,6 +107,38 @@ finally:
 
 if FIELD_SCENARIO_COUNT != 40:
     failures.append(f"field scenario count changed unexpectedly: {FIELD_SCENARIO_COUNT}")
+
+# Language regression: a terrain constraint using the verb "traverser" is not
+# a request for a route type "Traversée".
+normalized, _ = normalize_for_planner(
+    "Boucle autour du Mont-Saint-Michel. Je ne veux pas traverser la baie à pied."
+)
+if "traversee" in normalized:
+    failures.append(f"language regression: traverser became route-shape noun: {normalized!r}")
+
+# Stage-count regression: a validated two-stage geometry can safely be exposed
+# as three requested hiking days without redrawing the route.
+fake = {
+    "start": {"name": "Tours", "lat": 47.39, "lon": 0.68},
+    "end": {"name": "Chinon", "lat": 47.17, "lon": 0.24},
+    "stages": [
+        {"day": 1, "distance_km": 24.0},
+        {"day": 2, "distance_km": 25.0},
+    ],
+    "route_preview": {
+        "fallback": False,
+        "distance_km": 49.0,
+        "coords": [
+            [47.39, 0.68], [47.34, 0.58], [47.29, 0.48],
+            [47.24, 0.37], [47.17, 0.24],
+        ],
+    },
+    "accommodations": [],
+    "advisor_notes": [],
+}
+_rebalance_stage_count(fake, {"days": 3})
+if len(fake.get("stages") or []) != 3 or fake.get("duration_days") != 3:
+    failures.append(f"stage rebalance regression: {fake.get('stages')!r}")
 
 if failures:
     raise AssertionError("TrekBrain v9 field suite failed:\\n- " + "\\n- ".join(failures))

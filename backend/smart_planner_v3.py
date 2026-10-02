@@ -811,9 +811,18 @@ def _build(data: AIPlanRequest, legacy_main):
 
     # Do not knowingly return a trek that violates the requested daily mileage.
     # Humans asked for 20 km, not "20 km except when the optimiser feels artistic".
+    minimum_total = max(3.0, float(intent["total_target"]) * 0.68)
     acceptable = [
         row for row in evaluated
-        if row[6] and max(row[6]) <= intent["daily_max"] + 0.25 and (_fold(intent.get("route_type") or "") != "boucle" or _route_retrace_ratio(row[7]) <= 0.32)
+        if (
+            row[6]
+            and max(row[6]) <= intent["daily_max"] + 0.25
+            and float(row[5]) >= minimum_total
+            and (
+                _fold(intent.get("route_type") or "") != "boucle"
+                or _route_retrace_ratio(row[7]) <= 0.32
+            )
+        )
     ]
     if acceptable:
         evaluated = acceptable

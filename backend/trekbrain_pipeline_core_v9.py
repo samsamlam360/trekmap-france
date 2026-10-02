@@ -20,6 +20,7 @@ production installer chain.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+import math
 from typing import Any, Callable
 
 from fastapi import HTTPException
@@ -87,6 +88,136 @@ def _build_backbone(
 
     state.phases.append("route:generic")
     return base_build(state.route_data, legacy_main)
+
+
+def _haversine(a, b) -> float:
+    lat1, lon1, lat2, lon2 = map(
+        math.radians,
+        (float(a[0]), float(a[1]), float(b[0]), float(b[1])),
+    )
+    dlat, dlon = lat2 - lat1, lon2 - lon1
+    h = math.sin(dlat / 2) ** 2 + math.cos(lat1) * math.cos(lat2) * math.sin(dlon / 2) ** 2
+    return 6371.0088 * 2 * math.asin(min(1.0, math.sqrt(max(0.0, h))))
+
+
+def _rebalance_stage_count(result: dict[str, Any], intent: dict[str, Any]) -> dict[str, Any]:
+    """Split one validated route into the exact requested number of hiking days.
+
+    The route geometry is never redrawn here. We only place stage boundaries on
+    the existing pedestrian polyline at equal cumulative progress. This is the
+    safe recovery for point-to-point routes where POI discovery found too few
+    suitable overnight boundary objects even though the route itself is valid.
+    """
+    requested = max(1, int((intent or {}).get("days") or 1))
+    stages = result.get("stages") or []
+    if len(stages) == requested:
+        return result
+
+    route = result.get("route_preview") or {}
+    coords = route.get("coords") or []
+    if route.get("fallback") is not False or len(coords) < requested + 1:
+        return result
+
+    clean = []
+    for point in coords:
+        if not isinstance(point, (list, tuple)) or len(point) < 2:
+            continue
+        try:
+            lat, lon = float(point[0]), float(point[1])
+        except (TypeError, ValueError):
+            continue
+        if math.isfinite(lat) and math.isfinite(lon) and -90 <= lat <= 90 and -180 <= lon <= 180:
+            if not clean or [lat, lon] != clean[-1]:
+                clean.append([lat, lon])
+    if len(clean) < requested + 1:
+        return result
+
+    cumulative = [0.0]
+    for a, b in zip(clean, clean[1:]):
+        cumulative.append(cumulative[-1] + _haversine(a, b))
+    geometric_total = cumulative[-1]
+    if geometric_total <= 0:
+        return result
+
+    indices = [0]
+    floor = 1
+    for day in range(1, requested):
+        target = geometric_total * day / requested
+        if floor >= len(clean) - 1:
+            return result
+        idx = min(range(floor, len(clean) - 1), key=lambda i: abs(cumulative[i] - target))
+        indices.append(idx)
+        floor = idx + 1
+    indices.append(len(clean) - 1)
+
+    try:
+        routed_total = float(route.get("distance_km") or route.get("distance") or geometric_total)
+    except (TypeError, ValueError):
+        routed_total = geometric_total
+    if not math.isfinite(routed_total) or routed_total <= 0:
+        routed_total = geometric_total
+    scale = routed_total / geometric_total
+
+    accommodations = [x for x in (result.get("accommodations") or []) if isinstance(x, dict)]
+    original = [x for x in stages if isinstance(x, dict)]
+    rebuilt = []
+    for day in range(requested):
+        a_idx, b_idx = indices[day], indices[day + 1]
+        a_coord, b_coord = clean[a_idx], clean[b_idx]
+        distance = max(0.1, (cumulative[b_idx] - cumulative[a_idx]) * scale)
+        template = original[min(day, len(original) - 1)] if original else {}
+
+        from_name = (
+            str((result.get("start") or {}).get("name") or "Départ")
+            if day == 0 else f"Repère jour {day}"
+        )
+        to_name = (
+            str((result.get("end") or {}).get("name") or "Arrivée")
+            if day == requested - 1 else f"Repère jour {day + 1}"
+        )
+        overnight = "Fin du trek"
+        if day < requested - 1:
+            overnight = "Nuitée à confirmer près du repère d'étape"
+            if accommodations:
+                nearest = min(
+                    accommodations,
+                    key=lambda stay: _haversine(
+                        b_coord,
+                        [float(stay.get("lat") or 0), float(stay.get("lon") or 0)],
+                    ),
+                )
+                try:
+                    if _haversine(b_coord, [float(nearest["lat"]), float(nearest["lon"])]) <= 6.2:
+                        overnight = str(nearest.get("name") or overnight)
+                except (KeyError, TypeError, ValueError):
+                    pass
+
+        rebuilt.append({
+            **template,
+            "day": day + 1,
+            "name": f"Jour {day + 1}",
+            "title": f"{from_name} → {to_name}",
+            "from_name": from_name,
+            "to_name": to_name,
+            "distance_km": round(distance, 1),
+            "overnight": overnight,
+            "stage_anchor": {"lat": b_coord[0], "lon": b_coord[1]} if day < requested - 1 else None,
+        })
+
+    result["stages"] = rebuilt
+    result["duration_days"] = requested
+    planner = result.setdefault("planner", {})
+    if isinstance(planner, dict):
+        planner["stage_rebalanced"] = True
+        planner["stage_rebalanced_from"] = len(stages)
+    notes = result.setdefault("advisor_notes", [])
+    note = (
+        f"🧭 Les {requested} journées ont été rééquilibrées le long du tracé pédestre "
+        "validé afin de respecter la durée demandée sans modifier la géométrie."
+    )
+    if isinstance(notes, list) and note not in notes:
+        notes.append(note)
+    return result
 
 
 def _mark_pipeline(result: dict[str, Any], state: PlanningState) -> dict[str, Any]:
@@ -223,6 +354,9 @@ def install_planning_pipeline(
                     exc,
                 )
 
+        result = _rebalance_stage_count(result, state.intent)
+        if (result.get("planner") or {}).get("stage_rebalanced"):
+            state.phases.append("stages:rebalanced")
         state.phases.append("finalize")
         return _mark_pipeline(result, state)
 
@@ -234,4 +368,5 @@ __all__ = [
     "PlanningState",
     "install_planning_pipeline",
     "_build_backbone",
+    "_rebalance_stage_count",
 ]
