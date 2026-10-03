@@ -67,6 +67,47 @@ assert plan["transport"]["outbound_point"]["name"] == "Gare du départ"
 assert plan["transport"]["return_point"]["name"] == "Arrêt de bus arrivée"
 assert plan["trail_context"]["near_route"][0]["name"] == "GR Test"
 
+
+# The final resource overlay must not duplicate water or normal route-first
+# lodging discovery. Food and transport remain active because they are not
+# guaranteed by the lodging layer.
+from backend import trekbrain_resources_v9 as resources_module
+from backend.free_planner_v2 import AIPlanRequest
+
+captured_post_intent = {}
+real_postroute_resources = resources_module.v7.v5.v3._postroute_corridor_resources
+
+def fake_postroute_resources(boundaries, intent, existing_items):
+    captured_post_intent.update(dict(intent))
+    return []
+
+resources_module.v7.v5.v3._postroute_corridor_resources = fake_postroute_resources
+try:
+    dedupe_plan = sample_plan()
+    dedupe_plan["logistics"] = {"status": "partial"}
+    dedupe_request = AIPlanRequest(
+        prompt=(
+            "Boucle de 2 jours avec eau, ravitaillement, hébergement "
+            "et transports utiles."
+        ),
+        region="Zone test",
+        days=2,
+        daily_km=18,
+        route_type="Boucle",
+        require_transit=True,
+        require_water=True,
+        require_accommodation=True,
+        require_food=True,
+    )
+    resources_module._supplement_route_resources(dedupe_plan, dedupe_request)
+finally:
+    resources_module.v7.v5.v3._postroute_corridor_resources = real_postroute_resources
+
+assert captured_post_intent.get("water") is False, captured_post_intent
+assert captured_post_intent.get("sleep") is False, captured_post_intent
+assert captured_post_intent.get("food") is True, captured_post_intent
+assert captured_post_intent.get("transit") is True, captured_post_intent
+
 # Production regression: /ai/plan must accept the planner model as JSON body,
 # never as a query parameter named `data`.
 from backend import app_v5
