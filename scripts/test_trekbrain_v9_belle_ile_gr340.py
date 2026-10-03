@@ -158,6 +158,61 @@ assert concurrent_route is not None
 assert concurrent_route["gr340_source"] == "osm-api-relation-full"
 assert concurrent_route["relation_ref"] == "GR 340"
 
+
+# Production outage regression: if every direct OSM/Overpass domain is slow,
+# the independent OSM-derived GPX mirror may recover the same GR 340. The GPX
+# is converted into the normal relation shape and still passes all geometry
+# checks before it can be accepted.
+def synthetic_gpx():
+    rows = []
+    for member in rectangle_members():
+        for point in member["geometry"]:
+            rows.append(
+                f'<trkpt lat="{point["lat"]}" lon="{point["lon"]}"></trkpt>'
+            )
+    return (
+        '<?xml version="1.0" encoding="UTF-8"?>'
+        '<gpx version="1.1" xmlns="http://www.topografix.com/GPX/1/1">'
+        '<trk><name>GR 340</name><trkseg>' + ''.join(rows) + '</trkseg></trk></gpx>'
+    )
+
+parsed_gpx = belle._relation_from_gpx(synthetic_gpx())
+assert parsed_gpx is not None
+assert parsed_gpx["id"] == belle._GR340_RELATION_ID
+assert parsed_gpx["tags"]["ref"] == "GR 340"
+assert len(parsed_gpx["members"][0]["geometry"]) >= 8
+
+real_overpass_source = belle._overpass_relation
+real_secondary_source = belle._secondary_overpass_relation
+real_tertiary_source = belle._tertiary_overpass_relation
+real_direct_source = belle._direct_osm_relation
+real_gpx_source = belle._gpx_mirror_relation
+belle._DIRECT_CACHE = None
+belle._GPX_CACHE = None
+belle._overpass_relation = lambda _v3: (None, "primary timeout")
+belle._secondary_overpass_relation = lambda: (None, "secondary timeout")
+belle._tertiary_overpass_relation = lambda: (None, "tertiary timeout")
+belle._direct_osm_relation = lambda: (None, "direct timeout")
+belle._gpx_mirror_relation = lambda: (parsed_gpx, None)
+start_gpx = {"name": "Belle-Île-en-Mer", "lat": 47.31, "lon": -3.20, "category": "place"}
+try:
+    gpx_route, gpx_warning = belle._targeted_gr340(
+        SimpleNamespace(), gr, rescue, start_gpx, 90.0
+    )
+finally:
+    belle._overpass_relation = real_overpass_source
+    belle._secondary_overpass_relation = real_secondary_source
+    belle._tertiary_overpass_relation = real_tertiary_source
+    belle._direct_osm_relation = real_direct_source
+    belle._gpx_mirror_relation = real_gpx_source
+
+assert gpx_warning is None, gpx_warning
+assert gpx_route is not None
+assert gpx_route["relation_ref"] == "GR 340"
+assert gpx_route["gr340_source"] == "osm-gpx-mirror"
+assert gpx_route["fallback"] is False
+assert gpx_route["coords"][0] == gpx_route["coords"][-1]
+
 # Installing the priority wrapper must bypass a generic ORS round-trip whenever
 # the targeted OSM relation is available.
 generic_calls = []
