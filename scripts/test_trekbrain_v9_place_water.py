@@ -9,6 +9,7 @@ if str(ROOT) not in sys.path:
 from backend.free_planner_v2 import AIPlanRequest
 from backend.trekbrain_place_guard_v9 import guarded_geocode_factory, install_place_guard
 from backend.trekbrain_water_discovery_v9 import discover_water_points
+from backend import trekbrain_water_discovery_v9 as water_discovery
 from backend import trekbrain_resources_v9 as resources
 from backend import trekbrain_request_v9 as request_v9
 from backend import trekbrain_geo_safety_v9 as geo_safety
@@ -181,5 +182,40 @@ enriched = resources.enrich_resources(plan)
 assert enriched["route_preview"]["coords"] == before
 map_water = [x for x in enriched["map_resources"]["points"] if x.get("kind") == "water"]
 assert map_water and map_water[0]["name"] == "Fontaine du test"
+
+# When the final resource overlay already performed the compact parallel OSM
+# terrain lookup, the water wrapper must reuse those points and must not open a
+# second Overpass request.
+from types import SimpleNamespace
+
+preloaded_calls = {"discover": 0}
+real_discover = water_discovery.discover_water_points
+real_installed = water_discovery._INSTALLED
+dummy_resources = SimpleNamespace(enrich_resources=lambda result: result)
+try:
+    def forbidden_discover(v3, result):
+        preloaded_calls["discover"] += 1
+        raise AssertionError("preloaded terrain must skip duplicate water discovery")
+
+    water_discovery.discover_water_points = forbidden_discover
+    water_discovery._INSTALLED = False
+    water_discovery.install_water_discovery(WaterV3, dummy_resources)
+    preloaded = dummy_resources.enrich_resources({
+        "_terrain_osm_preloaded": True,
+        "water": [{
+            "name": "Fontaine préchargée",
+            "lat": 47.334,
+            "lon": -3.184,
+            "status": "potable_referenced",
+        }],
+        "route_preview": {"coords": route_coords, "fallback": False},
+    })
+finally:
+    water_discovery.discover_water_points = real_discover
+    water_discovery._INSTALLED = real_installed
+
+assert preloaded_calls["discover"] == 0, preloaded_calls
+assert preloaded["water"][0]["name"] == "Fontaine préchargée", preloaded
+assert preloaded["map_resources"]["water_discovery"] == "post-route-parallel-osm", preloaded
 
 print("Belle-Île loop intent + island preview + water discovery: OK")
