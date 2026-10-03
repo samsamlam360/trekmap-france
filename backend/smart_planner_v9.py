@@ -562,6 +562,10 @@ def install_smart_planner(app, legacy_main):
         except RuntimeError as exc:
             raise HTTPException(status_code=503, detail=str(exc)) from exc
         except Exception as exc:
+            print(
+                f"[TrekBrain v9][internal-error] {type(exc).__name__}: {exc}",
+                flush=True,
+            )
             raise HTTPException(status_code=500, detail="TrekBrain v9 n'a pas réussi à construire un plan suffisamment fiable. Précise la zone ou assouplis une contrainte importante.") from exc
 
     @app.post("/ai/feedback")
