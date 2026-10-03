@@ -316,8 +316,8 @@ def install_fast_planning(v3, v5, v9) -> None:
     #    and then be repeated for snapped/segmented variants. Cap the interactive
     #    calls while retaining the exact same response validation.
     # ------------------------------------------------------------------
-    ors_timeout = _env_seconds("TREKBRAIN_ORS_TIMEOUT_SECONDS", 5.5, 3.0, 12.0)
-    matrix_timeout = _env_seconds("TREKBRAIN_MATRIX_TIMEOUT_SECONDS", 5.0, 3.0, 12.0)
+    ors_timeout = _env_seconds("TREKBRAIN_ORS_TIMEOUT_SECONDS", 7.0, 3.0, 14.0)
+    matrix_timeout = _env_seconds("TREKBRAIN_MATRIX_TIMEOUT_SECONDS", 7.0, 3.0, 14.0)
 
     def fast_request_route(coords, distance_gps, snap_radius_m=None):
         payload = {
@@ -452,23 +452,17 @@ def install_fast_planning(v3, v5, v9) -> None:
             candidate["round_trip_requested_km"] = round(requested_km, 2)
             candidate["round_trip_target_km"] = round(float(target_km), 2)
             rows.append((score, candidate))
-            # A soft ~km/day request already accepts roughly +/-25%. If the
-            # first *validated* ORS loop lands inside that real product window,
-            # stop here. Previously Mont-Saint-Michel could be accepted later at
-            # 20.4 km/day but still paid for another ORS recovery because this
-            # early gate insisted on <=20.0 km/day.
-            target_per_day = float(target_km) / max(int(days), 1)
-            soft_window = float(daily_max) >= target_per_day * 1.20 - 0.05
-            accepted_high = float(daily_max) + (0.75 if soft_window else 0.35)
-            accepted_low = max(3.0, float(daily_min) * 0.90)
+            # Stop after one ORS call only when the route is already close to
+            # the requested target, not merely inside the broad +/-25% safety
+            # tolerance. The broad window is useful for feasibility, but using it
+            # as an early-exit criterion degraded Vercors from ~15.1 to ~18.7
+            # km/day even though the corrective second call produced a much
+            # better loop.
             if (
-                accepted_low <= per_day <= accepted_high
+                daily_min <= per_day <= daily_max
                 and retrace <= 0.25
+                and abs(distance - target_km) <= max(4.0, target_km * 0.12)
             ):
-                candidate["fast_accept_window"] = {
-                    "low_km_day": round(accepted_low, 2),
-                    "high_km_day": round(accepted_high, 2),
-                }
                 return candidate
 
             # Keep the same two-call budget, but make the second call corrective.
