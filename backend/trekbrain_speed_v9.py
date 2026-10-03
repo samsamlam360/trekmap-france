@@ -477,8 +477,45 @@ def install_fast_planning(v3, v5, v9) -> None:
             from fastapi import HTTPException
             detail = warnings[0] if warnings else "OpenRouteService n'a produit aucune boucle pédestre."
             raise HTTPException(status_code=503, detail=detail)
+
         rows.sort(key=lambda row: row[0])
-        return rows[0][1]
+        best = rows[0][1]
+        best_distance = float(best.get("distance") or 0)
+        material_gap = max(5.0, float(target_km) * 0.18)
+
+        # ORS can occasionally return one oversized family, then fail the
+        # calibrated retry. Keep normal requests at one or two calls, but allow
+        # one final seed-diverse attempt only when the best real route is still
+        # materially far from the requested loop length.
+        if abs(best_distance - float(target_km)) > material_gap:
+            route, warning = roundtrip._roundtrip_request(start, requested_km, 29)
+            if route is None:
+                if warning:
+                    warnings.append(warning)
+            else:
+                distance = float(route.get("distance") or 0)
+                per_day = distance / max(int(days), 1)
+                retrace = (
+                    float(v3_module._route_retrace_ratio(route.get("coords") or []))
+                    if hasattr(v3_module, "_route_retrace_ratio") else 0.0
+                )
+                range_penalty = (
+                    max(0.0, daily_min - per_day) * 5
+                    + max(0.0, per_day - daily_max) * 8
+                )
+                candidate = dict(route)
+                candidate["round_trip_requested_km"] = round(requested_km, 2)
+                candidate["round_trip_target_km"] = round(float(target_km), 2)
+                candidate["round_trip_stability_retry"] = True
+                rows.append((
+                    abs(distance - target_km) + range_penalty + retrace * 80,
+                    candidate,
+                ))
+
+        rows.sort(key=lambda row: row[0])
+        selected = rows[0][1]
+        selected["round_trip_candidates_tried"] = len(rows)
+        return selected
 
     v3._beam_candidates = beam_candidates
     v5._candidate_prompts = candidate_prompts
