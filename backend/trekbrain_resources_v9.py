@@ -26,6 +26,7 @@ from .trekbrain_geo_safety_v9 import (
 
 RESOURCE_LIMITS = {
     "water": 2.8,
+    "food": 4.5,
     "camping": 4.0,
     "refuge": 4.0,
     "station": 12.0,
@@ -100,6 +101,8 @@ def _resource_kind(item: dict[str, Any], fallback: str = "") -> str:
     raw = f"{item.get('type') or ''} {item.get('category') or ''} {item.get('name') or ''} {fallback}".casefold()
     if fallback == "water" or any(x in raw for x in ("eau", "fontaine", "source")):
         return "water"
+    if fallback == "food" or any(x in raw for x in ("ravitail", "boulanger", "epicer", "épicer", "supermarch", "convenience", "bakery")):
+        return "food"
     if any(x in raw for x in ("camping", "camp_site", "caravan_site", "campement")):
         return "camping"
     if any(x in raw for x in ("refuge", "abri", "gîte", "gite", "hut")):
@@ -122,11 +125,20 @@ def _candidate_resources(result: dict[str, Any]) -> list[dict[str, Any]]:
         if isinstance(a, dict):
             kind = _resource_kind(a, "refuge")
             items.append({**a, "kind": kind, "notes": a.get("notes") or "Ouverture et disponibilité à vérifier."})
+    food_rows = result.get("resources") or result.get("food") or []
+    for resource in food_rows:
+        if isinstance(resource, dict):
+            items.append({
+                **resource,
+                "kind": "food",
+                "type": resource.get("type") or "Ravitaillement",
+                "notes": resource.get("notes") or "Horaires et disponibilité à vérifier.",
+            })
     for p in result.get("points_of_interest") or []:
         if not isinstance(p, dict):
             continue
         kind = _resource_kind(p)
-        if kind in {"station", "transport", "trail"}:
+        if kind in {"food", "station", "transport", "trail"}:
             items.append({**p, "kind": kind, "notes": p.get("notes") or "Donnée cartographique ; conditions actuelles à vérifier."})
     return items
 
@@ -166,12 +178,12 @@ def enrich_resources(result: dict[str, Any]) -> dict[str, Any]:
             "source_url": str(item.get("source_url") or "")[:1000],
         })
 
-    priority = {"water": 0, "camping": 1, "refuge": 2, "station": 3, "transport": 4, "trail": 5}
+    priority = {"water": 0, "food": 1, "camping": 2, "refuge": 3, "station": 4, "transport": 5, "trail": 6}
     prepared.sort(key=lambda x: (x["route_day"], priority.get(x["kind"], 9), x["distance_to_route_km"], x["name"]))
 
     # Avoid a carpet of icons: keep the closest few of each category per day.
     limited, buckets = [], {}
-    per_day_caps = {"water": 3, "camping": 2, "refuge": 2, "station": 2, "transport": 3, "trail": 2}
+    per_day_caps = {"water": 3, "food": 3, "camping": 2, "refuge": 2, "station": 2, "transport": 3, "trail": 2}
     for item in prepared:
         bucket = (item["route_day"], item["kind"])
         count = buckets.get(bucket, 0)
@@ -182,7 +194,7 @@ def enrich_resources(result: dict[str, Any]) -> dict[str, Any]:
         if len(limited) >= 48:
             break
 
-    counts = {k: 0 for k in ("water", "camping", "refuge", "station", "transport", "trail")}
+    counts = {k: 0 for k in ("water", "food", "camping", "refuge", "station", "transport", "trail")}
     for item in limited:
         if item["kind"] in counts:
             counts[item["kind"]] += 1
