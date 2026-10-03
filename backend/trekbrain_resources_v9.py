@@ -27,7 +27,7 @@ from .trekbrain_geo_safety_v9 import (
 
 RESOURCE_LIMITS = {
     "water": 2.8,
-    "food": 4.5,
+    "food": 7.0,
     "camping": 4.0,
     "refuge": 4.0,
     "lodging": 6.2,
