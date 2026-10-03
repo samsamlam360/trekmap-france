@@ -258,6 +258,29 @@ try:
 finally:
     roundtrip_v9.ors.get_route = old_get_route
 
+# Closed-loop stage regression: plain equal-progress anchors must not be
+# re-matched by geographic proximity on a self-crossing loop.
+class _FakeLegacy:
+    @staticmethod
+    def distance_gps(coords):
+        return 999.0  # would expose accidental use of the old proximity split
+
+plain_stage_distances = roundtrip_v9._roundtrip_stage_distances(
+    [[48.0, 1.0], [48.1, 1.1], [48.0, 1.0], [47.9, 0.9], [48.0, 1.0]],
+    [
+        {"lat": 48.0, "lon": 1.0},
+        {"lat": 48.0, "lon": 1.0, "route_progress_km": 20.0},
+        {"lat": 48.0, "lon": 1.0},
+    ],
+    [],
+    2,
+    40.0,
+    _FakeLegacy(),
+    v7.v5.v3,
+)
+if plain_stage_distances != [20.0, 20.0]:
+    failures.append(f"closed-loop stage split regression: {plain_stage_distances!r}")
+
 # Candidate-selection regression: once a genuinely routed shortened loop is
 # available inside the distance window, a prettier but oversized ORS loop must
 # never win the final ranking.

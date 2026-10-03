@@ -785,6 +785,32 @@ def _balanced_corridor_stays(
     }
 
 
+def _roundtrip_stage_distances(coords, boundaries, stays, days: int, route_distance: float, legacy_main, v3):
+    """Return reliable day distances for a closed fallback loop.
+
+    For a plain round trip, intermediate boundaries come from _equal_anchors and
+    already represent equal progress along the validated geometry. Re-locating
+    those anchors by geographic proximity is unsafe on self-crossing loops: the
+    same place can occur several times and the nearest-point lookup may select
+    the wrong passage. In that case the mathematically correct split is simply
+    the routed total divided by the requested number of days.
+
+    When real overnight stays are inserted, their exact routed positions matter,
+    so keep the full boundary-based stage measurement.
+    """
+    try:
+        total = float(route_distance or 0)
+    except (TypeError, ValueError):
+        total = 0.0
+    if not stays and days > 0 and math.isfinite(total) and total > 0:
+        return [total / days] * days
+
+    measured = v3._stage_distances(coords, boundaries, legacy_main, total)
+    if len(measured) != days and total > 0:
+        return [total / max(days, 1)] * max(days, 1)
+    return measured
+
+
 def _route_points_with_stays(coords, start: dict, stays, days: int):
     """Preserve the original ORS loop while inserting out-and-back stay detours."""
     cum = _cumulative(coords)
@@ -924,9 +950,15 @@ def _build_roundtrip(data, legacy_main, v3):
         boundaries = [start] + anchors + [start]
         accommodations = []
 
-    stage_distances = v3._stage_distances(coords, boundaries, legacy_main, float(route.get("distance") or 0))
-    if len(stage_distances) != days:
-        stage_distances = [float(route.get("distance") or 0) / days] * days
+    stage_distances = _roundtrip_stage_distances(
+        coords,
+        boundaries,
+        stays,
+        days,
+        float(route.get("distance") or 0),
+        legacy_main,
+        v3,
+    )
 
     if any(d > daily_max + 0.35 for d in stage_distances):
         raise HTTPException(
@@ -1038,4 +1070,5 @@ __all__ = [
     "_constraint_near_start",
     "_balanced_corridor_stays",
     "_route_points_with_stays",
+    "_roundtrip_stage_distances",
 ]
