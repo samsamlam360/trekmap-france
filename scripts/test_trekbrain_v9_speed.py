@@ -218,6 +218,45 @@ assert len(roundtrip_calls) == 2, roundtrip_calls
 assert roundtrip_calls[1][0] < roundtrip_calls[0][0], roundtrip_calls
 assert float(corrected_loop.get("distance") or 0) == 45.3, corrected_loop
 
+# If the calibrated second provider attempt fails and the remaining loop is
+# still materially oversized, one final seed-diverse attempt is allowed. It
+# must not become an unconditional third call.
+third_calls = []
+def fake_unstable_roundtrip(start, requested_km, seed):
+    third_calls.append((float(requested_km), int(seed)))
+    if len(third_calls) == 1:
+        return {
+            "coords": [[45.0, 5.0], [45.10, 5.10], [44.96, 5.18], [45.0, 5.0]],
+            "distance": 56.2,
+            "fallback": False,
+            "routing_mode": "ors-round-trip",
+        }, None
+    if len(third_calls) == 2:
+        return None, "OpenRouteService round-trip HTTP 500."
+    return {
+        "coords": [[45.0, 5.0], [45.07, 5.07], [44.99, 5.13], [45.0, 5.0]],
+        "distance": 45.4,
+        "fallback": False,
+        "routing_mode": "ors-round-trip",
+    }, None
+
+roundtrip._roundtrip_request = fake_unstable_roundtrip
+try:
+    stabilized_loop = roundtrip._best_roundtrip(
+        {"lat": 45.0, "lon": 5.0},
+        45.0,
+        11.25,
+        18.75,
+        3,
+        v3,
+    )
+finally:
+    roundtrip._roundtrip_request = real_roundtrip_request
+assert len(third_calls) == 3, third_calls
+assert third_calls[-1][1] == 29, third_calls
+assert float(stabilized_loop.get("distance") or 0) == 45.4, stabilized_loop
+assert stabilized_loop.get("round_trip_stability_retry") is True, stabilized_loop
+
 # Route-first lodging must not start a third route-probe network path after
 # Photon and the single bounded bbox lookup fail.
 real_photon_split = logistics._photon_split_stays
