@@ -1271,20 +1271,26 @@ def _build(data: AIPlanRequest, legacy_main):
     base_categories = ["viewpoint", "water", "camping", "refuge", "food", "transit"]
     radius = min(30.0, max(10.0, intent["daily_target"] * min(intent["days"], 4) * 0.42))
     notes = []
-    try:
-        base, extra, extra_notes = _combined_nearby(center, radius, base_categories)
-        notes += extra_notes
-    except RuntimeError as exc:
-        notes.append(str(exc))
-        # For an explicit point-to-point trek the endpoints already define the
-        # pedestrian backbone. Do not replace one timed-out broad OSM request by
-        # another broad Photon sweep plus a second scenic OSM query. Route first,
-        # then use the bounded post-route resource lookup on real day anchors.
-        if corridor_centered and forced_start and forced_end:
-            base, extra = [], []
-        else:
-            base = _photon_category_candidates(location, center, base_categories)
-            extra = []
+    if corridor_centered and intent.get("explicit_endpoint_pair") and forced_start and forced_end:
+        # The two written endpoints are authoritative and already geocoded.
+        # A 30 km broad POI scan cannot change their pedestrian backbone, so
+        # route first and attach bounded route-relative resources afterwards.
+        base, extra = [], []
+    else:
+        try:
+            base, extra, extra_notes = _combined_nearby(center, radius, base_categories)
+            notes += extra_notes
+        except RuntimeError as exc:
+            notes.append(str(exc))
+            # For an explicit point-to-point trek the endpoints already define the
+            # pedestrian backbone. Do not replace one timed-out broad OSM request by
+            # another broad Photon sweep plus a second scenic OSM query. Route first,
+            # then use the bounded post-route resource lookup on real day anchors.
+            if corridor_centered and forced_start and forced_end:
+                base, extra = [], []
+            else:
+                base = _photon_category_candidates(location, center, base_categories)
+                extra = []
 
     # If a traverse has too little context but the broad OSM query succeeded,
     # one bounded endpoint fallback may add useful POIs. After an OSM timeout,
