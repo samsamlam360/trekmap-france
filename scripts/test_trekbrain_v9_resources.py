@@ -161,6 +161,10 @@ assert captured_missing_water.get("sleep") is False, captured_missing_water
 # never as a query parameter named `data`.
 from backend import app_v5
 
+assert resources_module.v7.v5.v3.POSTROUTE_RESOURCE_ENRICHMENT is False, (
+    "TrekBrain v9 must leave post-route resources to the final overlays"
+)
+
 schema = app_v5.app.openapi()
 plan_post = schema["paths"]["/ai/plan"]["post"]
 assert "requestBody" in plan_post, "/ai/plan lost its JSON request body"
