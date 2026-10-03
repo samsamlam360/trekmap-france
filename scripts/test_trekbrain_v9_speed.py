@@ -300,4 +300,61 @@ finally:
 assert result.get("fallback") is False, result
 assert post_calls and post_calls[0][1] <= 7.1, post_calls
 
+# A short soft-tolerance loop may legitimately end a few hundred metres
+# above daily_max after two ranked ORS variants. Once those variants have
+# already been compared, the raw-route recovery must not launch another ORS
+# calibration pass just because its older threshold is slightly stricter.
+real_roundtrip_request_ranked = roundtrip._roundtrip_request
+ranked_calls = []
+
+def fake_ranked_roundtrip(start, requested_km, seed):
+    ranked_calls.append((round(float(requested_km), 2), int(seed)))
+    return {
+        "coords": [
+            [48.636, -1.511],
+            [48.700, -1.430],
+            [48.600, -1.350],
+            [48.636, -1.511],
+        ],
+        "distance": 40.86,
+        "fallback": False,
+        "routing_mode": "ors-round-trip",
+    }, None
+
+roundtrip._roundtrip_request = fake_ranked_roundtrip
+try:
+    ranked = roundtrip._best_roundtrip(
+        {"lat": 48.636, "lon": -1.511},
+        32.0,
+        12.0,
+        20.0,
+        2,
+        v3,
+    )
+finally:
+    roundtrip._roundtrip_request = real_roundtrip_request_ranked
+
+assert len(ranked_calls) == 2, ranked_calls
+assert ranked.get("fast_ranked") is True, ranked
+assert ranked.get("candidate_pool_size") == 2, ranked
+
+recovery_calls = []
+real_recovery_request = roundtrip._roundtrip_request
+roundtrip._roundtrip_request = lambda *args, **kwargs: recovery_calls.append(args) or (None, "should not run")
+try:
+    recovered_ranked = roundtrip._recover_unranked_oversized_roundtrip(
+        ranked,
+        {"lat": 48.636, "lon": -1.511},
+        32.0,
+        12.0,
+        20.0,
+        2,
+        v3,
+    )
+finally:
+    roundtrip._roundtrip_request = real_recovery_request
+
+assert recovered_ranked is ranked, (recovered_ranked, ranked)
+assert recovery_calls == [], recovery_calls
+
 print("TrekBrain v9 interactive latency controls: OK")
