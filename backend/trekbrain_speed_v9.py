@@ -156,8 +156,8 @@ def install_fast_planning(v3, v5, v9) -> None:
 
     # One prompt is the normal path. A second route build is reserved only for a
     # genuinely dated/mandatory side objective where changing geometry matters.
-    def candidate_prompts(normalized, targets, compound):
-        prompts = list(original_prompts(normalized, targets, compound))
+    def candidate_prompts(normalized, targets, compound, internal_hint=""):
+        prompts = list(original_prompts(normalized, targets, compound, internal_hint))
         if len(prompts) <= 1:
             return prompts
         hard_dated = any(
