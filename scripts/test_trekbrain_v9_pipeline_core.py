@@ -155,6 +155,110 @@ assert v3.calls[0][2] is False
 assert result["logistics"]["route_immutable"] is True
 assert result["planner"]["pipeline_phases"][:3] == ["understand", "route", "route:generic"]
 
+
+# 3b. Plain multi-day lodging loops can skip the expensive generic stack and
+# go straight to the same validated ORS round-trip engine that used to win only
+# after the generic planner failed.
+fast_data = Data(
+    "boucle tranquille avec camping",
+    region="Chartres",
+    days=3,
+    daily_km=16,
+    accommodation="camping",
+)
+fast_intent = {
+    "days": 3,
+    "daily_target": 16.0,
+    "daily_min": 12.0,
+    "daily_max": 20.0,
+    "total_target": 48.0,
+    "route_type": "Boucle",
+    "start_query": "",
+    "end_query": "",
+    "via_query": "",
+    "max_dplus_day": None,
+    "raw": fast_data.prompt,
+    "priorities": {
+        "viewpoint": 2.5, "peak": 1.8, "lake": 2.4,
+        "waterfall": 2.0, "nature": 1.8, "heritage": 0.8,
+        "village": 0.6,
+    },
+}
+fast_state = pipeline.PlanningState(
+    data=fast_data,
+    route_data=fast_data,
+    intent=fast_intent,
+    category="camping",
+    phases=["understand"],
+)
+assert pipeline._can_fast_route_first_loop(fast_state) is True
+
+class FastRoundtrip:
+    calls = 0
+
+    @staticmethod
+    def _build_roundtrip(data, legacy, v3_module):
+        FastRoundtrip.calls += 1
+        return {
+            "name": "Fast ORS loop",
+            "route_type": "Boucle",
+            "route_preview": {
+                "coords": [[48.0, 1.0], [48.1, 1.1], [48.0, 1.0]],
+                "distance": 48.0,
+                "fallback": False,
+                "routing_mode": "ors-round-trip",
+            },
+            "stages": [{"day": 1}, {"day": 2}, {"day": 3}],
+            "planner": {},
+        }
+
+def forbidden_generic(*args, **kwargs):
+    raise AssertionError("generic planner must not run for eligible fast loop")
+
+fast_result = pipeline._build_backbone(
+    fast_state,
+    DUMMY,
+    base_build=forbidden_generic,
+    v3=FakeV3(),
+    canonical=FakeCanonical,
+    gr=DUMMY,
+    rescue=DUMMY,
+    roundtrip=FastRoundtrip,
+    stitch=DUMMY,
+    ors=DUMMY,
+    belle=DUMMY,
+)
+assert FastRoundtrip.calls == 1
+assert fast_result["route_preview"]["routing_mode"] == "ors-round-trip"
+assert fast_result["planner"]["fast_roundtrip"] is True
+assert "route:fast-roundtrip" in fast_state.phases
+
+# Strong scenic objectives remain on the advanced planner. A lake preference
+# already named by the region itself is exempt because it adds no new waypoint.
+scenic_intent = dict(fast_intent)
+scenic_intent["priorities"] = {**fast_intent["priorities"], "viewpoint": 5.0}
+scenic_state = pipeline.PlanningState(
+    data=fast_data, route_data=fast_data, intent=scenic_intent,
+    category="camping", phases=["understand"],
+)
+assert pipeline._can_fast_route_first_loop(scenic_state) is False
+
+lake_data = Data(
+    "boucle autour du lac avec camping",
+    region="Lac des Settons, Morvan",
+    days=3,
+    daily_km=16,
+    accommodation="camping",
+)
+lake_intent = dict(fast_intent)
+lake_intent["raw"] = lake_data.prompt
+lake_intent["priorities"] = {**fast_intent["priorities"], "lake": 5.0}
+lake_state = pipeline.PlanningState(
+    data=lake_data, route_data=lake_data, intent=lake_intent,
+    category="camping", phases=["understand"],
+)
+assert pipeline._can_fast_route_first_loop(lake_state) is True
+
 # 4. Generic traverse without lodging is left to the existing generic stack.
 v3 = FakeV3()
 FakeCanonical.calls.clear()
