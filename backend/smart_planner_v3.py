@@ -835,8 +835,29 @@ def _build(data: AIPlanRequest, legacy_main):
     extra, extra_notes = _extra_nearby(center, radius)
     notes += extra_notes
 
+    # A corridor search can legitimately outlive one slow Overpass mirror.
+    # Complete the POI pool around the *real* endpoints instead of falling back
+    # to the stale form region (e.g. Chartres for an explicit Tours -> Chinon).
+    if corridor_centered and len(base) + len(extra) < 4:
+        corridor_fallback = []
+        for anchor in (forced_start, forced_end):
+            if not anchor:
+                continue
+            label = str(anchor.get("short_name") or anchor.get("name") or "").strip()
+            if not label:
+                continue
+            try:
+                corridor_fallback.extend(
+                    _photon_category_candidates(label, anchor, base_categories)
+                )
+            except Exception:
+                continue
+        if corridor_fallback:
+            base += corridor_fallback
+            notes.append("POI du corridor complétés près du départ et de l'arrivée.")
+
     items = _dedupe(base + extra + [x for x in (forced_start, forced_end, forced_via) if x], center, max_km=max(40, radius * 1.45))
-    if len(items) < 4:
+    if len(items) < 4 and not (corridor_centered and forced_start and forced_end and len(items) >= 2):
         raise HTTPException(status_code=503, detail="Pas assez de données géographiques réelles ont pu être récupérées pour construire un trek pertinent dans cette zone.")
 
     start = _choose_start(center, items, intent, forced_start)
