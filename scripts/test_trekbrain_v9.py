@@ -113,6 +113,14 @@ traverse_plan = {
     # fixed A→B semantics from the user request itself.
     "planner": {"corridor_centered": False, "intent": {}},
 }
+parsed_traverse = request_reconcile.v7.v5.v3._parse_intent(traverse_request) if hasattr(request_reconcile, "v7") else None
+if parsed_traverse is None:
+    from backend import smart_planner_v3 as planner_v3
+    parsed_traverse = planner_v3._parse_intent(traverse_request)
+assert parsed_traverse["explicit_endpoint_pair"] is True, parsed_traverse
+assert parsed_traverse["start_query"] == "Tours", parsed_traverse
+assert parsed_traverse["end_query"] == "Chinon", parsed_traverse
+
 traverse_audit = precision_audit(
     traverse_plan, traverse_request, {"traverse": 1.0}, research, compound
 )
