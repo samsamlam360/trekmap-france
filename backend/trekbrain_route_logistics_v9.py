@@ -300,12 +300,36 @@ def _photon_split_stays(v3, roundtrip, coords, category: str, days: int) -> list
         # the route itself.
         radius = 12.5
 
+    jobs = []
+    for anchor in anchors:
+        if category == "lodging":
+            # One rural + one conventional lodging query, in the same bounded
+            # parallel wave. This preserves Tours' gîte gains while avoiding the
+            # Mont-Saint-Michel regression where "gîte" alone missed the nearby
+            # hotel that the previous query found.
+            jobs.append((anchor, "gîte"))
+            jobs.append((anchor, "hotel"))
+        else:
+            jobs.append((anchor, None))
+
     found = []
-    with ThreadPoolExecutor(max_workers=min(4, len(anchors))) as pool:
-        futures = [
-            pool.submit(lookup, anchor, "stay", tags, radius)
-            for anchor in anchors
-        ]
+    with ThreadPoolExecutor(max_workers=min(4, len(jobs))) as pool:
+        futures = []
+        for anchor, query_override in jobs:
+            if query_override:
+                futures.append(
+                    pool.submit(
+                        lookup,
+                        anchor,
+                        "stay",
+                        tags,
+                        radius,
+                        query_override=query_override,
+                    )
+                )
+            else:
+                futures.append(pool.submit(lookup, anchor, "stay", tags, radius))
+
         for future in as_completed(futures):
             try:
                 item = future.result()
