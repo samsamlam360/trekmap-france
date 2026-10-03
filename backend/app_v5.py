@@ -99,6 +99,11 @@ if TREKBRAIN_VERSION == "v9":
     from .trekbrain_failure_diagnostics_v9 import install_failure_diagnostics
     from .trekbrain_release_status_v9 import install_release_status
 
+    # In v9, route-first logistics and the final resource overlay are the sole
+    # owners of post-route resources. Disable v3's historical duplicate Photon
+    # wave while keeping the v3 default intact for standalone/older planners.
+    _planner_v7.v5.v3.POSTROUTE_RESOURCE_ENRICHMENT = False
+
     install_place_guard(_planner_v7.v5.v3, _geo_v2, _request_v9)
     install_gr_guidance(_planner_v7.v5.v3)
     install_gr_detours(_planner_v7.v5.v3, _gr_v9)
