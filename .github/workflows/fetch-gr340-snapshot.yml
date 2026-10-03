@@ -5,27 +5,187 @@ on:
     branches:
       - fetch-gr340-snapshot-20261003
 
+permissions:
+  contents: write
+
 jobs:
   fetch:
+    if: github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
-    timeout-minutes: 3
+    timeout-minutes: 4
     steps:
       - uses: actions/checkout@v4
-      - name: Fetch canonical OSM relation
+        with:
+          ref: fetch-gr340-snapshot-20261003
+      - name: Fetch and compact canonical OSM relation
         run: |
           set -euo pipefail
-          mkdir -p tmp/gr340
+          mkdir -p tmp/gr340 backend/data
           curl --fail --location --retry 3 --retry-delay 2 --connect-timeout 8 --max-time 45 \
             -H 'Accept: application/xml,text/xml' \
             -H 'User-Agent: TrekMap-France-GR340-Snapshot/1.0' \
             'https://api.openstreetmap.org/api/0.6/relation/6850120/full' \
             -o tmp/gr340/gr340_relation_6850120.osm
-          grep -q 'relation id="6850120"' tmp/gr340/gr340_relation_6850120.osm
-          grep -q 'v="GR 340"' tmp/gr340/gr340_relation_6850120.osm
-          wc -c tmp/gr340/gr340_relation_6850120.osm
+          python - <<'PY'
+          import hashlib, json, math, xml.etree.ElementTree as ET
+          from pathlib import Path
+
+          src = Path("tmp/gr340/gr340_relation_6850120.osm")
+          raw = src.read_bytes()
+          root = ET.fromstring(raw)
+          nodes = {}
+          for node in root.findall("node"):
+              try:
+                  nodes[int(node.attrib["id"])] = (float(node.attrib["lat"]), float(node.attrib["lon"]))
+              except (KeyError, TypeError, ValueError):
+                  pass
+
+          ways = {}
+          for way in root.findall("way"):
+              try:
+                  wid = int(way.attrib["id"])
+              except (KeyError, TypeError, ValueError):
+                  continue
+              geom = []
+              for nd in way.findall("nd"):
+                  try:
+                      point = nodes.get(int(nd.attrib["ref"]))
+                  except (KeyError, TypeError, ValueError):
+                      point = None
+                  if point:
+                      geom.append([point[0], point[1]])
+              if len(geom) >= 2:
+                  ways[wid] = geom
+
+          relation = next(
+              (r for r in root.findall("relation") if int(r.attrib.get("id", "0")) == 6850120),
+              None,
+          )
+          if relation is None:
+              raise SystemExit("relation 6850120 absent")
+
+          def hav(a, b):
+              lat1, lon1, lat2, lon2 = map(math.radians, (a[0], a[1], b[0], b[1]))
+              dlat, dlon = lat2-lat1, lon2-lon1
+              h = math.sin(dlat/2)**2 + math.cos(lat1)*math.cos(lat2)*math.sin(dlon/2)**2
+              return 6371.0088 * 2 * math.asin(min(1.0, math.sqrt(max(0.0, h))))
+
+          components, current = [], []
+          for member in relation.findall("member"):
+              if member.attrib.get("type") != "way":
+                  continue
+              try:
+                  geom = [list(p) for p in ways.get(int(member.attrib["ref"]), [])]
+              except (KeyError, TypeError, ValueError):
+                  geom = []
+              if len(geom) < 2:
+                  continue
+              if not current:
+                  current = geom[:]
+                  continue
+              d_first, d_last = hav(current[-1], geom[0]), hav(current[-1], geom[-1])
+              if min(d_first, d_last) <= 1.2:
+                  if d_last < d_first:
+                      geom.reverse()
+                  if hav(current[-1], geom[0]) <= 0.03:
+                      current.extend(geom[1:])
+                  else:
+                      current.extend(geom)
+              else:
+                  components.append(current)
+                  current = geom[:]
+          if current:
+              components.append(current)
+          if not components:
+              raise SystemExit("aucune géométrie GR340 reconstruite")
+          coords = max(
+              components,
+              key=lambda rows: sum(hav(a,b) for a,b in zip(rows, rows[1:])),
+          )
+
+          # Douglas-Peucker in a local metric projection, 8 m tolerance.
+          lat0 = sum(p[0] for p in coords) / len(coords)
+          cos0 = math.cos(math.radians(lat0))
+          xy = [(p[1]*111.320*cos0, p[0]*110.574) for p in coords]
+
+          def point_segment_distance(p, a, b):
+              px,py=p; ax,ay=a; bx,by=b
+              dx,dy=bx-ax,by-ay
+              if dx == 0 and dy == 0:
+                  return math.hypot(px-ax, py-ay)
+              t=max(0.0,min(1.0,((px-ax)*dx+(py-ay)*dy)/(dx*dx+dy*dy)))
+              qx,qy=ax+t*dx,ay+t*dy
+              return math.hypot(px-qx,py-qy)
+
+          def rdp(points, tol):
+              if len(points) <= 2:
+                  return [0, len(points)-1] if len(points)==2 else [0]
+              keep={0,len(points)-1}
+              stack=[(0,len(points)-1)]
+              while stack:
+                  i,j=stack.pop()
+                  best_k,best_d=None,-1.0
+                  for k in range(i+1,j):
+                      d=point_segment_distance(points[k],points[i],points[j])
+                      if d>best_d:
+                          best_k,best_d=k,d
+                  if best_k is not None and best_d>tol:
+                      keep.add(best_k)
+                      stack.append((i,best_k))
+                      stack.append((best_k,j))
+              return sorted(keep)
+
+          indexes=rdp(xy, 0.008)
+          compact=[[round(coords[i][0],6),round(coords[i][1],6)] for i in indexes]
+          if compact[-1] != compact[0]:
+              compact.append(list(compact[0]))
+
+          def length(rows):
+              return sum(hav(a,b) for a,b in zip(rows,rows[1:]))
+          max_gap=max((hav(a,b) for a,b in zip(compact,compact[1:])),default=0.0)
+          if len(compact) < 100 or len(compact) > 1400:
+              raise SystemExit(f"snapshot point count invalid: {len(compact)}")
+          if not 70.0 <= length(compact) <= 80.0:
+              raise SystemExit(f"snapshot distance invalid: {length(compact):.2f}")
+          if max_gap > 1.0:
+              raise SystemExit(f"snapshot gap invalid: {max_gap:.2f} km")
+
+          tags={t.attrib.get("k",""):t.attrib.get("v","") for t in relation.findall("tag")}
+          payload={
+              "schema":1,
+              "relation_id":6850120,
+              "name":tags.get("name") or "Tour de Belle-Île-en-Mer",
+              "ref":tags.get("ref") or "GR 340",
+              "network":tags.get("network") or "nwn",
+              "source_url":"https://api.openstreetmap.org/api/0.6/relation/6850120/full",
+              "source_license":"OpenStreetMap data © OpenStreetMap contributors, ODbL 1.0",
+              "retrieved_at":"2026-10-03",
+              "source_sha256":hashlib.sha256(raw).hexdigest(),
+              "simplification_tolerance_m":8,
+              "distance_km":round(length(compact),3),
+              "max_gap_km":round(max_gap,3),
+              "coords":compact,
+          }
+          Path("backend/data/gr340_relation_6850120_snapshot.json").write_text(
+              json.dumps(payload,ensure_ascii=False,separators=(",",":")),
+              encoding="utf-8",
+          )
+          print(json.dumps({k:payload[k] for k in ("relation_id","distance_km","max_gap_km","source_sha256")}))
+          print("points", len(compact))
+          PY
+      - name: Commit generated snapshot to temporary branch
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add backend/data/gr340_relation_6850120_snapshot.json
+          git commit -m '[snapshot-generated] Add canonical GR340 OSM snapshot'
+          git push origin HEAD:fetch-gr340-snapshot-20261003
       - uses: actions/upload-artifact@v4
         with:
           name: gr340-osm-snapshot
-          path: tmp/gr340/gr340_relation_6850120.osm
+          path: |
+            tmp/gr340/gr340_relation_6850120.osm
+            backend/data/gr340_relation_6850120_snapshot.json
           if-no-files-found: error
           retention-days: 1
