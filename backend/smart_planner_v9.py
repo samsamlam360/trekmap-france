@@ -573,6 +573,11 @@ def install_smart_planner(app, legacy_main):
     @app.post("/ai/plan")
     def plan(data: v7.v5.v3.AIPlanRequest, user=Depends(legacy_main.current_user)):
         try:
+            # A breaker opened by a previous user must never suppress the first
+            # network attempt of this independent request. It still protects
+            # retries inside _build after the first failure.
+            from .trekbrain_circuit_breaker_v9 import reset_circuit_breakers
+            reset_circuit_breakers()
             result = _build(data, legacy_main, int(user["id"]))
             quality = ((result.get("trekbrain") or {}).get("quality") or {}).get("score")
             total_ms = ((result.get("agent") or {}).get("performance") or {}).get("total_ms")

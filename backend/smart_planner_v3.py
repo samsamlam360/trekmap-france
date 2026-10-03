@@ -902,7 +902,7 @@ def _photon_anchor_resource(anchor, category: str, osm_tags, radius_km: float):
         "zoom": 11,
         "location_bias_scale": 0.1,
         "countrycode": "FR",
-        "limit": 8,
+        "limit": 12,
         "lang": "fr",
     }
     try:
@@ -1022,15 +1022,18 @@ def _postroute_corridor_resources(boundaries, intent, existing_items):
     if len(interiors) > 2:
         interiors = [interiors[0], interiors[-1]]
 
+    # Food near the actual start is valuable for resupply and is often much
+    # easier to resolve than a shop near a mathematical mountain day split.
+    food_anchors = []
+    if boundaries:
+        food_anchors.append(boundaries[0])
+    food_anchors.extend(interiors[:1])
+
     for boundary in interiors:
         if intent.get("water") and _closest(waters, boundary, 4.5) is None:
             water_jobs.append((boundary, "water", (
                 "amenity:drinking_water", "man_made:water_tap", "natural:spring"
             ), 5.5))
-        if intent.get("food") and _closest(foods, boundary, 5.0) is None:
-            food_jobs.append((boundary, "food", (
-                "shop:supermarket", "shop:convenience", "shop:bakery"
-            ), 6.5))
         if (
             intent.get("sleep")
             and intent.get("accommodation") != "bivouac"
@@ -1048,7 +1051,15 @@ def _postroute_corridor_resources(boundaries, intent, existing_items):
                 )
             stay_jobs.append((boundary, "stay", tags, 8.0))
 
-    groups = [transit_jobs, water_jobs, food_jobs, stay_jobs]
+    for boundary in food_anchors:
+        if intent.get("food") and _closest(foods, boundary, 5.0) is None:
+            food_jobs.append((boundary, "food", (
+                "shop:supermarket", "shop:convenience", "shop:bakery"
+            ), 6.5))
+
+    # Prioritise access and overnight logistics when the six-call cap is tight,
+    # then food and water. All calls still run in one bounded parallel wave.
+    groups = [transit_jobs, stay_jobs, food_jobs, water_jobs]
     jobs = []
     while groups and len(jobs) < 6:
         remaining = []
@@ -1271,26 +1282,37 @@ def _build(data: AIPlanRequest, legacy_main):
     base_categories = ["viewpoint", "water", "camping", "refuge", "food", "transit"]
     radius = min(30.0, max(10.0, intent["daily_target"] * min(intent["days"], 4) * 0.42))
     notes = []
-    try:
-        base, extra, extra_notes = _combined_nearby(center, radius, base_categories)
-        notes += extra_notes
-    except RuntimeError as exc:
-        notes.append(str(exc))
-        # For an explicit point-to-point trek the endpoints already define the
-        # pedestrian backbone. Do not replace one timed-out broad OSM request by
-        # another broad Photon sweep plus a second scenic OSM query. Route first,
-        # then use the bounded post-route resource lookup on real day anchors.
-        if corridor_centered and forced_start and forced_end:
-            base, extra = [], []
-        else:
-            base = _photon_category_candidates(location, center, base_categories)
-            extra = []
+    if corridor_centered and intent.get("explicit_endpoint_pair") and forced_start and forced_end:
+        # The two written endpoints are authoritative and already geocoded.
+        # A 30 km broad POI scan cannot change their pedestrian backbone, so
+        # route first and attach bounded route-relative resources afterwards.
+        base, extra = [], []
+    else:
+        try:
+            base, extra, extra_notes = _combined_nearby(center, radius, base_categories)
+            notes += extra_notes
+        except RuntimeError as exc:
+            notes.append(str(exc))
+            # For an explicit point-to-point trek the endpoints already define the
+            # pedestrian backbone. Do not replace one timed-out broad OSM request by
+            # another broad Photon sweep plus a second scenic OSM query. Route first,
+            # then use the bounded post-route resource lookup on real day anchors.
+            if corridor_centered and forced_start and forced_end:
+                base, extra = [], []
+            else:
+                base = _photon_category_candidates(location, center, base_categories)
+                extra = []
 
     # If a traverse has too little context but the broad OSM query succeeded,
     # one bounded endpoint fallback may add useful POIs. After an OSM timeout,
     # the two authoritative endpoints are enough to route and the post-route
     # resource pass will fill logistics without another broad search.
-    if corridor_centered and len(base) + len(extra) < 4 and not notes:
+    if (
+        corridor_centered
+        and not intent.get("explicit_endpoint_pair")
+        and len(base) + len(extra) < 4
+        and not notes
+    ):
         corridor_fallback = []
         for anchor in (forced_start, forced_end):
             if not anchor:

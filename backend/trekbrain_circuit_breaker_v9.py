@@ -33,6 +33,17 @@ def _network_failure(text: str) -> bool:
     ))
 
 
+def reset_circuit_breakers() -> None:
+    """Start each independent user request with a fresh external-service budget.
+
+    The breakers still protect retries *inside* one planning request, but a
+    timeout for user A must not poison user B's next request on the same worker.
+    """
+    with _LOCK:
+        for name in _STATE:
+            _STATE[name] = 0.0
+
+
 def install_circuit_breakers(v3, ors, roundtrip) -> None:
     global _INSTALLED
     if _INSTALLED:
@@ -92,4 +103,4 @@ def install_circuit_breakers(v3, ors, roundtrip) -> None:
     roundtrip._roundtrip_request = guarded_roundtrip
 
 
-__all__ = ["install_circuit_breakers"]
+__all__ = ["install_circuit_breakers", "reset_circuit_breakers"]
