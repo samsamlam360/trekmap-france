@@ -139,8 +139,63 @@ def _normalise_stay(element: dict[str, Any], category: str) -> dict[str, Any] | 
     }
 
 
-def _bbox_route_stays(coords, category: str) -> list[dict[str, Any]]:
-    """One compact Overpass query covering the full route instead of endpoint searches."""
+def _element_point(element: dict[str, Any]) -> tuple[float, float] | None:
+    lat, lon = element.get("lat"), element.get("lon")
+    if lat is None or lon is None:
+        center = element.get("center") or {}
+        lat, lon = center.get("lat"), center.get("lon")
+    try:
+        lat, lon = float(lat), float(lon)
+    except (TypeError, ValueError):
+        return None
+    if not (math.isfinite(lat) and math.isfinite(lon)):
+        return None
+    return lat, lon
+
+
+def _terrain_resource(element: dict[str, Any]) -> dict[str, Any] | None:
+    tags = element.get("tags") or {}
+    point = _element_point(element)
+    if not point:
+        return None
+    lat, lon = point
+    category = None
+    status = "unverified"
+    if (
+        tags.get("amenity") == "drinking_water"
+        or tags.get("man_made") == "water_tap"
+        or tags.get("natural") == "spring"
+    ):
+        category = "water"
+        if tags.get("amenity") == "drinking_water" or tags.get("drinking_water") == "yes":
+            status = "potable_referenced"
+        elif tags.get("drinking_water") == "no":
+            status = "not_potable"
+    elif tags.get("shop") in {"supermarket", "convenience", "bakery"}:
+        category = "food"
+    if category is None:
+        return None
+    return {
+        "name": str(
+            tags.get("name")
+            or ("Point d'eau" if category == "water" else "Ravitaillement")
+        )[:180],
+        "lat": lat,
+        "lon": lon,
+        "category": category,
+        "water_status": status,
+        "source_url": _osm_url(element),
+        "osm_tags": dict(tags),
+    }
+
+
+def _bbox_route_query(
+    coords,
+    category: str,
+    *,
+    include_terrain: bool,
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]], bool]:
+    """One compact Overpass query on the final route corridor."""
     from . import free_planner_v2 as free
 
     valid = []
@@ -152,7 +207,7 @@ def _bbox_route_stays(coords, category: str) -> list[dict[str, Any]]:
         except (TypeError, ValueError):
             continue
     if len(valid) < 2:
-        return []
+        return [], [], False
 
     min_lat = min(x[0] for x in valid)
     max_lat = max(x[0] for x in valid)
@@ -161,20 +216,23 @@ def _bbox_route_stays(coords, category: str) -> list[dict[str, Any]]:
     mid_lat = (min_lat + max_lat) / 2.0
     search_offroute_km = 10.0 if category == "lodging" else _MAX_OFFROUTE_KM
     pad_lat = min(0.12, max(0.025, search_offroute_km / 111.0))
-    pad_lon = min(0.16, max(0.03, search_offroute_km / max(35.0, 111.0 * math.cos(math.radians(mid_lat)))))
+    pad_lon = min(
+        0.16,
+        max(0.03, search_offroute_km / max(35.0, 111.0 * math.cos(math.radians(mid_lat)))),
+    )
     south, north = min_lat - pad_lat, max_lat + pad_lat
     west, east = min_lon - pad_lon, max_lon + pad_lon
 
     if category == "camping":
-        filters = ('["tourism"="camp_site"]', '["tourism"="caravan_site"]')
+        stay_filters = ('["tourism"="camp_site"]', '["tourism"="caravan_site"]')
     elif category == "refuge":
-        filters = (
+        stay_filters = (
             '["tourism"="alpine_hut"]',
             '["tourism"="wilderness_hut"]',
             '["amenity"="shelter"]',
         )
     else:
-        filters = (
+        stay_filters = (
             '["tourism"="hotel"]',
             '["tourism"="hostel"]',
             '["tourism"="guest_house"]',
@@ -185,53 +243,88 @@ def _bbox_route_stays(coords, category: str) -> list[dict[str, Any]]:
             '["tourism"="wilderness_hut"]',
             '["amenity"="shelter"]',
         )
+
+    terrain_filters = (
+        '["amenity"="drinking_water"]',
+        '["man_made"="water_tap"]',
+        '["natural"="spring"]',
+        '["shop"="supermarket"]',
+        '["shop"="convenience"]',
+        '["shop"="bakery"]',
+    ) if include_terrain else ()
+
     clauses = "".join(
         f"nwr{flt}({south:.6f},{west:.6f},{north:.6f},{east:.6f});"
-        for flt in filters
+        for flt in (*stay_filters, *terrain_filters)
     )
-    query = f"[out:json][timeout:5];({clauses});out center tags 160;"
+    query = f"[out:json][timeout:5];({clauses});out center tags {220 if include_terrain else 160};"
 
     try:
-        # Route-first logistics already has a validated walking line. Give this
-        # optional lodging lookup one short mirror attempt instead of spending
-        # the full global Overpass budget after routing has completed.
         url = list(free.OVERPASS_URLS)[0]
         data = free._request_json(
             url,
             data={"data": query},
             timeout=1.8,
             ttl=3600,
-            service="Overpass route stays",
+            service="Overpass route bundle" if include_terrain else "Overpass route stays",
             retries=1,
         )
     except Exception:
         data = None
     if not isinstance(data, dict):
-        return []
+        return [], [], False
 
-    rows = []
-    for element in (data.get("elements") or [])[:160]:
+    stays = []
+    terrain = []
+    seen_terrain = set()
+    for element in (data.get("elements") or [])[: (220 if include_terrain else 160)]:
         tags = element.get("tags") or {}
-        if category == "camping" and tags.get("tourism") not in {"camp_site", "caravan_site"}:
-            continue
-        if category == "refuge" and not (
-            tags.get("tourism") in {"alpine_hut", "wilderness_hut"}
-            or tags.get("amenity") == "shelter"
-        ):
-            continue
-        if category == "lodging" and not (
-            tags.get("tourism") in {
-                "hotel", "hostel", "guest_house", "chalet", "apartment",
-                "camp_site", "alpine_hut", "wilderness_hut",
-            }
-            or tags.get("amenity") == "shelter"
-        ):
-            continue
-        stay = _normalise_stay(element, category)
-        if stay:
-            rows.append(stay)
-    return rows
 
+        stay_match = False
+        if category == "camping":
+            stay_match = tags.get("tourism") in {"camp_site", "caravan_site"}
+        elif category == "refuge":
+            stay_match = (
+                tags.get("tourism") in {"alpine_hut", "wilderness_hut"}
+                or tags.get("amenity") == "shelter"
+            )
+        else:
+            stay_match = (
+                tags.get("tourism") in {
+                    "hotel", "hostel", "guest_house", "chalet", "apartment",
+                    "camp_site", "alpine_hut", "wilderness_hut",
+                }
+                or tags.get("amenity") == "shelter"
+            )
+        if stay_match:
+            stay = _normalise_stay(element, category)
+            if stay:
+                stays.append(stay)
+
+        if include_terrain:
+            resource = _terrain_resource(element)
+            if resource:
+                key = (
+                    resource.get("category"),
+                    round(float(resource["lat"]), 5),
+                    round(float(resource["lon"]), 5),
+                )
+                if key not in seen_terrain:
+                    seen_terrain.add(key)
+                    terrain.append(resource)
+
+    return stays, terrain, True
+
+
+def _bbox_route_stays(coords, category: str) -> list[dict[str, Any]]:
+    stays, _terrain, _preloaded = _bbox_route_query(
+        coords, category, include_terrain=False
+    )
+    return stays
+
+
+def _bbox_route_bundle(coords, category: str) -> tuple[list[dict[str, Any]], list[dict[str, Any]], bool]:
+    return _bbox_route_query(coords, category, include_terrain=True)
 
 def _route_probe_stays(v3, roundtrip, coords, category: str) -> list[dict[str, Any]]:
     """Bounded fallback when a full-corridor bbox lookup is unavailable."""
@@ -430,7 +523,11 @@ def _logistics_budget_seconds() -> float:
     return max(2.5, min(value, 8.0))
 
 
-def _discover_stays(v3, roundtrip, stay_rescue, coords, start, category: str, days: int, daily_target: float, strict_walk: bool):
+def _discover_stays(
+    v3, roundtrip, stay_rescue, coords, start, category: str,
+    days: int, daily_target: float, strict_walk: bool,
+    want_terrain: bool = False,
+):
     started = time.monotonic()
     budget = _logistics_budget_seconds()
     deadline = started + budget
@@ -443,13 +540,38 @@ def _discover_stays(v3, roundtrip, stay_rescue, coords, start, category: str, da
         else _MAX_OFFROUTE_KM
     )
 
-    # Campsites/refuges have strong OSM tags and are better served by one exact
-    # corridor query first. Generic lodging is fuzzier (hotel/gîte/auberge), so
-    # keep Photon first there. This improves outdoor lodging quality without
-    # adding a third network wave.
+    terrain_rows = []
+    terrain_preloaded = False
+
+    # Campsites/refuges have strong OSM tags, so keep the proven OSM-first path.
+    # Generic lodging normally stays Photon-first. The only exception is when
+    # water/food are also requested: that OSM terrain call would happen later
+    # anyway, so overlap it with Photon now and reuse the same response.
     structured = category in {"camping", "refuge"}
     if structured:
-        rows.extend(_bbox_route_stays(coords, category))
+        if want_terrain:
+            bbox_stays, terrain_rows, terrain_preloaded = _bbox_route_bundle(
+                coords, category
+            )
+            rows.extend(bbox_stays)
+        else:
+            rows.extend(_bbox_route_stays(coords, category))
+    elif want_terrain:
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            bbox_future = pool.submit(_bbox_route_bundle, coords, category)
+            photon_future = pool.submit(
+                _photon_split_stays, v3, roundtrip, coords, category, days
+            )
+            try:
+                bbox_stays, terrain_rows, terrain_preloaded = bbox_future.result()
+            except Exception:
+                bbox_stays, terrain_rows, terrain_preloaded = [], [], False
+            try:
+                photon_stays = photon_future.result()
+            except Exception:
+                photon_stays = []
+        rows.extend(list(bbox_stays or []))
+        rows.extend(list(photon_stays or []))
     else:
         rows.extend(_photon_split_stays(v3, roundtrip, coords, category, days))
 
@@ -459,18 +581,19 @@ def _discover_stays(v3, roundtrip, stay_rescue, coords, start, category: str, da
     if len(chosen) < needed and deadline - time.monotonic() >= 1.25:
         if structured:
             rows.extend(_photon_split_stays(v3, roundtrip, coords, category, days))
-        else:
+        elif not want_terrain:
             rows.extend(_bbox_route_stays(coords, category))
+        # For generic lodging + terrain, both OSM and Photon already ran in the
+        # first wave. Do not repeat either provider.
         projected = _project_stays(roundtrip, coords, rows, category, max_offroute)
         chosen = _choose_stays(roundtrip, coords, projected, days, daily_target)
 
-    # Do not open a third network discovery path here. A partial night plan is
-    # preferable to freezing the interactive request; the validated hiking
-    # backbone remains unchanged.
     return chosen, projected, {
         "budget_seconds": budget,
         "elapsed_ms": round((time.monotonic() - started) * 1000),
         "budget_exhausted": time.monotonic() >= deadline,
+        "terrain_rows": list(terrain_rows or []),
+        "terrain_preloaded": bool(terrain_preloaded),
     }
 
 
@@ -566,6 +689,73 @@ def _route_distance(result: dict[str, Any], coords, legacy_main) -> float:
         return 0.0
 
 
+
+def _attach_preloaded_terrain(
+    result: dict[str, Any],
+    rows: list[dict[str, Any]],
+    preloaded: bool,
+) -> None:
+    if preloaded:
+        result["_terrain_osm_preloaded"] = True
+    if not rows:
+        return
+
+    water = [dict(x) for x in (result.get("water") or []) if isinstance(x, dict)]
+    food = [
+        dict(x)
+        for x in (result.get("resources") or result.get("food") or [])
+        if isinstance(x, dict)
+    ]
+
+    def coord_key(item):
+        try:
+            return (round(float(item.get("lat")), 5), round(float(item.get("lon")), 5))
+        except (TypeError, ValueError):
+            return None
+
+    seen_water = {key for item in water if (key := coord_key(item)) is not None}
+    seen_food = {key for item in food if (key := coord_key(item)) is not None}
+
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        key = coord_key(row)
+        if key is None:
+            continue
+        kind = str(row.get("category") or "")
+        if kind == "water" and key not in seen_water:
+            seen_water.add(key)
+            status = str(row.get("water_status") or "unverified")
+            water.append({
+                "name": row.get("name") or "Point d'eau",
+                "lat": row.get("lat"),
+                "lon": row.get("lon"),
+                "category": "water",
+                "type": "Point d'eau",
+                "status": status,
+                "water_status": status,
+                "notes": "Point d'eau cartographié près du tracé ; disponibilité et potabilité à vérifier.",
+                "source_url": row.get("source_url") or "",
+                "display_only": True,
+            })
+        elif kind == "food" and key not in seen_food:
+            seen_food.add(key)
+            food.append({
+                "name": row.get("name") or "Ravitaillement",
+                "lat": row.get("lat"),
+                "lon": row.get("lon"),
+                "category": "food",
+                "type": "Ravitaillement",
+                "notes": "Commerce cartographié près du tracé ; horaires et disponibilité à vérifier.",
+                "source_url": row.get("source_url") or "",
+                "display_only": True,
+            })
+
+    result["water"] = water
+    result["resources"] = food
+    result["food"] = food
+
+
 def _attach_logistics(result: dict[str, Any], data, legacy_main, v3, roundtrip, stay_rescue, ors, intent, category: str):
     route = result.get("route_preview") or {}
     coords = route.get("coords") or []
@@ -581,8 +771,15 @@ def _attach_logistics(result: dict[str, Any], data, legacy_main, v3, roundtrip, 
         start = {"name": "Départ", "lat": float(coords[0][0]), "lon": float(coords[0][1])}
 
     logistics_started = time.monotonic()
+    want_terrain = bool(intent.get("water") or intent.get("food"))
     chosen, discovered, discovery_meta = _discover_stays(
-        v3, roundtrip, stay_rescue, coords, start, category, days, daily_target, strict_walk
+        v3, roundtrip, stay_rescue, coords, start, category, days,
+        daily_target, strict_walk, want_terrain=want_terrain,
+    )
+    _attach_preloaded_terrain(
+        result,
+        list(discovery_meta.get("terrain_rows") or []),
+        bool(discovery_meta.get("terrain_preloaded")),
     )
     by_night = {index + 1: stay for index, stay in enumerate(chosen[: max(0, days - 1)])}
 
