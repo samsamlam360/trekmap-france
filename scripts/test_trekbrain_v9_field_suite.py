@@ -218,7 +218,13 @@ try:
         "transit": True, "water": True, "food": True, "sleep": True,
         "accommodation": "balanced",
     }
-    resource_rows = v7.v5.v3._corridor_resource_items(split_bounds, resource_intent)
+    resource_bounds = [
+        dict(PLACES["tours"]),
+        {"name": "Repère 1", "lat": 47.31, "lon": 0.53, "category": "route_split"},
+        {"name": "Repère 2", "lat": 47.22, "lon": 0.36, "category": "route_split"},
+        dict(PLACES["chinon"]),
+    ]
+    resource_rows = v7.v5.v3._corridor_resource_items(resource_bounds, resource_intent)
     resource_categories = {x.get("category") for x in resource_rows}
     for expected in ("transit", "water", "food", "camping"):
         if expected not in resource_categories:
