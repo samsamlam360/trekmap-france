@@ -109,7 +109,14 @@ traverse_plan = {
     "water": [],
     "accommodations": [],
     "side_requests": [],
-    "planner": {"corridor_centered": True},
+    "planner": {
+        "corridor_centered": False,
+        "intent": {
+            "explicit_endpoint_pair": True,
+            "start_query": "Tours",
+            "end_query": "Chinon",
+        },
+    },
 }
 traverse_audit = precision_audit(
     traverse_plan, traverse_request, {"traverse": 1.0}, research, compound
