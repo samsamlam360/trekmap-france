@@ -902,7 +902,7 @@ def _photon_anchor_resource(anchor, category: str, osm_tags, radius_km: float):
         "zoom": 11,
         "location_bias_scale": 0.1,
         "countrycode": "FR",
-        "limit": 8,
+        "limit": 12,
         "lang": "fr",
     }
     try:
@@ -1022,15 +1022,18 @@ def _postroute_corridor_resources(boundaries, intent, existing_items):
     if len(interiors) > 2:
         interiors = [interiors[0], interiors[-1]]
 
+    # Food near the actual start is valuable for resupply and is often much
+    # easier to resolve than a shop near a mathematical mountain day split.
+    food_anchors = []
+    if boundaries:
+        food_anchors.append(boundaries[0])
+    food_anchors.extend(interiors[:1])
+
     for boundary in interiors:
         if intent.get("water") and _closest(waters, boundary, 4.5) is None:
             water_jobs.append((boundary, "water", (
                 "amenity:drinking_water", "man_made:water_tap", "natural:spring"
             ), 5.5))
-        if intent.get("food") and _closest(foods, boundary, 5.0) is None:
-            food_jobs.append((boundary, "food", (
-                "shop:supermarket", "shop:convenience", "shop:bakery"
-            ), 6.5))
         if (
             intent.get("sleep")
             and intent.get("accommodation") != "bivouac"
@@ -1048,7 +1051,15 @@ def _postroute_corridor_resources(boundaries, intent, existing_items):
                 )
             stay_jobs.append((boundary, "stay", tags, 8.0))
 
-    groups = [transit_jobs, water_jobs, food_jobs, stay_jobs]
+    for boundary in food_anchors:
+        if intent.get("food") and _closest(foods, boundary, 5.0) is None:
+            food_jobs.append((boundary, "food", (
+                "shop:supermarket", "shop:convenience", "shop:bakery"
+            ), 6.5))
+
+    # Prioritise access and overnight logistics when the six-call cap is tight,
+    # then food and water. All calls still run in one bounded parallel wave.
+    groups = [transit_jobs, stay_jobs, food_jobs, water_jobs]
     jobs = []
     while groups and len(jobs) < 6:
         remaining = []
