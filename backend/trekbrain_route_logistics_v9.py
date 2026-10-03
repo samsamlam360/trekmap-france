@@ -159,8 +159,9 @@ def _bbox_route_stays(coords, category: str) -> list[dict[str, Any]]:
     min_lon = min(x[1] for x in valid)
     max_lon = max(x[1] for x in valid)
     mid_lat = (min_lat + max_lat) / 2.0
-    pad_lat = min(0.09, max(0.025, _MAX_OFFROUTE_KM / 111.0))
-    pad_lon = min(0.13, max(0.03, _MAX_OFFROUTE_KM / max(35.0, 111.0 * math.cos(math.radians(mid_lat)))))
+    search_offroute_km = 10.0 if category == "lodging" else _MAX_OFFROUTE_KM
+    pad_lat = min(0.12, max(0.025, search_offroute_km / 111.0))
+    pad_lon = min(0.16, max(0.03, search_offroute_km / max(35.0, 111.0 * math.cos(math.radians(mid_lat)))))
     south, north = min_lat - pad_lat, max_lat + pad_lat
     west, east = min_lon - pad_lon, max_lon + pad_lon
 
@@ -290,7 +291,11 @@ def _photon_split_stays(v3, roundtrip, coords, category: str, days: int) -> list
             "tourism:camp_site", "tourism:alpine_hut",
             "tourism:wilderness_hut", "amenity:shelter",
         )
-        radius = 9.0
+        # Generic lodging may legitimately be a short transfer away from the
+        # hiking line. Route-first logistics keeps that transfer separate from
+        # the pedestrian backbone, so discover a wider pool without reshaping
+        # the route itself.
+        radius = 12.5
 
     found = []
     with ThreadPoolExecutor(max_workers=min(4, len(anchors))) as pool:
@@ -405,26 +410,36 @@ def _discover_stays(v3, roundtrip, stay_rescue, coords, start, category: str, da
     needed = max(1, days - 1)
 
     rows = []
-    # Photon is fast and stage-relative. It is the best first choice for an
-    # interactive planner because all night lookups run in parallel.
-    rows.extend(_photon_split_stays(v3, roundtrip, coords, category, days))
+    max_offroute = (
+        3.2 if strict_walk
+        else 10.0 if category == "lodging"
+        else _MAX_OFFROUTE_KM
+    )
 
-    max_offroute = 3.2 if strict_walk else _MAX_OFFROUTE_KM
+    # Campsites/refuges have strong OSM tags and are better served by one exact
+    # corridor query first. Generic lodging is fuzzier (hotel/gîte/auberge), so
+    # keep Photon first there. This improves outdoor lodging quality without
+    # adding a third network wave.
+    structured = category in {"camping", "refuge"}
+    if structured:
+        rows.extend(_bbox_route_stays(coords, category))
+    else:
+        rows.extend(_photon_split_stays(v3, roundtrip, coords, category, days))
+
     projected = _project_stays(roundtrip, coords, rows, category, max_offroute)
     chosen = _choose_stays(roundtrip, coords, projected, days, daily_target)
 
-    # Only if the fast stage lookups are insufficient do one compact OSM bbox
-    # query. Do not cascade through multiple public geocoders in the same click.
-    if len(chosen) < needed and deadline - time.monotonic() >= 1.4:
-        rows.extend(_bbox_route_stays(coords, category))
+    if len(chosen) < needed and deadline - time.monotonic() >= 1.25:
+        if structured:
+            rows.extend(_photon_split_stays(v3, roundtrip, coords, category, days))
+        else:
+            rows.extend(_bbox_route_stays(coords, category))
         projected = _project_stays(roundtrip, coords, rows, category, max_offroute)
         chosen = _choose_stays(roundtrip, coords, projected, days, daily_target)
 
-    # Do not open a third network discovery path here. The broad route probe
-    # can consume another full Overpass budget after Photon + bbox and was the
-    # reason Morvan exceeded the advertised logistics budget by several seconds.
-    # A partial night plan is preferable to freezing the interactive request;
-    # the validated hiking backbone remains unchanged.
+    # Do not open a third network discovery path here. A partial night plan is
+    # preferable to freezing the interactive request; the validated hiking
+    # backbone remains unchanged.
     return chosen, projected, {
         "budget_seconds": budget,
         "elapsed_ms": round((time.monotonic() - started) * 1000),
