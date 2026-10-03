@@ -461,13 +461,22 @@ def install_fast_planning(v3, v5, v9) -> None:
             soft_window = float(daily_max) >= target_per_day * 1.20 - 0.05
             accepted_high = float(daily_max) + (0.75 if soft_window else 0.35)
             accepted_low = max(3.0, float(daily_min) * 0.90)
+            close_enough = abs(distance - float(target_km)) <= max(
+                4.0, float(target_km) * 0.18
+            )
             if (
                 accepted_low <= per_day <= accepted_high
                 and retrace <= 0.25
+                and close_enough
             ):
                 candidate["fast_accept_window"] = {
                     "low_km_day": round(accepted_low, 2),
                     "high_km_day": round(accepted_high, 2),
+                    "target_deviation_pct": round(
+                        abs(distance - float(target_km))
+                        / max(float(target_km), 1.0) * 100.0,
+                        1,
+                    ),
                 }
                 return candidate
 
