@@ -8,6 +8,8 @@ from __future__ import annotations
 
 import json
 import math
+from concurrent.futures import ThreadPoolExecutor
+from copy import deepcopy
 from typing import Any
 
 from fastapi import Body, Depends, HTTPException
@@ -636,8 +638,44 @@ def _install_plan_overlay(app, legacy_main):
                 0,
                 "🛡️ Sécurité géographique : tracé pédestre validé avant affichage. Les lignes directes de secours sont interdites dans le conseiller.",
             )
-            result = _supplement_route_resources(result, data)
+
+            # The route is final here. Resource discovery cannot change its
+            # geometry, so independent Photon logistics and one compact OSM
+            # water/food lookup can safely run in parallel instead of adding
+            # their network latencies serially after routing.
+            try:
+                intent = v7.v5.v3._parse_intent(data)
+            except Exception:
+                intent = {}
+            snapshot = deepcopy(result)
+            with ThreadPoolExecutor(max_workers=2) as pool:
+                logistics_future = pool.submit(
+                    _supplement_route_resources, result, data
+                )
+                terrain_future = pool.submit(
+                    _bbox_route_water_food, snapshot, intent
+                )
+                try:
+                    result = logistics_future.result()
+                except Exception:
+                    result = result
+                try:
+                    terrain_rows = terrain_future.result()
+                except Exception:
+                    terrain_rows = []
+
+            if terrain_rows:
+                result = _merge_supplemented_resources(
+                    result,
+                    _filter_active(list(terrain_rows)),
+                )
+            # Tell the water overlay that the one bounded OSM terrain lookup has
+            # already been performed. It should enrich/filter only, not open a
+            # second network request.
+            result["_terrain_osm_preloaded"] = True
+
             result = enrich_resources(result)
+            result.pop("_terrain_osm_preloaded", None)
             result = _annotate_stage_resources(result)
             return _refresh_quality_after_resources(result, data)
         finally:
