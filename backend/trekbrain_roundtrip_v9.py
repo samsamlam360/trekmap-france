@@ -684,6 +684,121 @@ def _best_roundtrip(start, target_km: float, daily_min: float, daily_max: float,
     return selected
 
 
+def _recover_unranked_oversized_roundtrip(
+    route, start, target_km: float, daily_min: float, daily_max: float, days: int, v3
+):
+    """Recover a raw oversized ORS loop that bypassed normal candidate ranking.
+
+    Some compatibility wrappers can legitimately return a validated
+    ors-round-trip object directly. If that happens, the route has no
+    candidate_pool_size metadata and historically reached the hard daily
+    distance gate unchanged. Re-run one bounded calibration, then the existing
+    network-safe compact-loop recovery. Every accepted geometry is still
+    validated by ORS; this function never relaxes the user's distance ceiling.
+    """
+    if not isinstance(route, dict):
+        return route
+    if str(route.get("routing_mode") or "") != "ors-round-trip":
+        return route
+    if route.get("candidate_pool_size") is not None:
+        return route
+
+    try:
+        observed = float(route.get("distance") or 0)
+    except (TypeError, ValueError):
+        return route
+    feasible_low = max(3.0, float(daily_min) * max(days, 1))
+    feasible_high = float(daily_max) * max(days, 1)
+    if not math.isfinite(observed) or observed <= feasible_high + 0.35:
+        return route
+
+    rows = []
+
+    def add(candidate, requested_km=None):
+        if not isinstance(candidate, dict) or candidate.get("fallback") is not False:
+            return
+        try:
+            distance = float(candidate.get("distance") or 0)
+        except (TypeError, ValueError):
+            return
+        if not math.isfinite(distance) or distance <= 0:
+            return
+        if requested_km is not None:
+            candidate["round_trip_requested_km"] = round(float(requested_km), 2)
+        retrace = (
+            float(v3._route_retrace_ratio(candidate.get("coords") or []))
+            if hasattr(v3, "_route_retrace_ratio") else 0.0
+        )
+        per_day = distance / max(days, 1)
+        range_penalty = (
+            max(0.0, daily_min - per_day) * 5
+            + max(0.0, per_day - daily_max) * 8
+        )
+        rows.append((
+            abs(distance - float(target_km)) + range_penalty + retrace * 80,
+            candidate,
+        ))
+
+    add(route, route.get("round_trip_requested_km") or target_km)
+
+    # Calibrate the ORS objective from the measured overshoot. Two distinct
+    # seeds are enough to avoid turning one recovery into a retry storm.
+    ratio = max(0.38, min(0.88, float(target_km) / observed))
+    calibrated = max(3.0, min(float(target_km) * 0.90, float(target_km) * ratio))
+    if float(target_km) - calibrated >= 2.0:
+        for seed in (47, 61):
+            candidate, _warning = _roundtrip_request(start, calibrated, seed)
+            add(candidate, calibrated)
+            if rows and any(
+                feasible_low * 0.90 <= float(row[1].get("distance") or 0) <= feasible_high + 0.35
+                for row in rows
+            ):
+                break
+
+    feasible = [
+        row for row in rows
+        if feasible_low * 0.90 <= float(row[1].get("distance") or 0) <= feasible_high + 0.35
+    ]
+
+    # If ORS's round-trip objective is stubborn, search compact cycles through
+    # real points from the best validated loop rather than inventing off-network
+    # waypoints.
+    if not feasible:
+        source = min(
+            rows,
+            key=lambda row: abs(float(row[1].get("distance") or 0) - float(target_km)),
+        )[1]
+        for candidate in _matrix_subloop_candidates(
+            source, start, target_km, daily_min, daily_max, days, v3
+        ):
+            add(candidate)
+
+    feasible = [
+        row for row in rows
+        if feasible_low * 0.90 <= float(row[1].get("distance") or 0) <= feasible_high + 0.35
+    ]
+    pool = feasible or rows
+    pool.sort(key=lambda row: row[0])
+    selected = pool[0][1]
+    selected["distance_window_preferred"] = bool(feasible)
+    selected["candidate_pool_size"] = len(rows)
+    selected["candidate_modes"] = sorted({
+        str(row[1].get("routing_mode") or "unknown") for row in rows
+    })
+    selected["candidate_summary"] = [
+        {
+            "mode": str(candidate.get("routing_mode") or "unknown"),
+            "km": round(float(candidate.get("distance") or 0), 1),
+        }
+        for _score, candidate in sorted(
+            rows,
+            key=lambda row: abs(float(row[1].get("distance") or 0) - float(target_km)),
+        )[:10]
+    ]
+    selected["raw_roundtrip_recovery"] = True
+    return selected
+
+
 def _stay_key(stay: dict) -> str:
     source = str(stay.get("source_url") or "").strip()
     if source:
@@ -1006,6 +1121,9 @@ def _build_roundtrip(data, legacy_main, v3):
     daily_max = float(intent.get("daily_max") or data.daily_km * 1.25)
     target_km = float(intent.get("total_target") or daily_target * days)
     route = _best_roundtrip(start, target_km, daily_min, daily_max, days, v3)
+    route = _recover_unranked_oversized_roundtrip(
+        route, start, target_km, daily_min, daily_max, days, v3
+    )
     coords = route.get("coords") or []
     anchors = _equal_anchors(coords, days)
     if len(anchors) != max(0, days - 1):
@@ -1165,6 +1283,7 @@ __all__ = [
     "_equal_anchors",
     "_best_roundtrip",
     "_matrix_subloop_candidates",
+    "_recover_unranked_oversized_roundtrip",
     "_constraint_near_start",
     "_balanced_corridor_stays",
     "_route_points_with_stays",
