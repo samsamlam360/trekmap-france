@@ -735,12 +735,10 @@ def _photon_anchor_resource(anchor, category: str, osm_tags, radius_km: float):
     elif category == "transit":
         query = "gare"
     elif category == "food":
-        if any("bakery" in str(tag) for tag in tags):
-            query = "boulangerie"
-        elif any("convenience" in str(tag) for tag in tags):
-            query = "épicerie"
-        else:
-            query = "supermarché"
+        # A supermarket is the most useful single fallback for a hiker and one
+        # query keeps the latency budget predictable. OSM tags are still
+        # filtered locally, so unrelated Photon hits cannot become resources.
+        query = "supermarché"
     elif category == "stay":
         if any("hotel" in str(tag) or "hostel" in str(tag) or "guest_house" in str(tag) for tag in tags):
             query = "hotel"
