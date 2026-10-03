@@ -152,9 +152,13 @@ def _polygon_loop_candidates(start, target_km: float, daily_min: float, daily_ma
         candidate.update({
             "distance": round(distance, 2),
             "fallback": False,
-            "routing_mode": "ors-waypoint-loop",
+            "routing_mode": (
+                "secondary-waypoint-loop"
+                if routed.get("secondary_router")
+                else "ors-waypoint-loop"
+            ),
             "profile": routed.get("profile") or ors.ORS_PROFILE,
-            "provider": "OpenRouteService",
+            "provider": routed.get("provider") or "OpenRouteService",
             "waypoint_loop": True,
             "waypoint_orientation_deg": round(orientation, 1),
             "waypoint_radius_km": round(r, 2),
@@ -650,7 +654,38 @@ def _best_roundtrip(start, target_km: float, daily_min: float, daily_max: float,
                 ))
 
     if not rows:
-        detail = warnings[0] if warnings else "OpenRouteService n'a produit aucune boucle pédestre."
+        # Some ORS regions reject a large round_trip request outright even
+        # though shorter requests or ordinary pedestrian Directions still work.
+        # Keep this recovery bounded: two shorter round-trip attempts, then the
+        # existing waypoint-loop path which uses ors.get_route and therefore
+        # automatically benefits from the secondary pedestrian router.
+        for scale, seed in ((0.82, 7), (0.68, 19)):
+            add_candidate(max(3.0, target_km * scale), seed)
+            if rows:
+                break
+
+    if not rows:
+        for variant in _polygon_loop_candidates(
+            start, target_km, daily_min, daily_max, days, v3
+        ):
+            distance = float(variant.get("distance") or 0)
+            per_day = distance / max(days, 1)
+            retrace = (
+                float(v3._route_retrace_ratio(variant.get("coords") or []))
+                if hasattr(v3, "_route_retrace_ratio")
+                else 0.0
+            )
+            range_penalty = (
+                max(0.0, daily_min - per_day) * 5
+                + max(0.0, per_day - daily_max) * 8
+            )
+            rows.append((
+                abs(distance - target_km) + range_penalty + retrace * 80,
+                variant,
+            ))
+
+    if not rows:
+        detail = warnings[0] if warnings else "Aucun routeur pédestre n'a produit une boucle exploitable."
         raise HTTPException(status_code=503, detail=detail)
 
     # Distance constraints are a hard feasibility gate, not merely one term in
