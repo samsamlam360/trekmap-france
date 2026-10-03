@@ -33,10 +33,12 @@ from fastapi import HTTPException
 _INSTALLED = False
 _GR340_RELATION_ID = 6850120
 _OSM_FULL_URL = f"https://api.openstreetmap.org/api/0.6/relation/{_GR340_RELATION_ID}/full"
+_OSM_GPX_MIRROR_URL = "https://sortir.bzh/gpx/gr340-belle-ile.gpx"
 _OSM_TIMEOUT = 3.8
 _TARGETED_RACE_TIMEOUT = 4.2
 _CACHE_TTL = 6 * 60 * 60
 _DIRECT_CACHE: tuple[float, dict[str, Any]] | None = None
+_GPX_CACHE: tuple[float, dict[str, Any]] | None = None
 
 
 def _fold(value: Any) -> str:
@@ -130,6 +132,81 @@ def _relation_from_osm_xml(xml_text: str) -> dict[str, Any] | None:
         "tags": tags,
         "members": members,
     }
+
+
+
+def _relation_from_gpx(gpx_text: str) -> dict[str, Any] | None:
+    """Convert an OSM-derived GR 340 GPX into the normal relation shape."""
+    try:
+        root = ET.fromstring(gpx_text)
+    except (ET.ParseError, TypeError, ValueError):
+        return None
+
+    points = []
+    nodes = list(root.findall(".//{*}trkpt")) or list(root.findall(".//trkpt"))
+    for node in nodes:
+        try:
+            lat = float(node.attrib["lat"])
+            lon = float(node.attrib["lon"])
+        except (KeyError, TypeError, ValueError):
+            continue
+        if not (-90 <= lat <= 90 and -180 <= lon <= 180):
+            continue
+        row = {"lat": lat, "lon": lon}
+        if (
+            not points
+            or abs(points[-1]["lat"] - lat) > 1e-8
+            or abs(points[-1]["lon"] - lon) > 1e-8
+        ):
+            points.append(row)
+
+    if len(points) < 8:
+        return None
+    return {
+        "type": "relation",
+        "id": _GR340_RELATION_ID,
+        "tags": {
+            "type": "route",
+            "route": "hiking",
+            "ref": "GR 340",
+            "name": "Tour de Belle-Île-en-Mer",
+            "network": "nwn",
+        },
+        "members": [{
+            "type": "way",
+            "ref": 0,
+            "role": "",
+            "geometry": points,
+        }],
+    }
+
+
+def _gpx_mirror_relation() -> tuple[dict[str, Any] | None, str | None]:
+    """Fetch an independent OSM-derived GR 340 mirror with a warm cache."""
+    global _GPX_CACHE
+    now = time.monotonic()
+    if _GPX_CACHE is not None and now - _GPX_CACHE[0] < _CACHE_TTL:
+        return deepcopy(_GPX_CACHE[1]), None
+    try:
+        response = requests.get(
+            _OSM_GPX_MIRROR_URL,
+            headers={
+                "Accept": "application/gpx+xml,application/xml,text/xml,*/*",
+                "User-Agent": "TrekMap-France/9 (trekmap-france.onrender.com)",
+            },
+            timeout=3.2,
+        )
+    except requests.Timeout:
+        return None, "Miroir GPX OSM : délai dépassé"
+    except requests.RequestException as exc:
+        return None, f"Miroir GPX OSM inaccessible ({exc.__class__.__name__})"
+    if response.status_code != 200:
+        return None, f"Miroir GPX OSM HTTP {response.status_code}"
+    relation = _relation_from_gpx(response.text)
+    if relation is None:
+        return None, "Miroir GPX OSM : trace illisible ou incomplète"
+    _GPX_CACHE = (time.monotonic(), deepcopy(relation))
+    return relation, None
 
 
 def _direct_osm_relation() -> tuple[dict[str, Any] | None, str | None]:
@@ -349,6 +426,7 @@ def _targeted_gr340(v3, gr, rescue, start: dict[str, Any], target_km: float):
         ("overpass-secondary", _secondary_overpass_relation),
         ("overpass-tertiary", _tertiary_overpass_relation),
         ("osm-api-relation-full", _direct_osm_relation),
+        ("osm-gpx-mirror", _gpx_mirror_relation),
     )
     reasons = []
     executor = ThreadPoolExecutor(max_workers=len(sources))
