@@ -196,6 +196,39 @@ assert "q" not in captured_photon, captured_photon
 assert "osm.amenity.drinking_water" in captured_photon.get("include", ""), captured_photon
 assert "osm.natural.spring" in captured_photon.get("include", ""), captured_photon
 
+captured_lodging = {}
+def fake_lodging_request(url, *, params=None, **kwargs):
+    captured_lodging.update(dict(params or {}))
+    return {
+        "features": [{
+            "properties": {
+                "name": "Gîte test",
+                "countrycode": "FR",
+                "osm_key": "tourism",
+                "osm_value": "guest_house",
+                "osm_type": "N",
+                "osm_id": 124,
+            },
+            "geometry": {"coordinates": [5.001, 45.001]},
+        }]
+    }
+
+v3_module._request_json = fake_lodging_request
+try:
+    text_lodging = v3_module._photon_anchor_resource(
+        {"name": "Repère jour 1", "lat": 45.0, "lon": 5.0, "category": "route_anchor"},
+        "stay",
+        ("tourism:hotel", "tourism:guest_house", "tourism:hostel"),
+        8.0,
+        query_override="gîte",
+    )
+finally:
+    v3_module._request_json = real_request_json
+
+assert text_lodging and text_lodging["category"] == "lodging", text_lodging
+assert captured_lodging.get("q") == "gîte", captured_lodging
+assert "include" not in captured_lodging, captured_lodging
+
 
 # Production regression: /ai/plan must accept the planner model as JSON body,
 # never as a query parameter named `data`.
