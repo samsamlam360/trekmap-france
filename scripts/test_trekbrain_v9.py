@@ -74,6 +74,60 @@ missing_water = precision_audit(missing_water_plan, request, features, research,
 water_check = next(item for item in missing_water["checks"] if item["name"] == "Eau")
 assert water_check["status"] == "unknown", missing_water
 
+# A fixed-endpoint traverse should be judged on how evenly the *real* route is
+# split, not punished twice for being naturally shorter than a soft km/day
+# target. No detour should be invented just to manufacture extra kilometres.
+traverse_request = AIPlanRequest(
+    prompt="Je veux aller de Tours à Chinon à pied en 3 jours, environ 22 km par jour",
+    region="Tours",
+    days=3,
+    daily_km=22,
+    difficulty="medium",
+    route_type="Traversée",
+    require_transit=False,
+    require_water=False,
+    require_accommodation=False,
+    require_food=False,
+)
+traverse_plan = {
+    "confidence": {"score": 92, "limitations": []},
+    "route_type": "Traversée",
+    "route_preview": {
+        "fallback": False,
+        "distance_km": 54.6,
+        "coords": [[47.39, 0.68], [47.28, 0.43], [47.17, 0.24]],
+    },
+    "start": {"lat": 47.39, "lon": 0.68},
+    "end": {"lat": 47.17, "lon": 0.24},
+    "stages": [
+        {"distance_km": 18.2, "overnight": "Étape 1"},
+        {"distance_km": 18.2, "overnight": "Étape 2"},
+        {"distance_km": 18.2, "overnight": "Fin"},
+    ],
+    "duration_days": 3,
+    "transport": {},
+    "water": [],
+    "accommodations": [],
+    "side_requests": [],
+    "planner": {"corridor_centered": True},
+}
+traverse_audit = precision_audit(
+    traverse_plan, traverse_request, {"traverse": 1.0}, research, compound
+)
+traverse_stage = next(x for x in traverse_audit["checks"] if x["name"] == "Étapes")
+assert traverse_stage["status"] == "ok", traverse_audit
+assert "distance pédestre réelle" in traverse_stage["detail"], traverse_stage
+assert traverse_audit["score"] >= 94, traverse_audit
+
+# Explicit maxima remain hard constraints even on a fixed-endpoint traverse.
+strict_traverse_request = traverse_request.model_copy(update={
+    "prompt": "Je veux aller de Tours à Chinon en 3 jours, maximum 18 km par jour",
+})
+strict_audit = precision_audit(
+    traverse_plan, strict_traverse_request, {"traverse": 1.0}, research, compound
+)
+assert "distance maximale dépassée" in strict_audit["blockers"], strict_audit
+
 trusted = source_score({"url": "https://www.example.gouv.fr/agenda", "title": "Agenda randonnée Vercors", "snippet": "Informations officielles randonnée Vercors 2026"}, "agenda randonnée Vercors")
 social = source_score({"url": "https://www.instagram.com/example", "title": "Vercors", "snippet": "Photo randonnée"}, "agenda randonnée Vercors")
 assert trusted > social, (trusted, social)
