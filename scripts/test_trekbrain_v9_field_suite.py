@@ -195,16 +195,20 @@ try:
             raise AssertionError(f"post-route Photon query missing: {params!r}")
         if "lat" not in params or "lon" not in params:
             raise AssertionError(f"post-route Photon bias missing: {params!r}")
-        tags = params.get("osm_tag") or []
-        if isinstance(tags, str):
-            tags = [tags]
-        tag = str(tags[0] if tags else "")
-        mapping = {
-            "railway:station": ("Gare test", "railway", "station"),
-            "amenity:drinking_water": ("Fontaine test", "amenity", "drinking_water"),
-            "tourism:camp_site": ("Camping test", "tourism", "camp_site"),
-        }
-        name, key, value = mapping.get(tag, ("Hébergement test", "tourism", "hotel"))
+        if "osm_tag" in params:
+            raise AssertionError(f"post-route Photon must filter OSM locally: {params!r}")
+        query = str(params.get("q") or "").casefold()
+        if "gare" in query:
+            name, key, value = ("Gare test", "railway", "station")
+        elif "fontaine" in query:
+            name, key, value = ("Fontaine test", "amenity", "drinking_water")
+        elif "camping" in query:
+            name, key, value = ("Camping test", "tourism", "camp_site")
+        elif "hotel" in query:
+            name, key, value = ("Hébergement test", "tourism", "hotel")
+        else:
+            name, key, value = ("Refuge test", "tourism", "wilderness_hut")
+        tag = f"{key}:{value}"
         return {
             "features": [{
                 "properties": {

@@ -751,15 +751,14 @@ def _photon_anchor_resource(anchor, category: str, osm_tags, radius_km: float):
         "zoom": 11,
         "location_bias_scale": 0.1,
         "countrycode": "FR",
-        "limit": 6,
+        "limit": 8,
         "lang": "fr",
-        "osm_tag": tags,
     }
     try:
         payload = _request_json(
             PHOTON_URL,
             params=params,
-            timeout=2.6,
+            timeout=1.4,
             ttl=21600,
             service="Photon route resources",
             retries=1,
@@ -787,6 +786,13 @@ def _photon_anchor_resource(anchor, category: str, osm_tags, radius_km: float):
 
         osm_key = str(props.get("osm_key") or "")
         osm_value = str(props.get("osm_value") or "")
+        allowed = {
+            tuple(str(tag).split(":", 1))
+            for tag in tags
+            if ":" in str(tag)
+        }
+        if allowed and (osm_key, osm_value) not in allowed:
+            continue
         final_category = category
         if category == "stay":
             final_category = "camping" if osm_value in {"camp_site", "caravan_site"} else "refuge"
@@ -877,7 +883,7 @@ def _postroute_corridor_resources(boundaries, intent, existing_items):
         return []
 
     found = []
-    with ThreadPoolExecutor(max_workers=min(4, len(jobs))) as pool:
+    with ThreadPoolExecutor(max_workers=min(6, len(jobs))) as pool:
         futures = [
             pool.submit(_photon_anchor_resource, anchor, category, tags, radius)
             for anchor, category, tags, radius in jobs
