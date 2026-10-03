@@ -308,13 +308,11 @@ def _build_canonical(data, legacy_main, v3, gr, rescue, roundtrip, stitch, ors, 
 
     relation, warning = belle._targeted_gr340(v3, gr, rescue, start, target_km)
     if relation is None:
-        raise HTTPException(
-            status_code=503,
-            detail=(
-                "Le tour de Belle-Île a été reconnu comme GR 340, mais la relation OSM n'a pas pu être reconstruite. "
-                f"Diagnostic GR 340 : {warning or 'raison inconnue'}."
-            ),
-        )
+        # External OSM providers can all be temporarily unreachable from Render.
+        # Do not turn that provider outage into a total planning outage: return
+        # control to the generic pipeline, which still has to produce a validated
+        # pedestrian geometry and then pass the island safety filter.
+        return None
 
     coords = relation.get("coords") or []
     if len(coords) < 4:
