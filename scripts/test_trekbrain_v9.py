@@ -113,13 +113,27 @@ traverse_plan = {
     # fixed A→B semantics from the user request itself.
     "planner": {"corridor_centered": False, "intent": {}},
 }
-parsed_traverse = request_reconcile.v7.v5.v3._parse_intent(traverse_request) if hasattr(request_reconcile, "v7") else None
-if parsed_traverse is None:
-    from backend import smart_planner_v3 as planner_v3
-    parsed_traverse = planner_v3._parse_intent(traverse_request)
+from backend import smart_planner_v3 as planner_v3
+
+parsed_traverse = planner_v3._parse_intent(traverse_request)
 assert parsed_traverse["explicit_endpoint_pair"] is True, parsed_traverse
-assert parsed_traverse["start_query"] == "Tours", parsed_traverse
-assert parsed_traverse["end_query"] == "Chinon", parsed_traverse
+assert str(parsed_traverse["start_query"]).casefold() == "tours", parsed_traverse
+assert str(parsed_traverse["end_query"]).casefold() == "chinon", parsed_traverse
+
+# Exact production-style phrasing from the Render benchmark. This is the form
+# that previously slipped through the endpoint parser and triggered an
+# unnecessary broad Overpass search before routing.
+benchmark_traverse_request = traverse_request.model_copy(update={
+    "prompt": (
+        "Je veux faire un trek de Tours à Chinon en 3 jours, environ 22 km "
+        "par jour. Ce n'est pas une boucle."
+    ),
+})
+benchmark_intent = planner_v3._parse_intent(benchmark_traverse_request)
+assert benchmark_intent["explicit_endpoint_pair"] is True, benchmark_intent
+assert str(benchmark_intent["start_query"]).casefold() == "tours", benchmark_intent
+assert str(benchmark_intent["end_query"]).casefold() == "chinon", benchmark_intent
+assert benchmark_intent["route_type"] == "Traversée", benchmark_intent
 
 traverse_audit = precision_audit(
     traverse_plan, traverse_request, {"traverse": 1.0}, research, compound
