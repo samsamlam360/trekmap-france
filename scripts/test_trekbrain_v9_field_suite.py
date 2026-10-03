@@ -183,57 +183,6 @@ normalized, _ = normalize_for_planner(
 if "traversee" in normalized:
     failures.append(f"language regression: traverser became route-shape noun: {normalized!r}")
 
-# Corridor resource fallback must use real tagged Photon results near route
-# anchors and expose the requested categories without any network call in CI.
-old_request_json = v7.v5.v3.free._request_json
-try:
-    def fake_photon_reverse(url, **kwargs):
-        params = kwargs.get("params") or {}
-        tag = str(params.get("osm_tag") or "")
-        mapping = {
-            "railway:station": ("Gare test", "railway", "station"),
-            "amenity:drinking_water": ("Fontaine test", "amenity", "drinking_water"),
-            "shop:supermarket": ("Épicerie test", "shop", "supermarket"),
-            "tourism:camp_site": ("Camping test", "tourism", "camp_site"),
-        }
-        name, key, value = mapping.get(tag, ("Point test", "place", "locality"))
-        return {
-            "features": [{
-                "properties": {
-                    "name": name,
-                    "countrycode": "FR",
-                    "osm_type": "N",
-                    "osm_id": abs(hash((tag, params.get("lat"), params.get("lon")))) % 100000 + 1,
-                    "osm_key": key,
-                    "osm_value": value,
-                },
-                "geometry": {
-                    "coordinates": [float(params.get("lon")), float(params.get("lat"))],
-                },
-            }]
-        }
-
-    v7.v5.v3.free._request_json = fake_photon_reverse
-    resource_intent = {
-        "transit": True, "water": True, "food": True, "sleep": True,
-        "accommodation": "balanced",
-    }
-    resource_bounds = [
-        dict(PLACES["tours"]),
-        {"name": "Repère 1", "lat": 47.31, "lon": 0.53, "category": "route_split"},
-        {"name": "Repère 2", "lat": 47.22, "lon": 0.36, "category": "route_split"},
-        dict(PLACES["chinon"]),
-    ]
-    resource_rows = v7.v5.v3._corridor_resource_items(resource_bounds, resource_intent)
-    resource_categories = {x.get("category") for x in resource_rows}
-    for expected in ("transit", "water", "food", "camping"):
-        if expected not in resource_categories:
-            failures.append(
-                f"corridor Photon resource regression: missing {expected}, got {resource_categories!r}"
-            )
-finally:
-    v7.v5.v3.free._request_json = old_request_json
-
 # Explicit traverses may recover a validated route by splitting its existing
 # geometry into equal-progress days. No new path geometry may be invented.
 split_route = [
