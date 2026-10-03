@@ -310,9 +310,21 @@ def _score_side_requests(result: dict[str, Any], targets: list[dict[str, Any]], 
     return penalty, statuses
 
 
-def _candidate_prompts(normalized: str, targets: list[dict[str, Any]], compound: dict[str, Any]) -> list[str]:
+def _candidate_prompts(
+    normalized: str,
+    targets: list[dict[str, Any]],
+    compound: dict[str, Any],
+    internal_hint: str = "",
+) -> list[str]:
     semantic = " ".join(CATEGORY_TERMS.get(req.get("kind"), "") for req in compound.get("side_requests") or [])
     base = (normalized + " " + semantic).strip()
+
+    def with_hint(prompt: str) -> str:
+        prompt = str(prompt or "").strip()
+        hint = str(internal_hint or "").strip()
+        if not hint:
+            return prompt
+        return prompt + "\n\nPriorité interne TrekBrain : " + hint
     ranked = sorted(
         targets,
         key=lambda t: (
@@ -321,15 +333,16 @@ def _candidate_prompts(normalized: str, targets: list[dict[str, Any]], compound:
             0 if (t.get("request") or {}).get("preferred_day") else 1,
         ),
     )
-    prompts = [base]
+    prompts = [with_hint(base)]
     for target in ranked[:2]:
-        prompts.append(base + f" ; passer par {target['name']}")
+        prompts.append(with_hint(base + f" ; passer par {target['name']}"))
     return list(dict.fromkeys(prompts))[:3]
 
 
 def _build(data, legacy_main, user_id: int):
     rules = _safe_rules(legacy_main, user_id)
-    lesson = extract_inline_lesson(data.prompt)
+    explicit_prompt, internal_hint = _split_internal_strategy(data.prompt)
+    lesson = extract_inline_lesson(explicit_prompt)
     if lesson:
         try:
             ensure_language_schema(legacy_main)
@@ -338,7 +351,7 @@ def _build(data, legacy_main, user_id: int):
         except Exception:
             pass
 
-    normalized, matches = normalize_for_planner(data.prompt, rules)
+    normalized, matches = normalize_for_planner(explicit_prompt, rules)
     compound = extract_side_requests(normalized)
     location = v3._location(data)
     geo = v3._geocode(f"{location}, France") or v3._geocode(location)
@@ -352,7 +365,7 @@ def _build(data, legacy_main, user_id: int):
     compound_token = _COMPOUND.set(compound)
     candidates = []
     try:
-        for prompt in _candidate_prompts(normalized, targets, compound):
+        for prompt in _candidate_prompts(normalized, targets, compound, internal_hint):
             candidate_data = data.model_copy(update={"prompt": prompt})
             try:
                 result = v3._build(candidate_data, legacy_main)
