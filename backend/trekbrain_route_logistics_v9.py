@@ -420,10 +420,11 @@ def _discover_stays(v3, roundtrip, stay_rescue, coords, start, category: str, da
         projected = _project_stays(roundtrip, coords, rows, category, max_offroute)
         chosen = _choose_stays(roundtrip, coords, projected, days, daily_target)
 
-    if len(chosen) < needed and deadline - time.monotonic() >= 1.0:
-        rows.extend(_route_probe_stays(v3, roundtrip, coords, category))
-        projected = _project_stays(roundtrip, coords, rows, category, max_offroute)
-        chosen = _choose_stays(roundtrip, coords, projected, days, daily_target)
+    # Do not open a third network discovery path here. The broad route probe
+    # can consume another full Overpass budget after Photon + bbox and was the
+    # reason Morvan exceeded the advertised logistics budget by several seconds.
+    # A partial night plan is preferable to freezing the interactive request;
+    # the validated hiking backbone remains unchanged.
     return chosen, projected, {
         "budget_seconds": budget,
         "elapsed_ms": round((time.monotonic() - started) * 1000),

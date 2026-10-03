@@ -186,35 +186,66 @@ finally:
 assert nearby_calls["count"] <= 1, nearby_calls
 assert isinstance(probe_rows, list)
 
-# A first ORS loop that already fits the product's soft +/-25% daily window
-# must stop after one provider call. Mont-Saint-Michel used to pay for a second
-# loop even though 20.4 km/day was accepted later by the final soft gate.
+# A route that is technically inside the broad +/-25% feasibility window but
+# still far from the requested target must receive the corrective second ORS
+# call. This protects Vercors quality: ~18.7 km/day is feasible for a 15 km
+# target, but a second calibrated request can produce ~15.1 km/day.
 real_roundtrip_request = roundtrip._roundtrip_request
 roundtrip_calls = []
 def fake_soft_roundtrip(start, requested_km, seed):
     roundtrip_calls.append((float(requested_km), int(seed)))
+    distance = 56.2 if len(roundtrip_calls) == 1 else 45.3
     return {
-        "coords": [[48.60, -1.50], [48.66, -1.42], [48.58, -1.35], [48.60, -1.50]],
-        "distance": 40.9,
+        "coords": [[45.0, 5.0], [45.08, 5.08], [44.98, 5.15], [45.0, 5.0]],
+        "distance": distance,
         "fallback": False,
         "routing_mode": "ors-round-trip",
     }, None
 
 roundtrip._roundtrip_request = fake_soft_roundtrip
 try:
-    soft_loop = roundtrip._best_roundtrip(
-        {"lat": 48.60, "lon": -1.50},
-        32.0,
-        12.0,
-        20.0,
-        2,
+    corrected_loop = roundtrip._best_roundtrip(
+        {"lat": 45.0, "lon": 5.0},
+        45.0,
+        11.25,
+        18.75,
+        3,
         v3,
     )
 finally:
     roundtrip._roundtrip_request = real_roundtrip_request
-assert len(roundtrip_calls) == 1, roundtrip_calls
-assert float(soft_loop.get("distance") or 0) == 40.9, soft_loop
-assert soft_loop.get("fast_accept_window"), soft_loop
+assert len(roundtrip_calls) == 2, roundtrip_calls
+assert roundtrip_calls[1][0] < roundtrip_calls[0][0], roundtrip_calls
+assert float(corrected_loop.get("distance") or 0) == 45.3, corrected_loop
+
+# Route-first lodging must not start a third route-probe network path after
+# Photon and the single bounded bbox lookup fail.
+real_photon_split = logistics._photon_split_stays
+real_bbox_stays = logistics._bbox_route_stays
+real_route_probe = logistics._route_probe_stays
+logistics._photon_split_stays = lambda *args, **kwargs: []
+logistics._bbox_route_stays = lambda *args, **kwargs: []
+def forbidden_route_probe(*args, **kwargs):
+    raise AssertionError("route probe must not be called from _discover_stays")
+logistics._route_probe_stays = forbidden_route_probe
+try:
+    chosen, projected, meta = logistics._discover_stays(
+        v3,
+        roundtrip,
+        object(),
+        route_coords,
+        {"lat": lat, "lon": -1.54},
+        "camping",
+        3,
+        18.0,
+        False,
+    )
+finally:
+    logistics._photon_split_stays = real_photon_split
+    logistics._bbox_route_stays = real_bbox_stays
+    logistics._route_probe_stays = real_route_probe
+assert chosen == [] and projected == [], (chosen, projected)
+assert float(meta.get("elapsed_ms") or 0) < 500, meta
 
 # Walking connectors for several nights must be validated with one ORS Matrix
 # batch, not one Directions request per night.
