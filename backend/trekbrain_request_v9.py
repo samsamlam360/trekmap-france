@@ -263,6 +263,10 @@ def reconcile_request(data):
                     reason = reason + "+visit-near-region"
 
     explicit_route_type = _route_type_from_prompt(prompt)
+    if endpoint_pair and explicit_route_type is None:
+        # "aller de X à Y" is intrinsically point-to-point even when a stale
+        # form still says Boucle. No geocoding is required to resolve the shape.
+        explicit_route_type = "Traversée"
     effective_route_type = explicit_route_type or form_route_type
     route_type_overridden = bool(explicit_route_type and _fold(explicit_route_type) != _fold(form_route_type))
 
