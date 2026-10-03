@@ -247,6 +247,45 @@ finally:
 assert len(chosen_generic) == 4, chosen_generic
 assert all(6.0 < float(x.get("_offroute_km") or 0) <= 10.0 for x in chosen_generic), chosen_generic
 
+
+# Generic lodging sends gîte + hotel in the same bounded Photon wave.
+class PhotonRoundtrip(FakeRoundtrip):
+    @staticmethod
+    def _equal_anchors(_coords, days):
+        return [
+            {"name": f"Repère jour {i}", "lat": 0.0, "lon": i / 10.0, "category": "route_anchor"}
+            for i in range(1, days)
+        ]
+
+
+class DualQueryV3:
+    calls = []
+
+    @staticmethod
+    def _photon_anchor_resource(anchor, category, tags, radius, query_override=None):
+        DualQueryV3.calls.append((anchor["name"], query_override))
+        suffix = "g" if query_override == "gîte" else "h"
+        return {
+            "name": f"{query_override} {anchor['name']}",
+            "lat": float(anchor["lat"]),
+            "lon": float(anchor["lon"]) + (0.001 if suffix == "g" else 0.002),
+            "category": "lodging",
+            "source_url": f"osm://{anchor['name']}-{suffix}",
+        }
+
+
+DualQueryV3.calls.clear()
+dual_rows = logistics._photon_split_stays(
+    DualQueryV3,
+    PhotonRoundtrip,
+    coords,
+    "lodging",
+    3,
+)
+assert len(DualQueryV3.calls) == 4, DualQueryV3.calls
+assert {query for _anchor, query in DualQueryV3.calls} == {"gîte", "hotel"}
+assert len(dual_rows) == 4, dual_rows
+
 # Production guard: even if lodging post-processing throws an unexpected Python
 # exception, a valid pedestrian route must still be returned instead of
 # TB-INTERNAL-500.
