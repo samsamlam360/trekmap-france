@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import json
 import math
-from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 
 from fastapi import Body, Depends, HTTPException
@@ -511,21 +510,14 @@ def _supplement_route_resources(result: dict[str, Any], data) -> dict[str, Any]:
             if isinstance(item, dict) and _resource_kind(item) in {"station", "transport"}:
                 existing.append({**item, "category": "transit"})
 
-        with ThreadPoolExecutor(max_workers=2) as pool:
-            photon_future = pool.submit(
-                v3._postroute_corridor_resources, boundaries, intent, existing
-            )
-            osm_future = pool.submit(_bbox_route_water_food, result, intent)
-            try:
-                photon_rows = photon_future.result()
-            except Exception:
-                photon_rows = []
-            try:
-                osm_rows = osm_future.result()
-            except Exception:
-                osm_rows = []
-
-        rows = _filter_active(list(photon_rows or []) + list(osm_rows or []))
+        # Water already has its dedicated post-route discovery overlay. Keep
+        # this layer focused on the bounded Photon anchors (food, transit and
+        # missing route logistics) instead of paying for a second OSM request.
+        try:
+            rows = v3._postroute_corridor_resources(boundaries, intent, existing)
+        except Exception:
+            rows = []
+        rows = _filter_active(list(rows or []))
         return _merge_supplemented_resources(result, rows)
     except Exception:
         return result
