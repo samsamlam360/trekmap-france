@@ -119,6 +119,9 @@ def _summary(case_id: str, result: dict[str, Any], elapsed: float) -> dict[str, 
     logistics = result.get("logistics") or {}
     stages = result.get("stages") or []
     route = result.get("route_preview") or {}
+    performance = (result.get("agent") or {}).get("performance") or {}
+    confidence = result.get("confidence") or {}
+    checks = quality.get("checks") or []
     return {
         "case": case_id,
         "ok": True,
@@ -127,6 +130,14 @@ def _summary(case_id: str, result: dict[str, Any], elapsed: float) -> dict[str, 
         "grade": quality.get("grade"),
         "blockers": quality.get("blockers") or [],
         "reasons": quality.get("reasons") or [],
+        "quality_checks": [
+            [item.get("name"), item.get("status")]
+            for item in checks if isinstance(item, dict)
+        ],
+        "confidence_score": confidence.get("score"),
+        "limitations": [str(x)[:180] for x in (confidence.get("limitations") or [])[:6]],
+        "core_total_ms": performance.get("total_ms"),
+        "context_prepare_ms": performance.get("context_prepare_ms"),
         "route_km": route.get("distance_km") or route.get("distance"),
         "fallback": route.get("fallback"),
         "stage_km": [stage.get("distance_km") for stage in stages if isinstance(stage, dict)],
@@ -134,6 +145,7 @@ def _summary(case_id: str, result: dict[str, Any], elapsed: float) -> dict[str, 
         "nights_resolved": logistics.get("nights_resolved"),
         "nights_required": logistics.get("nights_required"),
         "logistics_status": logistics.get("status"),
+        "logistics_timing": logistics.get("timing") or {},
     }
 
 
