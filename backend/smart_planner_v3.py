@@ -881,13 +881,27 @@ def _photon_anchor_resource(anchor, category: str, osm_tags, radius_km: float):
     elif category == "transit":
         query = "gare"
     elif category == "food":
-        # A supermarket is the most useful single fallback for a hiker and one
-        # query keeps the latency budget predictable. OSM tags are still
-        # filtered locally, so unrelated Photon hits cannot become resources.
-        query = "supermarché"
+        # At the trip start a supermarket is ideal; around an intermediate
+        # hiking split, a bakery is substantially more common in small French
+        # villages. Keep one query per anchor, just make that query better suited
+        # to the anchor instead of opening a second network call.
+        anchor_kind = str(anchor.get("category") or "").casefold()
+        anchor_name = str(anchor.get("name") or "").casefold()
+        query = (
+            "boulangerie"
+            if anchor_kind == "route_anchor" or "repère jour" in anchor_name or "repere jour" in anchor_name
+            else "supermarché"
+        )
     elif category == "stay":
-        if any("hotel" in str(tag) or "hostel" in str(tag) or "guest_house" in str(tag) for tag in tags):
-            query = "hotel"
+        if any(
+            token in str(tag)
+            for tag in tags
+            for token in ("hotel", "hostel", "guest_house", "chalet", "apartment")
+        ):
+            # Generic trek lodging is usually rural; "gîte" gives Photon a
+            # better chance of surfacing guest houses/chalets than an urban-only
+            # hotel query. Exact OSM tags are still checked before acceptance.
+            query = "gîte"
         elif any("camp_site" in str(tag) for tag in tags):
             query = "camping"
         else:
