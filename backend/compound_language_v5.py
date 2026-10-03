@@ -205,8 +205,7 @@ def extract_side_requests(normalized_text: str, *, today: date | None = None) ->
             for _kind, word in hits:
                 token = re.escape(word)
                 with_marker = re.search(
-                    rf"\b(?:avec|pres de|proche de)\b[^.;,!?
-]{{0,48}}(?<!\w){token}(?!\w)",
+                    rf"\b(?:avec|pres de|proche de)\b[^.;,!?\\n]{{0,48}}(?<!\w){token}(?!\w)",
                     clause,
                 )
                 noun_phrase = re.search(
