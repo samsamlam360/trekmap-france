@@ -30,6 +30,7 @@ from .free_planner_v2 import (
     _overpass,
     _photon_category_candidates,
     _request_json,
+    FILTERS as BASE_FILTERS,
     PHOTON_URL,
 )
 
@@ -400,6 +401,138 @@ def _extra_nearby(center: dict[str, Any], radius_km: float) -> tuple[list[dict[s
             "trail_name": tags.get("name") if cat == "trail" else "",
         })
     return items, []
+
+
+
+def _combined_nearby(
+    center: dict[str, Any],
+    radius_km: float,
+    base_categories: list[str],
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[str]]:
+    """Fetch route logistics and scenic context in one Overpass request.
+
+    Historically v9 paid for one broad logistics query and then immediately paid
+    for a second scenic/trail query over the same circle. The merged request
+    keeps the exact OSM filters and parsing semantics while cutting one network
+    round trip from the interactive path.
+    """
+    radius_m = max(1000, min(int(radius_km * 1000), 30000))
+    clauses = []
+    for cat in base_categories:
+        for flt in BASE_FILTERS.get(cat, []):
+            clauses.append(
+                f"nwr(around:{radius_m},{center['lat']},{center['lon']}){flt};"
+            )
+    for cat, filters in EXTRA_FILTERS.items():
+        for flt in filters:
+            element = "relation" if cat == "trail" else "nwr"
+            clauses.append(
+                f"{element}(around:{radius_m},{center['lat']},{center['lon']}){flt};"
+            )
+    if not clauses:
+        return [], [], []
+
+    query = "[out:json][timeout:20];(" + "".join(clauses) + ");out center tags 260;"
+    data = _overpass(query)
+
+    base_items, extra_items = [], []
+    seen_base, seen_extra = set(), set()
+    for e in (data.get("elements") or [])[:260]:
+        tags = e.get("tags") or {}
+        lat, lon = e.get("lat"), e.get("lon")
+        if lat is None or lon is None:
+            c = e.get("center") or {}
+            lat, lon = c.get("lat"), c.get("lon")
+        try:
+            lat, lon = float(lat), float(lon)
+        except (TypeError, ValueError):
+            continue
+
+        base_cat = None
+        if (
+            tags.get("amenity") == "drinking_water"
+            or tags.get("man_made") == "water_tap"
+            or tags.get("natural") == "spring"
+        ):
+            base_cat = "water"
+        elif tags.get("tourism") in {"camp_site", "caravan_site"}:
+            base_cat = "camping"
+        elif (
+            tags.get("tourism") in {"alpine_hut", "wilderness_hut"}
+            or tags.get("amenity") == "shelter"
+        ):
+            base_cat = "refuge"
+        elif (
+            tags.get("railway") in {"station", "halt"}
+            or tags.get("highway") == "bus_stop"
+            or tags.get("public_transport") == "station"
+        ):
+            base_cat = "transit"
+        elif (
+            tags.get("shop") in {"supermarket", "convenience", "bakery"}
+            or tags.get("amenity") in {"restaurant", "cafe"}
+        ):
+            base_cat = "food"
+        elif tags.get("tourism") == "viewpoint" or tags.get("natural") in {"peak", "waterfall"}:
+            base_cat = "viewpoint"
+
+        identity = (e.get("type"), e.get("id"))
+        if base_cat and base_cat in base_categories and identity not in seen_base:
+            seen_base.add(identity)
+            status = "unverified"
+            if base_cat == "water":
+                if tags.get("amenity") == "drinking_water" or tags.get("drinking_water") == "yes":
+                    status = "potable_referenced"
+                elif tags.get("drinking_water") == "no":
+                    status = "not_potable"
+            base_items.append({
+                "name": tags.get("name") or tags.get("ref") or f"{base_cat.title()} OSM",
+                "category": base_cat,
+                "lat": lat,
+                "lon": lon,
+                "source_url": (
+                    f"https://www.openstreetmap.org/{e.get('type','node')}/{e.get('id')}"
+                    if e.get("id") else _map_url(lat, lon)
+                ),
+                "water_status": status,
+                "opening_hours": tags.get("opening_hours") or "",
+            })
+
+        extra_cat = None
+        if tags.get("route") == "hiking":
+            extra_cat = "trail"
+        elif tags.get("natural") == "peak":
+            extra_cat = "peak"
+        elif tags.get("natural") == "waterfall":
+            extra_cat = "waterfall"
+        elif tags.get("natural") == "water":
+            extra_cat = "lake"
+        elif tags.get("historic") or tags.get("tourism") == "attraction":
+            extra_cat = "heritage"
+        elif tags.get("place") in {"village", "town"}:
+            extra_cat = "village"
+        elif tags.get("leisure") == "nature_reserve" or tags.get("boundary") == "protected_area":
+            extra_cat = "nature"
+
+        if extra_cat and identity not in seen_extra:
+            name = tags.get("name") or tags.get("ref")
+            if name or extra_cat in {"lake", "nature"}:
+                seen_extra.add(identity)
+                extra_items.append({
+                    "name": name or CATEGORY_LABEL.get(extra_cat, extra_cat).title(),
+                    "category": extra_cat,
+                    "lat": lat,
+                    "lon": lon,
+                    "source_url": (
+                        f"https://www.openstreetmap.org/{e.get('type','node')}/{e.get('id')}"
+                        if e.get("id") else _map_url(lat, lon)
+                    ),
+                    "water_status": "unverified",
+                    "opening_hours": tags.get("opening_hours") or "",
+                    "trail_name": tags.get("name") if extra_cat == "trail" else "",
+                })
+
+    return base_items, extra_items, []
 
 
 def _geocode_named(query: str, location: str) -> dict[str, Any] | None:
@@ -1116,17 +1249,25 @@ def _build(data: AIPlanRequest, legacy_main):
     radius = min(30.0, max(10.0, intent["daily_target"] * min(intent["days"], 4) * 0.42))
     notes = []
     try:
-        base = _nearby(center["lat"], center["lon"], radius, base_categories)
+        base, extra, extra_notes = _combined_nearby(center, radius, base_categories)
+        notes += extra_notes
     except RuntimeError as exc:
         notes.append(str(exc))
-        base = _photon_category_candidates(location, center, base_categories)
-    extra, extra_notes = _extra_nearby(center, radius)
-    notes += extra_notes
+        # For an explicit point-to-point trek the endpoints already define the
+        # pedestrian backbone. Do not replace one timed-out broad OSM request by
+        # another broad Photon sweep plus a second scenic OSM query. Route first,
+        # then use the bounded post-route resource lookup on real day anchors.
+        if corridor_centered and forced_start and forced_end:
+            base, extra = [], []
+        else:
+            base = _photon_category_candidates(location, center, base_categories)
+            extra = []
 
-    # A corridor search can legitimately outlive one slow Overpass mirror.
-    # Complete the POI pool around the *real* endpoints instead of falling back
-    # to the stale form region (e.g. Chartres for an explicit Tours -> Chinon).
-    if corridor_centered and len(base) + len(extra) < 4:
+    # If a traverse has too little context but the broad OSM query succeeded,
+    # one bounded endpoint fallback may add useful POIs. After an OSM timeout,
+    # the two authoritative endpoints are enough to route and the post-route
+    # resource pass will fill logistics without another broad search.
+    if corridor_centered and len(base) + len(extra) < 4 and not notes:
         corridor_fallback = []
         for anchor in (forced_start, forced_end):
             if not anchor:
