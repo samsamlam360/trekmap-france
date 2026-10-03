@@ -1311,7 +1311,15 @@ def _build(data: AIPlanRequest, legacy_main):
         if len(candidates) >= 10:
             break
     if not candidates:
-        raise HTTPException(status_code=422, detail="Je n'ai pas trouvé de combinaison d'étapes cohérente. Essaie une zone plus précise ou assouplis la distance quotidienne.")
+        non_loop = _fold(intent.get("route_type") or "") not in {"boucle", "aller-retour", "aller retour"}
+        if corridor_centered and non_loop and forced_start and forced_end:
+            # The endpoints are authoritative. Sparse or unavailable POIs must
+            # not prevent routing the real pedestrian backbone; once ORS
+            # validates it, the recovery below can split that geometry into the
+            # requested hiking days and final resources are attached afterwards.
+            candidates = [Candidate([start, end], "corridor-direct", 0.0)]
+        else:
+            raise HTTPException(status_code=422, detail="Je n'ai pas trouvé de combinaison d'étapes cohérente. Essaie une zone plus précise ou assouplis la distance quotidienne.")
 
     evaluated = []
     for candidate in candidates[:6]:
