@@ -876,15 +876,39 @@ def _photon_anchor_resource(anchor, category: str, osm_tags, radius_km: float):
     # lookup on the public instance. Coordinates only bias ranking; every result
     # is still distance-filtered below before it is accepted.
     tags = list(osm_tags)
+    anchor_label = str(
+        anchor.get("short_name") or anchor.get("name") or ""
+    ).strip()
+    folded_anchor = _fold(anchor_label)
+    useful_anchor_label = bool(
+        anchor_label
+        and len(anchor_label) <= 90
+        and not any(
+            folded_anchor.startswith(prefix)
+            for prefix in (
+                "repere jour", "repère jour", "etape", "étape",
+                "depart", "départ", "arrivee", "arrivée",
+            )
+        )
+    )
+
     if category == "water":
         query = "fontaine"
     elif category == "transit":
-        query = "gare"
+        # Photon treats coordinates as a ranking bias, not a hard locality
+        # constraint. Add a real endpoint name when available so "gare Tours"
+        # or "gare Chinon" wins over a merely nearby station with a stronger
+        # global text score. The result is still OSM-tag and distance filtered.
+        query = f"gare {anchor_label}" if useful_anchor_label else "gare"
     elif category == "food":
-        # A supermarket is the most useful single fallback for a hiker and one
-        # query keeps the latency budget predictable. OSM tags are still
-        # filtered locally, so unrelated Photon hits cannot become resources.
-        query = "supermarché"
+        # Same network cost as before, but a named anchor makes mountainous
+        # resupply searches materially more precise ("supermarché Le Mont-Dore"
+        # instead of a generic nationwide "supermarché" query).
+        query = (
+            f"supermarché {anchor_label}"
+            if useful_anchor_label
+            else "supermarché"
+        )
     elif category == "stay":
         if any("hotel" in str(tag) or "hostel" in str(tag) or "guest_house" in str(tag) for tag in tags):
             query = "hotel"
@@ -1012,11 +1036,11 @@ def _postroute_corridor_resources(boundaries, intent, existing_items):
         if _closest(transit, boundaries[0], 12) is None:
             transit_jobs.append((boundaries[0], "transit", (
                 "railway:station", "railway:halt", "public_transport:station"
-            ), 12.0))
+            ), 15.0))
         if _closest(transit, boundaries[-1], 12) is None:
             transit_jobs.append((boundaries[-1], "transit", (
                 "railway:station", "railway:halt", "public_transport:station"
-            ), 12.0))
+            ), 15.0))
 
     interiors = list(boundaries[1:-1])
     if len(interiors) > 2:
@@ -1055,7 +1079,7 @@ def _postroute_corridor_resources(boundaries, intent, existing_items):
         if intent.get("food") and _closest(foods, boundary, 5.0) is None:
             food_jobs.append((boundary, "food", (
                 "shop:supermarket", "shop:convenience", "shop:bakery"
-            ), 6.5))
+            ), 9.0))
 
     # Prioritise access and overnight logistics when the six-call cap is tight,
     # then food and water. All calls still run in one bounded parallel wave.
