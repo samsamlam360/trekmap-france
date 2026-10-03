@@ -540,7 +540,7 @@ def _attach_logistics(result: dict[str, Any], data, legacy_main, v3, roundtrip, 
 
         if day == days:
             overnight = "Fin du trek"
-        elif not night:
+        elif not night or not str(night.get("name") or "").strip():
             overnight = "Nuitée à organiser sans modifier le tracé principal"
         elif night.get("access_mode") == "walk":
             overnight = f"{night['name']} · liaison pédestre {night.get('access_distance_km', 0):.1f} km"
