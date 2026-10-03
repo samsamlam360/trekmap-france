@@ -222,6 +222,89 @@ def enrich_resources(result: dict[str, Any]) -> dict[str, Any]:
     return result
 
 
+
+def _annotate_stage_resources(result: dict[str, Any]) -> dict[str, Any]:
+    """Project final route-relative resources back onto the daily stage cards."""
+    points = ((result.get("map_resources") or {}).get("points") or [])
+    stages = result.get("stages") or []
+    if not isinstance(stages, list):
+        return result
+
+    by_day: dict[int, dict[str, list[dict[str, Any]]]] = {}
+    for item in points:
+        if not isinstance(item, dict):
+            continue
+        kind = str(item.get("kind") or "")
+        if kind not in {"water", "food"}:
+            continue
+        try:
+            day = max(1, int(item.get("route_day") or 1))
+        except (TypeError, ValueError):
+            continue
+        by_day.setdefault(day, {}).setdefault(kind, []).append(item)
+
+    for index, stage in enumerate(stages, start=1):
+        if not isinstance(stage, dict):
+            continue
+        resources = by_day.get(index) or {}
+        water = resources.get("water") or []
+        food = resources.get("food") or []
+        if water:
+            stage["water_notes"] = " · ".join(
+                f"{item.get('name') or 'Point d’eau'}"
+                + (
+                    " (potable référencée)"
+                    if str(item.get("status") or "") == "potable_referenced"
+                    else " (potabilité à vérifier)"
+                )
+                for item in water[:3]
+            )
+        if food:
+            stage["food_notes"] = " · ".join(
+                str(item.get("name") or "Ravitaillement")
+                for item in food[:3]
+            )
+    return result
+
+
+def _refresh_quality_after_resources(result: dict[str, Any], data) -> dict[str, Any]:
+    """Recompute the public v9 audit after final water/food overlays.
+
+    Geometry and route choice are unchanged; this only makes the score observe
+    the same final result the user actually receives.
+    """
+    try:
+        from . import smart_planner_v9 as planner_v9
+
+        normalized, _ = v7.normalize_for_planner(data.prompt)
+        compound = v7.extract_side_requests(normalized)
+        features = planner_v9.extract_features(data, normalized, compound)
+        web = result.get("web_research") or {}
+        research = {
+            "evidence": web.get("evidence") or {},
+            "results": result.get("web_sources") or [],
+        }
+        audit = planner_v9.precision_audit(
+            result,
+            data,
+            features,
+            research,
+            compound,
+        )
+    except Exception:
+        return result
+
+    trekbrain = result.setdefault("trekbrain", {})
+    if isinstance(trekbrain, dict):
+        trekbrain["quality"] = audit
+    decision = result.get("decision_summary")
+    if isinstance(decision, dict):
+        decision["quality"] = audit.get("score")
+        decision["grade"] = audit.get("grade")
+        decision["score_meaning"] = audit.get("score_meaning")
+    return result
+
+
 def _install_plan_overlay(app, legacy_main):
     original = next((r for r in app.router.routes if getattr(r, "path", None) == "/ai/plan" and "POST" in getattr(r, "methods", set())), None)
     if not original:
@@ -253,7 +336,9 @@ def _install_plan_overlay(app, legacy_main):
                 0,
                 "🛡️ Sécurité géographique : tracé pédestre validé avant affichage. Les lignes directes de secours sont interdites dans le conseiller.",
             )
-            return enrich_resources(result)
+            result = enrich_resources(result)
+            result = _annotate_stage_resources(result)
+            return _refresh_quality_after_resources(result, data)
         finally:
             reset_region(token)
 
