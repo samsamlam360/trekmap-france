@@ -67,6 +67,68 @@ assert plan["transport"]["outbound_point"]["name"] == "Gare du départ"
 assert plan["transport"]["return_point"]["name"] == "Arrêt de bus arrivée"
 assert plan["trail_context"]["near_route"][0]["name"] == "GR Test"
 
+# Named route anchors should make the same single Photon call more precise.
+# We inspect only the request parameters and return deterministic fake OSM data.
+from backend import smart_planner_v3 as v3
+
+_real_request_json = v3._request_json
+_calls = []
+
+def _fake_route_resource_request(url, **kwargs):
+    _calls.append(dict(kwargs.get("params") or {}))
+    query = str((kwargs.get("params") or {}).get("q") or "")
+    if query.startswith("gare"):
+        return {
+            "features": [{
+                "properties": {
+                    "name": "Gare de Tours",
+                    "city": "Tours",
+                    "countrycode": "FR",
+                    "osm_key": "railway",
+                    "osm_value": "station",
+                    "osm_type": "N",
+                    "osm_id": 10,
+                },
+                "geometry": {"coordinates": [0.684, 47.394]},
+            }]
+        }
+    return {
+        "features": [{
+            "properties": {
+                "name": "Supermarché du test",
+                "city": "Le Mont-Dore",
+                "countrycode": "FR",
+                "osm_key": "shop",
+                "osm_value": "supermarket",
+                "osm_type": "N",
+                "osm_id": 11,
+            },
+            "geometry": {"coordinates": [2.812, 45.575]},
+        }]
+    }
+
+v3._request_json = _fake_route_resource_request
+try:
+    station = v3._photon_anchor_resource(
+        {"name": "Tours", "lat": 47.394, "lon": 0.684},
+        "transit",
+        ("railway:station", "railway:halt", "public_transport:station"),
+        15.0,
+    )
+    food = v3._photon_anchor_resource(
+        {"name": "Le Mont-Dore", "lat": 45.575, "lon": 2.812},
+        "food",
+        ("shop:supermarket", "shop:convenience", "shop:bakery"),
+        9.0,
+    )
+finally:
+    v3._request_json = _real_request_json
+
+assert station and station["category"] == "transit", station
+assert food and food["category"] == "food", food
+assert _calls[0]["q"] == "gare Tours", _calls
+assert _calls[1]["q"] == "supermarché Le Mont-Dore", _calls
+
 # Production regression: /ai/plan must accept the planner model as JSON body,
 # never as a query parameter named `data`.
 from backend import app_v5
