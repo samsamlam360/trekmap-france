@@ -796,6 +796,7 @@ def _recover_unranked_oversized_roundtrip(
         )[:10]
     ]
     selected["raw_roundtrip_recovery"] = True
+    selected["raw_roundtrip_recovery_version"] = 1
     return selected
 
 
