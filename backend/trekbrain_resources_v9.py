@@ -647,30 +647,41 @@ def _install_plan_overlay(app, legacy_main):
             except Exception:
                 intent = {}
             snapshot = deepcopy(result)
-            with ThreadPoolExecutor(max_workers=2) as pool:
-                logistics_future = pool.submit(
-                    _supplement_route_resources, result, data
-                )
-                terrain_future = pool.submit(
-                    _bbox_route_water_food, snapshot, intent
-                )
+            terrain_preloaded = bool(result.get("_terrain_osm_preloaded"))
+            terrain_rows = []
+            if terrain_preloaded:
+                # Route-first lodging already paid for a compact OSM corridor
+                # request and attached its water/food rows. Only the bounded
+                # Photon supplement may still be useful (typically transport).
                 try:
-                    result = logistics_future.result()
+                    result = _supplement_route_resources(result, data)
                 except Exception:
                     pass
-                try:
-                    terrain_rows = terrain_future.result()
-                except Exception:
-                    terrain_rows = []
+            else:
+                with ThreadPoolExecutor(max_workers=2) as pool:
+                    logistics_future = pool.submit(
+                        _supplement_route_resources, result, data
+                    )
+                    terrain_future = pool.submit(
+                        _bbox_route_water_food, snapshot, intent
+                    )
+                    try:
+                        result = logistics_future.result()
+                    except Exception:
+                        pass
+                    try:
+                        terrain_rows = terrain_future.result()
+                    except Exception:
+                        terrain_rows = []
 
-            if terrain_rows:
-                result = _merge_supplemented_resources(
-                    result,
-                    _filter_active(list(terrain_rows)),
-                )
-            # The water overlay must reuse the compact OSM terrain lookup above
-            # instead of opening another public Overpass request.
-            result["_terrain_osm_preloaded"] = True
+                if terrain_rows:
+                    result = _merge_supplemented_resources(
+                        result,
+                        _filter_active(list(terrain_rows)),
+                    )
+                # The water overlay must reuse the compact OSM terrain lookup
+                # above instead of opening another public Overpass request.
+                result["_terrain_osm_preloaded"] = True
             result = enrich_resources(result)
             result.pop("_terrain_osm_preloaded", None)
             result = _annotate_stage_resources(result)
