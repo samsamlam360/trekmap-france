@@ -73,7 +73,37 @@ def _distance_km(a: tuple[float, float], b: tuple[float, float]) -> float:
     return 6371.0088 * 2 * math.asin(min(1.0, math.sqrt(h)))
 
 
-def _route_match(coords: list[list[float]], item: dict[str, Any]) -> tuple[float, float] | None:
+def _route_distance_profile(coords: list[list[float]]) -> tuple[list[float], float]:
+    """Cumulative route distance aligned to coordinate indices.
+
+    Resource day assignment must follow kilometres walked, not the density of
+    router geometry points. ORS may emit many points in one technical section
+    and few in another, so index/len(coords) is not a reliable route progress.
+    """
+    if not isinstance(coords, list) or not coords:
+        return [], 0.0
+    cumulative = [0.0] * len(coords)
+    total = 0.0
+    previous: tuple[float, float] | None = None
+    for index, point in enumerate(coords):
+        current = None
+        if isinstance(point, (list, tuple)) and len(point) >= 2:
+            lat, lon = _number(point[0]), _number(point[1])
+            if lat is not None and lon is not None:
+                current = (lat, lon)
+        if current is not None:
+            if previous is not None:
+                total += _distance_km(previous, current)
+            previous = current
+        cumulative[index] = total
+    return cumulative, total
+
+
+def _route_match(
+    coords: list[list[float]],
+    item: dict[str, Any],
+    route_profile: tuple[list[float], float] | None = None,
+) -> tuple[float, float] | None:
     target = _point(item)
     if not target or not coords:
         return None
@@ -98,7 +128,13 @@ def _route_match(coords: list[list[float]], item: dict[str, Any]) -> tuple[float
                     best_d, best_i = d, len(coords) - 1
     if not math.isfinite(best_d):
         return None
-    return best_d, best_i / max(1, len(coords) - 1)
+
+    progress = best_i / max(1, len(coords) - 1)
+    if route_profile:
+        cumulative, total = route_profile
+        if len(cumulative) == len(coords) and total > 0 and 0 <= best_i < len(cumulative):
+            progress = max(0.0, min(1.0, float(cumulative[best_i]) / float(total)))
+    return best_d, progress
 
 
 def _resource_kind(item: dict[str, Any], fallback: str = "") -> str:
@@ -154,12 +190,13 @@ def enrich_resources(result: dict[str, Any]) -> dict[str, Any]:
     coords = route.get("coords") or []
     days = max(1, int(result.get("duration_days") or len(result.get("stages") or []) or 1))
     prepared, seen = [], set()
+    route_profile = _route_distance_profile(coords)
     for item in _candidate_resources(result):
         point = _point(item)
         if not point:
             continue
         kind = str(item.get("kind") or "poi")
-        match = _route_match(coords, item)
+        match = _route_match(coords, item, route_profile)
         if not match:
             continue
         distance, progress = match
