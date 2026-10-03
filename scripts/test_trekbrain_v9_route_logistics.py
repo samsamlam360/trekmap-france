@@ -181,18 +181,27 @@ assert all(
 )
 
 
-# Structured outdoor lodging should prefer one exact OSM corridor query and stop
-# before Photon when that query already resolves every night.
+# OSM tags and Photon lodging discovery must share one concurrent network wave.
+# Each fake waits until the other has started; a sequential implementation would
+# time out and fail this regression.
+from threading import Event
+
 real_bbox_order = logistics._bbox_route_stays
 real_photon_order = logistics._photon_split_stays
 order_calls = {"bbox": 0, "photon": 0}
+bbox_started = Event()
+photon_started = Event()
 try:
     def counted_bbox(_coords, category):
         order_calls["bbox"] += 1
+        bbox_started.set()
+        assert photon_started.wait(0.8), "Photon lodging lookup did not start concurrently"
         return [dict(x) for x in camps]
 
     def counted_photon(*args, **kwargs):
         order_calls["photon"] += 1
+        photon_started.set()
+        assert bbox_started.wait(0.8), "OSM lodging lookup did not start concurrently"
         return []
 
     logistics._bbox_route_stays = counted_bbox
@@ -213,7 +222,7 @@ finally:
     logistics._photon_split_stays = real_photon_order
 
 assert len(chosen_fast) == 4, chosen_fast
-assert order_calls == {"bbox": 1, "photon": 0}, order_calls
+assert order_calls == {"bbox": 1, "photon": 1}, order_calls
 assert meta_fast["elapsed_ms"] >= 0
 
 # Generic lodging may be a separate transfer without reshaping the hiking line.
