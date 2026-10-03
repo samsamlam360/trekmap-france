@@ -671,6 +671,16 @@ def _best_roundtrip(start, target_km: float, daily_min: float, daily_max: float,
     selected["candidate_modes"] = sorted({
         str(row[1].get("routing_mode") or "unknown") for row in rows
     })
+    compact = []
+    for _score, candidate in sorted(
+        rows,
+        key=lambda row: abs(float(row[1].get("distance") or 0) - float(target_km)),
+    )[:10]:
+        compact.append({
+            "mode": str(candidate.get("routing_mode") or "unknown"),
+            "km": round(float(candidate.get("distance") or 0), 1),
+        })
+    selected["candidate_summary"] = compact
     return selected
 
 
@@ -1051,7 +1061,8 @@ def _build_roundtrip(data, legacy_main, v3):
                 "Une boucle pédestre a bien été calculée, mais au moins une journée reste trop longue "
                 f"({max(stage_distances):.1f} km pour une limite de {daily_max:.1f} km). "
                 f"Meilleur secours: {route.get('routing_mode') or 'inconnu'}, "
-                f"{float(route.get('distance') or 0):.1f} km au total."
+                f"{float(route.get('distance') or 0):.1f} km au total. "
+                f"Candidats: {route.get('candidate_summary') or []}."
             ),
         )
 
