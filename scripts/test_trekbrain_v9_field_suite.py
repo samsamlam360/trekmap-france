@@ -183,6 +183,34 @@ normalized, _ = normalize_for_planner(
 if "traversee" in normalized:
     failures.append(f"language regression: traverser became route-shape noun: {normalized!r}")
 
+# Explicit traverses may recover a validated route by splitting its existing
+# geometry into equal-progress days. No new path geometry may be invented.
+split_route = [
+    [47.3941, 0.6848],
+    [47.36, 0.62],
+    [47.32, 0.55],
+    [47.28, 0.47],
+    [47.24, 0.39],
+    [47.20, 0.31],
+    [47.1670, 0.2428],
+]
+split_bounds = v7.v5.v3._equal_progress_boundaries(
+    split_route, PLACES["tours"], PLACES["chinon"], 3
+)
+if len(split_bounds) != 4:
+    failures.append(f"corridor split regression: boundaries={split_bounds!r}")
+elif (
+    abs(float(split_bounds[0]["lat"]) - PLACES["tours"]["lat"]) > 1e-6
+    or abs(float(split_bounds[-1]["lat"]) - PLACES["chinon"]["lat"]) > 1e-6
+):
+    failures.append(f"corridor split regression: endpoints changed {split_bounds!r}")
+elif any(
+    [round(float(row["lat"]), 6), round(float(row["lon"]), 6)]
+    not in [[round(p[0], 6), round(p[1], 6)] for p in split_route]
+    for row in split_bounds[1:-1]
+):
+    failures.append(f"corridor split regression: off-route boundary {split_bounds!r}")
+
 # Stage-count regression: a validated two-stage geometry can safely be exposed
 # as three requested hiking days without redrawing the route.
 fake = {

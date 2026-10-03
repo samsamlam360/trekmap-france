@@ -714,6 +714,69 @@ def _stage_distances(route_coords, boundaries, legacy_main, total_distance):
     return distances
 
 
+def _equal_progress_boundaries(route_coords, start, end, days: int):
+    """Place hiking-day boundaries on an already validated route geometry.
+
+    Used only as a recovery for explicit point-to-point treks when POI-based
+    stage anchors make one day artificially too long. The walking line itself is
+    never redrawn: boundaries are sampled from the existing ORS polyline.
+    """
+    days = max(1, int(days or 1))
+    if days <= 1:
+        return [start, end]
+    clean = []
+    for point in route_coords or []:
+        if not isinstance(point, (list, tuple)) or len(point) < 2:
+            continue
+        try:
+            lat, lon = float(point[0]), float(point[1])
+        except (TypeError, ValueError):
+            continue
+        if not (math.isfinite(lat) and math.isfinite(lon)):
+            continue
+        if not clean or [lat, lon] != clean[-1]:
+            clean.append([lat, lon])
+    if len(clean) < days + 1:
+        return []
+
+    cumulative = [0.0]
+    for a, b in zip(clean, clean[1:]):
+        cumulative.append(
+            cumulative[-1] + _dist(
+                {"lat": a[0], "lon": a[1]},
+                {"lat": b[0], "lon": b[1]},
+            )
+        )
+    total = cumulative[-1]
+    if total <= 0:
+        return []
+
+    indices = [0]
+    floor = 1
+    for day in range(1, days):
+        target = total * day / days
+        ceiling = len(clean) - (days - day)
+        if floor >= ceiling:
+            return []
+        idx = min(range(floor, ceiling), key=lambda i: abs(cumulative[i] - target))
+        indices.append(idx)
+        floor = idx + 1
+    indices.append(len(clean) - 1)
+
+    boundaries = [dict(start)]
+    for day, idx in enumerate(indices[1:-1], start=1):
+        point = clean[idx]
+        boundaries.append({
+            "name": f"Repère jour {day}",
+            "category": "route_split",
+            "lat": point[0],
+            "lon": point[1],
+            "source_url": f"route-split:{day}:{point[0]:.5f}:{point[1]:.5f}",
+        })
+    boundaries.append(dict(end))
+    return boundaries
+
+
 def _route_retrace_ratio(coords):
     """Estimate how much of a route reuses the same corridor.
 
@@ -904,14 +967,69 @@ def _build(data: AIPlanRequest, legacy_main):
     if acceptable:
         evaluated = acceptable
     elif evaluated:
-        raise HTTPException(
-            status_code=422,
-            detail=(
-                f"Je n'ai pas trouvé de tracé réellement compatible avec environ "
-                f"{intent['daily_target']:.0f} km/jour. Je préfère ne pas proposer "
-                "une étape beaucoup trop longue. Élargis légèrement la zone ou la distance quotidienne."
-            ),
-        )
+        # Explicit point-to-point requests already have authoritative endpoints.
+        # A good ORS geometry must not be rejected only because sparse corridor
+        # POIs created poor stage anchors. Re-split the same validated polyline
+        # into equal-progress hiking days, without changing the route.
+        recovered = []
+        non_loop = _fold(intent.get("route_type") or "") not in {"boucle", "aller-retour", "aller retour"}
+        if non_loop and forced_start and forced_end:
+            maximum_total = max(
+                float(intent["total_target"]) * 1.30,
+                float(intent["daily_max"]) * max(1, int(intent["days"])),
+            )
+            for row in evaluated:
+                _score, candidate, route_points, stage_highlights, route, distance, _stage_dist, route_coords = row
+                if route.get("fallback") is not False:
+                    continue
+                if not (minimum_total <= float(distance) <= maximum_total):
+                    continue
+                boundaries = _equal_progress_boundaries(
+                    route_coords, start, end, int(intent["days"])
+                )
+                if len(boundaries) != int(intent["days"]) + 1:
+                    continue
+                split_candidate = Candidate(
+                    boundaries,
+                    f"{candidate.strategy}-route-split",
+                    float(candidate.heuristic),
+                )
+                split_score, split_distance, split_stages, _elev, split_coords = _candidate_score(
+                    split_candidate,
+                    route_points,
+                    route,
+                    intent,
+                    items,
+                    legacy_main,
+                    compute_elevation=False,
+                )
+                if (
+                    split_stages
+                    and len(split_stages) == int(intent["days"])
+                    and max(split_stages) <= float(intent["daily_max"]) + 0.25
+                ):
+                    recovered.append((
+                        split_score,
+                        split_candidate,
+                        route_points,
+                        stage_highlights,
+                        route,
+                        split_distance,
+                        split_stages,
+                        split_coords,
+                    ))
+            if recovered:
+                recovered.sort(key=lambda row: row[0])
+                evaluated = recovered
+        if not recovered:
+            raise HTTPException(
+                status_code=422,
+                detail=(
+                    f"Je n'ai pas trouvé de tracé réellement compatible avec environ "
+                    f"{intent['daily_target']:.0f} km/jour. Je préfère ne pas proposer "
+                    "une étape beaucoup trop longue. Élargis légèrement la zone ou la distance quotidienne."
+                ),
+            )
 
     # If D+ is an explicit concern, compare elevation of the two best real routes.
     finalists = evaluated[:2] if intent["max_dplus_day"] and len(evaluated) > 1 else evaluated[:1]
