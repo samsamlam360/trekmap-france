@@ -158,6 +158,23 @@ def precision_audit(result: dict[str, Any], data, features: dict[str, float], re
     score = float(local.get("score") or 0)
     if not math.isfinite(score):
         score = 0.0
+
+    # The v8 local critic counts every confidence limitation. In v9, three
+    # universal caveats are always displayed (weather/closures, water
+    # verification and model scope). They are useful safety information, not a
+    # route-specific defect, so neutralise only that generic penalty here.
+    generic_markers = (
+        "modele de langage generaliste",
+        "meteo, fermetures, reglementation de bivouac et horaires de transport",
+        "points d'eau sans mention explicite de potabilite",
+    )
+    generic_count = 0
+    for limitation in ((result.get("confidence") or {}).get("limitations") or []):
+        folded_limitation = v7.v5.v3._fold(limitation)
+        if any(marker in folded_limitation for marker in generic_markers):
+            generic_count += 1
+    score += min(6.0, generic_count * 2.0)
+
     checks: list[dict[str, str]] = []
     blockers: list[str] = []
 

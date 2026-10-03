@@ -202,6 +202,10 @@ try:
             name, key, value = ("Gare test", "railway", "station")
         elif "fontaine" in query:
             name, key, value = ("Fontaine test", "amenity", "drinking_water")
+        elif "boulanger" in query:
+            name, key, value = ("Boulangerie test", "shop", "bakery")
+        elif "supermarch" in query or "épicer" in query or "epicer" in query:
+            name, key, value = ("Épicerie test", "shop", "convenience")
         elif "camping" in query:
             name, key, value = ("Camping test", "tourism", "camp_site")
         elif "hotel" in query:
@@ -235,6 +239,7 @@ try:
     resource_intent = {
         "transit": True,
         "water": True,
+        "food": True,
         "sleep": True,
         "accommodation": "balanced",
     }
@@ -246,6 +251,8 @@ try:
         failures.append(f"post-route resources regression: no transit {enriched_resources!r}")
     if "water" not in cats:
         failures.append(f"post-route resources regression: no water {enriched_resources!r}")
+    if "food" not in cats:
+        failures.append(f"post-route resources regression: no food {enriched_resources!r}")
     if not ({"camping", "refuge"} & cats):
         failures.append(f"post-route resources regression: no stay {enriched_resources!r}")
     if any(not str(x.get("source_url") or "").startswith("https://www.openstreetmap.org/") for x in enriched_resources):
