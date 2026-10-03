@@ -1173,7 +1173,8 @@ def _build_roundtrip(data, legacy_main, v3):
         v3,
     )
 
-    if any(d > daily_max + 0.35 for d in stage_distances):
+    stage_slack = 0.75 if intent.get("distance_tolerance") == "soft-25pct" else 0.35
+    if any(d > daily_max + stage_slack for d in stage_distances):
         raise HTTPException(
             status_code=422,
             detail=(
