@@ -118,8 +118,15 @@ camps = [
     {"name": "Camping D", "lat": 0.012, "lon": 0.80, "category": "camping", "source_url": "osm://d"},
 ]
 
-real_bbox = logistics._bbox_route_stays
-logistics._bbox_route_stays = lambda _coords, category: [dict(x) for x in camps]
+real_bbox = logistics._bbox_route_bundle
+logistics._bbox_route_bundle = lambda _coords, category: (
+    [dict(x) for x in camps],
+    [
+        {"name": "Fontaine test", "lat": 0.0, "lon": 0.25, "category": "water", "water_status": "potable_referenced", "source_url": "osm://water"},
+        {"name": "Épicerie test", "lat": 0.0, "lon": 0.45, "category": "food", "source_url": "osm://food"},
+    ],
+    True,
+)
 try:
     v3 = FakeV3()
 
@@ -132,7 +139,7 @@ try:
     logistics.install_route_first_logistics(v3, FakeRoundtrip, FakeStayRescue, FakeORS)
     result = v3._build(Data(), FakeLegacy())
 finally:
-    logistics._bbox_route_stays = real_bbox
+    logistics._bbox_route_bundle = real_bbox
 
 # Main route is built with lodging removed, proving camping does not shape geometry.
 assert len(v3._build_calls) == 1, v3._build_calls
@@ -144,6 +151,9 @@ assert result["planner"]["logistics_mode"] == "route-first"
 assert result["logistics"]["nights_required"] == 4
 assert result["logistics"]["nights_resolved"] == 4
 assert len(result["accommodations"]) == 4
+assert any(x.get("name") == "Fontaine test" for x in result.get("water") or [])
+assert any(x.get("name") == "Épicerie test" for x in result.get("resources") or [])
+assert result.get("_terrain_osm_preloaded") is True
 assert all(float(stage["distance_km"]) == 20.0 for stage in result["stages"])
 assert max(float(stage["distance_km"]) for stage in result["stages"]) <= 25.0
 
@@ -163,14 +173,14 @@ def base_build_partial(data, legacy):
     return {**base_result, "route_preview": dict(base_result["route_preview"]), "stages": [dict(x) for x in base_result["stages"]], "advisor_notes": [], "planner": {}}
 
 v3_partial._build = base_build_partial
-real_bbox_partial = logistics._bbox_route_stays
+real_bbox_partial = logistics._bbox_route_bundle
 try:
-    logistics._bbox_route_stays = lambda _coords, category: []
+    logistics._bbox_route_bundle = lambda _coords, category: ([], [], True)
     logistics._INSTALLED = False
     logistics.install_route_first_logistics(v3_partial, FakeRoundtrip, FakeStayRescue, FakeORS)
     partial = v3_partial._build(Data(), FakeLegacy())
 finally:
-    logistics._bbox_route_stays = real_bbox_partial
+    logistics._bbox_route_bundle = real_bbox_partial
 
 assert partial["route_preview"]["fallback"] is False
 assert partial["logistics"]["status"] == "partial"
@@ -186,7 +196,7 @@ assert all(
 # time out and fail this regression.
 from threading import Event
 
-real_bbox_order = logistics._bbox_route_stays
+real_bbox_order = logistics._bbox_route_bundle
 real_photon_order = logistics._photon_split_stays
 order_calls = {"bbox": 0, "photon": 0}
 bbox_started = Event()
@@ -196,7 +206,7 @@ try:
         order_calls["bbox"] += 1
         bbox_started.set()
         assert photon_started.wait(0.8), "Photon lodging lookup did not start concurrently"
-        return [dict(x) for x in camps]
+        return [dict(x) for x in camps], [], True
 
     def counted_photon(*args, **kwargs):
         order_calls["photon"] += 1
@@ -204,7 +214,7 @@ try:
         assert bbox_started.wait(0.8), "OSM lodging lookup did not start concurrently"
         return []
 
-    logistics._bbox_route_stays = counted_bbox
+    logistics._bbox_route_bundle = counted_bbox
     logistics._photon_split_stays = counted_photon
     chosen_fast, projected_fast, meta_fast = logistics._discover_stays(
         FakeV3(),
@@ -218,7 +228,7 @@ try:
         False,
     )
 finally:
-    logistics._bbox_route_stays = real_bbox_order
+    logistics._bbox_route_bundle = real_bbox_order
     logistics._photon_split_stays = real_photon_order
 
 assert len(chosen_fast) == 4, chosen_fast
@@ -234,10 +244,10 @@ generic_lodging = [
     {"name": "Gîte D", "lat": 0.080, "lon": 0.80, "category": "lodging", "source_url": "osm://gd"},
 ]
 real_photon_generic = logistics._photon_split_stays
-real_bbox_generic = logistics._bbox_route_stays
+real_bbox_generic = logistics._bbox_route_bundle
 try:
     logistics._photon_split_stays = lambda *args, **kwargs: [dict(x) for x in generic_lodging]
-    logistics._bbox_route_stays = lambda *args, **kwargs: []
+    logistics._bbox_route_bundle = lambda *args, **kwargs: ([], [], True)
     chosen_generic, projected_generic, _meta_generic = logistics._discover_stays(
         FakeV3(),
         FakeRoundtrip,
@@ -251,7 +261,7 @@ try:
     )
 finally:
     logistics._photon_split_stays = real_photon_generic
-    logistics._bbox_route_stays = real_bbox_generic
+    logistics._bbox_route_bundle = real_bbox_generic
 
 assert len(chosen_generic) == 4, chosen_generic
 assert all(6.0 < float(x.get("_offroute_km") or 0) <= 10.0 for x in chosen_generic), chosen_generic
