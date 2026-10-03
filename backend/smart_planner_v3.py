@@ -863,7 +863,7 @@ def _stage_distances(route_coords, boundaries, legacy_main, total_distance):
     return distances
 
 
-def _photon_anchor_resource(anchor, category: str, osm_tags, radius_km: float):
+def _photon_anchor_resource(anchor, category: str, osm_tags, radius_km: float, query_override: str | None = None):
     """Fetch one real OSM resource near a validated route anchor via Photon."""
     try:
         lat, lon = float(anchor["lat"]), float(anchor["lon"])
@@ -908,6 +908,9 @@ def _photon_anchor_resource(anchor, category: str, osm_tags, radius_km: float):
             query = "refuge"
     else:
         query = "point utile"
+
+    if query_override:
+        query = str(query_override).strip()[:80] or query
 
     params = {
         "q": query,
