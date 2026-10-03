@@ -935,15 +935,14 @@ def _photon_anchor_resource(anchor, category: str, osm_tags, radius_km: float, q
         "limit": 20,
         "lang": "fr",
     }
-    if allowed_categories:
+    if allowed_categories and not query_override:
         # A comma-separated include condition is OR: any accepted OSM resource
         # category may match in this single request.
         params["include"] = ",".join(allowed_categories)
     else:
-        params["q"] = query
-    if query_override:
-        # Generic lodging deliberately distinguishes gîte/hotel while still
-        # enforcing the exact accepted OSM categories above.
+        # Named lodging discovery (gîte/hotel) works better as Photon text
+        # search, then the existing result parser still enforces accepted OSM
+        # tags before a candidate can be returned.
         params["q"] = query
     try:
         payload = _request_json(
