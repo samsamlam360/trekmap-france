@@ -126,7 +126,8 @@ def install_water_discovery(v3, resources) -> None:
 
     def enrich_resources(result: dict[str, Any]):
         existing = [x for x in (result.get("water") or []) if isinstance(x, dict)]
-        discovered = discover_water_points(v3, result)
+        preloaded = bool(result.get("_terrain_osm_preloaded"))
+        discovered = [] if preloaded else discover_water_points(v3, result)
         merged = []
         seen = set()
         for item in existing + discovered:
@@ -140,7 +141,9 @@ def install_water_discovery(v3, resources) -> None:
             merged.append(item)
         result["water"] = merged
         enriched = original_enrich(result)
-        enriched.setdefault("map_resources", {})["water_discovery"] = "post-route-overpass"
+        enriched.setdefault("map_resources", {})["water_discovery"] = (
+            "post-route-parallel-osm" if preloaded else "post-route-overpass"
+        )
         return enriched
 
     resources.enrich_resources = enrich_resources
