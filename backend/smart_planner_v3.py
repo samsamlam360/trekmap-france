@@ -918,16 +918,33 @@ def _photon_anchor_resource(anchor, category: str, osm_tags, radius_km: float, q
     if query_override:
         query = str(query_override).strip()[:80] or query
 
+    allowed_categories = [
+        "osm." + str(tag).replace(":", ".", 1)
+        for tag in tags
+        if ":" in str(tag)
+    ]
     params = {
-        "q": query,
         "lat": round(lat, 6),
         "lon": round(lon, 6),
-        "zoom": 11,
-        "location_bias_scale": 0.1,
+        "zoom": 13,
+        # With an exact OSM category filter, proximity matters more than global
+        # place prominence. Photon permits q-less searches when include/exclude
+        # filtering is present.
+        "location_bias_scale": 0.0,
         "countrycode": "FR",
-        "limit": 12,
+        "limit": 20,
         "lang": "fr",
     }
+    if allowed_categories:
+        # A comma-separated include condition is OR: any accepted OSM resource
+        # category may match in this single request.
+        params["include"] = ",".join(allowed_categories)
+    else:
+        params["q"] = query
+    if query_override:
+        # Generic lodging deliberately distinguishes gîte/hotel while still
+        # enforcing the exact accepted OSM categories above.
+        params["q"] = query
     try:
         payload = _request_json(
             PHOTON_URL,
