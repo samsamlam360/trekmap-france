@@ -178,6 +178,8 @@ def _bbox_route_stays(coords, category: str) -> list[dict[str, Any]]:
             '["tourism"="hotel"]',
             '["tourism"="hostel"]',
             '["tourism"="guest_house"]',
+            '["tourism"="chalet"]',
+            '["tourism"="apartment"]',
             '["tourism"="camp_site"]',
             '["tourism"="alpine_hut"]',
             '["tourism"="wilderness_hut"]',
@@ -219,8 +221,8 @@ def _bbox_route_stays(coords, category: str) -> list[dict[str, Any]]:
             continue
         if category == "lodging" and not (
             tags.get("tourism") in {
-                "hotel", "hostel", "guest_house", "camp_site",
-                "alpine_hut", "wilderness_hut",
+                "hotel", "hostel", "guest_house", "chalet", "apartment",
+                "camp_site", "alpine_hut", "wilderness_hut",
             }
             or tags.get("amenity") == "shelter"
         ):
@@ -288,6 +290,7 @@ def _photon_split_stays(v3, roundtrip, coords, category: str, days: int) -> list
     else:
         tags = (
             "tourism:hotel", "tourism:hostel", "tourism:guest_house",
+            "tourism:chalet", "tourism:apartment",
             "tourism:camp_site", "tourism:alpine_hut",
             "tourism:wilderness_hut", "amenity:shelter",
         )
