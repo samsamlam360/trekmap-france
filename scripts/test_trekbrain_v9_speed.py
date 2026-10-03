@@ -72,6 +72,55 @@ assert 1 <= len(implicit_rows) <= 2, [x.strategy for x in implicit_rows]
 # path. The lower layers already compare route candidates.
 assert v9.seconds("TREKBRAIN_RETRY_BUDGET_SECONDS", 10) == 0.0
 
+# Photon fallback must preserve the exact serial query set and deterministic
+# result order even though independent requests are now executed concurrently.
+real_photon = free._geocode_photon
+photon_queries = []
+
+def fake_photon(query):
+    photon_queries.append(query)
+    # Return one unique nearby result per query. Deliberately vary completion
+    # order so the collector has to restore historical deterministic ordering.
+    import time as _time
+    delay = 0.012 if "camping" in query else 0.004 if "refuge" in query else 0.001
+    _time.sleep(delay)
+    index = len(query)
+    return [{
+        "name": query,
+        "short_name": query,
+        "lat": 48.0 + (index % 5) * 0.001,
+        "lon": 2.0 + (sum(ord(c) for c in query) % 7) * 0.001,
+        "category": "place",
+        "source_url": "placeholder",
+    }]
+
+free._geocode_photon = fake_photon
+try:
+    photon_rows = free._photon_category_candidates(
+        "TestZone",
+        {"lat": 48.0, "lon": 2.0},
+        ["camping", "refuge", "food", "transit", "viewpoint", "water"],
+    )
+finally:
+    free._geocode_photon = real_photon
+
+expected_queries = [
+    "camping TestZone",
+    "refuge TestZone",
+    "gîte TestZone",
+    "boulangerie TestZone",
+    "supermarché TestZone",
+    "gare TestZone",
+    "sommet TestZone",
+    "belvédère TestZone",
+]
+assert sorted(photon_queries) == sorted(expected_queries), photon_queries
+expected_categories = [
+    "camping", "refuge", "refuge", "food", "food", "transit", "viewpoint", "viewpoint",
+]
+assert [row.get("category") for row in photon_rows] == expected_categories, photon_rows
+assert [row.get("name") for row in photon_rows] == expected_queries, photon_rows
+
 # One Overpass operation may use at most two mirrors. Public OSM slowness must
 # not cascade through every known mirror and turn one click into minutes.
 overpass_calls = []

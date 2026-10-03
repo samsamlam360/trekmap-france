@@ -10,6 +10,7 @@ import math
 import os
 import re
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from copy import deepcopy
 from typing import Any
 
@@ -459,28 +460,55 @@ PHOTON_TERMS = {
 
 
 def _photon_category_candidates(location: str, center, categories):
-    items, seen = [], set()
+    """Photon POI fallback with identical search semantics and bounded parallelism.
+
+    Every query string and every result filter matches the historical serial
+    implementation. Only independent HTTP calls overlap. Results are replayed in
+    their original category/term order so planner behaviour stays deterministic.
+    """
+    jobs = []
     for cat in categories:
         if cat == "water":
             continue
         for term in PHOTON_TERMS.get(cat, ()):
+            jobs.append((len(jobs), cat, term, f"{term} {location}"))
+
+    if not jobs:
+        return []
+
+    results_by_index = {}
+    workers = min(3, len(jobs))
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        futures = {
+            pool.submit(_geocode_photon, query): (index, cat, term)
+            for index, cat, term, query in jobs
+        }
+        for future in as_completed(futures):
+            index, cat, _term = futures[future]
             try:
-                results = _geocode_photon(f"{term} {location}")
+                rows = future.result()
             except RuntimeError:
+                rows = []
+            except Exception:
+                rows = []
+            results_by_index[index] = (cat, rows)
+
+    items, seen = [], set()
+    for index, _cat, _term, _query in jobs:
+        cat, results = results_by_index.get(index, (_cat, []))
+        for place in results[:4]:
+            if _dist(center, place) > 35:
                 continue
-            for place in results[:4]:
-                if _dist(center, place) > 35:
-                    continue
-                key = (round(place["lat"], 5), round(place["lon"], 5), cat)
-                if key in seen:
-                    continue
-                seen.add(key)
-                place = dict(place)
-                place["category"] = cat
-                place["source_url"] = _map_url(place["lat"], place["lon"])
-                place["water_status"] = "unverified"
-                place["opening_hours"] = ""
-                items.append(place)
+            key = (round(place["lat"], 5), round(place["lon"], 5), cat)
+            if key in seen:
+                continue
+            seen.add(key)
+            place = dict(place)
+            place["category"] = cat
+            place["source_url"] = _map_url(place["lat"], place["lon"])
+            place["water_status"] = "unverified"
+            place["opening_hours"] = ""
+            items.append(place)
     return items
 
 
