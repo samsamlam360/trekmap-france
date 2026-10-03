@@ -195,6 +195,15 @@ def extract_side_requests(normalized_text: str, *, today: date | None = None) ->
         if not hits:
             continue
 
+        # A geographic route anchor is context, not a secondary mission. This
+        # must be filtered before HARD_MARKERS such as "je veux" are evaluated,
+        # otherwise "je veux une boucle autour du lac des Settons" becomes an
+        # invented mandatory lake detour.
+        if re.search(r"\bautour\s+(?:de|du|des|d )\s+(?:la\s+|le\s+|les\s+)?(?:lac|etang)\b", clause):
+            hits = [(kind, word) for kind, word in hits if kind != "lake"]
+        if not hits:
+            continue
+
         has_action = any(action in clause for action in ACTION_WORDS)
         has_event = any(kind == "event" for kind, _ in hits)
         if not has_action and not has_event:
