@@ -555,7 +555,15 @@ def _supplement_route_resources(result: dict[str, Any], data) -> dict[str, Any]:
         # normal complete/partial state. Keep Photon here for the categories
         # that still add unique value: food and public transport.
         post_intent = dict(intent)
-        post_intent["water"] = False
+        # Skip Photon water only when a previous route-relative layer actually
+        # found water. If OSM returned no usable point, keep one bounded Photon
+        # fallback in the same resource wave. This restores coverage without
+        # reintroducing a sequential network phase.
+        has_water = any(
+            isinstance(item, dict) and _point(item) is not None
+            for item in (result.get("water") or [])
+        )
+        post_intent["water"] = bool(intent.get("water") and not has_water)
         logistics_status = str((result.get("logistics") or {}).get("status") or "")
         if logistics_status in {"complete", "partial"}:
             post_intent["sleep"] = False
