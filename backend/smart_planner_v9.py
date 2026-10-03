@@ -211,7 +211,52 @@ def precision_audit(result: dict[str, Any], data, features: dict[str, float], re
             checks.append(_check("Limite quotidienne", "failed", "Au moins une étape dépasse le maximum demandé.", "high"))
         mean_dev = sum(abs(x - target) / target for x in distances) / len(distances)
         worst = max(abs(x - target) / target for x in distances)
-        if mean_dev <= 0.16 and worst <= 0.30:
+
+        planner = result.get("planner") or {}
+        result_route_type = v7.v5.v3._fold(result.get("route_type") or getattr(data, "route_type", ""))
+        fixed_traverse = bool(
+            planner.get("corridor_centered")
+            and result_route_type not in {"boucle", "aller-retour", "aller retour"}
+            and not limit
+        )
+        soft_fixed_distance = bool(
+            fixed_traverse
+            and all(target * 0.75 - 0.1 <= x <= target * 1.25 + 0.1 for x in distances)
+        )
+
+        if soft_fixed_distance:
+            # For authoritative A -> B traverses, the real pedestrian distance
+            # is fixed by geography. A soft "environ 22 km/j" target should not
+            # encourage artificial detours when Tours -> Chinon naturally
+            # splits into three very even ~18 km days. The v8 local critic
+            # already penalised deviation from the nominal target, so neutralise
+            # only that legacy term and judge balance around the real stage mean.
+            score += min(20.0, mean_dev * 24.0)
+            actual_target = sum(distances) / len(distances)
+            actual_mean_dev = (
+                sum(abs(x - actual_target) / max(actual_target, 0.1) for x in distances)
+                / len(distances)
+            )
+            actual_worst = max(
+                abs(x - actual_target) / max(actual_target, 0.1) for x in distances
+            )
+            if actual_mean_dev <= 0.12 and actual_worst <= 0.20:
+                checks.append(_check(
+                    "Étapes",
+                    "ok",
+                    (
+                        "Traversée à départ/arrivée imposés : étapes équilibrées "
+                        f"autour de {actual_target:.1f} km/jour sur la distance pédestre réelle."
+                    ),
+                ))
+            else:
+                score -= 5
+                checks.append(_check(
+                    "Étapes",
+                    "partial",
+                    "La distance totale est imposée par les extrémités ; les journées pourraient encore être mieux réparties.",
+                ))
+        elif mean_dev <= 0.16 and worst <= 0.30:
             checks.append(_check("Étapes", "ok", f"Étapes bien équilibrées autour de {target:.0f} km/jour."))
         elif mean_dev <= 0.28:
             score -= 5

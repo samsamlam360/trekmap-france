@@ -8,6 +8,8 @@ from __future__ import annotations
 
 import json
 import math
+from concurrent.futures import ThreadPoolExecutor
+from copy import deepcopy
 from typing import Any
 
 from fastapi import Body, Depends, HTTPException
@@ -636,8 +638,41 @@ def _install_plan_overlay(app, legacy_main):
                 0,
                 "🛡️ Sécurité géographique : tracé pédestre validé avant affichage. Les lignes directes de secours sont interdites dans le conseiller.",
             )
-            result = _supplement_route_resources(result, data)
+
+            # The route is already authoritative. Final resource discovery is
+            # display/logistics-only, so independent Photon and OSM terrain
+            # lookups can safely overlap instead of adding their latency.
+            try:
+                intent = v7.v5.v3._parse_intent(data)
+            except Exception:
+                intent = {}
+            snapshot = deepcopy(result)
+            with ThreadPoolExecutor(max_workers=2) as pool:
+                logistics_future = pool.submit(
+                    _supplement_route_resources, result, data
+                )
+                terrain_future = pool.submit(
+                    _bbox_route_water_food, snapshot, intent
+                )
+                try:
+                    result = logistics_future.result()
+                except Exception:
+                    pass
+                try:
+                    terrain_rows = terrain_future.result()
+                except Exception:
+                    terrain_rows = []
+
+            if terrain_rows:
+                result = _merge_supplemented_resources(
+                    result,
+                    _filter_active(list(terrain_rows)),
+                )
+            # The water overlay must reuse the compact OSM terrain lookup above
+            # instead of opening another public Overpass request.
+            result["_terrain_osm_preloaded"] = True
             result = enrich_resources(result)
+            result.pop("_terrain_osm_preloaded", None)
             result = _annotate_stage_resources(result)
             return _refresh_quality_after_resources(result, data)
         finally:
