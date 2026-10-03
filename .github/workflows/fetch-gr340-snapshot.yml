@@ -1,0 +1,31 @@
+name: Fetch GR340 snapshot
+
+on:
+  push:
+    branches:
+      - fetch-gr340-snapshot-20261003
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fetch canonical OSM relation
+        run: |
+          set -euo pipefail
+          mkdir -p tmp/gr340
+          curl --fail --location --retry 3 --retry-delay 2 --connect-timeout 8 --max-time 45 \
+            -H 'Accept: application/xml,text/xml' \
+            -H 'User-Agent: TrekMap-France-GR340-Snapshot/1.0' \
+            'https://api.openstreetmap.org/api/0.6/relation/6850120/full' \
+            -o tmp/gr340/gr340_relation_6850120.osm
+          grep -q 'relation id="6850120"' tmp/gr340/gr340_relation_6850120.osm
+          grep -q 'v="GR 340"' tmp/gr340/gr340_relation_6850120.osm
+          wc -c tmp/gr340/gr340_relation_6850120.osm
+      - uses: actions/upload-artifact@v4
+        with:
+          name: gr340-osm-snapshot
+          path: tmp/gr340/gr340_relation_6850120.osm
+          if-no-files-found: error
+          retention-days: 1
