@@ -74,14 +74,17 @@ v3 = SimpleNamespace(_overpass=lambda query: (queries.append(query) or payload))
 start = {"name": "Belle-Île-en-Mer", "lat": 47.31, "lon": -3.20, "category": "place"}
 real_direct_source = belle._direct_osm_relation
 real_secondary_source = belle._secondary_overpass_relation
+real_tertiary_source = belle._tertiary_overpass_relation
 belle._DIRECT_CACHE = None
 belle._direct_osm_relation = lambda: (None, "direct disabled in unit test")
 belle._secondary_overpass_relation = lambda: (None, "secondary disabled in unit test")
+belle._tertiary_overpass_relation = lambda: (None, "tertiary disabled in unit test")
 try:
     route, warning = belle._targeted_gr340(v3, gr, rescue, start, 90.0)
 finally:
     belle._direct_osm_relation = real_direct_source
     belle._secondary_overpass_relation = real_secondary_source
+    belle._tertiary_overpass_relation = real_tertiary_source
 assert warning is None, warning
 assert route is not None
 assert route["fallback"] is False
@@ -102,10 +105,12 @@ class FakeResponse:
 
 real_get = belle.requests.get
 real_secondary = belle._secondary_overpass_relation
+real_tertiary = belle._tertiary_overpass_relation
 belle._DIRECT_CACHE = None
 api_calls = []
 belle.requests.get = lambda url, **kwargs: (api_calls.append((url, kwargs)) or FakeResponse())
 belle._secondary_overpass_relation = lambda: (None, "secondary unavailable")
+belle._tertiary_overpass_relation = lambda: (None, "tertiary unavailable")
 blocked_v3 = SimpleNamespace(_overpass=lambda _query: (_ for _ in ()).throw(RuntimeError("Overpass ignoré après un timeout récent")))
 start_blocked = {"name": "Belle-Île-en-Mer", "lat": 47.31, "lon": -3.20, "category": "place"}
 try:
@@ -113,6 +118,7 @@ try:
 finally:
     belle.requests.get = real_get
     belle._secondary_overpass_relation = real_secondary
+    belle._tertiary_overpass_relation = real_tertiary
 assert warning is None, warning
 assert recovered is not None
 assert recovered["relation_ref"] == "GR 340"
@@ -125,6 +131,7 @@ assert api_calls and str(belle._GR340_RELATION_ID) in api_calls[0][0]
 real_overpass_fetch = belle._overpass_relation
 real_direct_fetch = belle._direct_osm_relation
 real_secondary_fetch = belle._secondary_overpass_relation
+real_tertiary_fetch = belle._tertiary_overpass_relation
 overpass_started = Event()
 direct_started = Event()
 relation_element = payload["elements"][0]
@@ -143,6 +150,7 @@ belle._DIRECT_CACHE = None
 belle._overpass_relation = concurrent_overpass
 belle._direct_osm_relation = concurrent_direct
 belle._secondary_overpass_relation = lambda: (None, "secondary unavailable")
+belle._tertiary_overpass_relation = lambda: (None, "tertiary unavailable")
 start_concurrent = {"name": "Belle-Île-en-Mer", "lat": 47.31, "lon": -3.20, "category": "place"}
 try:
     concurrent_route, concurrent_warning = belle._targeted_gr340(
@@ -152,6 +160,7 @@ finally:
     belle._overpass_relation = real_overpass_fetch
     belle._direct_osm_relation = real_direct_fetch
     belle._secondary_overpass_relation = real_secondary_fetch
+    belle._tertiary_overpass_relation = real_tertiary_fetch
 
 assert concurrent_warning is None, concurrent_warning
 assert concurrent_route is not None
