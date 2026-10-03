@@ -37,6 +37,8 @@ _OSM_TIMEOUT = 3.8
 _TARGETED_RACE_TIMEOUT = 4.2
 _CACHE_TTL = 6 * 60 * 60
 _DIRECT_CACHE: tuple[float, dict[str, Any]] | None = None
+_NEGATIVE_CACHE: tuple[float, str] | None = None
+_NEGATIVE_CACHE_TTL = 45.0
 
 
 def _fold(value: Any) -> str:
@@ -333,6 +335,11 @@ def _targeted_gr340(v3, gr, rescue, start: dict[str, Any], target_km: float):
     if not _is_belle_ile(start):
         return None, "hors Belle-Île"
 
+    global _NEGATIVE_CACHE
+    now = time.monotonic()
+    if _NEGATIVE_CACHE is not None and now - _NEGATIVE_CACHE[0] < _NEGATIVE_CACHE_TTL:
+        return None, _NEGATIVE_CACHE[1]
+
     # A warm direct-OSM cache is deterministic and costs virtually nothing.
     # Check it before opening any network race.
     global _DIRECT_CACHE
@@ -374,6 +381,7 @@ def _targeted_gr340(v3, gr, rescue, start: dict[str, Any], target_km: float):
                     start.clear()
                     start.update(route_start)
                     route["gr340_source"] = source
+                    _NEGATIVE_CACHE = None
                     for pending in future_sources:
                         if pending is not future:
                             pending.cancel()
@@ -392,7 +400,9 @@ def _targeted_gr340(v3, gr, rescue, start: dict[str, Any], target_km: float):
         executor.shutdown(wait=False, cancel_futures=True)
 
     detail = "; ".join(dict.fromkeys(x for x in reasons if x))
-    return None, detail or "GR 340 ciblé non exploitable"
+    detail = detail or "GR 340 ciblé non exploitable"
+    _NEGATIVE_CACHE = (time.monotonic(), detail)
+    return None, detail
 
 
 def install_belle_ile_gr340_priority(roundtrip, gr, rescue) -> None:
