@@ -29,6 +29,7 @@ RESOURCE_LIMITS = {
     "food": 4.5,
     "camping": 4.0,
     "refuge": 4.0,
+    "lodging": 6.2,
     "station": 12.0,
     "transport": 8.0,
     "trail": 2.2,
@@ -107,6 +108,8 @@ def _resource_kind(item: dict[str, Any], fallback: str = "") -> str:
         return "camping"
     if any(x in raw for x in ("refuge", "abri", "gîte", "gite", "hut")):
         return "refuge"
+    if any(x in raw for x in ("hébergement", "hebergement", "hotel", "hostel", "guest_house", "auberge")):
+        return "lodging"
     if any(x in raw for x in ("gare", "station ferroviaire", "train", "sncf")):
         return "station"
     if fallback == "transport" or any(x in raw for x in ("transport", "bus", "arrêt", "arret")):
@@ -123,7 +126,7 @@ def _candidate_resources(result: dict[str, Any]) -> list[dict[str, Any]]:
             items.append({**w, "kind": "water", "type": "Point d'eau", "notes": w.get("notes") or "Potabilité à vérifier."})
     for a in result.get("accommodations") or []:
         if isinstance(a, dict):
-            kind = _resource_kind(a, "refuge")
+            kind = _resource_kind(a, "lodging")
             items.append({**a, "kind": kind, "notes": a.get("notes") or "Ouverture et disponibilité à vérifier."})
     food_rows = result.get("resources") or result.get("food") or []
     for resource in food_rows:
@@ -178,12 +181,12 @@ def enrich_resources(result: dict[str, Any]) -> dict[str, Any]:
             "source_url": str(item.get("source_url") or "")[:1000],
         })
 
-    priority = {"water": 0, "food": 1, "camping": 2, "refuge": 3, "station": 4, "transport": 5, "trail": 6}
+    priority = {"water": 0, "food": 1, "camping": 2, "refuge": 3, "lodging": 4, "station": 5, "transport": 6, "trail": 7}
     prepared.sort(key=lambda x: (x["route_day"], priority.get(x["kind"], 9), x["distance_to_route_km"], x["name"]))
 
     # Avoid a carpet of icons: keep the closest few of each category per day.
     limited, buckets = [], {}
-    per_day_caps = {"water": 3, "food": 3, "camping": 2, "refuge": 2, "station": 2, "transport": 3, "trail": 2}
+    per_day_caps = {"water": 3, "food": 3, "camping": 2, "refuge": 2, "lodging": 2, "station": 2, "transport": 3, "trail": 2}
     for item in prepared:
         bucket = (item["route_day"], item["kind"])
         count = buckets.get(bucket, 0)
@@ -194,7 +197,7 @@ def enrich_resources(result: dict[str, Any]) -> dict[str, Any]:
         if len(limited) >= 48:
             break
 
-    counts = {k: 0 for k in ("water", "food", "camping", "refuge", "station", "transport", "trail")}
+    counts = {k: 0 for k in ("water", "food", "camping", "refuge", "lodging", "station", "transport", "trail")}
     for item in limited:
         if item["kind"] in counts:
             counts[item["kind"]] += 1
@@ -221,6 +224,182 @@ def enrich_resources(result: dict[str, Any]) -> dict[str, Any]:
     }
     return result
 
+
+
+
+def _route_day_boundaries(result: dict[str, Any], days: int) -> list[dict[str, Any]]:
+    route = result.get("route_preview") or {}
+    coords = route.get("coords") or []
+    clean = []
+    for point in coords if isinstance(coords, list) else []:
+        if not isinstance(point, (list, tuple)) or len(point) < 2:
+            continue
+        lat, lon = _number(point[0]), _number(point[1])
+        if lat is None or lon is None:
+            continue
+        if not clean or [lat, lon] != clean[-1]:
+            clean.append([lat, lon])
+    if len(clean) < 2:
+        return []
+
+    cumulative = [0.0]
+    for a, b in zip(clean, clean[1:]):
+        cumulative.append(cumulative[-1] + _distance_km((a[0], a[1]), (b[0], b[1])))
+    total = cumulative[-1]
+    if total <= 0:
+        return []
+
+    start = dict(result.get("start") or {})
+    end = dict(result.get("end") or {})
+    if _point(start) is None:
+        start = {"name": "Départ", "lat": clean[0][0], "lon": clean[0][1], "category": "route_anchor"}
+    if _point(end) is None:
+        end = {"name": "Arrivée", "lat": clean[-1][0], "lon": clean[-1][1], "category": "route_anchor"}
+
+    boundaries = [start]
+    floor = 1
+    for day in range(1, max(1, int(days))):
+        target = total * day / max(1, int(days))
+        if floor >= len(clean) - 1:
+            break
+        idx = min(range(floor, len(clean) - 1), key=lambda i: abs(cumulative[i] - target))
+        boundaries.append({
+            "name": f"Repère jour {day}",
+            "lat": clean[idx][0],
+            "lon": clean[idx][1],
+            "category": "route_anchor",
+        })
+        floor = idx + 1
+    boundaries.append(end)
+    return boundaries
+
+
+def _merge_supplemented_resources(result: dict[str, Any], rows: list[dict[str, Any]]) -> dict[str, Any]:
+    if not rows:
+        return result
+
+    water = list(result.get("water") or [])
+    food = list(result.get("resources") or result.get("food") or [])
+    accommodations = list(result.get("accommodations") or [])
+    pois = list(result.get("points_of_interest") or [])
+    transit_rows = []
+
+    def add_unique(target, item, *, category=None):
+        key = str(item.get("source_url") or "")
+        try:
+            coords_key = (round(float(item.get("lat")), 5), round(float(item.get("lon")), 5))
+        except (TypeError, ValueError):
+            coords_key = None
+        for existing in target:
+            if not isinstance(existing, dict):
+                continue
+            if key and str(existing.get("source_url") or "") == key:
+                return
+            if coords_key is not None:
+                try:
+                    if (
+                        round(float(existing.get("lat")), 5),
+                        round(float(existing.get("lon")), 5),
+                    ) == coords_key and (category is None or str(existing.get("category") or "") == category):
+                        return
+                except (TypeError, ValueError):
+                    pass
+        target.append(item)
+
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        category = str(row.get("category") or "")
+        if category == "water":
+            add_unique(water, {
+                "name": row.get("name") or "Point d'eau",
+                "lat": row.get("lat"), "lon": row.get("lon"),
+                "status": row.get("water_status") or "unverified",
+                "notes": "Repère cartographique proche du tracé ; disponibilité et potabilité à vérifier.",
+                "source_url": row.get("source_url") or "",
+            })
+        elif category == "food":
+            add_unique(food, {
+                "name": row.get("name") or "Ravitaillement",
+                "type": "Ravitaillement", "category": "food",
+                "lat": row.get("lat"), "lon": row.get("lon"),
+                "notes": "Commerce proche du tracé ; horaires et disponibilité à vérifier.",
+                "source_url": row.get("source_url") or "",
+            }, category="food")
+        elif category in {"camping", "refuge", "lodging"}:
+            type_label = (
+                "Camping" if category == "camping"
+                else "Refuge / abri" if category == "refuge"
+                else "Hébergement"
+            )
+            add_unique(accommodations, {
+                "name": row.get("name") or type_label,
+                "type": type_label, "category": category,
+                "lat": row.get("lat"), "lon": row.get("lon"),
+                "notes": "Hébergement proche du tracé ; ouverture et disponibilité à vérifier.",
+                "source_url": row.get("source_url") or "",
+            }, category=category)
+        elif category == "transit":
+            transit_rows.append(row)
+            add_unique(pois, {
+                "name": row.get("name") or "Transport public",
+                "type": "Transport public", "category": "transit",
+                "lat": row.get("lat"), "lon": row.get("lon"),
+                "source_url": row.get("source_url") or "",
+                "notes": "Accès cartographique ; desserte et horaires à vérifier.",
+            }, category="transit")
+
+    result["water"] = water
+    result["resources"] = food
+    result["food"] = food
+    result["accommodations"] = accommodations
+    result["points_of_interest"] = pois
+
+    transport = result.setdefault("transport", {})
+    start, end = _point(result.get("start")), _point(result.get("end"))
+    if transit_rows and start:
+        nearest = min(transit_rows, key=lambda x: _distance_km(start, _point(x) or start))
+        current = str(transport.get("outbound") or "")
+        if not current or "aucun" in current.casefold() or "non trouv" in current.casefold():
+            transport["outbound"] = f"{nearest.get('name') or 'Transport public'} à environ {_distance_km(start, _point(nearest) or start):.1f} km du départ."
+    if transit_rows and end:
+        nearest = min(transit_rows, key=lambda x: _distance_km(end, _point(x) or end))
+        current = str(transport.get("return") or "")
+        if not current or "aucun" in current.casefold() or "non trouv" in current.casefold():
+            transport["return"] = f"{nearest.get('name') or 'Transport public'} à environ {_distance_km(end, _point(nearest) or end):.1f} km de l'arrivée."
+    return result
+
+
+def _supplement_route_resources(result: dict[str, Any], data) -> dict[str, Any]:
+    """Bounded Photon safety net on final day anchors, never used for routing."""
+    try:
+        v3 = v7.v5.v3
+        intent = v3._parse_intent(data)
+        days = max(1, int(intent.get("days") or len(result.get("stages") or []) or 1))
+        boundaries = _route_day_boundaries(result, days)
+        if len(boundaries) < 2:
+            return result
+
+        existing = []
+        for item in result.get("water") or []:
+            if isinstance(item, dict):
+                existing.append({**item, "category": "water"})
+        for item in result.get("resources") or result.get("food") or []:
+            if isinstance(item, dict):
+                existing.append({**item, "category": "food"})
+        for item in result.get("accommodations") or []:
+            if isinstance(item, dict):
+                kind = _resource_kind(item, "lodging")
+                existing.append({**item, "category": kind})
+        for item in result.get("points_of_interest") or []:
+            if isinstance(item, dict) and _resource_kind(item) in {"station", "transport"}:
+                existing.append({**item, "category": "transit"})
+
+        rows = v3._postroute_corridor_resources(boundaries, intent, existing)
+        rows = _filter_active(rows)
+        return _merge_supplemented_resources(result, rows)
+    except Exception:
+        return result
 
 
 def _annotate_stage_resources(result: dict[str, Any]) -> dict[str, Any]:
@@ -336,6 +515,7 @@ def _install_plan_overlay(app, legacy_main):
                 0,
                 "🛡️ Sécurité géographique : tracé pédestre validé avant affichage. Les lignes directes de secours sont interdites dans le conseiller.",
             )
+            result = _supplement_route_resources(result, data)
             result = enrich_resources(result)
             result = _annotate_stage_resources(result)
             return _refresh_quality_after_resources(result, data)
