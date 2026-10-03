@@ -15,6 +15,7 @@ from backend import smart_planner_v9 as v9
 from backend import trekbrain_roundtrip_v9 as roundtrip
 from backend import trekbrain_route_logistics_v9 as logistics
 from backend import trekbrain_speed_v9 as speed
+from backend import trekbrain_ors_resilience_v9 as resilience
 
 # This test validates the default interactive profile, not an operator override.
 os.environ.pop("TREKBRAIN_RETRY_BUDGET_SECONDS", None)
@@ -287,6 +288,35 @@ finally:
 assert matrix_calls["count"] == 1, matrix_calls
 assert len(connector_rows) == 2, connector_rows
 assert all(row.get("routing_mode") == "ors-matrix" for row in connector_rows.values())
+
+# A network timeout must not trigger the old snapped/segmented ORS retry chain.
+# The resilience layer marks it as a transient provider failure (599), allowing
+# the already-installed secondary router to take over after one primary attempt.
+class TimeoutORS:
+    ORS_PROFILE = "foot-hiking"
+    def __init__(self):
+        self.calls = 0
+        self._request_route = self.raw_request
+    def raw_request(self, coords, distance_gps, snap_radius_m=None):
+        self.calls += 1
+        return None, "OpenRouteService : délai d'attente dépassé.", None
+
+timeout_ors = TimeoutORS()
+real_resilience_installed = resilience._INSTALLED
+try:
+    resilience._INSTALLED = False
+    resilience.install_ors_resilience(timeout_ors)
+    timeout_result, timeout_warning, timeout_status = timeout_ors._request_route(
+        [[48.0, 2.0], [48.1, 2.1]],
+        lambda _coords: 10.0,
+    )
+finally:
+    resilience._INSTALLED = real_resilience_installed
+
+assert timeout_result is None, timeout_result
+assert timeout_ors.calls == 1, timeout_ors.calls
+assert timeout_status == 599, (timeout_warning, timeout_status)
+assert resilience._is_transport_failure(timeout_warning, None) is True
 
 # ORS Matrix must inherit the short interactive timeout instead of its historical
 # 15-second timeout. Use a deterministic fake successful response.
