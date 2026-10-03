@@ -62,6 +62,23 @@ def _is_server_error(status) -> bool:
         return False
 
 
+def _is_transport_failure(warning, status) -> bool:
+    """Distinguish provider/network failure from a routable-geometry failure.
+
+    ors._request_route historically returns status=None for timeouts and
+    connection failures. Passing that through unchanged makes ors.get_route
+    retry the same request with snapping and then segmented routing, multiplying
+    one provider outage into several sequential timeout budgets.
+    """
+    if status is not None:
+        return False
+    text = str(warning or "").casefold()
+    return any(token in text for token in (
+        "délai", "delai", "timeout", "inaccessible", "connection",
+        "connexion", "réseau", "reseau",
+    ))
+
+
 def _secondary_route(coords):
     """Lazy import keeps the normal ORS path dependency-free and easy to test."""
     try:
@@ -101,6 +118,14 @@ def install_ors_resilience(ors) -> None:
         if result is not None:
             _remember(coords, snap_radius_m, result)
             return result, warning, status
+
+        # A timeout/connection failure is not evidence that the waypoint needs a
+        # different snap radius. Surface it as a transient provider failure so
+        # ors.get_route stops retrying ORS and the independent router can take
+        # over immediately.
+        if _is_transport_failure(warning, status):
+            return None, warning, 599
+
         if not _is_server_error(status):
             return result, warning, status
 
@@ -184,4 +209,4 @@ def install_ors_resilience(ors) -> None:
     ors._request_route = resilient_request
 
 
-__all__ = ["install_ors_resilience"]
+__all__ = ["install_ors_resilience", "_is_transport_failure"]
