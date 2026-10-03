@@ -734,6 +734,13 @@ def _photon_anchor_resource(anchor, category: str, osm_tags, radius_km: float):
         query = "fontaine"
     elif category == "transit":
         query = "gare"
+    elif category == "food":
+        if any("bakery" in str(tag) for tag in tags):
+            query = "boulangerie"
+        elif any("convenience" in str(tag) for tag in tags):
+            query = "épicerie"
+        else:
+            query = "supermarché"
     elif category == "stay":
         if any("hotel" in str(tag) or "hostel" in str(tag) or "guest_house" in str(tag) for tag in tags):
             query = "hotel"
@@ -811,6 +818,7 @@ def _photon_anchor_resource(anchor, category: str, osm_tags, radius_km: float):
         if not name:
             name = {
                 "water": "Point d'eau",
+                "food": "Ravitaillement",
                 "stay": "Hébergement",
                 "transit": "Transport public",
             }.get(category, "Point utile")
@@ -844,24 +852,36 @@ def _postroute_corridor_resources(boundaries, intent, existing_items):
     existing_items = list(existing_items or [])
     stays = [x for x in existing_items if x.get("category") in {"camping", "refuge"}]
     waters = [x for x in existing_items if x.get("category") == "water"]
+    foods = [x for x in existing_items if x.get("category") == "food"]
     transit = [x for x in existing_items if x.get("category") == "transit"]
 
-    jobs = []
+    # Build small route-relative lookup groups, then interleave them. This gives
+    # every requested logistics family a chance before the six-call latency cap
+    # is reached instead of spending the whole budget on one category.
+    transit_jobs, water_jobs, food_jobs, stay_jobs = [], [], [], []
     if intent.get("transit"):
         if _closest(transit, boundaries[0], 12) is None:
-            jobs.append((boundaries[0], "transit", (
+            transit_jobs.append((boundaries[0], "transit", (
                 "railway:station", "railway:halt", "public_transport:station"
             ), 12.0))
         if _closest(transit, boundaries[-1], 12) is None:
-            jobs.append((boundaries[-1], "transit", (
+            transit_jobs.append((boundaries[-1], "transit", (
                 "railway:station", "railway:halt", "public_transport:station"
             ), 12.0))
 
-    for boundary in boundaries[1:-1]:
+    interiors = list(boundaries[1:-1])
+    if len(interiors) > 2:
+        interiors = [interiors[0], interiors[-1]]
+
+    for boundary in interiors:
         if intent.get("water") and _closest(waters, boundary, 4.5) is None:
-            jobs.append((boundary, "water", (
+            water_jobs.append((boundary, "water", (
                 "amenity:drinking_water", "man_made:water_tap", "natural:spring"
             ), 5.5))
+        if intent.get("food") and _closest(foods, boundary, 5.0) is None:
+            food_jobs.append((boundary, "food", (
+                "shop:supermarket", "shop:convenience", "shop:bakery"
+            ), 6.5))
         if (
             intent.get("sleep")
             and intent.get("accommodation") != "bivouac"
@@ -877,7 +897,18 @@ def _postroute_corridor_resources(boundaries, intent, existing_items):
                     "tourism:camp_site", "tourism:hotel", "tourism:hostel",
                     "tourism:guest_house", "tourism:alpine_hut", "tourism:wilderness_hut"
                 )
-            jobs.append((boundary, "stay", tags, 8.0))
+            stay_jobs.append((boundary, "stay", tags, 8.0))
+
+    groups = [transit_jobs, water_jobs, food_jobs, stay_jobs]
+    jobs = []
+    while groups and len(jobs) < 6:
+        remaining = []
+        for group in groups:
+            if group and len(jobs) < 6:
+                jobs.append(group.pop(0))
+            if group:
+                remaining.append(group)
+        groups = remaining
 
     if not jobs:
         return []
@@ -1238,13 +1269,44 @@ def _build(data: AIPlanRequest, legacy_main):
     score, candidate, route_points, stage_highlights, route, distance, stage_dist, elevation, route_coords = final_rows[0]
 
     boundaries = candidate.boundaries
+    stage_rebalanced = False
 
-    # Explicit traverses may suffer from broad Overpass timeouts while the
-    # walking geometry itself is perfectly valid. Add only missing display/
-    # logistics resources near the selected day boundaries. These points never
-    # become ORS waypoints and therefore cannot alter the chosen route.
-    non_loop = _fold(intent.get("route_type") or "") not in {"boucle", "aller-retour", "aller retour"}
-    if corridor_centered and non_loop and forced_start and forced_end:
+    # Once a real walking geometry is validated, day boundaries may move along
+    # that exact polyline without changing the trek. Re-split only when doing so
+    # materially improves daily balance; no extra router or Web call is needed.
+    requested_days = max(1, int(intent.get("days") or 1))
+    if (
+        route.get("fallback") is False
+        and requested_days > 1
+        and len(stage_dist) == requested_days
+        and len(route_coords or []) >= requested_days + 1
+    ):
+        target = max(3.0, float(intent.get("daily_target") or 18.0))
+        current_dev = sum(abs(float(d) - target) / target for d in stage_dist) / requested_days
+        current_worst = max(abs(float(d) - target) / target for d in stage_dist)
+        if current_dev > 0.12 or current_worst > 0.25:
+            balanced_boundaries = _equal_progress_boundaries(
+                route_coords, start, end, requested_days
+            )
+            if len(balanced_boundaries) == requested_days + 1:
+                balanced_dist = _stage_distances(
+                    route_coords, balanced_boundaries, legacy_main, distance
+                )
+                if len(balanced_dist) == requested_days and max(balanced_dist) <= float(intent["daily_max"]) + 0.25:
+                    balanced_dev = sum(
+                        abs(float(d) - target) / target for d in balanced_dist
+                    ) / requested_days
+                    if balanced_dev + 0.01 < current_dev:
+                        boundaries = balanced_boundaries
+                        stage_dist = balanced_dist
+                        stage_highlights = [[] for _ in range(requested_days)]
+                        stage_rebalanced = True
+
+    # Fill missing route-relative logistics only after geometry is final. These
+    # points are display/logistics data and never become routing waypoints.
+    if route.get("fallback") is False and any(
+        intent.get(key) for key in ("transit", "water", "food", "sleep")
+    ):
         postroute_items = _postroute_corridor_resources(boundaries, intent, items)
         if postroute_items:
             items = _dedupe(
@@ -1266,8 +1328,8 @@ def _build(data: AIPlanRequest, legacy_main):
     for i, (a, b) in enumerate(zip(boundaries, boundaries[1:])):
         d = stage_dist[i] if i < len(stage_dist) else distance / max(1, len(boundaries) - 1)
         elev_i = round(total_elev * d / total_stage_dist) if total_elev else 0
-        water_near = _near(waters, a, b, 4.5, 3)
-        food_near = _near(foods, a, b, 4.0, 2)
+        water_near = _near(waters, a, b, 5.5, 3)
+        food_near = _near(foods, a, b, 5.5, 3)
         scenic_near = _near(scenic, a, b, 6.0, 3)
         highlight_names = list(dict.fromkeys((stage_highlights[i] if i < len(stage_highlights) else []) + [x["name"] for x in scenic_near]))[:4]
         overnight = b["name"]
@@ -1342,7 +1404,7 @@ def _build(data: AIPlanRequest, legacy_main):
     confidence_score -= 10 if intent["transit"] and (not outbound or not inbound) else 0
     confidence_score = max(20, min(confidence_score, 96))
 
-    source_items = route_points + waters[:5] + stays[:5] + transit[:3] + trails[:3]
+    source_items = route_points + waters[:5] + foods[:5] + stays[:5] + transit[:3] + trails[:3]
     sources, seen = [], set()
     for item in source_items:
         url = item.get("source_url")
@@ -1375,6 +1437,12 @@ def _build(data: AIPlanRequest, legacy_main):
         "notes": f"Horaires cartographiés : {x['opening_hours']}" if x.get("opening_hours") else "Ouverture et réservation à vérifier.",
         "source_url": x["source_url"],
     } for x in stays[:18]]
+    resources = [{
+        "name": x["name"], "type": "Ravitaillement", "category": "food",
+        "lat": x["lat"], "lon": x["lon"],
+        "notes": f"Horaires cartographiés : {x['opening_hours']}" if x.get("opening_hours") else "Horaires et disponibilité à vérifier.",
+        "source_url": x["source_url"],
+    } for x in foods[:18]]
 
     understood = _human_understanding(intent, location)
     title_focus = next((x["name"] for x in route_points[1:-1] if x.get("category") in SCENIC_CATEGORIES and x.get("name")), center["short_name"])
@@ -1396,6 +1464,8 @@ def _build(data: AIPlanRequest, legacy_main):
         "stages": stages,
         "points_of_interest": pois,
         "water": water,
+        "resources": resources,
+        "food": resources,
         "accommodations": accommodations,
         "transport": transport,
         "confidence": {
@@ -1420,6 +1490,7 @@ def _build(data: AIPlanRequest, legacy_main):
             "postroute_resource_count": len([
                 x for x in items if x.get("_postroute_resource")
             ]),
+            "stage_rebalanced": stage_rebalanced,
             "search_center": {
                 "lat": round(float(center["lat"]), 6),
                 "lon": round(float(center["lon"]), 6),
