@@ -202,6 +202,8 @@ def _parse_intent(data: AIPlanRequest) -> dict[str, Any]:
     elif any(k in explicit_text for k in ("difficile", "sportif", "sportive", "soutenu")):
         difficulty = "hard"
 
+    explicit_endpoint_pair = False
+
     start_query = _phrase_after(
         explicit_original,
         [
@@ -235,6 +237,7 @@ def _parse_intent(data: AIPlanRequest) -> dict[str, Any]:
             flags=re.I,
         )
         if pair:
+            explicit_endpoint_pair = True
             if not start_query:
                 start_query = re.sub(r"\s+", " ", pair.group(1)).strip(" .,-")
             if not end_query:
@@ -336,6 +339,7 @@ def _parse_intent(data: AIPlanRequest) -> dict[str, Any]:
         "start_query": start_query,
         "end_query": end_query,
         "via_query": via_query,
+        "explicit_endpoint_pair": explicit_endpoint_pair,
         "priorities": priorities,
         "avoid": avoid,
         "accommodation": accommodation,
@@ -536,11 +540,19 @@ def _combined_nearby(
     return base_items, extra_items, []
 
 
-def _geocode_named(query: str, location: str) -> dict[str, Any] | None:
+def _geocode_named(
+    query: str,
+    location: str,
+    *,
+    standalone_first: bool = False,
+) -> dict[str, Any] | None:
     query = re.sub(r"\s+", " ", str(query or "")).strip()
     if not query:
         return None
-    attempts = [f"{query}, {location}, France", f"{query}, France", query]
+    if standalone_first:
+        attempts = [f"{query}, France", query, f"{query}, {location}, France"]
+    else:
+        attempts = [f"{query}, {location}, France", f"{query}, France", query]
     for attempt in attempts:
         try:
             found = _geocode(attempt)
@@ -1238,8 +1250,13 @@ def _build(data: AIPlanRequest, legacy_main):
         raise HTTPException(status_code=422, detail=f"Impossible de localiser « {location} ».")
     center = geo[0]
 
-    forced_start = _geocode_named(intent["start_query"], location)
-    forced_end = _geocode_named(intent["end_query"], location)
+    standalone_endpoints = bool(intent.get("explicit_endpoint_pair"))
+    forced_start = _geocode_named(
+        intent["start_query"], location, standalone_first=standalone_endpoints
+    )
+    forced_end = _geocode_named(
+        intent["end_query"], location, standalone_first=standalone_endpoints
+    )
     forced_via = _geocode_named(intent["via_query"], location)
 
     corridor_centered = False
