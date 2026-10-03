@@ -139,6 +139,21 @@ if strategy_intent.get("difficulty") != "medium":
 if strategy_intent.get("days") != 2 or abs(float(strategy_intent.get("daily_target") or 0) - 16.0) > 0.11:
     failures.append(f"strategy isolation regression: numeric intent={strategy_intent!r}")
 
+normalized_strategy, _ = normalize_for_planner(strategy_req.prompt)
+normalized_strategy_intent = v7.v5.v3._parse_intent(
+    strategy_req.model_copy(update={"prompt": normalized_strategy})
+)
+if normalized_strategy_intent.get("accommodation") != "balanced":
+    failures.append(
+        "normalized strategy isolation regression: "
+        f"accommodation={normalized_strategy_intent.get('accommodation')!r}"
+    )
+if normalized_strategy_intent.get("difficulty") != "medium":
+    failures.append(
+        "normalized strategy isolation regression: "
+        f"difficulty={normalized_strategy_intent.get('difficulty')!r}"
+    )
+
 # Language regression: a terrain constraint using the verb "traverser" is not
 # a request for a route type "Traversée".
 normalized, _ = normalize_for_planner(
