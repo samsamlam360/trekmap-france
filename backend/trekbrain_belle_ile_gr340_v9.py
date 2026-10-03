@@ -10,7 +10,8 @@ OSM relation*:
 
 1. the normal TrekBrain Overpass path by canonical relation id;
 2. a secondary Overpass mirror queried directly for that same id;
-3. the normal OpenStreetMap relation/full API.
+3. a tertiary Overpass mirror queried directly for that same id;
+4. the normal OpenStreetMap relation/full API.
 
 The first relation that passes the usual GR 340 geometry checks wins.
 
@@ -229,6 +230,48 @@ def _secondary_overpass_relation() -> tuple[dict[str, Any] | None, str | None]:
     return None, "Miroir Overpass secondaire : relation 6850120 absente"
 
 
+def _tertiary_overpass_relation() -> tuple[dict[str, Any] | None, str | None]:
+    """Try the third configured Overpass mirror in the same bounded race."""
+    from . import free_planner_v2 as free
+
+    urls = list(getattr(free, "OVERPASS_URLS", []) or [])
+    if len(urls) < 3:
+        return None, "Miroir Overpass tertiaire non configuré"
+    url = urls[2]
+    query = (
+        "[out:json][timeout:4];"
+        f"relation({_GR340_RELATION_ID});"
+        "out body geom;"
+    )
+    try:
+        response = requests.post(
+            url,
+            data={"data": query},
+            headers={
+                "Accept": "application/json",
+                "User-Agent": "TrekMap-France/9 (trekmap-france.onrender.com)",
+            },
+            timeout=3.2,
+        )
+    except requests.Timeout:
+        return None, "Miroir Overpass tertiaire : délai dépassé"
+    except requests.RequestException as exc:
+        return None, f"Miroir Overpass tertiaire inaccessible ({exc.__class__.__name__})"
+    if response.status_code != 200:
+        return None, f"Miroir Overpass tertiaire HTTP {response.status_code}"
+    try:
+        payload = response.json()
+    except ValueError:
+        return None, "Miroir Overpass tertiaire : JSON invalide"
+    for element in (payload or {}).get("elements") or []:
+        if element.get("type") != "relation":
+            continue
+        tags = element.get("tags") or {}
+        if element.get("id") == _GR340_RELATION_ID or _is_gr340(tags):
+            return element, None
+    return None, "Miroir Overpass tertiaire : relation 6850120 absente"
+
+
 def _relation_route(element, gr, rescue, start: dict[str, Any], target_km: float):
     tags = element.get("tags") or {}
     # The canonical id is sufficient identity if tagging is temporarily incomplete;
@@ -304,6 +347,7 @@ def _targeted_gr340(v3, gr, rescue, start: dict[str, Any], target_km: float):
     sources = (
         ("overpass-relation-id", lambda: _overpass_relation(v3)),
         ("overpass-secondary", _secondary_overpass_relation),
+        ("overpass-tertiary", _tertiary_overpass_relation),
         ("osm-api-relation-full", _direct_osm_relation),
     )
     reasons = []
@@ -383,5 +427,6 @@ __all__ = [
     "_relation_from_osm_xml",
     "_direct_osm_relation",
     "_secondary_overpass_relation",
+    "_tertiary_overpass_relation",
     "_GR340_RELATION_ID",
 ]
