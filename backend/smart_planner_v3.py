@@ -30,6 +30,7 @@ from .free_planner_v2 import (
     _overpass,
     _photon_category_candidates,
     _request_json,
+    FILTERS as BASE_FILTERS,
     PHOTON_URL,
 )
 
@@ -65,6 +66,7 @@ CATEGORY_LABEL = {
     "village": "village",
     "camping": "camping",
     "refuge": "refuge",
+    "lodging": "hébergement",
     "food": "ravitaillement",
     "transit": "transport",
     "trail": "itinéraire balisé",
@@ -402,6 +404,138 @@ def _extra_nearby(center: dict[str, Any], radius_km: float) -> tuple[list[dict[s
     return items, []
 
 
+
+def _combined_nearby(
+    center: dict[str, Any],
+    radius_km: float,
+    base_categories: list[str],
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[str]]:
+    """Fetch route logistics and scenic context in one Overpass request.
+
+    Historically v9 paid for one broad logistics query and then immediately paid
+    for a second scenic/trail query over the same circle. The merged request
+    keeps the exact OSM filters and parsing semantics while cutting one network
+    round trip from the interactive path.
+    """
+    radius_m = max(1000, min(int(radius_km * 1000), 30000))
+    clauses = []
+    for cat in base_categories:
+        for flt in BASE_FILTERS.get(cat, []):
+            clauses.append(
+                f"nwr(around:{radius_m},{center['lat']},{center['lon']}){flt};"
+            )
+    for cat, filters in EXTRA_FILTERS.items():
+        for flt in filters:
+            element = "relation" if cat == "trail" else "nwr"
+            clauses.append(
+                f"{element}(around:{radius_m},{center['lat']},{center['lon']}){flt};"
+            )
+    if not clauses:
+        return [], [], []
+
+    query = "[out:json][timeout:20];(" + "".join(clauses) + ");out center tags 260;"
+    data = _overpass(query)
+
+    base_items, extra_items = [], []
+    seen_base, seen_extra = set(), set()
+    for e in (data.get("elements") or [])[:260]:
+        tags = e.get("tags") or {}
+        lat, lon = e.get("lat"), e.get("lon")
+        if lat is None or lon is None:
+            c = e.get("center") or {}
+            lat, lon = c.get("lat"), c.get("lon")
+        try:
+            lat, lon = float(lat), float(lon)
+        except (TypeError, ValueError):
+            continue
+
+        base_cat = None
+        if (
+            tags.get("amenity") == "drinking_water"
+            or tags.get("man_made") == "water_tap"
+            or tags.get("natural") == "spring"
+        ):
+            base_cat = "water"
+        elif tags.get("tourism") in {"camp_site", "caravan_site"}:
+            base_cat = "camping"
+        elif (
+            tags.get("tourism") in {"alpine_hut", "wilderness_hut"}
+            or tags.get("amenity") == "shelter"
+        ):
+            base_cat = "refuge"
+        elif (
+            tags.get("railway") in {"station", "halt"}
+            or tags.get("highway") == "bus_stop"
+            or tags.get("public_transport") == "station"
+        ):
+            base_cat = "transit"
+        elif (
+            tags.get("shop") in {"supermarket", "convenience", "bakery"}
+            or tags.get("amenity") in {"restaurant", "cafe"}
+        ):
+            base_cat = "food"
+        elif tags.get("tourism") == "viewpoint" or tags.get("natural") in {"peak", "waterfall"}:
+            base_cat = "viewpoint"
+
+        identity = (e.get("type"), e.get("id"))
+        if base_cat and base_cat in base_categories and identity not in seen_base:
+            seen_base.add(identity)
+            status = "unverified"
+            if base_cat == "water":
+                if tags.get("amenity") == "drinking_water" or tags.get("drinking_water") == "yes":
+                    status = "potable_referenced"
+                elif tags.get("drinking_water") == "no":
+                    status = "not_potable"
+            base_items.append({
+                "name": tags.get("name") or tags.get("ref") or f"{base_cat.title()} OSM",
+                "category": base_cat,
+                "lat": lat,
+                "lon": lon,
+                "source_url": (
+                    f"https://www.openstreetmap.org/{e.get('type','node')}/{e.get('id')}"
+                    if e.get("id") else _map_url(lat, lon)
+                ),
+                "water_status": status,
+                "opening_hours": tags.get("opening_hours") or "",
+            })
+
+        extra_cat = None
+        if tags.get("route") == "hiking":
+            extra_cat = "trail"
+        elif tags.get("natural") == "peak":
+            extra_cat = "peak"
+        elif tags.get("natural") == "waterfall":
+            extra_cat = "waterfall"
+        elif tags.get("natural") == "water":
+            extra_cat = "lake"
+        elif tags.get("historic") or tags.get("tourism") == "attraction":
+            extra_cat = "heritage"
+        elif tags.get("place") in {"village", "town"}:
+            extra_cat = "village"
+        elif tags.get("leisure") == "nature_reserve" or tags.get("boundary") == "protected_area":
+            extra_cat = "nature"
+
+        if extra_cat and identity not in seen_extra:
+            name = tags.get("name") or tags.get("ref")
+            if name or extra_cat in {"lake", "nature"}:
+                seen_extra.add(identity)
+                extra_items.append({
+                    "name": name or CATEGORY_LABEL.get(extra_cat, extra_cat).title(),
+                    "category": extra_cat,
+                    "lat": lat,
+                    "lon": lon,
+                    "source_url": (
+                        f"https://www.openstreetmap.org/{e.get('type','node')}/{e.get('id')}"
+                        if e.get("id") else _map_url(lat, lon)
+                    ),
+                    "water_status": "unverified",
+                    "opening_hours": tags.get("opening_hours") or "",
+                    "trail_name": tags.get("name") if extra_cat == "trail" else "",
+                })
+
+    return base_items, extra_items, []
+
+
 def _geocode_named(query: str, location: str) -> dict[str, Any] | None:
     query = re.sub(r"\s+", " ", str(query or "")).strip()
     if not query:
@@ -482,7 +616,7 @@ def _choose_start(center, items, intent, forced_start):
         return forced_start
     transit = [x for x in items if x.get("category") == "transit"]
     villages = [x for x in items if x.get("category") == "village"]
-    stays = [x for x in items if x.get("category") in {"camping", "refuge"}]
+    stays = [x for x in items if x.get("category") in {"camping", "refuge", "lodging"}]
     if intent["transit"] and transit:
         def transit_score(x):
             name = _fold(x.get("name", ""))
@@ -499,7 +633,7 @@ def _choose_end(start, center, items, intent, forced_end):
     if loop:
         return start
     transit = [x for x in items if x.get("category") == "transit" and _dist(x, start) > 3]
-    pool = transit if intent["transit"] and transit else [x for x in items if x.get("category") in {"village", "camping", "refuge", "viewpoint"} and _dist(x, start) > 3]
+    pool = transit if intent["transit"] and transit else [x for x in items if x.get("category") in {"village", "camping", "refuge", "lodging", "viewpoint"} and _dist(x, start) > 3]
     if not pool:
         return center
     wanted = max(5.0, intent["total_target"] * 0.55)
@@ -514,7 +648,7 @@ def _night_pool(items, intent):
     elif intent["accommodation"] == "refuge":
         preferred = [x for x in items if x.get("category") == "refuge"]
     else:
-        preferred = [x for x in items if x.get("category") in {"camping", "refuge"}]
+        preferred = [x for x in items if x.get("category") in {"camping", "refuge", "lodging"}]
     fallback = [x for x in items if x.get("category") in {"village", "food"}]
     scenic = [x for x in items if x.get("category") in SCENIC_CATEGORIES]
     if intent["sleep"]:
@@ -564,8 +698,8 @@ def _beam_candidates(start, end, center, items, intent, strategy: str, width: in
                     value += abs(_dist(center, item) - wanted_radius) * 0.45
 
                 if intent["sleep"] and intent["accommodation"] != "bivouac":
-                    if item.get("category") not in {"camping", "refuge", "village", "food"}:
-                        nearby_stay = _closest([x for x in items if x.get("category") in {"camping", "refuge"}], item, 3.5)
+                    if item.get("category") not in {"camping", "refuge", "lodging", "village", "food"}:
+                        nearby_stay = _closest([x for x in items if x.get("category") in {"camping", "refuge", "lodging"}], item, 3.5)
                         value += 2.0 if nearby_stay else 9.0
 
                 ranked.append((value, item))
@@ -800,7 +934,12 @@ def _photon_anchor_resource(anchor, category: str, osm_tags, radius_km: float):
             continue
         final_category = category
         if category == "stay":
-            final_category = "camping" if osm_value in {"camp_site", "caravan_site"} else "refuge"
+            if osm_value in {"camp_site", "caravan_site"}:
+                final_category = "camping"
+            elif osm_value in {"alpine_hut", "wilderness_hut", "shelter"}:
+                final_category = "refuge"
+            else:
+                final_category = "lodging"
 
         osm_type = str(props.get("osm_type") or "").upper()
         osm_id = props.get("osm_id")
@@ -848,7 +987,7 @@ def _postroute_corridor_resources(boundaries, intent, existing_items):
         return []
 
     existing_items = list(existing_items or [])
-    stays = [x for x in existing_items if x.get("category") in {"camping", "refuge"}]
+    stays = [x for x in existing_items if x.get("category") in {"camping", "refuge", "lodging"}]
     waters = [x for x in existing_items if x.get("category") == "water"]
     foods = [x for x in existing_items if x.get("category") == "food"]
     transit = [x for x in existing_items if x.get("category") == "transit"]
@@ -1116,17 +1255,25 @@ def _build(data: AIPlanRequest, legacy_main):
     radius = min(30.0, max(10.0, intent["daily_target"] * min(intent["days"], 4) * 0.42))
     notes = []
     try:
-        base = _nearby(center["lat"], center["lon"], radius, base_categories)
+        base, extra, extra_notes = _combined_nearby(center, radius, base_categories)
+        notes += extra_notes
     except RuntimeError as exc:
         notes.append(str(exc))
-        base = _photon_category_candidates(location, center, base_categories)
-    extra, extra_notes = _extra_nearby(center, radius)
-    notes += extra_notes
+        # For an explicit point-to-point trek the endpoints already define the
+        # pedestrian backbone. Do not replace one timed-out broad OSM request by
+        # another broad Photon sweep plus a second scenic OSM query. Route first,
+        # then use the bounded post-route resource lookup on real day anchors.
+        if corridor_centered and forced_start and forced_end:
+            base, extra = [], []
+        else:
+            base = _photon_category_candidates(location, center, base_categories)
+            extra = []
 
-    # A corridor search can legitimately outlive one slow Overpass mirror.
-    # Complete the POI pool around the *real* endpoints instead of falling back
-    # to the stale form region (e.g. Chartres for an explicit Tours -> Chinon).
-    if corridor_centered and len(base) + len(extra) < 4:
+    # If a traverse has too little context but the broad OSM query succeeded,
+    # one bounded endpoint fallback may add useful POIs. After an OSM timeout,
+    # the two authoritative endpoints are enough to route and the post-route
+    # resource pass will fill logistics without another broad search.
+    if corridor_centered and len(base) + len(extra) < 4 and not notes:
         corridor_fallback = []
         for anchor in (forced_start, forced_end):
             if not anchor:
@@ -1318,7 +1465,7 @@ def _build(data: AIPlanRequest, legacy_main):
                 max_km=max(40, radius * 1.45),
             )
 
-    stays = [x for x in items if x.get("category") in {"camping", "refuge"}]
+    stays = [x for x in items if x.get("category") in {"camping", "refuge", "lodging"}]
     waters = [x for x in items if x.get("category") == "water"]
     foods = [x for x in items if x.get("category") == "food"]
     transit = [x for x in items if x.get("category") == "transit"]
@@ -1336,7 +1483,7 @@ def _build(data: AIPlanRequest, legacy_main):
         scenic_near = _near(scenic, a, b, 6.0, 3)
         highlight_names = list(dict.fromkeys((stage_highlights[i] if i < len(stage_highlights) else []) + [x["name"] for x in scenic_near]))[:4]
         overnight = b["name"]
-        if i < len(boundaries) - 2 and b.get("category") not in {"camping", "refuge", "village", "food"}:
+        if i < len(boundaries) - 2 and b.get("category") not in {"camping", "refuge", "lodging", "village", "food"}:
             nearby_stay = _closest(stays, b, 3.5)
             if nearby_stay:
                 overnight = nearby_stay["name"]
@@ -1435,7 +1582,11 @@ def _build(data: AIPlanRequest, legacy_main):
         "source_url": x["source_url"],
     } for x in waters[:18]]
     accommodations = [{
-        "name": x["name"], "type": "Camping" if x.get("category") == "camping" else "Refuge / abri",
+        "name": x["name"], "type": (
+            "Camping" if x.get("category") == "camping"
+            else "Refuge / abri" if x.get("category") == "refuge"
+            else "Hébergement"
+        ),
         "lat": x["lat"], "lon": x["lon"],
         "notes": f"Horaires cartographiés : {x['opening_hours']}" if x.get("opening_hours") else "Ouverture et réservation à vérifier.",
         "source_url": x["source_url"],

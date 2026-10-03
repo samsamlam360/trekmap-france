@@ -153,6 +153,7 @@ def install_geo_filters(v3) -> None:
 
     original_nearby = v3._nearby
     original_extra = v3._extra_nearby
+    original_combined = getattr(v3, "_combined_nearby", None)
     original_photon = v3._photon_category_candidates
 
     def nearby(lat, lon, radius_km, categories):
@@ -167,11 +168,25 @@ def install_geo_filters(v3) -> None:
             ]
         return filtered, notes
 
+    def combined_nearby(center, radius_km, categories):
+        base, extra, notes = original_combined(center, radius_km, categories)
+        filtered_base = _filter_active(base)
+        filtered_extra = _filter_active(extra)
+        if _ACTIVE_BOUNDS.get() and (
+            len(filtered_base) < len(base) or len(filtered_extra) < len(extra)
+        ):
+            notes = list(notes or []) + [
+                "Zone insulaire : les points situés hors de l'île ont été écartés avant le calcul du parcours."
+            ]
+        return filtered_base, filtered_extra, notes
+
     def photon(location, center, categories):
         return _filter_active(original_photon(location, center, categories))
 
     v3._nearby = nearby
     v3._extra_nearby = extra_nearby
+    if original_combined is not None:
+        v3._combined_nearby = combined_nearby
     v3._photon_category_candidates = photon
 
 
