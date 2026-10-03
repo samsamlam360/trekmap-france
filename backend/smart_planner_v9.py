@@ -215,13 +215,19 @@ def precision_audit(result: dict[str, Any], data, features: dict[str, float], re
         planner = result.get("planner") or {}
         planner_intent = planner.get("intent") if isinstance(planner, dict) else {}
         planner_intent = planner_intent if isinstance(planner_intent, dict) else {}
+        try:
+            request_intent = v7.v5.v3._parse_intent(data)
+        except Exception:
+            request_intent = {}
+        request_intent = request_intent if isinstance(request_intent, dict) else {}
         result_route_type = v7.v5.v3._fold(result.get("route_type") or getattr(data, "route_type", ""))
         explicit_endpoints = bool(
             planner.get("corridor_centered")
             or planner_intent.get("explicit_endpoint_pair")
+            or request_intent.get("explicit_endpoint_pair")
             or (
-                str(planner_intent.get("start_query") or "").strip()
-                and str(planner_intent.get("end_query") or "").strip()
+                str(planner_intent.get("start_query") or request_intent.get("start_query") or "").strip()
+                and str(planner_intent.get("end_query") or request_intent.get("end_query") or "").strip()
             )
         )
         fixed_traverse = bool(
