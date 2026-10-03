@@ -221,10 +221,20 @@ def precision_audit(result: dict[str, Any], data, features: dict[str, float], re
             request_intent = {}
         request_intent = request_intent if isinstance(request_intent, dict) else {}
         result_route_type = v7.v5.v3._fold(result.get("route_type") or getattr(data, "route_type", ""))
+        prompt_folded = v7.v5.v3._fold(data.prompt)
+        start_name = v7.v5.v3._fold((result.get("start") or {}).get("name") or "").split(",")[0].strip()
+        end_name = v7.v5.v3._fold((result.get("end") or {}).get("name") or "").split(",")[0].strip()
+        named_endpoints = bool(
+            start_name and end_name
+            and start_name != end_name
+            and len(start_name) >= 3 and len(end_name) >= 3
+            and start_name in prompt_folded and end_name in prompt_folded
+        )
         explicit_endpoints = bool(
             planner.get("corridor_centered")
             or planner_intent.get("explicit_endpoint_pair")
             or request_intent.get("explicit_endpoint_pair")
+            or named_endpoints
             or (
                 str(planner_intent.get("start_query") or request_intent.get("start_query") or "").strip()
                 and str(planner_intent.get("end_query") or request_intent.get("end_query") or "").strip()
