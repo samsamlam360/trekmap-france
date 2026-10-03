@@ -435,8 +435,9 @@ def install_fast_planning(v3, v5, v9) -> None:
             raise HTTPException(status_code=422, detail="Le mode boucle automatique de secours est limité à environ 100 km au total.")
         rows = []
         warnings = []
-        for seed in (3, 11):
-            route, warning = roundtrip._roundtrip_request(start, target_km, seed)
+        requested_km = float(target_km)
+        for attempt, seed in enumerate((3, 11)):
+            route, warning = roundtrip._roundtrip_request(start, requested_km, seed)
             if route is None:
                 if warning:
                     warnings.append(warning)
@@ -446,11 +447,23 @@ def install_fast_planning(v3, v5, v9) -> None:
             retrace = float(v3_module._route_retrace_ratio(route.get("coords") or [])) if hasattr(v3_module, "_route_retrace_ratio") else 0.0
             range_penalty = max(0.0, daily_min - per_day) * 5 + max(0.0, per_day - daily_max) * 8
             score = abs(distance - target_km) + range_penalty + retrace * 80
-            rows.append((score, route))
+            candidate = dict(route)
+            candidate["round_trip_requested_km"] = round(requested_km, 2)
+            candidate["round_trip_target_km"] = round(float(target_km), 2)
+            rows.append((score, candidate))
             # Healthy first result: stop immediately instead of asking ORS for
             # two cosmetic alternatives.
             if daily_min <= per_day <= daily_max and retrace <= 0.25 and abs(distance - target_km) <= max(4.0, target_km * 0.12):
-                return route
+                return candidate
+
+            # Keep the same two-call budget, but make the second call corrective.
+            # ORS round_trip can systematically overshoot or undershoot on a
+            # constrained path network. Scale its requested length from the
+            # measured first result instead of merely changing the random seed.
+            if attempt == 0 and distance > 0:
+                correction = float(target_km) / distance
+                correction = max(0.72, min(1.28, correction))
+                requested_km = max(6.0, min(99.0, float(target_km) * correction))
         if not rows:
             from fastapi import HTTPException
             detail = warnings[0] if warnings else "OpenRouteService n'a produit aucune boucle pédestre."
