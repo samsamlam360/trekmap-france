@@ -180,6 +180,73 @@ assert all(
     for stage in partial["stages"][:-1]
 )
 
+
+# Structured outdoor lodging should prefer one exact OSM corridor query and stop
+# before Photon when that query already resolves every night.
+real_bbox_order = logistics._bbox_route_stays
+real_photon_order = logistics._photon_split_stays
+order_calls = {"bbox": 0, "photon": 0}
+try:
+    def counted_bbox(_coords, category):
+        order_calls["bbox"] += 1
+        return [dict(x) for x in camps]
+
+    def counted_photon(*args, **kwargs):
+        order_calls["photon"] += 1
+        return []
+
+    logistics._bbox_route_stays = counted_bbox
+    logistics._photon_split_stays = counted_photon
+    chosen_fast, projected_fast, meta_fast = logistics._discover_stays(
+        FakeV3(),
+        FakeRoundtrip,
+        FakeStayRescue,
+        coords,
+        {"name": "Départ", "lat": 0.0, "lon": 0.0},
+        "camping",
+        5,
+        20.0,
+        False,
+    )
+finally:
+    logistics._bbox_route_stays = real_bbox_order
+    logistics._photon_split_stays = real_photon_order
+
+assert len(chosen_fast) == 4, chosen_fast
+assert order_calls == {"bbox": 1, "photon": 0}, order_calls
+assert meta_fast["elapsed_ms"] >= 0
+
+# Generic lodging may be a separate transfer without reshaping the hiking line.
+# Keep candidates up to ~10 km off-route when the user did not demand 100% walk.
+generic_lodging = [
+    {"name": "Gîte A", "lat": 0.080, "lon": 0.20, "category": "lodging", "source_url": "osm://ga"},
+    {"name": "Gîte B", "lat": 0.080, "lon": 0.40, "category": "lodging", "source_url": "osm://gb"},
+    {"name": "Gîte C", "lat": 0.080, "lon": 0.60, "category": "lodging", "source_url": "osm://gc"},
+    {"name": "Gîte D", "lat": 0.080, "lon": 0.80, "category": "lodging", "source_url": "osm://gd"},
+]
+real_photon_generic = logistics._photon_split_stays
+real_bbox_generic = logistics._bbox_route_stays
+try:
+    logistics._photon_split_stays = lambda *args, **kwargs: [dict(x) for x in generic_lodging]
+    logistics._bbox_route_stays = lambda *args, **kwargs: []
+    chosen_generic, projected_generic, _meta_generic = logistics._discover_stays(
+        FakeV3(),
+        FakeRoundtrip,
+        FakeStayRescue,
+        coords,
+        {"name": "Départ", "lat": 0.0, "lon": 0.0},
+        "lodging",
+        5,
+        20.0,
+        False,
+    )
+finally:
+    logistics._photon_split_stays = real_photon_generic
+    logistics._bbox_route_stays = real_bbox_generic
+
+assert len(chosen_generic) == 4, chosen_generic
+assert all(6.0 < float(x.get("_offroute_km") or 0) <= 10.0 for x in chosen_generic), chosen_generic
+
 # Production guard: even if lodging post-processing throws an unexpected Python
 # exception, a valid pedestrian route must still be returned instead of
 # TB-INTERNAL-500.
