@@ -86,6 +86,7 @@ def main() -> None:
         root / "scripts" / "test_trekbrain_v9_resources.py",
         root / "scripts" / "test_trekbrain_v9_route_logistics.py",
         root / "scripts" / "test_trekbrain_v9_belle_ile_gr340.py",
+        root / "scripts" / "test_trekbrain_v9_roundtrip_empty_primary.py",
     ]
     for script in regression_scripts:
         try:
