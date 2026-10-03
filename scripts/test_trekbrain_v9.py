@@ -109,14 +109,9 @@ traverse_plan = {
     "water": [],
     "accommodations": [],
     "side_requests": [],
-    "planner": {
-        "corridor_centered": False,
-        "intent": {
-            "explicit_endpoint_pair": True,
-            "start_query": "Tours",
-            "end_query": "Chinon",
-        },
-    },
+    # Deliberately omit planner-internal endpoint flags. The audit must recover
+    # fixed A→B semantics from the user request itself.
+    "planner": {"corridor_centered": False, "intent": {}},
 }
 traverse_audit = precision_audit(
     traverse_plan, traverse_request, {"traverse": 1.0}, research, compound
