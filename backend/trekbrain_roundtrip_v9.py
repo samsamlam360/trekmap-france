@@ -667,6 +667,10 @@ def _best_roundtrip(start, target_km: float, daily_min: float, daily_max: float,
     pool.sort(key=lambda row: row[0])
     selected = pool[0][1]
     selected["distance_window_preferred"] = bool(feasible)
+    selected["candidate_pool_size"] = len(rows)
+    selected["candidate_modes"] = sorted({
+        str(row[1].get("routing_mode") or "unknown") for row in rows
+    })
     return selected
 
 
@@ -1045,7 +1049,9 @@ def _build_roundtrip(data, legacy_main, v3):
             status_code=422,
             detail=(
                 "Une boucle pédestre a bien été calculée, mais au moins une journée reste trop longue "
-                f"({max(stage_distances):.1f} km pour une limite de {daily_max:.1f} km)."
+                f"({max(stage_distances):.1f} km pour une limite de {daily_max:.1f} km). "
+                f"Meilleur secours: {route.get('routing_mode') or 'inconnu'}, "
+                f"{float(route.get('distance') or 0):.1f} km au total."
             ),
         )
 
