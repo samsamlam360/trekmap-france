@@ -37,6 +37,37 @@ prompt_rows = v5._candidate_prompts(
 )
 assert prompt_rows and "Priorité interne TrekBrain" in prompt_rows[0], prompt_rows
 
+# Explicit point-to-point requests with authoritative endpoints should route
+# only the strongest candidate family. The validated route-split recovery handles
+# day boundaries, so a second ORS lookalike only adds latency.
+class DummyCandidate:
+    def __init__(self, strategy):
+        self.strategy = strategy
+
+traverse_rows = [
+    DummyCandidate("balanced-gr-corridor"),
+    DummyCandidate("balanced-generic"),
+    DummyCandidate("balanced-extra"),
+]
+pruned_traverse = speed._prune_route_candidates(
+    traverse_rows,
+    {
+        "route_type": "Traversée",
+        "start_query": "Tours",
+        "end_query": "Chinon",
+        "accommodation": "balanced",
+    },
+)
+assert len(pruned_traverse) == 1, [x.strategy for x in pruned_traverse]
+
+# Do not apply the same shortcut to an implicit non-loop request; without
+# explicit endpoints the second family may materially change the route.
+implicit_rows = speed._prune_route_candidates(
+    traverse_rows,
+    {"route_type": "Traversée", "start_query": "", "end_query": "", "accommodation": "balanced"},
+)
+assert 1 <= len(implicit_rows) <= 2, [x.strategy for x in implicit_rows]
+
 # A second complete geographic hypothesis is not part of the default interactive
 # path. The lower layers already compare route candidates.
 assert v9.seconds("TREKBRAIN_RETRY_BUDGET_SECONDS", 10) == 0.0

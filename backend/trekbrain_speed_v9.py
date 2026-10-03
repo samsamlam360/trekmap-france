@@ -57,6 +57,57 @@ def _empty_research() -> dict[str, Any]:
     }
 
 
+def _prune_route_candidates(rows, intent):
+    """Keep only route families that can materially change an interactive plan."""
+    rows = list(rows or [])
+    if len(rows) <= 1:
+        return rows
+    matrix = [c for c in rows if "matrix-loop" in str(getattr(c, "strategy", ""))]
+    network = [
+        c for c in rows
+        if "path-network-loop" in str(getattr(c, "strategy", ""))
+        and c not in matrix
+    ]
+    gr = [
+        c for c in rows
+        if "gr-" in str(getattr(c, "strategy", ""))
+        and c not in network and c not in matrix
+    ]
+    generic = [c for c in rows if c not in matrix and c not in network and c not in gr]
+
+    selected = []
+    for family in (matrix, network, gr, generic):
+        if family:
+            selected.append(family[0])
+        if len(selected) >= 2:
+            break
+
+    route_type = str((intent or {}).get("route_type") or "").casefold()
+    accommodation = str((intent or {}).get("accommodation") or "").casefold()
+    start_query = str((intent or {}).get("start_query") or "").strip()
+    end_query = str((intent or {}).get("end_query") or "").strip()
+
+    # When both endpoints are explicit, candidate families differ mostly by
+    # optional POI decoration. The route itself is authoritative start -> end
+    # and the v3 recovery can split the validated geometry into hiking days.
+    # Route only the strongest family instead of paying ORS for a lookalike.
+    explicit_traverse = (
+        start_query and end_query
+        and "boucle" not in route_type
+        and "aller-retour" not in route_type
+        and "aller retour" not in route_type
+    )
+    if explicit_traverse and selected:
+        return selected[:1]
+
+    # Matrix/network/GR candidates already encode the real multi-day structure.
+    # For explicit camping/refuge loops, routing a second lookalike per strategy
+    # was the dominant Vercors/Morvan latency cost.
+    if "boucle" in route_type and accommodation in {"camping", "refuge"} and selected:
+        return selected[:1]
+    return selected[:2] or rows[:2]
+
+
 def install_fast_planning(v3, v5, v9) -> None:
     global _INSTALLED
     if _INSTALLED:
@@ -142,28 +193,7 @@ def install_fast_planning(v3, v5, v9) -> None:
     # ------------------------------------------------------------------
     def beam_candidates(start, end, center, items, intent, strategy, width=8):
         rows = list(original_beam(start, end, center, items, intent, strategy, width))
-        if len(rows) <= 2:
-            return rows
-        matrix = [c for c in rows if "matrix-loop" in str(getattr(c, "strategy", ""))]
-        network = [c for c in rows if "path-network-loop" in str(getattr(c, "strategy", "")) and c not in matrix]
-        gr = [c for c in rows if "gr-" in str(getattr(c, "strategy", "")) and c not in network and c not in matrix]
-        generic = [c for c in rows if c not in matrix and c not in network and c not in gr]
-
-        selected = []
-        for family in (matrix, network, gr, generic):
-            if family:
-                selected.append(family[0])
-            if len(selected) >= 2:
-                break
-
-        route_type = str((intent or {}).get("route_type") or "").casefold()
-        accommodation = str((intent or {}).get("accommodation") or "").casefold()
-        # Matrix/network/GR candidates already encode the real multi-day
-        # structure. For explicit camping/refuge loops, routing a second
-        # lookalike per strategy was the dominant Vercors/Morvan latency cost.
-        if "boucle" in route_type and accommodation in {"camping", "refuge"} and selected:
-            return selected[:1]
-        return selected[:2] or rows[:2]
+        return _prune_route_candidates(rows, intent)
 
     # One prompt is the normal path. A second route build is reserved only for a
     # genuinely dated/mandatory side objective where changing geometry matters.
@@ -438,4 +468,4 @@ def install_fast_planning(v3, v5, v9) -> None:
     roundtrip._best_roundtrip = fast_best_roundtrip
 
 
-__all__ = ["install_fast_planning", "_empty_research"]
+__all__ = ["install_fast_planning", "_empty_research", "_prune_route_candidates"]
