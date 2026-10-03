@@ -103,9 +103,11 @@ def _prune_route_candidates(rows, intent):
         return selected[:1]
 
     # Matrix/network/GR candidates already encode the real multi-day structure.
-    # For explicit camping/refuge loops, routing a second lookalike per strategy
-    # was the dominant Vercors/Morvan latency cost.
-    if "boucle" in route_type and accommodation in {"camping", "refuge"} and selected:
+    # When the user explicitly requests camping/refuge logistics, routing a
+    # second lookalike inside the same strategy mostly repeats ORS work. Keep
+    # one structural candidate per strategy for loops *and* itinerant routes;
+    # the outer planner still compares balanced/scenic/logistics strategies.
+    if accommodation in {"camping", "refuge"} and selected:
         return selected[:1]
     return selected[:2] or rows[:2]
 
