@@ -236,7 +236,11 @@ def _parse_intent(data: AIPlanRequest) -> dict[str, Any]:
     # authoritative geographic anchors instead of keeping a stale form region.
     if not start_query or not end_query:
         pair = re.search(
-            r"\b(?:aller|marcher)\s+(?:de|depuis)\s+(.+?)\s+(?:à|a|au|aux)\s+(.+?)"
+            r"\b(?:"
+            r"aller|marcher|"
+            r"faire\s+(?:un\s+)?(?:trek|itin[eé]raire)|"
+            r"faire\s+une?\s+randonn[eé]e"
+            r")\s+(?:de|depuis)\s+(.+?)\s+(?:à|a|au|aux)\s+(.+?)"
             r"(?=\s+(?:à|a)\s+pied\b|\s+en\s+\d{1,2}\s*(?:jours?|j)\b|"
             r"\s+(?:avec|sans|pour)\b|[,.;\n]|$)",
             explicit_original,
