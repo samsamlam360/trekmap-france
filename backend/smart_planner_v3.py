@@ -66,6 +66,7 @@ CATEGORY_LABEL = {
     "village": "village",
     "camping": "camping",
     "refuge": "refuge",
+    "lodging": "hébergement",
     "food": "ravitaillement",
     "transit": "transport",
     "trail": "itinéraire balisé",
@@ -615,7 +616,7 @@ def _choose_start(center, items, intent, forced_start):
         return forced_start
     transit = [x for x in items if x.get("category") == "transit"]
     villages = [x for x in items if x.get("category") == "village"]
-    stays = [x for x in items if x.get("category") in {"camping", "refuge"}]
+    stays = [x for x in items if x.get("category") in {"camping", "refuge", "lodging"}]
     if intent["transit"] and transit:
         def transit_score(x):
             name = _fold(x.get("name", ""))
@@ -632,7 +633,7 @@ def _choose_end(start, center, items, intent, forced_end):
     if loop:
         return start
     transit = [x for x in items if x.get("category") == "transit" and _dist(x, start) > 3]
-    pool = transit if intent["transit"] and transit else [x for x in items if x.get("category") in {"village", "camping", "refuge", "viewpoint"} and _dist(x, start) > 3]
+    pool = transit if intent["transit"] and transit else [x for x in items if x.get("category") in {"village", "camping", "refuge", "lodging", "viewpoint"} and _dist(x, start) > 3]
     if not pool:
         return center
     wanted = max(5.0, intent["total_target"] * 0.55)
@@ -647,7 +648,7 @@ def _night_pool(items, intent):
     elif intent["accommodation"] == "refuge":
         preferred = [x for x in items if x.get("category") == "refuge"]
     else:
-        preferred = [x for x in items if x.get("category") in {"camping", "refuge"}]
+        preferred = [x for x in items if x.get("category") in {"camping", "refuge", "lodging"}]
     fallback = [x for x in items if x.get("category") in {"village", "food"}]
     scenic = [x for x in items if x.get("category") in SCENIC_CATEGORIES]
     if intent["sleep"]:
@@ -697,8 +698,8 @@ def _beam_candidates(start, end, center, items, intent, strategy: str, width: in
                     value += abs(_dist(center, item) - wanted_radius) * 0.45
 
                 if intent["sleep"] and intent["accommodation"] != "bivouac":
-                    if item.get("category") not in {"camping", "refuge", "village", "food"}:
-                        nearby_stay = _closest([x for x in items if x.get("category") in {"camping", "refuge"}], item, 3.5)
+                    if item.get("category") not in {"camping", "refuge", "lodging", "village", "food"}:
+                        nearby_stay = _closest([x for x in items if x.get("category") in {"camping", "refuge", "lodging"}], item, 3.5)
                         value += 2.0 if nearby_stay else 9.0
 
                 ranked.append((value, item))
@@ -933,7 +934,12 @@ def _photon_anchor_resource(anchor, category: str, osm_tags, radius_km: float):
             continue
         final_category = category
         if category == "stay":
-            final_category = "camping" if osm_value in {"camp_site", "caravan_site"} else "refuge"
+            if osm_value in {"camp_site", "caravan_site"}:
+                final_category = "camping"
+            elif osm_value in {"alpine_hut", "wilderness_hut", "shelter"}:
+                final_category = "refuge"
+            else:
+                final_category = "lodging"
 
         osm_type = str(props.get("osm_type") or "").upper()
         osm_id = props.get("osm_id")
@@ -981,7 +987,7 @@ def _postroute_corridor_resources(boundaries, intent, existing_items):
         return []
 
     existing_items = list(existing_items or [])
-    stays = [x for x in existing_items if x.get("category") in {"camping", "refuge"}]
+    stays = [x for x in existing_items if x.get("category") in {"camping", "refuge", "lodging"}]
     waters = [x for x in existing_items if x.get("category") == "water"]
     foods = [x for x in existing_items if x.get("category") == "food"]
     transit = [x for x in existing_items if x.get("category") == "transit"]
@@ -1459,7 +1465,7 @@ def _build(data: AIPlanRequest, legacy_main):
                 max_km=max(40, radius * 1.45),
             )
 
-    stays = [x for x in items if x.get("category") in {"camping", "refuge"}]
+    stays = [x for x in items if x.get("category") in {"camping", "refuge", "lodging"}]
     waters = [x for x in items if x.get("category") == "water"]
     foods = [x for x in items if x.get("category") == "food"]
     transit = [x for x in items if x.get("category") == "transit"]
@@ -1477,7 +1483,7 @@ def _build(data: AIPlanRequest, legacy_main):
         scenic_near = _near(scenic, a, b, 6.0, 3)
         highlight_names = list(dict.fromkeys((stage_highlights[i] if i < len(stage_highlights) else []) + [x["name"] for x in scenic_near]))[:4]
         overnight = b["name"]
-        if i < len(boundaries) - 2 and b.get("category") not in {"camping", "refuge", "village", "food"}:
+        if i < len(boundaries) - 2 and b.get("category") not in {"camping", "refuge", "lodging", "village", "food"}:
             nearby_stay = _closest(stays, b, 3.5)
             if nearby_stay:
                 overnight = nearby_stay["name"]
@@ -1576,7 +1582,11 @@ def _build(data: AIPlanRequest, legacy_main):
         "source_url": x["source_url"],
     } for x in waters[:18]]
     accommodations = [{
-        "name": x["name"], "type": "Camping" if x.get("category") == "camping" else "Refuge / abri",
+        "name": x["name"], "type": (
+            "Camping" if x.get("category") == "camping"
+            else "Refuge / abri" if x.get("category") == "refuge"
+            else "Hébergement"
+        ),
         "lat": x["lat"], "lon": x["lon"],
         "notes": f"Horaires cartographiés : {x['opening_hours']}" if x.get("opening_hours") else "Ouverture et réservation à vérifier.",
         "source_url": x["source_url"],
