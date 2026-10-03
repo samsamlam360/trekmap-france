@@ -582,10 +582,15 @@ def install_smart_planner(app, legacy_main):
             quality = ((result.get("trekbrain") or {}).get("quality") or {}).get("score")
             total_ms = ((result.get("agent") or {}).get("performance") or {}).get("total_ms")
             planner = result.get("planner") or {}
+            route_preview = result.get("route_preview") or {}
+            performance = (result.get("agent") or {}).get("performance") or {}
             print(
                 "[TrekBrain v9][plan] "
                 f"quality={quality} total_ms={total_ms} "
+                f"prepare_ms={performance.get('context_prepare_ms')} "
                 f"route_type={result.get('route_type')} "
+                f"route_mode={route_preview.get('routing_mode')} "
+                f"fallback={result.get('planner_fallback')} "
                 f"stage_rebalanced={planner.get('stage_rebalanced')} "
                 f"postroute_resources={planner.get('postroute_resource_count')}",
                 flush=True,
