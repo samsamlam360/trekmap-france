@@ -1296,7 +1296,12 @@ def _build(data: AIPlanRequest, legacy_main):
     # one bounded endpoint fallback may add useful POIs. After an OSM timeout,
     # the two authoritative endpoints are enough to route and the post-route
     # resource pass will fill logistics without another broad search.
-    if corridor_centered and len(base) + len(extra) < 4 and not notes:
+    if (
+        corridor_centered
+        and not intent.get("explicit_endpoint_pair")
+        and len(base) + len(extra) < 4
+        and not notes
+    ):
         corridor_fallback = []
         for anchor in (forced_start, forced_end):
             if not anchor:
