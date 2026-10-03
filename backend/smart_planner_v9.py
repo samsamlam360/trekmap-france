@@ -462,9 +462,25 @@ def _build(data, legacy_main, user_id: int):
 
     threshold = seconds("TREKBRAIN_V9_RETRY_THRESHOLD", 72, 100)
     margin = float(ranked[0].get("margin", 0)) if ranked else 0.0
-    # A second full geographic hypothesis is expensive. Retry only when the first
-    # route is actually blocked, or when quality is clearly poor and uncertain.
-    should_retry = bool(audit1.get("blockers")) or (audit1["score"] < threshold and margin < 0.6)
+    # A second full geographic hypothesis is expensive. Retry only for defects
+    # another geometry can plausibly fix. Water/food/transit/lodging enrichment
+    # happens after route selection, so repeating the whole route because one of
+    # those resources is missing only adds latency and often returns the same
+    # backbone.
+    route_sensitive_tokens = (
+        "distance", "etape", "étape", "routage", "trace", "tracé",
+        "boucle", "objectif secondaire", "objectif(s) secondaire",
+    )
+    retryable_reasons = [
+        str(reason)
+        for reason in (audit1.get("reasons") or [])
+        if any(token in str(reason).casefold() for token in route_sensitive_tokens)
+    ]
+    should_retry = bool(audit1.get("blockers")) or (
+        audit1["score"] < threshold
+        and margin < 0.6
+        and bool(retryable_reasons)
+    )
     retry_budget = seconds("TREKBRAIN_RETRY_BUDGET_SECONDS", 10)
     if should_retry and len(ranked) > 1 and time.perf_counter() - total_started < retry_budget:
         alternative = next((x["action"] for x in ranked[1:] if x["action"] != primary), "balanced")
