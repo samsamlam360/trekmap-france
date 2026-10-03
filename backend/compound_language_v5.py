@@ -198,8 +198,25 @@ def extract_side_requests(normalized_text: str, *, today: date | None = None) ->
         has_action = any(action in clause for action in ACTION_WORDS)
         has_event = any(kind == "event" for kind, _ in hits)
         if not has_action and not has_event:
-            # Keep explicit preference clauses such as 'avec un château' or 'un village typique'.
-            if not re.search(r"\b(?:avec|pres de|proche de|un|une|des)\b", clause):
+            # Keep genuine preference clauses such as "avec un château" or
+            # "un village typique", but do not mistake the route anchor itself
+            # ("une boucle autour du lac des Settons") for a mandatory detour.
+            explicit_preference = False
+            for _kind, word in hits:
+                token = re.escape(word)
+                with_marker = re.search(
+                    rf"\b(?:avec|pres de|proche de)\b[^.;,!?
+]{{0,48}}(?<!\w){token}(?!\w)",
+                    clause,
+                )
+                noun_phrase = re.search(
+                    rf"\b(?:un|une|des)\s+(?:[\w'-]+\s+)?(?<!\w){token}(?!\w)",
+                    clause,
+                )
+                if with_marker or noun_phrase:
+                    explicit_preference = True
+                    break
+            if not explicit_preference:
                 continue
 
         soft = any(marker in clause for marker in SOFT_MARKERS)

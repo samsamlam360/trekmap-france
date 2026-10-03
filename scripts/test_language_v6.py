@@ -37,6 +37,24 @@ event = next(item for item in requests if item["kind"] == "event")
 assert event["target_date"] and event["target_date"].endswith("-07-14"), event
 assert event["required"] is False, event  # "si possible" must remain a preference.
 
+# Route anchors are not side objectives. The Morvan production prompt used to
+# mark "lac des Settons" as a mandatory secondary objective simply because the
+# clause also contained "Je veux une boucle", capping an otherwise valid route
+# at 59/100.
+anchor_text, _ = normalize_for_planner(
+    "Je veux une boucle tranquille de 3 jours dans le Morvan autour du lac des Settons, "
+    "environ 16 km par jour, avec camping, eau et ravitaillement."
+)
+anchor_requests = extract_side_requests(anchor_text)["side_requests"]
+assert not any(item["kind"] == "lake" for item in anchor_requests), anchor_requests
+
+# Genuine side preferences must still be extracted.
+preference_text, _ = normalize_for_planner(
+    "Je veux une randonnée avec un beau lac et un village typique."
+)
+preference_kinds = {item["kind"] for item in extract_side_requests(preference_text)["side_requests"]}
+assert {"lake", "village"} <= preference_kinds, preference_kinds
+
 print("TrekMap v6 French long-request parser: OK")
 print(normalized)
 print(requests)
