@@ -1300,10 +1300,15 @@ def _build(data: AIPlanRequest, legacy_main):
                         stage_highlights = [[] for _ in range(requested_days)]
                         stage_rebalanced = True
 
-    # Fill missing route-relative logistics only after geometry is final. These
-    # points are display/logistics data and never become routing waypoints.
-    if route.get("fallback") is False and any(
-        intent.get(key) for key in ("transit", "water", "food", "sleep")
+    # Fill missing route-relative logistics only for explicit traverses. Loops
+    # already received their POIs during candidate discovery; another network
+    # wave here costs seconds without improving their geometry. Keep the cheap
+    # local rebalancing and resource presentation for every route.
+    non_loop = _fold(intent.get("route_type") or "") not in {"boucle", "aller-retour", "aller retour"}
+    if (
+        route.get("fallback") is False
+        and corridor_centered and non_loop and forced_start and forced_end
+        and any(intent.get(key) for key in ("transit", "water", "food", "sleep"))
     ):
         postroute_items = _postroute_corridor_resources(boundaries, intent, items)
         if postroute_items:
