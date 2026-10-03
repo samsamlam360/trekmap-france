@@ -31,6 +31,7 @@ from .free_planner_v2 import (
 )
 
 PLANNER_VERSION = "trekmap-expert-planner-v3"
+CORRIDOR_SEARCH_VERSION = 1
 
 EXTRA_FILTERS = {
     "lake": [
@@ -1065,6 +1066,7 @@ def _build(data: AIPlanRequest, legacy_main):
             "strategy": candidate.strategy,
             "candidates_compared": len(evaluated),
             "corridor_centered": corridor_centered,
+            "corridor_search_version": CORRIDOR_SEARCH_VERSION,
             "search_center": {
                 "lat": round(float(center["lat"]), 6),
                 "lon": round(float(center["lon"]), 6),
