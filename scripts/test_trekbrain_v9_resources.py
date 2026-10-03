@@ -157,6 +157,46 @@ finally:
 assert captured_missing_water.get("water") is True, captured_missing_water
 assert captured_missing_water.get("sleep") is False, captured_missing_water
 
+# Photon route resources must query exact OSM categories instead of relying on
+# names such as "fontaine". This improves water/food/transit coverage without
+# adding another network call.
+v3_module = resources_module.v7.v5.v3
+real_request_json = v3_module._request_json
+captured_photon = {}
+
+def fake_photon_request(url, *, params=None, **kwargs):
+    captured_photon.update(dict(params or {}))
+    return {
+        "features": [{
+            "properties": {
+                "name": "Point d'eau test",
+                "countrycode": "FR",
+                "osm_key": "amenity",
+                "osm_value": "drinking_water",
+                "osm_type": "N",
+                "osm_id": 123,
+            },
+            "geometry": {"coordinates": [5.001, 45.001]},
+        }]
+    }
+
+v3_module._request_json = fake_photon_request
+try:
+    exact_water = v3_module._photon_anchor_resource(
+        {"name": "Repère jour 1", "lat": 45.0, "lon": 5.0, "category": "route_anchor"},
+        "water",
+        ("amenity:drinking_water", "man_made:water_tap", "natural:spring"),
+        5.5,
+    )
+finally:
+    v3_module._request_json = real_request_json
+
+assert exact_water and exact_water["water_status"] == "potable_referenced", exact_water
+assert "q" not in captured_photon, captured_photon
+assert "osm.amenity.drinking_water" in captured_photon.get("include", ""), captured_photon
+assert "osm.natural.spring" in captured_photon.get("include", ""), captured_photon
+
+
 # Production regression: /ai/plan must accept the planner model as JSON body,
 # never as a query parameter named `data`.
 from backend import app_v5
