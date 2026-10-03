@@ -57,19 +57,26 @@ OSM_FILTERS = {
 }
 
 
+def _split_internal_strategy(prompt: str) -> tuple[str, str]:
+    """Separate user text from TrekBrain's appended strategy, even after normalization."""
+    raw = str(prompt or "")
+    match = re.search(
+        r"\bpriorit(?:é|e)\s+interne\s+trekbrain\s*:",
+        raw,
+        flags=re.IGNORECASE,
+    )
+    if not match:
+        return raw, ""
+    return raw[:match.start()].rstrip(), raw[match.end():].strip()
+
+
 def _language_parse_intent(data):
     rules = _RULES.get()
 
     # V9 may append an internal strategy sentence to the user prompt. Keep this
     # context out of the language/constraint parser: words such as "campings",
     # "refuges" or "sportif" are planning hints here, not user requirements.
-    raw_prompt = str(data.prompt or "")
-    explicit_prompt, marker, internal_hint = raw_prompt.partition(
-        "\n\nPriorité interne TrekBrain :"
-    )
-    if not marker:
-        explicit_prompt = raw_prompt
-        internal_hint = ""
+    explicit_prompt, internal_hint = _split_internal_strategy(data.prompt)
 
     normalized, matches = normalize_for_planner(explicit_prompt, rules)
     compound = extract_side_requests(normalized)
