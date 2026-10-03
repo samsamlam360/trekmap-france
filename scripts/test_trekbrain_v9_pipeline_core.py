@@ -124,6 +124,28 @@ def install(v3):
     )
 
 
+# The direct-loop shortcut is intentionally narrow. It must help common short
+# generic loops without stealing named hiking relations or long itineraries from
+# the advanced planner.
+assert pipeline._fast_generic_loop_allowed({
+    "route_type": "Boucle", "days": 3, "total_target": 51.0,
+    "start_query": "", "end_query": "", "via_query": "",
+    "max_dplus_day": None, "avoid": set(),
+    "raw": "boucle dans le massif du Sancy avec de beaux paysages",
+}) is True
+assert pipeline._fast_generic_loop_allowed({
+    "route_type": "Boucle", "days": 3, "total_target": 51.0,
+    "start_query": "", "end_query": "", "via_query": "",
+    "max_dplus_day": None, "avoid": set(),
+    "raw": "boucle en suivant le GR 30",
+}) is False
+assert pipeline._fast_generic_loop_allowed({
+    "route_type": "Boucle", "days": 5, "total_target": 90.0,
+    "start_query": "", "end_query": "", "via_query": "",
+    "max_dplus_day": None, "avoid": set(),
+    "raw": "grande boucle cinq jours",
+}) is False
+
 # 1. Belle-Île without lodging: canonical route, no generic planner.
 v3 = FakeV3()
 FakeCanonical.calls.clear()
