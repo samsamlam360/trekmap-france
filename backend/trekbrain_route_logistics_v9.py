@@ -234,7 +234,10 @@ def _project_stays(roundtrip, coords, rows, category: str, max_offroute_km: floa
             continue
         item = dict(row)
         item["category"] = category
-        projection = roundtrip._project_stay_to_route(coords, cum, item)
+        try:
+            projection = roundtrip._project_stay_to_route(coords, cum, item)
+        except Exception:
+            projection = None
         if not projection:
             continue
         index, progress, offroute = projection
@@ -583,7 +586,11 @@ def _attach_logistics(result: dict[str, Any], data, legacy_main, v3, roundtrip, 
         },
         "principle": "Le tracé pédestre est calculé d'abord. Les nuitées sont une logistique secondaire et ne rallongent pas artificiellement l'itinéraire principal.",
     }
-    result.setdefault("advisor_notes", []).insert(
+    advisor_notes = result.get("advisor_notes")
+    if not isinstance(advisor_notes, list):
+        advisor_notes = [str(advisor_notes)] if advisor_notes else []
+        result["advisor_notes"] = advisor_notes
+    advisor_notes.insert(
         0,
         "🧭 Itinéraire d'abord : TrekBrain a séparé le parcours pédestre des nuitées. Un camping éloigné ne déforme plus le trek ; une petite liaison est ajoutée si elle est validée, sinon un transfert séparé est conseillé.",
     )
