@@ -173,9 +173,11 @@ def evaluate(case, result, elapsed_s, clarify):
     route = result.get("route_preview") or {}
     coords = valid_coords(result)
     stages = [x for x in (result.get("stages") or []) if isinstance(x, dict)]
-    quality = ((result.get("trekbrain") or {}).get("quality") or {}).get("score")
+    quality_obj = ((result.get("trekbrain") or {}).get("quality") or {})
+    quality = quality_obj.get("score")
     decision = result.get("decision_summary") or {}
-    perf_ms = ((result.get("agent") or {}).get("performance") or {}).get("total_ms")
+    performance = ((result.get("agent") or {}).get("performance") or {})
+    perf_ms = performance.get("total_ms")
     closing = haversine(result.get("start"), result.get("end"))
 
     if len(coords) < 2:
@@ -308,7 +310,28 @@ def evaluate(case, result, elapsed_s, clarify):
         "clarification_needed": bool((clarify or {}).get("needs_clarification")),
         "clarification_questions": (clarify or {}).get("questions") or [],
         "strategy": (result.get("trekbrain") or {}).get("strategy"),
-        "blockers": ((result.get("trekbrain") or {}).get("quality") or {}).get("blockers") or [],
+        "blockers": quality_obj.get("blockers") or [],
+        "quality_checks": quality_obj.get("checks") or [],
+        "quality_reasons": quality_obj.get("reasons") or [],
+        "base_local_score": quality_obj.get("base_local_score"),
+        "confidence_score": (result.get("confidence") or {}).get("score"),
+        "confidence_limitations": (result.get("confidence") or {}).get("limitations") or [],
+        "performance": performance,
+        "planner_diagnostics": {
+            key: (result.get("planner") or {}).get(key)
+            for key in (
+                "pipeline_version", "pipeline_phases", "strategy",
+                "candidates_compared", "corridor_centered", "search_center",
+                "stage_rebalanced", "logistics_mode",
+            )
+            if key in (result.get("planner") or {})
+        },
+        "logistics_diagnostics": {
+            "status": (result.get("logistics") or {}).get("status"),
+            "discovered_candidates": (result.get("logistics") or {}).get("discovered_candidates"),
+            "nights_resolved": (result.get("logistics") or {}).get("nights_resolved"),
+            "timing": (result.get("logistics") or {}).get("timing") or {},
+        },
     }
 
 

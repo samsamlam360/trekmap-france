@@ -110,6 +110,27 @@ finally:
 if FIELD_SCENARIO_COUNT != 40:
     failures.append(f"field scenario count changed unexpectedly: {FIELD_SCENARIO_COUNT}")
 
+# Explicit point-to-point phrasing must override stale geographic context.
+corridor_req = AIPlanRequest(
+    prompt=(
+        "Je veux aller de Tours à Chinon à pied en 3 jours, environ 22 km par jour. "
+        "Ce n'est pas une boucle."
+    ),
+    region="Chartres",
+    days=3,
+    daily_km=22,
+    difficulty="medium",
+    route_type="Boucle",
+)
+corridor_intent = v7.v5.v3._parse_intent(corridor_req)
+if request_v9._fold(corridor_intent.get("start_query")) != "tours":
+    failures.append(f"corridor regression: start={corridor_intent.get('start_query')!r}")
+if request_v9._fold(corridor_intent.get("end_query")) != "chinon":
+    failures.append(f"corridor regression: end={corridor_intent.get('end_query')!r}")
+midpoint = v7.v5.v3._corridor_center(PLACES["tours"], PLACES["chinon"])
+if abs(float(midpoint["lat"]) - 47.28055) > 0.01 or abs(float(midpoint["lon"]) - 0.4638) > 0.01:
+    failures.append(f"corridor regression: midpoint={midpoint!r}")
+
 # Internal-strategy isolation regression. TrekBrain may append soft planning
 # advice containing words such as "campings", "refuges" or "sportif"; these are
 # not user constraints and must not silently change accommodation/difficulty.

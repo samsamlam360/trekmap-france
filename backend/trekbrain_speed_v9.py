@@ -155,6 +155,14 @@ def install_fast_planning(v3, v5, v9) -> None:
                 selected.append(family[0])
             if len(selected) >= 2:
                 break
+
+        route_type = str((intent or {}).get("route_type") or "").casefold()
+        accommodation = str((intent or {}).get("accommodation") or "").casefold()
+        # Matrix/network/GR candidates already encode the real multi-day
+        # structure. For explicit camping/refuge loops, routing a second
+        # lookalike per strategy was the dominant Vercors/Morvan latency cost.
+        if "boucle" in route_type and accommodation in {"camping", "refuge"} and selected:
+            return selected[:1]
         return selected[:2] or rows[:2]
 
     # One prompt is the normal path. A second route build is reserved only for a

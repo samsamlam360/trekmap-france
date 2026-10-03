@@ -22,7 +22,9 @@ No straight-line geometry is promoted to a hiking route.
 from __future__ import annotations
 
 import math
+import os
 import re
+import time
 import unicodedata
 from copy import deepcopy
 from typing import Any
@@ -165,21 +167,12 @@ def _bbox_route_stays(coords, category: str) -> list[dict[str, Any]]:
     )
     query = f"[out:json][timeout:5];({clauses});out center tags 160;"
 
-    data = None
-    for url in list(getattr(free, "OVERPASS_URLS", []))[:2]:
-        try:
-            data = free._request_json(
-                url,
-                data={"data": query},
-                timeout=3.2,
-                ttl=3600,
-                service="Overpass logistique nuitées",
-                retries=1,
-            )
-            if isinstance(data, dict):
-                break
-        except Exception:
-            data = None
+    try:
+        # speed_v9 patches free._overpass with one global interactive budget.
+        # Reuse it here instead of opening an independent mirror loop.
+        data = free._overpass(query)
+    except Exception:
+        data = None
     if not isinstance(data, dict):
         return []
 
@@ -206,12 +199,19 @@ def _route_probe_stays(v3, roundtrip, coords, category: str) -> list[dict[str, A
         return []
     rows = []
     seen = set()
-    for part in range(6):
-        target = float(cum[-1]) * (part + 0.5) / 6.0
+    probe_count = 4
+    lookup = getattr(roundtrip, "_nearby_stays", None)
+    for part in range(probe_count):
+        target = float(cum[-1]) * (part + 0.5) / probe_count
         idx = roundtrip._route_index_for_progress(cum, target)
         point = coords[idx]
+        anchor = {"lat": float(point[0]), "lon": float(point[1])}
         try:
-            found = list(v3._nearby(float(point[0]), float(point[1]), 6.0, [category]) or [])
+            if callable(lookup):
+                # speed_v9 turns this into one broad cached Overpass pool.
+                found = list(lookup(v3, anchor, category, 6.0) or [])
+            else:
+                found = list(v3._nearby(anchor["lat"], anchor["lon"], 6.0, [category]) or [])
         except Exception:
             found = []
         for item in found:
@@ -289,31 +289,96 @@ def _choose_stays(roundtrip, coords, rows, days: int, daily_target: float) -> li
     return beam[0][1] if beam else []
 
 
+def _logistics_budget_seconds() -> float:
+    try:
+        value = float(os.getenv("TREKBRAIN_LOGISTICS_BUDGET_SECONDS", "7.0") or 7.0)
+    except (TypeError, ValueError):
+        value = 7.0
+    return max(3.0, min(value, 12.0))
+
+
 def _discover_stays(v3, roundtrip, stay_rescue, coords, start, category: str, days: int, daily_target: float, strict_walk: bool):
+    started = time.monotonic()
+    budget = _logistics_budget_seconds()
+    deadline = started + budget
+    needed = max(1, days - 1)
+
     rows = []
     rows.extend(_bbox_route_stays(coords, category))
-    if len(rows) < max(2, days - 1):
+    if len(rows) < max(2, needed) and deadline - time.monotonic() >= 2.2:
         rows.extend(_route_probe_stays(v3, roundtrip, coords, category))
 
     max_offroute = 3.2 if strict_walk else _MAX_OFFROUTE_KM
     projected = _project_stays(roundtrip, coords, rows, category, max_offroute)
 
-    # Public geocoders remain discovery-only fallbacks. Route projection filters
-    # mainland/irrelevant hits before any stay can be selected.
-    if len(projected) < max(1, days - 1):
+    # Public geocoders are last-resort discovery only. Never let two slow
+    # geocoders consume another full request after OSM has used the interactive
+    # budget; unresolved lodging is preferable to freezing the planner.
+    if len(projected) < needed and deadline - time.monotonic() >= 1.8:
         try:
             rows.extend(stay_rescue._photon_stays(start, category, 38.0))
         except Exception:
             pass
         projected = _project_stays(roundtrip, coords, rows, category, max_offroute)
-    if len(projected) < max(1, days - 1):
+    if len(projected) < needed and deadline - time.monotonic() >= 1.8:
         try:
             rows.extend(stay_rescue._nominatim_stays(start, category, 38.0))
         except Exception:
             pass
         projected = _project_stays(roundtrip, coords, rows, category, max_offroute)
 
-    return _choose_stays(roundtrip, coords, projected, days, daily_target), projected
+    chosen = _choose_stays(roundtrip, coords, projected, days, daily_target)
+    return chosen, projected, {
+        "budget_seconds": budget,
+        "elapsed_ms": round((time.monotonic() - started) * 1000),
+        "budget_exhausted": time.monotonic() >= deadline,
+    }
+
+
+def _matrix_connectors(ors, coords, stays) -> dict[str, dict[str, Any]]:
+    """Validate short stay connectors with real ORS Matrix distances in batches."""
+    eligible = [
+        stay for stay in stays
+        if isinstance(stay, dict) and float(stay.get("_offroute_km") or 0) <= _WALK_CONNECTOR_LIMIT_KM
+    ]
+    out: dict[str, dict[str, Any]] = {}
+    # 10 stays -> 20 Matrix locations, below TrekBrain's 24-location cap.
+    for offset in range(0, len(eligible), 10):
+        chunk = eligible[offset:offset + 10]
+        points = []
+        valid = []
+        for stay in chunk:
+            try:
+                index = max(0, min(int(stay.get("_route_index") or 0), len(coords) - 1))
+                anchor = coords[index]
+                points.extend([
+                    [float(anchor[0]), float(anchor[1])],
+                    [float(stay["lat"]), float(stay["lon"])],
+                ])
+                valid.append(stay)
+            except (KeyError, TypeError, ValueError):
+                continue
+        if not valid or len(points) != len(valid) * 2:
+            continue
+        try:
+            result = ors.get_distance_matrix(points)
+        except Exception:
+            result = None
+        matrix = result.get("distances") if isinstance(result, dict) else None
+        if not isinstance(matrix, list) or len(matrix) != len(points):
+            continue
+        for index, stay in enumerate(valid):
+            try:
+                distance = float(matrix[index * 2][index * 2 + 1])
+            except (IndexError, TypeError, ValueError):
+                continue
+            if math.isfinite(distance) and distance > 0:
+                out[_stay_key(stay)] = {
+                    "validated": True,
+                    "distance_km": round(distance, 2),
+                    "routing_mode": "ors-matrix",
+                }
+    return out
 
 
 def _connector(ors, legacy_main, roundtrip, coords, stay: dict[str, Any]) -> dict[str, Any]:
@@ -376,10 +441,15 @@ def _attach_logistics(result: dict[str, Any], data, legacy_main, v3, roundtrip, 
     if "lat" not in start or "lon" not in start:
         start = {"name": "Départ", "lat": float(coords[0][0]), "lon": float(coords[0][1])}
 
-    chosen, discovered = _discover_stays(
+    logistics_started = time.monotonic()
+    chosen, discovered, discovery_meta = _discover_stays(
         v3, roundtrip, stay_rescue, coords, start, category, days, daily_target, strict_walk
     )
     by_night = {index + 1: stay for index, stay in enumerate(chosen[: max(0, days - 1)])}
+
+    matrix_started = time.monotonic()
+    connector_map = _matrix_connectors(ors, coords, list(by_night.values()))
+    matrix_elapsed_ms = round((time.monotonic() - matrix_started) * 1000)
 
     total_distance = _route_distance(result, coords, legacy_main)
     if total_distance <= 0:
@@ -414,7 +484,9 @@ def _attach_logistics(result: dict[str, Any], data, legacy_main, v3, roundtrip, 
 
         connector = {"validated": False, "distance_km": None}
         if offroute <= _WALK_CONNECTOR_LIMIT_KM:
-            connector = _connector(ors, legacy_main, roundtrip, coords, stay)
+            connector = connector_map.get(_stay_key(stay)) or _connector(
+                ors, legacy_main, roundtrip, coords, stay
+            )
         connector_km = float(connector.get("distance_km") or 0)
         if connector.get("validated") and connector_km <= 4.0:
             access["status"] = "confirmed"
@@ -501,6 +573,14 @@ def _attach_logistics(result: dict[str, Any], data, legacy_main, v3, roundtrip, 
         "nights_resolved": len([row for row in logistics_rows if row.get("status") in {"confirmed", "usable_with_transfer"}]),
         "strict_walk": strict_walk,
         "nights": logistics_rows,
+        "timing": {
+            "discovery_ms": discovery_meta.get("elapsed_ms"),
+            "discovery_budget_seconds": discovery_meta.get("budget_seconds"),
+            "discovery_budget_exhausted": discovery_meta.get("budget_exhausted"),
+            "connector_matrix_ms": matrix_elapsed_ms,
+            "connector_matrix_hits": len(connector_map),
+            "total_ms": round((time.monotonic() - logistics_started) * 1000),
+        },
         "principle": "Le tracé pédestre est calculé d'abord. Les nuitées sont une logistique secondaire et ne rallongent pas artificiellement l'itinéraire principal.",
     }
     result.setdefault("advisor_notes", []).insert(
@@ -592,4 +672,6 @@ __all__ = [
     "_attach_logistics",
     "_bbox_route_stays",
     "_choose_stays",
+    "_matrix_connectors",
+    "_logistics_budget_seconds",
 ]

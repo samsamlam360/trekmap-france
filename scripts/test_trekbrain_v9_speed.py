@@ -13,6 +13,7 @@ from backend import smart_planner_v3 as v3
 from backend import smart_planner_v5 as v5
 from backend import smart_planner_v9 as v9
 from backend import trekbrain_roundtrip_v9 as roundtrip
+from backend import trekbrain_route_logistics_v9 as logistics
 from backend import trekbrain_speed_v9 as speed
 
 # This test validates the default interactive profile, not an operator override.
@@ -88,6 +89,49 @@ finally:
     v3._nearby = real_nearby
 assert nearby_calls["count"] == 1, nearby_calls
 assert all(rows for rows in found), found
+
+# Route-first logistics must reuse the same pooled lookup instead of opening one
+# OSM search for every route probe.
+route_coords = [
+    [lat, -1.54], [lat, -1.48], [lat, -1.42], [lat, -1.36],
+    [lat, -1.30], [lat, -1.24],
+]
+nearby_calls["count"] = 0
+v3._nearby = fake_nearby
+try:
+    speed._STAY_POOLS.clear()
+    probe_rows = logistics._route_probe_stays(v3, roundtrip, route_coords, "camping")
+finally:
+    v3._nearby = real_nearby
+assert nearby_calls["count"] <= 1, nearby_calls
+assert isinstance(probe_rows, list)
+
+# Walking connectors for several nights must be validated with one ORS Matrix
+# batch, not one Directions request per night.
+matrix_calls = {"count": 0}
+real_matrix = ors.get_distance_matrix
+
+def fake_connector_matrix(points):
+    matrix_calls["count"] += 1
+    n = len(points)
+    matrix = [[0.0 if i == j else 1.2 for j in range(n)] for i in range(n)]
+    return {"distances": matrix, "fallback": False, "routing_mode": "ors-matrix"}
+
+ors.get_distance_matrix = fake_connector_matrix
+try:
+    connector_rows = logistics._matrix_connectors(
+        ors,
+        route_coords,
+        [
+            {"name": "A", "lat": lat + 0.005, "lon": -1.48, "_route_index": 1, "_offroute_km": 0.8},
+            {"name": "B", "lat": lat + 0.005, "lon": -1.36, "_route_index": 3, "_offroute_km": 0.9},
+        ],
+    )
+finally:
+    ors.get_distance_matrix = real_matrix
+assert matrix_calls["count"] == 1, matrix_calls
+assert len(connector_rows) == 2, connector_rows
+assert all(row.get("routing_mode") == "ors-matrix" for row in connector_rows.values())
 
 # ORS Matrix must inherit the short interactive timeout instead of its historical
 # 15-second timeout. Use a deterministic fake successful response.

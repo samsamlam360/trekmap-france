@@ -216,6 +216,24 @@ def _parse_intent(data: AIPlanRequest) -> dict[str, Any]:
             r"\bvia\s+(.+?)(?=\s+(?:puis|ensuite|avec|pour|sur|en)\b|[,.;\n]|$)",
         ],
     )
+
+    # Natural point-to-point phrasing often omits the words "départ" and
+    # "arrivée": "aller de Tours à Chinon à pied". Treat those endpoints as
+    # authoritative geographic anchors instead of keeping a stale form region.
+    if not start_query or not end_query:
+        pair = re.search(
+            r"\b(?:aller|marcher)\s+(?:de|depuis)\s+(.+?)\s+(?:à|a|au|aux)\s+(.+?)"
+            r"(?=\s+(?:à|a)\s+pied\b|\s+en\s+\d{1,2}\s*(?:jours?|j)\b|"
+            r"\s+(?:avec|sans|pour)\b|[,.;\n]|$)",
+            explicit_original,
+            flags=re.I,
+        )
+        if pair:
+            if not start_query:
+                start_query = re.sub(r"\s+", " ", pair.group(1)).strip(" .,-")
+            if not end_query:
+                end_query = re.sub(r"\s+", " ", pair.group(2)).strip(" .,-")
+
     if start_query and end_query and not shape_explicit:
         route_type = "Traversée"
 
@@ -395,6 +413,22 @@ def _geocode_named(query: str, location: str) -> dict[str, Any] | None:
             point["category"] = "forced"
             return point
     return None
+
+
+def _corridor_center(start: dict[str, Any], end: dict[str, Any]) -> dict[str, Any]:
+    """Midpoint used for POI discovery on an explicit point-to-point trek."""
+    lat = (float(start["lat"]) + float(end["lat"])) / 2.0
+    lon = (float(start["lon"]) + float(end["lon"])) / 2.0
+    start_name = str(start.get("short_name") or start.get("name") or "Départ")
+    end_name = str(end.get("short_name") or end.get("name") or "Arrivée")
+    return {
+        "name": f"{start_name} → {end_name}",
+        "short_name": f"{start_name} → {end_name}",
+        "lat": lat,
+        "lon": lon,
+        "category": "corridor",
+        "source_url": "",
+    }
 
 
 def _dedupe(items: list[dict[str, Any]], center: dict[str, Any], max_km: float = 45) -> list[dict[str, Any]]:
@@ -780,6 +814,15 @@ def _build(data: AIPlanRequest, legacy_main):
     forced_end = _geocode_named(intent["end_query"], location)
     forced_via = _geocode_named(intent["via_query"], location)
 
+    corridor_centered = False
+    if forced_start and forced_end:
+        try:
+            if _dist(forced_start, forced_end) >= 5.0:
+                center = _corridor_center(forced_start, forced_end)
+                corridor_centered = True
+        except Exception:
+            corridor_centered = False
+
     base_categories = ["viewpoint", "water", "camping", "refuge", "food", "transit"]
     radius = min(30.0, max(10.0, intent["daily_target"] * min(intent["days"], 4) * 0.42))
     notes = []
@@ -1021,6 +1064,11 @@ def _build(data: AIPlanRequest, legacy_main):
             "version": PLANNER_VERSION,
             "strategy": candidate.strategy,
             "candidates_compared": len(evaluated),
+            "corridor_centered": corridor_centered,
+            "search_center": {
+                "lat": round(float(center["lat"]), 6),
+                "lon": round(float(center["lon"]), 6),
+            },
             "intent": {k: v for k, v in intent.items() if k not in {"raw", "priorities", "avoid"}},
         },
         "model": PLANNER_VERSION,
