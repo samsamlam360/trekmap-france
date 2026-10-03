@@ -5,11 +5,14 @@ round trip.  The preferred geometry is the live OpenStreetMap GR 340 relation.
 
 The generic Overpass discovery can already be unavailable by the time fallback
 planning starts (for example because the interactive circuit breaker opened after
-an earlier timeout).  For that reason this module has two independent ways to
-retrieve the *same live OSM relation*:
+an earlier timeout).  For that reason this module races independent ways to retrieve the *same live
+OSM relation*:
 
-1. a tiny Overpass lookup by the canonical relation id;
-2. the normal OpenStreetMap relation/full API as a bounded backup.
+1. the normal TrekBrain Overpass path by canonical relation id;
+2. a secondary Overpass mirror queried directly for that same id;
+3. the normal OpenStreetMap relation/full API.
+
+The first relation that passes the usual GR 340 geometry checks wins.
 
 Only the OSM relation id is pinned here.  No route coordinates are embedded in
 TrekBrain, so edits to the OSM relation remain authoritative after cache expiry.
@@ -19,6 +22,7 @@ from __future__ import annotations
 import time
 import unicodedata
 import xml.etree.ElementTree as ET
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError, as_completed
 from copy import deepcopy
 from typing import Any
 
@@ -28,7 +32,8 @@ from fastapi import HTTPException
 _INSTALLED = False
 _GR340_RELATION_ID = 6850120
 _OSM_FULL_URL = f"https://api.openstreetmap.org/api/0.6/relation/{_GR340_RELATION_ID}/full"
-_OSM_TIMEOUT = 6.0
+_OSM_TIMEOUT = 3.8
+_TARGETED_RACE_TIMEOUT = 4.2
 _CACHE_TTL = 6 * 60 * 60
 _DIRECT_CACHE: tuple[float, dict[str, Any]] | None = None
 
@@ -174,6 +179,56 @@ def _overpass_relation(v3) -> tuple[dict[str, Any] | None, str | None]:
     return None, "Overpass n'a pas renvoyé la relation 6850120"
 
 
+
+def _secondary_overpass_relation() -> tuple[dict[str, Any] | None, str | None]:
+    """Fetch only relation 6850120 from an independent Overpass mirror.
+
+    This deliberately bypasses the generic Overpass circuit breaker. A previous
+    unrelated POI timeout must not make the known canonical GR disappear.
+    """
+    from . import free_planner_v2 as free
+
+    urls = list(getattr(free, "OVERPASS_URLS", []) or [])
+    # The planner path normally starts with overpass-api.de. Prefer the second
+    # configured mirror here so the two concurrent attempts are independent.
+    url = urls[1] if len(urls) > 1 else (urls[0] if urls else "")
+    if not url:
+        return None, "Miroir Overpass secondaire non configuré"
+
+    query = (
+        "[out:json][timeout:4];"
+        f"relation({_GR340_RELATION_ID});"
+        "out body geom;"
+    )
+    try:
+        response = requests.post(
+            url,
+            data={"data": query},
+            headers={
+                "Accept": "application/json",
+                "User-Agent": "TrekMap-France/9 (trekmap-france.onrender.com)",
+            },
+            timeout=3.2,
+        )
+    except requests.Timeout:
+        return None, "Miroir Overpass secondaire : délai dépassé"
+    except requests.RequestException as exc:
+        return None, f"Miroir Overpass secondaire inaccessible ({exc.__class__.__name__})"
+    if response.status_code != 200:
+        return None, f"Miroir Overpass secondaire HTTP {response.status_code}"
+    try:
+        payload = response.json()
+    except ValueError:
+        return None, "Miroir Overpass secondaire : JSON invalide"
+    for element in (payload or {}).get("elements") or []:
+        if element.get("type") != "relation":
+            continue
+        tags = element.get("tags") or {}
+        if element.get("id") == _GR340_RELATION_ID or _is_gr340(tags):
+            return element, None
+    return None, "Miroir Overpass secondaire : relation 6850120 absente"
+
+
 def _relation_route(element, gr, rescue, start: dict[str, Any], target_km: float):
     tags = element.get("tags") or {}
     # The canonical id is sufficient identity if tagging is temporarily incomplete;
@@ -235,30 +290,62 @@ def _targeted_gr340(v3, gr, rescue, start: dict[str, Any], target_km: float):
     if not _is_belle_ile(start):
         return None, "hors Belle-Île"
 
-    reasons = []
-    element, warning = _overpass_relation(v3)
-    if element is not None:
-        route, route_warning = _relation_route(element, gr, rescue, start, target_km)
+    # A warm direct-OSM cache is deterministic and costs virtually nothing.
+    # Check it before opening any network race.
+    global _DIRECT_CACHE
+    now = time.monotonic()
+    if _DIRECT_CACHE is not None and now - _DIRECT_CACHE[0] < _CACHE_TTL:
+        cached = deepcopy(_DIRECT_CACHE[1])
+        route, route_warning = _relation_route(cached, gr, rescue, start, target_km)
         if route is not None:
-            route["gr340_source"] = "overpass-relation-id"
+            route["gr340_source"] = "osm-api-relation-cache"
             return route, None
-        if route_warning:
-            reasons.append(route_warning)
-    elif warning:
-        reasons.append(warning)
 
-    # Critical production fallback: this path does not use v3._overpass, so an
-    # already-open Overpass circuit breaker cannot hide the known island route.
-    element, warning = _direct_osm_relation()
-    if element is not None:
-        route, route_warning = _relation_route(element, gr, rescue, start, target_km)
-        if route is not None:
-            route["gr340_source"] = "osm-api-relation-full"
-            return route, None
-        if route_warning:
-            reasons.append(route_warning)
-    elif warning:
-        reasons.append(warning)
+    sources = (
+        ("overpass-relation-id", lambda: _overpass_relation(v3)),
+        ("overpass-secondary", _secondary_overpass_relation),
+        ("osm-api-relation-full", _direct_osm_relation),
+    )
+    reasons = []
+    executor = ThreadPoolExecutor(max_workers=len(sources))
+    future_sources = {
+        executor.submit(fetcher): source
+        for source, fetcher in sources
+    }
+    try:
+        for future in as_completed(future_sources, timeout=_TARGETED_RACE_TIMEOUT):
+            source = future_sources[future]
+            try:
+                element, warning = future.result()
+            except Exception as exc:
+                element, warning = None, f"{source} : {exc.__class__.__name__}"
+            if element is not None:
+                route_start = dict(start)
+                route, route_warning = _relation_route(
+                    element, gr, rescue, route_start, target_km
+                )
+                if route is not None:
+                    # _relation_route snaps the supplied start to the relation.
+                    # Commit that mutation only for the winning validated source.
+                    start.clear()
+                    start.update(route_start)
+                    route["gr340_source"] = source
+                    for pending in future_sources:
+                        if pending is not future:
+                            pending.cancel()
+                    return route, None
+                if route_warning:
+                    reasons.append(f"{source}: {route_warning}")
+            elif warning:
+                reasons.append(str(warning))
+    except FuturesTimeoutError:
+        reasons.append(
+            f"Sources GR 340 encore en attente après {_TARGETED_RACE_TIMEOUT:.1f}s"
+        )
+    finally:
+        # Do not serialize on a provider that already lost the race. Running
+        # requests have their own short socket timeouts and will terminate.
+        executor.shutdown(wait=False, cancel_futures=True)
 
     detail = "; ".join(dict.fromkeys(x for x in reasons if x))
     return None, detail or "GR 340 ciblé non exploitable"
@@ -295,5 +382,6 @@ __all__ = [
     "_is_gr340",
     "_relation_from_osm_xml",
     "_direct_osm_relation",
+    "_secondary_overpass_relation",
     "_GR340_RELATION_ID",
 ]
