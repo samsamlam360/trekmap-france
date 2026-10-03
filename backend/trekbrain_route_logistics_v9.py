@@ -405,22 +405,36 @@ def _discover_stays(v3, roundtrip, stay_rescue, coords, start, category: str, da
     needed = max(1, days - 1)
 
     rows = []
-    # Photon is fast and stage-relative. It is the best first choice for an
-    # interactive planner because all night lookups run in parallel.
-    rows.extend(_photon_split_stays(v3, roundtrip, coords, category, days))
-
     max_offroute = 3.2 if strict_walk else _MAX_OFFROUTE_KM
+
+    # Structured outdoor lodging is represented much more reliably by exact
+    # OSM tags than by free-text geocoding. Start with one compact corridor bbox
+    # for campsites/refuges; generic hotel/gîte requests still start with Photon.
+    structured = category in {"camping", "refuge"}
+    if structured:
+        rows.extend(_bbox_route_stays(coords, category))
+    else:
+        rows.extend(_photon_split_stays(v3, roundtrip, coords, category, days))
+
     projected = _project_stays(roundtrip, coords, rows, category, max_offroute)
     chosen = _choose_stays(roundtrip, coords, projected, days, daily_target)
 
-    # Only if the fast stage lookups are insufficient do one compact OSM bbox
-    # query. Do not cascade through multiple public geocoders in the same click.
-    if len(chosen) < needed and deadline - time.monotonic() >= 1.4:
-        rows.extend(_bbox_route_stays(coords, category))
+    if len(chosen) < needed and deadline - time.monotonic() >= 1.25:
+        if structured:
+            rows.extend(_photon_split_stays(v3, roundtrip, coords, category, days))
+        else:
+            rows.extend(_bbox_route_stays(coords, category))
         projected = _project_stays(roundtrip, coords, rows, category, max_offroute)
         chosen = _choose_stays(roundtrip, coords, projected, days, daily_target)
 
-    if len(chosen) < needed and deadline - time.monotonic() >= 1.0:
+    # The probe path internally opens another broad OSM pool. After an exact
+    # campsite/refuge bbox plus Photon it is mostly duplicate work and was the
+    # reason Morvan lodging could overrun a 3.5 s budget to ~5 s.
+    if (
+        not structured
+        and len(chosen) < needed
+        and deadline - time.monotonic() >= 1.0
+    ):
         rows.extend(_route_probe_stays(v3, roundtrip, coords, category))
         projected = _project_stays(roundtrip, coords, rows, category, max_offroute)
         chosen = _choose_stays(roundtrip, coords, projected, days, daily_target)
