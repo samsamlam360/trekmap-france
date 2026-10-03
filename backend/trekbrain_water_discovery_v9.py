@@ -67,9 +67,21 @@ def discover_water_points(v3, result: dict[str, Any]) -> list[dict[str, Any]]:
             f'nwr(around:{radius_m},{lat:.6f},{lon:.6f})["man_made"="water_tap"];',
             f'nwr(around:{radius_m},{lat:.6f},{lon:.6f})["natural"="spring"];',
         ])
-    query = "[out:json][timeout:12];(" + "".join(clauses) + ");out center tags 120;"
+    query = "[out:json][timeout:4];(" + "".join(clauses) + ");out center tags 120;"
     try:
-        payload = v3._overpass(query)
+        # This is display-only context after a validated route already exists.
+        # One short mirror attempt is enough; failing fast is preferable to
+        # delaying the whole itinerary by the full generic Overpass budget.
+        from . import free_planner_v2 as free
+        url = list(free.OVERPASS_URLS)[0]
+        payload = free._request_json(
+            url,
+            data={"data": query},
+            timeout=1.6,
+            ttl=3600,
+            service="Overpass water display",
+            retries=1,
+        )
     except Exception:
         return []
 

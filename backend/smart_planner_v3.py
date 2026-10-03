@@ -1256,22 +1256,50 @@ def _human_understanding(intent, location):
 def _build(data: AIPlanRequest, legacy_main):
     intent = _parse_intent(data)
     location = _location(data)
-    geo = _geocode(f"{location}, France") or _geocode(location)
-    if not geo:
-        raise HTTPException(status_code=422, detail=f"Impossible de localiser « {location} ».")
-    center = geo[0]
-
     standalone_endpoints = bool(intent.get("explicit_endpoint_pair"))
-    forced_start = _geocode_named(
-        intent["start_query"], location, standalone_first=standalone_endpoints
-    )
-    forced_end = _geocode_named(
-        intent["end_query"], location, standalone_first=standalone_endpoints
-    )
+
+    # Explicit point-to-point requests already require geocoding both written
+    # endpoints. Reuse those coordinates as the search centre instead of first
+    # geocoding the (usually identical) region field and then geocoding the
+    # start again. Non-explicit requests keep the historical region-first path
+    # because that context helps disambiguate short place names.
+    forced_start = None
+    forced_end = None
+    corridor_centered = False
+    center = None
+
+    if standalone_endpoints:
+        forced_start = _geocode_named(
+            intent["start_query"], location, standalone_first=True
+        )
+        forced_end = _geocode_named(
+            intent["end_query"], location, standalone_first=True
+        )
+        if forced_start and forced_end:
+            try:
+                if _dist(forced_start, forced_end) >= 5.0:
+                    center = _corridor_center(forced_start, forced_end)
+                    corridor_centered = True
+            except Exception:
+                corridor_centered = False
+
+    if center is None:
+        geo = _geocode(f"{location}, France") or _geocode(location)
+        if not geo:
+            raise HTTPException(status_code=422, detail=f"Impossible de localiser « {location} ».")
+        center = geo[0]
+
+    if forced_start is None:
+        forced_start = _geocode_named(
+            intent["start_query"], location, standalone_first=standalone_endpoints
+        )
+    if forced_end is None:
+        forced_end = _geocode_named(
+            intent["end_query"], location, standalone_first=standalone_endpoints
+        )
     forced_via = _geocode_named(intent["via_query"], location)
 
-    corridor_centered = False
-    if forced_start and forced_end:
+    if not corridor_centered and forced_start and forced_end:
         try:
             if _dist(forced_start, forced_end) >= 5.0:
                 center = _corridor_center(forced_start, forced_end)

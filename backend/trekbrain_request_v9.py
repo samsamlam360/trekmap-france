@@ -223,18 +223,16 @@ def reconcile_request(data):
 
     if endpoint_pair:
         start_name, end_name = endpoint_pair
-        start_point = _geocode_one(start_name)
-        end_point = _geocode_one(end_name)
-        if start_point and end_point:
-            anchor_point = start_point
-            anchor_name = str(start_point.get("short_name") or start_name).strip()[:120]
-            # Explicit "de X à Y" is stronger geographic evidence than a stale
-            # form region. Use X as the planning area; Y remains an explicit
-            # route endpoint in the planner parser.
-            effective_region = anchor_name
-            region_overridden = _fold(effective_region) != _fold(form_region)
-            reason = "explicit-endpoint-pair"
-            selected = None
+        # Strong "de X à Y" wording is already authoritative text. Do not
+        # geocode both cities here and then geocode them again in the geographic
+        # planner. Validation belongs to that planner, which needs the actual
+        # coordinates anyway. This removes two serial network lookups from
+        # point-to-point requests such as Tours -> Chinon.
+        anchor_name = start_name[:120]
+        effective_region = anchor_name
+        region_overridden = _fold(effective_region) != _fold(form_region)
+        reason = "explicit-endpoint-pair-deferred-geocode"
+        selected = None
 
     if selected:
         anchor_point = _geocode_one(selected["place"])
@@ -265,6 +263,10 @@ def reconcile_request(data):
                     reason = reason + "+visit-near-region"
 
     explicit_route_type = _route_type_from_prompt(prompt)
+    if endpoint_pair and explicit_route_type is None:
+        # "aller de X à Y" is intrinsically point-to-point even when a stale
+        # form still says Boucle. No geocoding is required to resolve the shape.
+        explicit_route_type = "Traversée"
     effective_route_type = explicit_route_type or form_route_type
     route_type_overridden = bool(explicit_route_type and _fold(explicit_route_type) != _fold(form_route_type))
 

@@ -79,6 +79,28 @@ finally:
     request_v9.geo._geocode = original_request_geocode
 
 
+# Strong point-to-point wording must not geocode twice in the reconciliation
+# layer. The geographic planner owns coordinate validation and will geocode the
+# two endpoints exactly where those coordinates are needed.
+original_pair_geocode = request_v9._geocode_one
+pair_calls = []
+request_v9._geocode_one = lambda place: pair_calls.append(place) or None
+try:
+    pair_data = AIPlanRequest(
+        prompt="Je veux aller de Tours à Chinon à pied en 3 jours",
+        region="Chartres",
+        days=3,
+        daily_km=22,
+        route_type="Boucle",
+    )
+    pair_resolved, pair_meta = request_v9.reconcile_request(pair_data)
+finally:
+    request_v9._geocode_one = original_pair_geocode
+assert pair_calls == [], pair_calls
+assert pair_resolved.region == "Tours"
+assert pair_resolved.route_type == "Traversée"
+assert pair_meta["reason"] == "explicit-endpoint-pair-deferred-geocode"
+
 # A failed island plan must never retain a provisional line that jumps to the
 # mainland. A candidate fully inside the island remains available for inspection.
 failed_preview.clear_failed_preview()
@@ -107,23 +129,7 @@ finally:
 # Water discovery is one batched Overpass query after routing. It supplies map
 # markers but never changes the route geometry.
 class WaterV3:
-    calls = 0
-
-    @staticmethod
-    def _overpass(query):
-        WaterV3.calls += 1
-        assert 'amenity"="drinking_water' in query
-        return {
-            "elements": [
-                {
-                    "type": "node",
-                    "id": 123,
-                    "lat": 47.3340,
-                    "lon": -3.1840,
-                    "tags": {"amenity": "drinking_water", "name": "Fontaine du test"},
-                }
-            ]
-        }
+    pass
 
 route_coords = [
     [47.3331, -3.1870],
@@ -141,8 +147,32 @@ plan = {
     "points_of_interest": [],
     "transport": {},
 }
-points = discover_water_points(WaterV3, plan)
-assert WaterV3.calls == 1, "Water discovery should use one batched Overpass request"
+from backend import free_planner_v2 as free_planner
+
+real_water_request = free_planner._request_json
+water_calls = []
+def fake_water_request(url, **kwargs):
+    water_calls.append((url, kwargs))
+    assert 'amenity"="drinking_water' in str((kwargs.get("data") or {}).get("data") or "")
+    assert float(kwargs.get("timeout") or 0) <= 1.7
+    return {
+        "elements": [
+            {
+                "type": "node",
+                "id": 123,
+                "lat": 47.3340,
+                "lon": -3.1840,
+                "tags": {"amenity": "drinking_water", "name": "Fontaine du test"},
+            }
+        ]
+    }
+
+free_planner._request_json = fake_water_request
+try:
+    points = discover_water_points(WaterV3, plan)
+finally:
+    free_planner._request_json = real_water_request
+assert len(water_calls) == 1, "Water discovery should use one short batched OSM request"
 assert len(points) == 1 and points[0]["display_only"] is True
 assert points[0]["name"] == "Fontaine du test"
 plan["water"] = points
