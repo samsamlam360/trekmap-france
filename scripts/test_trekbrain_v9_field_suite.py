@@ -253,7 +253,7 @@ try:
         failures.append(f"post-route resources regression: no water {enriched_resources!r}")
     if "food" not in cats:
         failures.append(f"post-route resources regression: no food {enriched_resources!r}")
-    if not ({"camping", "refuge"} & cats):
+    if not ({"camping", "refuge", "lodging"} & cats):
         failures.append(f"post-route resources regression: no stay {enriched_resources!r}")
     if any(not str(x.get("source_url") or "").startswith("https://www.openstreetmap.org/") for x in enriched_resources):
         failures.append(f"post-route resources regression: bad source {enriched_resources!r}")
