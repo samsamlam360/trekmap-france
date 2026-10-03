@@ -26,6 +26,7 @@ import os
 import re
 import time
 import unicodedata
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from copy import deepcopy
 from typing import Any
 
@@ -60,6 +61,11 @@ def _requested_category(intent: dict[str, Any]) -> str | None:
         return "camping"
     if accommodation == "refuge":
         return "refuge"
+    if intent.get("sleep") and accommodation != "bivouac":
+        # Generic accommodation requests (hotel/gîte/auberge accepted) still
+        # deserve route-first night logistics. Historically they skipped this
+        # layer entirely and were scored as "aucune nuitée fiable".
+        return "lodging"
     return None
 
 
@@ -118,8 +124,13 @@ def _normalise_stay(element: dict[str, Any], category: str) -> dict[str, Any] | 
         lat, lon = float(lat), float(lon)
     except (TypeError, ValueError):
         return None
+    fallback_name = (
+        "Camping" if category == "camping"
+        else "Refuge" if category == "refuge"
+        else "Hébergement"
+    )
     return {
-        "name": str(tags.get("name") or tags.get("ref") or ("Camping" if category == "camping" else "Refuge"))[:180],
+        "name": str(tags.get("name") or tags.get("ref") or fallback_name)[:180],
         "lat": lat,
         "lon": lon,
         "category": category,
@@ -155,8 +166,18 @@ def _bbox_route_stays(coords, category: str) -> list[dict[str, Any]]:
 
     if category == "camping":
         filters = ('["tourism"="camp_site"]', '["tourism"="caravan_site"]')
+    elif category == "refuge":
+        filters = (
+            '["tourism"="alpine_hut"]',
+            '["tourism"="wilderness_hut"]',
+            '["amenity"="shelter"]',
+        )
     else:
         filters = (
+            '["tourism"="hotel"]',
+            '["tourism"="hostel"]',
+            '["tourism"="guest_house"]',
+            '["tourism"="camp_site"]',
             '["tourism"="alpine_hut"]',
             '["tourism"="wilderness_hut"]',
             '["amenity"="shelter"]',
@@ -168,9 +189,18 @@ def _bbox_route_stays(coords, category: str) -> list[dict[str, Any]]:
     query = f"[out:json][timeout:5];({clauses});out center tags 160;"
 
     try:
-        # speed_v9 patches free._overpass with one global interactive budget.
-        # Reuse it here instead of opening an independent mirror loop.
-        data = free._overpass(query)
+        # Route-first logistics already has a validated walking line. Give this
+        # optional lodging lookup one short mirror attempt instead of spending
+        # the full global Overpass budget after routing has completed.
+        url = list(free.OVERPASS_URLS)[0]
+        data = free._request_json(
+            url,
+            data={"data": query},
+            timeout=1.8,
+            ttl=3600,
+            service="Overpass route stays",
+            retries=1,
+        )
     except Exception:
         data = None
     if not isinstance(data, dict):
@@ -183,6 +213,14 @@ def _bbox_route_stays(coords, category: str) -> list[dict[str, Any]]:
             continue
         if category == "refuge" and not (
             tags.get("tourism") in {"alpine_hut", "wilderness_hut"}
+            or tags.get("amenity") == "shelter"
+        ):
+            continue
+        if category == "lodging" and not (
+            tags.get("tourism") in {
+                "hotel", "hostel", "guest_house", "camp_site",
+                "alpine_hut", "wilderness_hut",
+            }
             or tags.get("amenity") == "shelter"
         ):
             continue
@@ -222,6 +260,66 @@ def _route_probe_stays(v3, roundtrip, coords, category: str) -> list[dict[str, A
                 seen.add(key)
                 rows.append(dict(item))
     return rows
+
+
+
+def _photon_split_stays(v3, roundtrip, coords, category: str, days: int) -> list[dict[str, Any]]:
+    """Fast first pass: one bounded Photon lookup around each ideal night split."""
+    if days <= 1 or len(coords or []) < 3:
+        return []
+    lookup = getattr(v3, "_photon_anchor_resource", None)
+    if not callable(lookup):
+        return []
+
+    anchors = roundtrip._equal_anchors(coords, days)
+    if len(anchors) != days - 1:
+        return []
+
+    if category == "camping":
+        tags = ("tourism:camp_site", "tourism:caravan_site")
+        radius = 8.0
+    elif category == "refuge":
+        tags = (
+            "tourism:alpine_hut", "tourism:wilderness_hut",
+            "amenity:shelter",
+        )
+        radius = 8.0
+    else:
+        tags = (
+            "tourism:hotel", "tourism:hostel", "tourism:guest_house",
+            "tourism:camp_site", "tourism:alpine_hut",
+            "tourism:wilderness_hut", "amenity:shelter",
+        )
+        radius = 9.0
+
+    found = []
+    with ThreadPoolExecutor(max_workers=min(4, len(anchors))) as pool:
+        futures = [
+            pool.submit(lookup, anchor, "stay", tags, radius)
+            for anchor in anchors
+        ]
+        for future in as_completed(futures):
+            try:
+                item = future.result()
+            except Exception:
+                item = None
+            if not isinstance(item, dict):
+                continue
+            item = dict(item)
+            actual = str(item.get("category") or "")
+            if category in {"camping", "refuge"} and actual != category:
+                continue
+            if category == "lodging" and actual not in {"camping", "refuge", "lodging"}:
+                item["category"] = "lodging"
+            found.append(item)
+
+    deduped, seen = [], set()
+    for item in found:
+        key = _stay_key(item)
+        if key and key not in seen:
+            seen.add(key)
+            deduped.append(item)
+    return deduped
 
 
 def _project_stays(roundtrip, coords, rows, category: str, max_offroute_km: float) -> list[dict[str, Any]]:
@@ -294,10 +392,10 @@ def _choose_stays(roundtrip, coords, rows, days: int, daily_target: float) -> li
 
 def _logistics_budget_seconds() -> float:
     try:
-        value = float(os.getenv("TREKBRAIN_LOGISTICS_BUDGET_SECONDS", "7.0") or 7.0)
+        value = float(os.getenv("TREKBRAIN_LOGISTICS_BUDGET_SECONDS", "4.0") or 4.0)
     except (TypeError, ValueError):
-        value = 7.0
-    return max(3.0, min(value, 12.0))
+        value = 4.0
+    return max(2.5, min(value, 8.0))
 
 
 def _discover_stays(v3, roundtrip, stay_rescue, coords, start, category: str, days: int, daily_target: float, strict_walk: bool):
@@ -307,30 +405,25 @@ def _discover_stays(v3, roundtrip, stay_rescue, coords, start, category: str, da
     needed = max(1, days - 1)
 
     rows = []
-    rows.extend(_bbox_route_stays(coords, category))
-    if len(rows) < max(2, needed) and deadline - time.monotonic() >= 2.2:
-        rows.extend(_route_probe_stays(v3, roundtrip, coords, category))
+    # Photon is fast and stage-relative. It is the best first choice for an
+    # interactive planner because all night lookups run in parallel.
+    rows.extend(_photon_split_stays(v3, roundtrip, coords, category, days))
 
     max_offroute = 3.2 if strict_walk else _MAX_OFFROUTE_KM
     projected = _project_stays(roundtrip, coords, rows, category, max_offroute)
-
-    # Public geocoders are last-resort discovery only. Never let two slow
-    # geocoders consume another full request after OSM has used the interactive
-    # budget; unresolved lodging is preferable to freezing the planner.
-    if len(projected) < needed and deadline - time.monotonic() >= 1.8:
-        try:
-            rows.extend(stay_rescue._photon_stays(start, category, 38.0))
-        except Exception:
-            pass
-        projected = _project_stays(roundtrip, coords, rows, category, max_offroute)
-    if len(projected) < needed and deadline - time.monotonic() >= 1.8:
-        try:
-            rows.extend(stay_rescue._nominatim_stays(start, category, 38.0))
-        except Exception:
-            pass
-        projected = _project_stays(roundtrip, coords, rows, category, max_offroute)
-
     chosen = _choose_stays(roundtrip, coords, projected, days, daily_target)
+
+    # Only if the fast stage lookups are insufficient do one compact OSM bbox
+    # query. Do not cascade through multiple public geocoders in the same click.
+    if len(chosen) < needed and deadline - time.monotonic() >= 1.4:
+        rows.extend(_bbox_route_stays(coords, category))
+        projected = _project_stays(roundtrip, coords, rows, category, max_offroute)
+        chosen = _choose_stays(roundtrip, coords, projected, days, daily_target)
+
+    if len(chosen) < needed and deadline - time.monotonic() >= 1.0:
+        rows.extend(_route_probe_stays(v3, roundtrip, coords, category))
+        projected = _project_stays(roundtrip, coords, rows, category, max_offroute)
+        chosen = _choose_stays(roundtrip, coords, projected, days, daily_target)
     return chosen, projected, {
         "budget_seconds": budget,
         "elapsed_ms": round((time.monotonic() - started) * 1000),
@@ -508,7 +601,11 @@ def _attach_logistics(result: dict[str, Any], data, legacy_main, v3, roundtrip, 
         logistics_rows.append(access)
         accommodations.append({
             "name": access["name"],
-            "type": "Camping" if category == "camping" else "Refuge / gîte",
+            "type": (
+                "Camping" if category == "camping"
+                else "Refuge / gîte" if category == "refuge"
+                else "Hébergement"
+            ),
             "category": category,
             "lat": access["lat"],
             "lon": access["lon"],
@@ -543,11 +640,13 @@ def _attach_logistics(result: dict[str, Any], data, legacy_main, v3, roundtrip, 
         elif not night:
             overnight = "Nuitée à organiser sans modifier le tracé principal"
         elif night.get("access_mode") == "walk":
-            overnight = f"{night['name']} · liaison pédestre {night.get('access_distance_km', 0):.1f} km"
+            overnight = f"{night.get('name') or 'Nuitée'} · liaison pédestre {night.get('access_distance_km', 0):.1f} km"
         elif night.get("access_mode") == "transfer":
-            overnight = f"{night['name']} · transfert conseillé"
+            overnight = f"{night.get('name') or 'Nuitée'} · transfert conseillé"
+        elif night.get("status") == "unresolved":
+            overnight = "Nuitée à organiser sans modifier le tracé principal"
         else:
-            overnight = f"{night['name']} · liaison à vérifier"
+            overnight = f"{night.get('name') or 'Nuitée'} · liaison à vérifier"
 
         stages.append({
             **old,

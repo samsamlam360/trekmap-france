@@ -153,6 +153,33 @@ assert night3["name"] == "Camping C"
 assert night3["access_mode"] == "transfer", night3
 assert "transfert" in result["stages"][2]["overnight"].casefold()
 
+
+# Missing stays are a normal partial-logistics state, not an exception. This
+# protects the production KeyError regression where an unresolved night had no
+# "name" field but stage rendering accessed night["name"] anyway.
+v3_partial = FakeV3()
+
+def base_build_partial(data, legacy):
+    return {**base_result, "route_preview": dict(base_result["route_preview"]), "stages": [dict(x) for x in base_result["stages"]], "advisor_notes": [], "planner": {}}
+
+v3_partial._build = base_build_partial
+real_bbox_partial = logistics._bbox_route_stays
+try:
+    logistics._bbox_route_stays = lambda _coords, category: []
+    logistics._INSTALLED = False
+    logistics.install_route_first_logistics(v3_partial, FakeRoundtrip, FakeStayRescue, FakeORS)
+    partial = v3_partial._build(Data(), FakeLegacy())
+finally:
+    logistics._bbox_route_stays = real_bbox_partial
+
+assert partial["route_preview"]["fallback"] is False
+assert partial["logistics"]["status"] == "partial"
+assert partial["logistics"]["nights_resolved"] == 0
+assert all(
+    "Nuitée à organiser" in str(stage.get("overnight") or "")
+    for stage in partial["stages"][:-1]
+)
+
 # Production guard: even if lodging post-processing throws an unexpected Python
 # exception, a valid pedestrian route must still be returned instead of
 # TB-INTERNAL-500.

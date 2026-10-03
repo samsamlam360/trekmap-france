@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import math
+from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 
 from fastapi import Body, Depends, HTTPException
@@ -371,6 +372,120 @@ def _merge_supplemented_resources(result: dict[str, Any], rows: list[dict[str, A
     return result
 
 
+
+def _bbox_route_water_food(result: dict[str, Any], intent: dict[str, Any]) -> list[dict[str, Any]]:
+    """One short OSM lookup for water/food close to the final validated route."""
+    if not (intent.get("water") or intent.get("food")):
+        return []
+    route = result.get("route_preview") or {}
+    coords = route.get("coords") or []
+    valid = []
+    for point in coords if isinstance(coords, list) else []:
+        if not isinstance(point, (list, tuple)) or len(point) < 2:
+            continue
+        lat, lon = _number(point[0]), _number(point[1])
+        if lat is not None and lon is not None:
+            valid.append((lat, lon))
+    if len(valid) < 2:
+        return []
+
+    from . import free_planner_v2 as free
+
+    min_lat, max_lat = min(x[0] for x in valid), max(x[0] for x in valid)
+    min_lon, max_lon = min(x[1] for x in valid), max(x[1] for x in valid)
+    mid_lat = (min_lat + max_lat) / 2.0
+    pad_lat = 0.045
+    pad_lon = max(0.045, 5.0 / max(35.0, 111.0 * math.cos(math.radians(mid_lat))))
+    south, north = min_lat - pad_lat, max_lat + pad_lat
+    west, east = min_lon - pad_lon, max_lon + pad_lon
+
+    clauses = []
+    if intent.get("water"):
+        for flt in (
+            '["amenity"="drinking_water"]',
+            '["man_made"="water_tap"]',
+            '["natural"="spring"]',
+        ):
+            clauses.append(f"nwr{flt}({south:.6f},{west:.6f},{north:.6f},{east:.6f});")
+    if intent.get("food"):
+        for flt in (
+            '["shop"="supermarket"]',
+            '["shop"="convenience"]',
+            '["shop"="bakery"]',
+        ):
+            clauses.append(f"nwr{flt}({south:.6f},{west:.6f},{north:.6f},{east:.6f});")
+    if not clauses:
+        return []
+
+    query = "[out:json][timeout:3];(" + "".join(clauses) + ");out center tags 120;"
+    try:
+        url = list(free.OVERPASS_URLS)[0]
+        payload = free._request_json(
+            url,
+            data={"data": query},
+            timeout=1.7,
+            ttl=3600,
+            service="Overpass route resources",
+            retries=1,
+        )
+    except Exception:
+        return []
+
+    rows = []
+    for element in (payload.get("elements") or [])[:120] if isinstance(payload, dict) else []:
+        tags = element.get("tags") or {}
+        lat, lon = element.get("lat"), element.get("lon")
+        if lat is None or lon is None:
+            center = element.get("center") or {}
+            lat, lon = center.get("lat"), center.get("lon")
+        lat, lon = _number(lat), _number(lon)
+        if lat is None or lon is None:
+            continue
+
+        category = None
+        status = ""
+        if (
+            tags.get("amenity") == "drinking_water"
+            or tags.get("man_made") == "water_tap"
+            or tags.get("natural") == "spring"
+        ):
+            category = "water"
+            status = (
+                "potable_referenced"
+                if tags.get("amenity") == "drinking_water" or tags.get("drinking_water") == "yes"
+                else "not_potable" if tags.get("drinking_water") == "no"
+                else "unverified"
+            )
+        elif tags.get("shop") in {"supermarket", "convenience", "bakery"}:
+            category = "food"
+        if category is None:
+            continue
+
+        osm_type = str(element.get("type") or "node")
+        osm_id = element.get("id")
+        row = {
+            "name": str(
+                tags.get("name")
+                or ("Point d'eau" if category == "water" else "Ravitaillement")
+            )[:180],
+            "lat": lat,
+            "lon": lon,
+            "category": category,
+            "water_status": status or "unverified",
+            "source_url": (
+                f"https://www.openstreetmap.org/{osm_type}/{osm_id}"
+                if osm_id is not None else ""
+            ),
+        }
+        match = _route_match(coords, row)
+        if not match:
+            continue
+        max_distance = 5.0 if category == "water" else 7.0
+        if match[0] <= max_distance:
+            rows.append(row)
+    return rows
+
+
 def _supplement_route_resources(result: dict[str, Any], data) -> dict[str, Any]:
     """Bounded Photon safety net on final day anchors, never used for routing."""
     try:
@@ -396,8 +511,21 @@ def _supplement_route_resources(result: dict[str, Any], data) -> dict[str, Any]:
             if isinstance(item, dict) and _resource_kind(item) in {"station", "transport"}:
                 existing.append({**item, "category": "transit"})
 
-        rows = v3._postroute_corridor_resources(boundaries, intent, existing)
-        rows = _filter_active(rows)
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            photon_future = pool.submit(
+                v3._postroute_corridor_resources, boundaries, intent, existing
+            )
+            osm_future = pool.submit(_bbox_route_water_food, result, intent)
+            try:
+                photon_rows = photon_future.result()
+            except Exception:
+                photon_rows = []
+            try:
+                osm_rows = osm_future.result()
+            except Exception:
+                osm_rows = []
+
+        rows = _filter_active(list(photon_rows or []) + list(osm_rows or []))
         return _merge_supplemented_resources(result, rows)
     except Exception:
         return result
