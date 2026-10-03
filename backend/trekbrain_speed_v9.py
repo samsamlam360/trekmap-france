@@ -478,7 +478,36 @@ def install_fast_planning(v3, v5, v9) -> None:
             detail = warnings[0] if warnings else "OpenRouteService n'a produit aucune boucle pédestre."
             raise HTTPException(status_code=503, detail=detail)
         rows.sort(key=lambda row: row[0])
-        return rows[0][1]
+        selected = rows[0][1]
+
+        # _recover_unranked_oversized_roundtrip exists for raw ORS routes that
+        # bypassed candidate ranking. fast_best_roundtrip has already compared
+        # up to two real ORS variants, so mark the selected result as ranked
+        # when it also fits the *final* soft stage ceiling. Otherwise leave the
+        # metadata absent so the deeper recovery can still rescue a genuinely
+        # oversized route.
+        selected_distance = float(selected.get("distance") or 0)
+        selected_per_day = selected_distance / max(int(days), 1)
+        target_per_day = float(target_km) / max(int(days), 1)
+        soft_window = float(daily_max) >= target_per_day * 1.20 - 0.05
+        final_slack = 0.75 if soft_window else 0.35
+        if (
+            selected_per_day >= float(daily_min) * 0.90
+            and selected_per_day <= float(daily_max) + final_slack
+        ):
+            selected["candidate_pool_size"] = len(rows)
+            selected["candidate_modes"] = sorted({
+                str(row[1].get("routing_mode") or "unknown") for row in rows
+            })
+            selected["candidate_summary"] = [
+                {
+                    "mode": str(candidate.get("routing_mode") or "unknown"),
+                    "km": round(float(candidate.get("distance") or 0), 1),
+                }
+                for _score, candidate in rows
+            ]
+            selected["fast_ranked"] = True
+        return selected
 
     v3._beam_candidates = beam_candidates
     v5._candidate_prompts = candidate_prompts
