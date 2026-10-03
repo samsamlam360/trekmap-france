@@ -68,6 +68,20 @@ implicit_rows = speed._prune_route_candidates(
 )
 assert 1 <= len(implicit_rows) <= 2, [x.strategy for x in implicit_rows]
 
+# Explicit refuge/camping logistics already constrains the useful candidate
+# family strongly. Keep one candidate per strategy even for an itinerary,
+# while the outer planner still compares its three strategies.
+refuge_rows = speed._prune_route_candidates(
+    traverse_rows,
+    {
+        "route_type": "Itinérance",
+        "start_query": "",
+        "end_query": "",
+        "accommodation": "refuge",
+    },
+)
+assert len(refuge_rows) == 1, [x.strategy for x in refuge_rows]
+
 # A second complete geographic hypothesis is not part of the default interactive
 # path. The lower layers already compare route candidates.
 assert v9.seconds("TREKBRAIN_RETRY_BUDGET_SECONDS", 10) == 0.0
