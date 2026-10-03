@@ -110,6 +110,35 @@ finally:
 if FIELD_SCENARIO_COUNT != 40:
     failures.append(f"field scenario count changed unexpectedly: {FIELD_SCENARIO_COUNT}")
 
+# Internal-strategy isolation regression. TrekBrain may append soft planning
+# advice containing words such as "campings", "refuges" or "sportif"; these are
+# not user constraints and must not silently change accommodation/difficulty.
+strategy_req = AIPlanRequest(
+    prompt=(
+        "Je veux une boucle de 2 jours autour du Mont-Saint-Michel, 16 km par jour, "
+        "avec un hébergement."
+        "\n\nPriorité interne TrekBrain : logistique. "
+        "Privilégier campings ou refuges et un parcours sportif si pertinent."
+    ),
+    region="Mont Saint-Michel",
+    days=2,
+    daily_km=16,
+    difficulty="medium",
+    route_type="Boucle",
+    require_accommodation=True,
+)
+strategy_intent = v7.v5.v3._parse_intent(strategy_req)
+if strategy_intent.get("accommodation") != "balanced":
+    failures.append(
+        f"strategy isolation regression: accommodation={strategy_intent.get('accommodation')!r}"
+    )
+if strategy_intent.get("difficulty") != "medium":
+    failures.append(
+        f"strategy isolation regression: difficulty={strategy_intent.get('difficulty')!r}"
+    )
+if strategy_intent.get("days") != 2 or abs(float(strategy_intent.get("daily_target") or 0) - 16.0) > 0.11:
+    failures.append(f"strategy isolation regression: numeric intent={strategy_intent!r}")
+
 # Language regression: a terrain constraint using the verb "traverser" is not
 # a request for a route type "Traversée".
 normalized, _ = normalize_for_planner(
