@@ -180,6 +180,44 @@ assert all(
     for stage in partial["stages"][:-1]
 )
 
+
+# Structured campsite/refuge discovery should stop after the exact OSM corridor
+# lookup when it already resolves every night. Photon would only duplicate work
+# and add another network wave.
+real_bbox_order = logistics._bbox_route_stays
+real_photon_order = logistics._photon_split_stays
+order_calls = {"bbox": 0, "photon": 0}
+try:
+    def counted_bbox(_coords, category):
+        order_calls["bbox"] += 1
+        return [dict(x) for x in camps]
+
+    def counted_photon(*args, **kwargs):
+        order_calls["photon"] += 1
+        return []
+
+    logistics._bbox_route_stays = counted_bbox
+    logistics._photon_split_stays = counted_photon
+    chosen_fast, projected_fast, meta_fast = logistics._discover_stays(
+        FakeV3(),
+        FakeRoundtrip,
+        FakeStayRescue,
+        coords,
+        {"name": "Départ", "lat": 0.0, "lon": 0.0},
+        "camping",
+        5,
+        20.0,
+        False,
+    )
+finally:
+    logistics._bbox_route_stays = real_bbox_order
+    logistics._photon_split_stays = real_photon_order
+
+assert len(chosen_fast) == 4, chosen_fast
+assert order_calls["bbox"] == 1, order_calls
+assert order_calls["photon"] == 0, order_calls
+assert meta_fast["elapsed_ms"] >= 0
+
 # Production guard: even if lodging post-processing throws an unexpected Python
 # exception, a valid pedestrian route must still be returned instead of
 # TB-INTERNAL-500.
