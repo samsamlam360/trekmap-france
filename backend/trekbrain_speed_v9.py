@@ -160,7 +160,29 @@ def install_fast_planning(v3, v5, v9) -> None:
     # One prompt is the normal path. A second route build is reserved only for a
     # genuinely dated/mandatory side objective where changing geometry matters.
     def candidate_prompts(normalized, targets, compound, internal_hint=""):
-        prompts = list(original_prompts(normalized, targets, compound, internal_hint))
+        # v5 gained an explicit internal_hint argument in v9, but inherited
+        # language wrappers can still expose the historical 3-argument API.
+        # Preserve compatibility without letting the hint leak into the user
+        # constraint parser.
+        try:
+            prompts = list(original_prompts(normalized, targets, compound, internal_hint))
+        except TypeError as exc:
+            message = str(exc)
+            signature_mismatch = (
+                "positional argument" in message
+                or "positional arguments" in message
+                or "unexpected keyword" in message
+            )
+            if not signature_mismatch:
+                raise
+            prompts = list(original_prompts(normalized, targets, compound))
+            hint = str(internal_hint or "").strip()
+            if hint:
+                marker = "\n\nPriorité interne TrekBrain : "
+                prompts = [
+                    str(prompt or "").rstrip() + marker + hint
+                    for prompt in prompts
+                ]
         if len(prompts) <= 1:
             return prompts
         hard_dated = any(
