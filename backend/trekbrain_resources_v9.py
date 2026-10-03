@@ -512,11 +512,18 @@ def _supplement_route_resources(result: dict[str, Any], data) -> dict[str, Any]:
             if isinstance(item, dict) and _resource_kind(item) in {"station", "transport"}:
                 existing.append({**item, "category": "transit"})
 
-        # Water already has its dedicated post-route discovery overlay. Keep
-        # this layer focused on the bounded Photon anchors (food, transit and
-        # missing route logistics) instead of paying for a second OSM request.
+        # Water already has a dedicated OSM terrain lookup in this outer
+        # resource overlay, so another Photon water wave is duplicate work.
+        # Route-first lodging is likewise authoritative once it has returned a
+        # normal complete/partial state. Keep Photon here for the categories
+        # that still add unique value: food and public transport.
+        post_intent = dict(intent)
+        post_intent["water"] = False
+        logistics_status = str((result.get("logistics") or {}).get("status") or "")
+        if logistics_status in {"complete", "partial"}:
+            post_intent["sleep"] = False
         try:
-            rows = v3._postroute_corridor_resources(boundaries, intent, existing)
+            rows = v3._postroute_corridor_resources(boundaries, post_intent, existing)
         except Exception:
             rows = []
         rows = _filter_active(list(rows or []))
