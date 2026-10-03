@@ -186,6 +186,51 @@ _rebalance_stage_count(fake, {"days": 3})
 if len(fake.get("stages") or []) != 3 or fake.get("duration_days") != 3:
     failures.append(f"stage rebalance regression: {fake.get('stages')!r}")
 
+# Raw ORS round-trip regression. A validated oversized loop that bypasses the
+# normal candidate ranker must be recalibrated before daily-stage validation.
+old_roundtrip_request = roundtrip_v9._roundtrip_request
+old_matrix_subloops = roundtrip_v9._matrix_subloop_candidates
+try:
+    calibration_calls = []
+
+    def fake_roundtrip_request(start, requested_km, seed):
+        calibration_calls.append((round(float(requested_km), 2), int(seed)))
+        return {
+            "coords": [
+                [48.0, 1.0], [48.08, 1.08], [48.02, 1.16],
+                [47.94, 1.08], [48.0, 1.0],
+            ],
+            "distance": 34.0,
+            "fallback": False,
+            "routing_mode": "ors-round-trip",
+            "round_trip_seed": int(seed),
+        }, None
+
+    roundtrip_v9._roundtrip_request = fake_roundtrip_request
+    roundtrip_v9._matrix_subloop_candidates = lambda *args, **kwargs: []
+    recovered = roundtrip_v9._recover_unranked_oversized_roundtrip(
+        {
+            "coords": [
+                [48.0, 1.0], [48.12, 1.12], [48.0, 1.24],
+                [47.88, 1.12], [48.0, 1.0],
+            ],
+            "distance": 50.0,
+            "fallback": False,
+            "routing_mode": "ors-round-trip",
+        },
+        {"lat": 48.0, "lon": 1.0},
+        32.0, 12.0, 20.0, 2, v7.v5.v3,
+    )
+    if float(recovered.get("distance") or 0) != 34.0:
+        failures.append(f"raw round-trip recovery regression: {recovered!r}")
+    elif recovered.get("raw_roundtrip_recovery") is not True:
+        failures.append("raw round-trip recovery regression: metadata missing")
+    elif not calibration_calls or calibration_calls[0][0] >= 32.0:
+        failures.append(f"raw round-trip recovery regression: no downward calibration {calibration_calls!r}")
+finally:
+    roundtrip_v9._roundtrip_request = old_roundtrip_request
+    roundtrip_v9._matrix_subloop_candidates = old_matrix_subloops
+
 # Oversized-loop regression. The shortening layer must only return geometry
 # closed through a routed connector, never through a direct diagnostic segment.
 old_get_route = roundtrip_v9.ors.get_route
