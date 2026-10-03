@@ -67,6 +67,62 @@ assert plan["transport"]["outbound_point"]["name"] == "Gare du départ"
 assert plan["transport"]["return_point"]["name"] == "Arrêt de bus arrivée"
 assert plan["trail_context"]["near_route"][0]["name"] == "GR Test"
 
+# Named endpoints should improve the text query without adding another Photon
+# request. Accepted rows still need matching OSM tags and route-relative distance.
+from backend import smart_planner_v3 as v3
+
+_real_request_json = v3._request_json
+_named_calls = []
+
+def _fake_named_resource(url, **kwargs):
+    params = dict(kwargs.get("params") or {})
+    _named_calls.append(params)
+    q = str(params.get("q") or "")
+    if q.startswith("gare"):
+        return {
+            "features": [{
+                "properties": {
+                    "name": "Gare de Tours", "city": "Tours", "countrycode": "FR",
+                    "osm_key": "railway", "osm_value": "station",
+                    "osm_type": "N", "osm_id": 10,
+                },
+                "geometry": {"coordinates": [0.684, 47.394]},
+            }]
+        }
+    return {
+        "features": [{
+            "properties": {
+                "name": "Supermarché du test", "city": "Le Mont-Dore",
+                "countrycode": "FR", "osm_key": "shop",
+                "osm_value": "supermarket", "osm_type": "N", "osm_id": 11,
+            },
+            "geometry": {"coordinates": [2.812, 45.575]},
+        }]
+    }
+
+v3._request_json = _fake_named_resource
+try:
+    station = v3._photon_anchor_resource(
+        {"name": "Tours", "lat": 47.394, "lon": 0.684},
+        "transit",
+        ("railway:station", "railway:halt", "public_transport:station"),
+        15.0,
+    )
+    food = v3._photon_anchor_resource(
+        {"name": "Le Mont-Dore", "lat": 45.575, "lon": 2.812},
+        "food",
+        ("shop:supermarket", "shop:convenience", "shop:bakery"),
+        9.0,
+    )
+finally:
+    v3._request_json = _real_request_json
+
+assert station and station.get("category") == "transit", station
+assert food and food.get("category") == "food", food
+assert len(_named_calls) == 2, _named_calls
+assert _named_calls[0]["q"] == "gare Tours", _named_calls
+assert _named_calls[1]["q"] == "supermarché Le Mont-Dore", _named_calls
+
 # Production regression: /ai/plan must accept the planner model as JSON body,
 # never as a query parameter named `data`.
 from backend import app_v5
