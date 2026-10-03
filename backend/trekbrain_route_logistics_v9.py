@@ -443,26 +443,26 @@ def _discover_stays(v3, roundtrip, stay_rescue, coords, start, category: str, da
         else _MAX_OFFROUTE_KM
     )
 
-    # Campsites/refuges have strong OSM tags and are better served by one exact
-    # corridor query first. Generic lodging is fuzzier (hotel/gîte/auberge), so
-    # keep Photon first there. This improves outdoor lodging quality without
-    # adding a third network wave.
-    structured = category in {"camping", "refuge"}
-    if structured:
-        rows.extend(_bbox_route_stays(coords, category))
-    else:
-        rows.extend(_photon_split_stays(v3, roundtrip, coords, category, days))
+    # OSM exact tags and Photon free-text search are independent read-only
+    # discoveries against the same already-validated route. Run both in one
+    # bounded wave, then merge and rank locally. This preserves the quality of
+    # the old fallback sequence while paying roughly max(OSM, Photon) instead of
+    # OSM + Photon when the first source is sparse.
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        futures = [
+            pool.submit(_bbox_route_stays, coords, category),
+            pool.submit(_photon_split_stays, v3, roundtrip, coords, category, days),
+        ]
+        for future in as_completed(futures):
+            try:
+                found = future.result()
+            except Exception:
+                found = []
+            if found:
+                rows.extend(found)
 
     projected = _project_stays(roundtrip, coords, rows, category, max_offroute)
     chosen = _choose_stays(roundtrip, coords, projected, days, daily_target)
-
-    if len(chosen) < needed and deadline - time.monotonic() >= 1.25:
-        if structured:
-            rows.extend(_photon_split_stays(v3, roundtrip, coords, category, days))
-        else:
-            rows.extend(_bbox_route_stays(coords, category))
-        projected = _project_stays(roundtrip, coords, rows, category, max_offroute)
-        chosen = _choose_stays(roundtrip, coords, projected, days, daily_target)
 
     # Do not open a third network discovery path here. A partial night plan is
     # preferable to freezing the interactive request; the validated hiking
