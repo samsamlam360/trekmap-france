@@ -138,6 +138,25 @@ assert captured_post_intent.get("sleep") is False, captured_post_intent
 assert captured_post_intent.get("food") is True, captured_post_intent
 assert captured_post_intent.get("transit") is True, captured_post_intent
 
+# If the exact OSM terrain lookup found no water, one bounded Photon fallback
+# must remain enabled. This runs inside the same post-route wave.
+captured_missing_water = {}
+def fake_missing_water(boundaries, intent, existing_items):
+    captured_missing_water.update(dict(intent))
+    return []
+
+resources_module.v7.v5.v3._postroute_corridor_resources = fake_missing_water
+try:
+    missing_water_plan = sample_plan()
+    missing_water_plan["water"] = []
+    missing_water_plan["logistics"] = {"status": "complete"}
+    resources_module._supplement_route_resources(missing_water_plan, dedupe_request)
+finally:
+    resources_module.v7.v5.v3._postroute_corridor_resources = real_postroute_resources
+
+assert captured_missing_water.get("water") is True, captured_missing_water
+assert captured_missing_water.get("sleep") is False, captured_missing_water
+
 # Production regression: /ai/plan must accept the planner model as JSON body,
 # never as a query parameter named `data`.
 from backend import app_v5
