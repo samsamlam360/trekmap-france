@@ -573,7 +573,19 @@ def install_smart_planner(app, legacy_main):
     @app.post("/ai/plan")
     def plan(data: v7.v5.v3.AIPlanRequest, user=Depends(legacy_main.current_user)):
         try:
-            return _build(data, legacy_main, int(user["id"]))
+            result = _build(data, legacy_main, int(user["id"]))
+            quality = ((result.get("trekbrain") or {}).get("quality") or {}).get("score")
+            total_ms = ((result.get("agent") or {}).get("performance") or {}).get("total_ms")
+            planner = result.get("planner") or {}
+            print(
+                "[TrekBrain v9][plan] "
+                f"quality={quality} total_ms={total_ms} "
+                f"route_type={result.get('route_type')} "
+                f"stage_rebalanced={planner.get('stage_rebalanced')} "
+                f"postroute_resources={planner.get('postroute_resource_count')}",
+                flush=True,
+            )
+            return result
         except HTTPException:
             raise
         except RuntimeError as exc:
