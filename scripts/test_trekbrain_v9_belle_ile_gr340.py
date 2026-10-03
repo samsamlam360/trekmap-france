@@ -1,6 +1,7 @@
 """Regression: Belle-Île loops must recover GR 340 even when Overpass is unavailable."""
 from pathlib import Path
 from types import SimpleNamespace
+from threading import Event
 import runpy
 import sys
 
@@ -71,7 +72,16 @@ payload = {
 queries = []
 v3 = SimpleNamespace(_overpass=lambda query: (queries.append(query) or payload))
 start = {"name": "Belle-Île-en-Mer", "lat": 47.31, "lon": -3.20, "category": "place"}
-route, warning = belle._targeted_gr340(v3, gr, rescue, start, 90.0)
+real_direct_source = belle._direct_osm_relation
+real_secondary_source = belle._secondary_overpass_relation
+belle._DIRECT_CACHE = None
+belle._direct_osm_relation = lambda: (None, "direct disabled in unit test")
+belle._secondary_overpass_relation = lambda: (None, "secondary disabled in unit test")
+try:
+    route, warning = belle._targeted_gr340(v3, gr, rescue, start, 90.0)
+finally:
+    belle._direct_osm_relation = real_direct_source
+    belle._secondary_overpass_relation = real_secondary_source
 assert warning is None, warning
 assert route is not None
 assert route["fallback"] is False
@@ -91,21 +101,62 @@ class FakeResponse:
     text = osm_full_xml()
 
 real_get = belle.requests.get
+real_secondary = belle._secondary_overpass_relation
 belle._DIRECT_CACHE = None
 api_calls = []
 belle.requests.get = lambda url, **kwargs: (api_calls.append((url, kwargs)) or FakeResponse())
+belle._secondary_overpass_relation = lambda: (None, "secondary unavailable")
 blocked_v3 = SimpleNamespace(_overpass=lambda _query: (_ for _ in ()).throw(RuntimeError("Overpass ignoré après un timeout récent")))
 start_blocked = {"name": "Belle-Île-en-Mer", "lat": 47.31, "lon": -3.20, "category": "place"}
 try:
     recovered, warning = belle._targeted_gr340(blocked_v3, gr, rescue, start_blocked, 90.0)
 finally:
     belle.requests.get = real_get
+    belle._secondary_overpass_relation = real_secondary
 assert warning is None, warning
 assert recovered is not None
 assert recovered["relation_ref"] == "GR 340"
 assert recovered["gr340_source"] == "osm-api-relation-full"
 assert recovered["targeted_relation_id"] == belle._GR340_RELATION_ID
 assert api_calls and str(belle._GR340_RELATION_ID) in api_calls[0][0]
+
+# Production latency regression: the independent GR providers must start in the
+# same wave. A sequential implementation would deadlock these Event waits.
+real_overpass_fetch = belle._overpass_relation
+real_direct_fetch = belle._direct_osm_relation
+real_secondary_fetch = belle._secondary_overpass_relation
+overpass_started = Event()
+direct_started = Event()
+relation_element = payload["elements"][0]
+
+def concurrent_overpass(_v3):
+    overpass_started.set()
+    assert direct_started.wait(0.8), "direct OSM source did not start concurrently"
+    return None, "simulated Overpass outage"
+
+def concurrent_direct():
+    direct_started.set()
+    assert overpass_started.wait(0.8), "planner Overpass source did not start concurrently"
+    return relation_element, None
+
+belle._DIRECT_CACHE = None
+belle._overpass_relation = concurrent_overpass
+belle._direct_osm_relation = concurrent_direct
+belle._secondary_overpass_relation = lambda: (None, "secondary unavailable")
+start_concurrent = {"name": "Belle-Île-en-Mer", "lat": 47.31, "lon": -3.20, "category": "place"}
+try:
+    concurrent_route, concurrent_warning = belle._targeted_gr340(
+        SimpleNamespace(), gr, rescue, start_concurrent, 90.0
+    )
+finally:
+    belle._overpass_relation = real_overpass_fetch
+    belle._direct_osm_relation = real_direct_fetch
+    belle._secondary_overpass_relation = real_secondary_fetch
+
+assert concurrent_warning is None, concurrent_warning
+assert concurrent_route is not None
+assert concurrent_route["gr340_source"] == "osm-api-relation-full"
+assert concurrent_route["relation_ref"] == "GR 340"
 
 # Installing the priority wrapper must bypass a generic ORS round-trip whenever
 # the targeted OSM relation is available.
