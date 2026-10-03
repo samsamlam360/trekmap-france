@@ -59,7 +59,19 @@ OSM_FILTERS = {
 
 def _language_parse_intent(data):
     rules = _RULES.get()
-    normalized, matches = normalize_for_planner(data.prompt, rules)
+
+    # V9 may append an internal strategy sentence to the user prompt. Keep this
+    # context out of the language/constraint parser: words such as "campings",
+    # "refuges" or "sportif" are planning hints here, not user requirements.
+    raw_prompt = str(data.prompt or "")
+    explicit_prompt, marker, internal_hint = raw_prompt.partition(
+        "\n\nPriorité interne TrekBrain :"
+    )
+    if not marker:
+        explicit_prompt = raw_prompt
+        internal_hint = ""
+
+    normalized, matches = normalize_for_planner(explicit_prompt, rules)
     compound = extract_side_requests(normalized)
     _MATCHES.set(matches)
     _COMPOUND.set(compound)
@@ -87,6 +99,24 @@ def _language_parse_intent(data):
         pair = boosts.get(req.get("kind"))
         if pair:
             intent["priorities"][pair[0]] = max(intent["priorities"].get(pair[0], 0), pair[1])
+
+    # Preserve only safe, soft scenic preferences from the internal strategy.
+    # Never mutate accommodation, difficulty, route type, duration or distances.
+    hint = fold(internal_hint)
+    soft_rules = (
+        (("panoram", "beau paysage", "beaux paysages", "vue"), {"viewpoint": 6.0}),
+        (("lac", "lacs"), {"lake": 5.0}),
+        (("cascade", "cascades"), {"waterfall": 5.0}),
+        (("crete", "cretes", "sommet", "sommets"), {"peak": 5.0, "viewpoint": 4.0}),
+        (("patrimoine", "chateau", "chateaux"), {"heritage": 5.0}),
+        (("village", "villages"), {"village": 4.5}),
+        (("nature sauvage", "espaces naturels", "calme"), {"nature": 5.0}),
+    )
+    for words, values in soft_rules:
+        if any(word in hint for word in words):
+            for key, value in values.items():
+                intent["priorities"][key] = max(intent["priorities"].get(key, 0), value)
+
     return intent
 
 
