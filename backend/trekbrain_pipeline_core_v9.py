@@ -344,6 +344,11 @@ def install_planning_pipeline(
                 raise
             except Exception as exc:
                 state.phases.append("logistics:degraded")
+                print(
+                    "[TrekBrain v9][logistics-degraded] "
+                    f"{exc.__class__.__name__}: {str(exc)[:240]}",
+                    flush=True,
+                )
                 # We already possess the valid route, so unlike the previous guard
                 # there is no reason to calculate it a second time.
                 result = logistics_guard._mark_degraded(
