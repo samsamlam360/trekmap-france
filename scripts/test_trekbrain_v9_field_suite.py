@@ -175,6 +175,50 @@ try:
 finally:
     roundtrip_v9.ors.get_route = old_get_route
 
+# Matrix compact-subloop regression: reuse real sampled points and select a
+# shorter closed cycle before falling back to arc replacement.
+old_get_route = roundtrip_v9.ors.get_route
+old_get_matrix = roundtrip_v9.ors.get_distance_matrix
+try:
+    def fake_compact_matrix(points):
+        n = len(points)
+        matrix = [[0.0] * n for _ in range(n)]
+        for i in range(n):
+            for j in range(n):
+                if i != j:
+                    matrix[i][j] = 5.0 + abs(i - j) * 1.2
+        return {"distances": matrix, "fallback": False}
+
+    def fake_compact_route(points, distance_fn):
+        return {
+            "coords": [list(x) for x in points],
+            "distance": 33.0,
+            "fallback": False,
+            "routing_mode": "test-compact",
+            "profile": "foot-hiking",
+        }
+
+    roundtrip_v9.ors.get_distance_matrix = fake_compact_matrix
+    roundtrip_v9.ors.get_route = fake_compact_route
+    ring = []
+    for n in range(145):
+        angle = 2 * math.pi * n / 144
+        ring.append([48.0 + 0.11 * math.sin(angle), 1.0 + 0.16 * math.cos(angle)])
+    compact = roundtrip_v9._matrix_subloop_candidates(
+        {"coords": ring, "distance": 58.0, "fallback": False},
+        {"lat": ring[0][0], "lon": ring[0][1]},
+        32.0, 12.0, 20.0, 2, v7.v5.v3,
+    )
+    if not compact:
+        failures.append("matrix compact-subloop regression: no candidate")
+    elif compact[0].get("routing_mode") != "ors-matrix-subloop":
+        failures.append(f"matrix compact-subloop regression: bad mode {compact[0]!r}")
+    elif float(compact[0].get("distance") or 0) != 33.0:
+        failures.append(f"matrix compact-subloop regression: bad distance {compact[0]!r}")
+finally:
+    roundtrip_v9.ors.get_route = old_get_route
+    roundtrip_v9.ors.get_distance_matrix = old_get_matrix
+
 # Matrix-first internal-arc shortcut regression. The planner must evaluate many
 # on-route pairs with one Matrix call and render only the selected connector.
 old_get_route = roundtrip_v9.ors.get_route
