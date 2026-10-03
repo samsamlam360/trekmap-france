@@ -37,6 +37,12 @@ from .free_planner_v2 import (
 PLANNER_VERSION = "trekmap-expert-planner-v3"
 CORRIDOR_SEARCH_VERSION = 1
 
+# V3 keeps its historical post-route resource pass when used standalone.
+# TrekBrain v9 disables it because the route-first logistics/resource overlays
+# own the same work later in the pipeline, where it can be deduplicated and
+# parallelised without changing route geometry.
+POSTROUTE_RESOURCE_ENRICHMENT = True
+
 EXTRA_FILTERS = {
     "lake": [
         '["natural"="water"]["water"~"lake|reservoir|pond"]',
@@ -1545,7 +1551,8 @@ def _build(data: AIPlanRequest, legacy_main):
     # local rebalancing and resource presentation for every route.
     non_loop = _fold(intent.get("route_type") or "") not in {"boucle", "aller-retour", "aller retour"}
     if (
-        route.get("fallback") is False
+        POSTROUTE_RESOURCE_ENRICHMENT
+        and route.get("fallback") is False
         and corridor_centered and non_loop and forced_start and forced_end
         and any(intent.get(key) for key in ("transit", "water", "food", "sleep"))
     ):
