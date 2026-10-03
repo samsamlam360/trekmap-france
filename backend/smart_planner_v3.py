@@ -890,21 +890,12 @@ def _build(data: AIPlanRequest, legacy_main):
     base_categories = ["viewpoint", "water", "camping", "refuge", "food", "transit"]
     radius = min(30.0, max(10.0, intent["daily_target"] * min(intent["days"], 4) * 0.42))
     notes = []
-    overpass_failed = False
     try:
         base = _nearby(center["lat"], center["lon"], radius, base_categories)
     except RuntimeError as exc:
-        overpass_failed = True
         notes.append(str(exc))
         base = _photon_category_candidates(location, center, base_categories)
-
-    # A second broad Overpass call immediately after the first provider failure
-    # adds latency but rarely new information. Explicit corridors already have
-    # authoritative endpoints and a biased Photon fallback, so skip that retry.
-    if corridor_centered and overpass_failed:
-        extra, extra_notes = [], []
-    else:
-        extra, extra_notes = _extra_nearby(center, radius)
+    extra, extra_notes = _extra_nearby(center, radius)
     notes += extra_notes
 
     # A corridor search can legitimately outlive one slow Overpass mirror.
@@ -926,6 +917,7 @@ def _build(data: AIPlanRequest, legacy_main):
                 continue
         if corridor_fallback:
             base += corridor_fallback
+            notes.append("POI du corridor complétés près du départ et de l'arrivée.")
 
     items = _dedupe(base + extra + [x for x in (forced_start, forced_end, forced_via) if x], center, max_km=max(40, radius * 1.45))
     if len(items) < 4 and not (corridor_centered and forced_start and forced_end and len(items) >= 2):

@@ -10,7 +10,6 @@ import math
 import os
 import re
 import time
-from concurrent.futures import ThreadPoolExecutor, as_completed
 from copy import deepcopy
 from typing import Any
 
@@ -235,23 +234,10 @@ def _geocode_nominatim(query: str):
     return out
 
 
-def _geocode_photon(query: str, *, center=None, osm_tag: str | None = None):
-    params = {"q": query, "limit": 6, "lang": "fr", "countrycode": "FR"}
-    if isinstance(center, dict):
-        try:
-            params.update({
-                "lat": round(float(center["lat"]), 6),
-                "lon": round(float(center["lon"]), 6),
-                "zoom": 10,
-                "location_bias_scale": 0.10,
-            })
-        except (KeyError, TypeError, ValueError):
-            pass
-    if osm_tag:
-        params["osm_tag"] = str(osm_tag)
+def _geocode_photon(query: str):
     data = _request_json(
         PHOTON_URL,
-        params=params,
+        params={"q": query, "limit": 6, "lang": "fr"},
         timeout=12,
         ttl=43200,
         service="Photon",
@@ -464,81 +450,38 @@ def _nearby(lat, lon, radius_km, categories):
 # Photon fallback if every Overpass instance is unreachable. It is deliberately
 # modest: enough to still propose real named places, not a replacement for OSM POIs.
 PHOTON_TERMS = {
-    "water": (("fontaine", "amenity:drinking_water"),),
-    "camping": (("camping", "tourism:camp_site"),),
-    "refuge": (("refuge", "tourism:wilderness_hut"), ("gîte", None)),
-    "food": (("boulangerie", "shop:bakery"), ("supermarché", "shop:supermarket")),
-    "transit": (("gare", "railway:station"),),
-    "viewpoint": (("belvédère", "tourism:viewpoint"), ("sommet", "natural:peak")),
+    "camping": ("camping",),
+    "refuge": ("refuge", "gîte"),
+    "food": ("boulangerie", "supermarché"),
+    "transit": ("gare",),
+    "viewpoint": ("sommet", "belvédère"),
 }
 
 
 def _photon_category_candidates(location: str, center, categories):
-    """Small real-POI fallback when Overpass is unavailable.
-
-    Searches run concurrently because each Photon call is independent. Corridor
-    centres deliberately avoid the stale form region in the text query: the
-    coordinate bias is authoritative for explicit point-to-point treks.
-    """
-    corridor = isinstance(center, dict) and center.get("category") == "corridor"
-    jobs = []
+    items, seen = [], set()
     for cat in categories:
-        for term, osm_tag in PHOTON_TERMS.get(cat, ()):
-            query = term if corridor else f"{term} {location}".strip()
-            jobs.append((cat, term, osm_tag, query))
-
-    if not jobs:
-        return []
-
-    rows = []
-    workers = min(4, len(jobs))
-    with ThreadPoolExecutor(max_workers=workers) as pool:
-        futures = {
-            pool.submit(
-                _geocode_photon,
-                query,
-                center=center,
-                osm_tag=osm_tag,
-            ): (cat, term, osm_tag)
-            for cat, term, osm_tag, query in jobs
-        }
-        for future in as_completed(futures):
-            cat, _term, osm_tag = futures[future]
+        if cat == "water":
+            continue
+        for term in PHOTON_TERMS.get(cat, ()):
             try:
-                results = future.result()
+                results = _geocode_photon(f"{term} {location}")
             except RuntimeError:
                 continue
-            except Exception:
-                continue
             for place in results[:4]:
-                try:
-                    if _dist(center, place) > 35:
-                        continue
-                except Exception:
+                if _dist(center, place) > 35:
                     continue
-                row = dict(place)
-                row["category"] = cat
-                row["source_url"] = row.get("source_url") or _map_url(row["lat"], row["lon"])
-                row["water_status"] = (
-                    "potable_referenced"
-                    if cat == "water" and osm_tag == "amenity:drinking_water"
-                    else "unverified"
-                )
-                row["opening_hours"] = ""
-                rows.append(row)
-
-    items, seen = [], set()
-    for place in rows:
-        key = (
-            round(float(place["lat"]), 5),
-            round(float(place["lon"]), 5),
-            place.get("category"),
-        )
-        if key in seen:
-            continue
-        seen.add(key)
-        items.append(place)
-    return items[:28]
+                key = (round(place["lat"], 5), round(place["lon"], 5), cat)
+                if key in seen:
+                    continue
+                seen.add(key)
+                place = dict(place)
+                place["category"] = cat
+                place["source_url"] = _map_url(place["lat"], place["lon"])
+                place["water_status"] = "unverified"
+                place["opening_hours"] = ""
+                items.append(place)
+    return items
 
 
 KNOWN = [
