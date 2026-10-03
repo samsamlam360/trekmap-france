@@ -164,9 +164,9 @@ def precision_audit(result: dict[str, Any], data, features: dict[str, float], re
     # verification and model scope). They are useful safety information, not a
     # route-specific defect, so neutralise only that generic penalty here.
     generic_markers = (
-        "ce n est pas un modele de langage generaliste",
-        "meteo fermetures reglementation de bivouac et horaires de transport",
-        "les points d eau sans mention explicite de potabilite",
+        "modele de langage generaliste",
+        "meteo, fermetures, reglementation de bivouac et horaires de transport",
+        "points d'eau sans mention explicite de potabilite",
     )
     generic_count = 0
     for limitation in ((result.get("confidence") or {}).get("limitations") or []):
