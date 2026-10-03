@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import os
 import platform
+import subprocess
 import sys
 from pathlib import Path
 from urllib.parse import urlparse
@@ -76,6 +77,25 @@ def main() -> None:
             "TREKBRAIN_RELEASE_CHANNEL doit valoir 'v9-stable' sur Render "
             f"(valeur actuelle: {release_channel!r})."
         )
+
+    # Run the network-free TrekBrain regression checks on every production build.
+    # These tests exercise the final resource projection and route-first lodging
+    # semantics without calling ORS/Overpass/Photon, so they are cheap enough to
+    # be a real deployment gate instead of documentation that merely hopes.
+    regression_scripts = [
+        root / "scripts" / "test_trekbrain_v9_resources.py",
+        root / "scripts" / "test_trekbrain_v9_route_logistics.py",
+    ]
+    for script in regression_scripts:
+        try:
+            subprocess.run(
+                [sys.executable, str(script)],
+                cwd=root,
+                check=True,
+                timeout=45,
+            )
+        except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as exc:
+            fail(f"régression TrekBrain détectée dans {script.name}: {exc}")
 
     import backend.app_v5 as app_v5
 
