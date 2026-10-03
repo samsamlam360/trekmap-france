@@ -186,6 +186,36 @@ finally:
 assert nearby_calls["count"] <= 1, nearby_calls
 assert isinstance(probe_rows, list)
 
+# A first ORS loop that already fits the product's soft +/-25% daily window
+# must stop after one provider call. Mont-Saint-Michel used to pay for a second
+# loop even though 20.4 km/day was accepted later by the final soft gate.
+real_roundtrip_request = roundtrip._roundtrip_request
+roundtrip_calls = []
+def fake_soft_roundtrip(start, requested_km, seed):
+    roundtrip_calls.append((float(requested_km), int(seed)))
+    return {
+        "coords": [[48.60, -1.50], [48.66, -1.42], [48.58, -1.35], [48.60, -1.50]],
+        "distance": 40.9,
+        "fallback": False,
+        "routing_mode": "ors-round-trip",
+    }, None
+
+roundtrip._roundtrip_request = fake_soft_roundtrip
+try:
+    soft_loop = roundtrip._best_roundtrip(
+        {"lat": 48.60, "lon": -1.50},
+        32.0,
+        12.0,
+        20.0,
+        2,
+        v3,
+    )
+finally:
+    roundtrip._roundtrip_request = real_roundtrip_request
+assert len(roundtrip_calls) == 1, roundtrip_calls
+assert float(soft_loop.get("distance") or 0) == 40.9, soft_loop
+assert soft_loop.get("fast_accept_window"), soft_loop
+
 # Walking connectors for several nights must be validated with one ORS Matrix
 # batch, not one Directions request per night.
 matrix_calls = {"count": 0}
