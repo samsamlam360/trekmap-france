@@ -183,6 +183,66 @@ normalized, _ = normalize_for_planner(
 if "traversee" in normalized:
     failures.append(f"language regression: traverser became route-shape noun: {normalized!r}")
 
+# Post-route corridor resources must enrich logistics without becoming route
+# waypoints. Mock Photon so CI stays deterministic and network-free.
+old_request_json = v7.v5.v3._request_json
+try:
+    def fake_route_resource_json(url, **kwargs):
+        params = kwargs.get("params") or {}
+        tags = params.get("osm_tag") or []
+        if isinstance(tags, str):
+            tags = [tags]
+        tag = str(tags[0] if tags else "")
+        mapping = {
+            "railway:station": ("Gare test", "railway", "station"),
+            "amenity:drinking_water": ("Fontaine test", "amenity", "drinking_water"),
+            "tourism:camp_site": ("Camping test", "tourism", "camp_site"),
+        }
+        name, key, value = mapping.get(tag, ("Hébergement test", "tourism", "hotel"))
+        return {
+            "features": [{
+                "properties": {
+                    "name": name,
+                    "countrycode": "FR",
+                    "osm_type": "N",
+                    "osm_id": abs(hash((tag, params.get("lat"), params.get("lon")))) % 100000 + 1,
+                    "osm_key": key,
+                    "osm_value": value,
+                },
+                "geometry": {
+                    "coordinates": [float(params.get("lon")), float(params.get("lat"))],
+                },
+            }]
+        }
+
+    v7.v5.v3._request_json = fake_route_resource_json
+    resource_bounds = [
+        dict(PLACES["tours"]),
+        {"name": "Repère 1", "lat": 47.31, "lon": 0.53, "category": "route_split"},
+        {"name": "Repère 2", "lat": 47.22, "lon": 0.36, "category": "route_split"},
+        dict(PLACES["chinon"]),
+    ]
+    resource_intent = {
+        "transit": True,
+        "water": True,
+        "sleep": True,
+        "accommodation": "balanced",
+    }
+    enriched_resources = v7.v5.v3._postroute_corridor_resources(
+        resource_bounds, resource_intent, []
+    )
+    cats = {x.get("category") for x in enriched_resources}
+    if "transit" not in cats:
+        failures.append(f"post-route resources regression: no transit {enriched_resources!r}")
+    if "water" not in cats:
+        failures.append(f"post-route resources regression: no water {enriched_resources!r}")
+    if not ({"camping", "refuge"} & cats):
+        failures.append(f"post-route resources regression: no stay {enriched_resources!r}")
+    if any(not str(x.get("source_url") or "").startswith("https://www.openstreetmap.org/") for x in enriched_resources):
+        failures.append(f"post-route resources regression: bad source {enriched_resources!r}")
+finally:
+    v7.v5.v3._request_json = old_request_json
+
 # Explicit traverses may recover a validated route by splitting its existing
 # geometry into equal-progress days. No new path geometry may be invented.
 split_route = [

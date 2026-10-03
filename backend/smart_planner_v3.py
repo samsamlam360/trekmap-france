@@ -10,6 +10,7 @@ import math
 import os
 import re
 import unicodedata
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from typing import Any
 
@@ -28,6 +29,8 @@ from .free_planner_v2 import (
     _nearby,
     _overpass,
     _photon_category_candidates,
+    _request_json,
+    PHOTON_URL,
 )
 
 PLANNER_VERSION = "trekmap-expert-planner-v3"
@@ -714,6 +717,173 @@ def _stage_distances(route_coords, boundaries, legacy_main, total_distance):
     return distances
 
 
+def _photon_anchor_resource(anchor, category: str, osm_tags, radius_km: float):
+    """Fetch one real OSM resource near a validated route anchor via Photon."""
+    try:
+        lat, lon = float(anchor["lat"]), float(anchor["lon"])
+    except (KeyError, TypeError, ValueError):
+        return None
+    if not (math.isfinite(lat) and math.isfinite(lon)):
+        return None
+
+    reverse_url = str(PHOTON_URL).replace("/api/", "/reverse")
+    params = {
+        "lat": round(lat, 6),
+        "lon": round(lon, 6),
+        "radius": round(float(radius_km), 1),
+        "limit": 5,
+        "lang": "fr",
+        "osm_tag": list(osm_tags),
+    }
+    try:
+        payload = _request_json(
+            reverse_url,
+            params=params,
+            timeout=2.6,
+            ttl=21600,
+            service="Photon route resources",
+            retries=1,
+        )
+    except Exception:
+        return None
+
+    best = None
+    for feature in (payload.get("features") or []) if isinstance(payload, dict) else []:
+        props = feature.get("properties") or {}
+        country_code = str(props.get("countrycode") or props.get("country_code") or "").upper()
+        if country_code and country_code != "FR":
+            continue
+        coords = (feature.get("geometry") or {}).get("coordinates") or []
+        if len(coords) < 2:
+            continue
+        try:
+            flon, flat = float(coords[0]), float(coords[1])
+        except (TypeError, ValueError):
+            continue
+        item = {"lat": flat, "lon": flon}
+        distance = _dist(anchor, item)
+        if distance > float(radius_km) + 0.35:
+            continue
+
+        osm_key = str(props.get("osm_key") or "")
+        osm_value = str(props.get("osm_value") or "")
+        final_category = category
+        if category == "stay":
+            final_category = "camping" if osm_value in {"camp_site", "caravan_site"} else "refuge"
+
+        osm_type = str(props.get("osm_type") or "").upper()
+        osm_id = props.get("osm_id")
+        osm_kind = {"N": "node", "W": "way", "R": "relation"}.get(osm_type, "")
+        source_url = (
+            f"https://www.openstreetmap.org/{osm_kind}/{osm_id}"
+            if osm_kind and osm_id is not None
+            else _map_url(flat, flon)
+        )
+
+        name_parts = [props.get("name"), props.get("city"), props.get("county")]
+        name = ", ".join(dict.fromkeys(str(x).strip() for x in name_parts if x))
+        if not name:
+            name = {
+                "water": "Point d'eau",
+                "stay": "Hébergement",
+                "transit": "Transport public",
+            }.get(category, "Point utile")
+
+        row = {
+            "name": name[:300],
+            "short_name": name.split(",")[0].strip()[:160],
+            "lat": flat,
+            "lon": flon,
+            "category": final_category,
+            "source_url": source_url,
+            "opening_hours": "",
+            "water_status": (
+                "potable_referenced"
+                if category == "water" and osm_key == "amenity" and osm_value == "drinking_water"
+                else "unverified"
+            ),
+            "_postroute_resource": True,
+            "_distance_to_anchor_km": round(distance, 2),
+        }
+        if best is None or distance < best[0]:
+            best = (distance, row)
+    return best[1] if best else None
+
+
+def _postroute_corridor_resources(boundaries, intent, existing_items):
+    """Fill missing route logistics after geometry selection, without rerouting."""
+    if len(boundaries or []) < 2:
+        return []
+
+    existing_items = list(existing_items or [])
+    stays = [x for x in existing_items if x.get("category") in {"camping", "refuge"}]
+    waters = [x for x in existing_items if x.get("category") == "water"]
+    transit = [x for x in existing_items if x.get("category") == "transit"]
+
+    jobs = []
+    if intent.get("transit"):
+        if _closest(transit, boundaries[0], 12) is None:
+            jobs.append((boundaries[0], "transit", (
+                "railway:station", "railway:halt", "public_transport:station"
+            ), 12.0))
+        if _closest(transit, boundaries[-1], 12) is None:
+            jobs.append((boundaries[-1], "transit", (
+                "railway:station", "railway:halt", "public_transport:station"
+            ), 12.0))
+
+    for boundary in boundaries[1:-1]:
+        if intent.get("water") and _closest(waters, boundary, 4.5) is None:
+            jobs.append((boundary, "water", (
+                "amenity:drinking_water", "man_made:water_tap", "natural:spring"
+            ), 4.5))
+        if (
+            intent.get("sleep")
+            and intent.get("accommodation") != "bivouac"
+            and _closest(stays, boundary, 3.5) is None
+        ):
+            preferred = str(intent.get("accommodation") or "balanced")
+            if preferred == "camping":
+                tags = ("tourism:camp_site", "tourism:caravan_site")
+            elif preferred == "refuge":
+                tags = ("tourism:alpine_hut", "tourism:wilderness_hut", "amenity:shelter")
+            else:
+                tags = (
+                    "tourism:camp_site", "tourism:hotel", "tourism:hostel",
+                    "tourism:guest_house", "tourism:alpine_hut", "tourism:wilderness_hut"
+                )
+            jobs.append((boundary, "stay", tags, 6.0))
+
+    if not jobs:
+        return []
+
+    found = []
+    with ThreadPoolExecutor(max_workers=min(4, len(jobs))) as pool:
+        futures = [
+            pool.submit(_photon_anchor_resource, anchor, category, tags, radius)
+            for anchor, category, tags, radius in jobs
+        ]
+        for future in as_completed(futures):
+            try:
+                item = future.result()
+            except Exception:
+                item = None
+            if item:
+                found.append(item)
+
+    deduped, seen = [], set()
+    for item in found:
+        key = (
+            item.get("category"),
+            round(float(item.get("lat")), 5),
+            round(float(item.get("lon")), 5),
+        )
+        if key in seen:
+            continue
+        seen.add(key)
+        deduped.append(item)
+    return deduped
+
+
 def _equal_progress_boundaries(route_coords, start, end, days: int):
     """Place hiking-day boundaries on an already validated route geometry.
 
@@ -1042,6 +1212,21 @@ def _build(data: AIPlanRequest, legacy_main):
     score, candidate, route_points, stage_highlights, route, distance, stage_dist, elevation, route_coords = final_rows[0]
 
     boundaries = candidate.boundaries
+
+    # Explicit traverses may suffer from broad Overpass timeouts while the
+    # walking geometry itself is perfectly valid. Add only missing display/
+    # logistics resources near the selected day boundaries. These points never
+    # become ORS waypoints and therefore cannot alter the chosen route.
+    non_loop = _fold(intent.get("route_type") or "") not in {"boucle", "aller-retour", "aller retour"}
+    if corridor_centered and non_loop and forced_start and forced_end:
+        postroute_items = _postroute_corridor_resources(boundaries, intent, items)
+        if postroute_items:
+            items = _dedupe(
+                items + postroute_items,
+                center,
+                max_km=max(40, radius * 1.45),
+            )
+
     stays = [x for x in items if x.get("category") in {"camping", "refuge"}]
     waters = [x for x in items if x.get("category") == "water"]
     foods = [x for x in items if x.get("category") == "food"]
@@ -1206,6 +1391,9 @@ def _build(data: AIPlanRequest, legacy_main):
             "candidates_compared": len(evaluated),
             "corridor_centered": corridor_centered,
             "corridor_search_version": CORRIDOR_SEARCH_VERSION,
+            "postroute_resource_count": len([
+                x for x in items if x.get("_postroute_resource")
+            ]),
             "search_center": {
                 "lat": round(float(center["lat"]), 6),
                 "lon": round(float(center["lon"]), 6),
