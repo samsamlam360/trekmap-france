@@ -97,8 +97,8 @@ traverse_plan = {
         "distance_km": 54.6,
         "coords": [[47.39, 0.68], [47.28, 0.43], [47.17, 0.24]],
     },
-    "start": {"lat": 47.39, "lon": 0.68},
-    "end": {"lat": 47.17, "lon": 0.24},
+    "start": {"name": "Tours", "lat": 47.39, "lon": 0.68},
+    "end": {"name": "Chinon", "lat": 47.17, "lon": 0.24},
     "stages": [
         {"distance_km": 18.2, "overnight": "Étape 1"},
         {"distance_km": 18.2, "overnight": "Étape 2"},
