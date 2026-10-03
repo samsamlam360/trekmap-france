@@ -21,6 +21,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 import math
+import re
+import unicodedata
 from typing import Any, Callable
 
 from fastapi import HTTPException
@@ -50,6 +52,72 @@ def _route_request(logistics_module, data, category: str | None):
     if category is None:
         return data
     return logistics_module._clone_route_only(data)
+
+
+
+_DEFAULT_PRIORITIES = {
+    "viewpoint": 2.5,
+    "peak": 1.8,
+    "lake": 2.4,
+    "waterfall": 2.0,
+    "nature": 1.8,
+    "heritage": 0.8,
+    "village": 0.6,
+}
+
+
+def _fold(value: Any) -> str:
+    text = unicodedata.normalize("NFKD", str(value or ""))
+    return "".join(c for c in text if not unicodedata.combining(c)).casefold()
+
+
+def _can_fast_route_first_loop(state: PlanningState) -> bool:
+    """Use direct ORS only when no richer geographic objective would be lost.
+
+    Multi-day lodging loops are especially expensive because the generic planner
+    can spend several network calls before falling back to the exact same ORS
+    round-trip engine. Route-first logistics means camping/refuge placement is
+    solved afterwards, so these plain loops can safely start with ORS.
+    """
+    intent = state.intent or {}
+    if state.category is None:
+        return False
+    try:
+        days = int(intent.get("days") or getattr(state.data, "days", 1) or 1)
+        total = float(intent.get("total_target") or 0)
+    except (TypeError, ValueError):
+        return False
+    if days <= 1 or total <= 0 or total > 99.0:
+        return False
+    if _fold(intent.get("route_type")) != "boucle":
+        return False
+    if any(str(intent.get(key) or "").strip() for key in ("start_query", "end_query", "via_query")):
+        return False
+    if intent.get("max_dplus_day"):
+        return False
+
+    raw = _fold(intent.get("raw") or getattr(state.data, "prompt", ""))
+    if re.search(r"\bgr\s*(?:®\s*)?\d+\b|\bgrp\b", raw):
+        return False
+    if any(token in raw for token in ("passer par", "via ", "obligatoirement par")):
+        return False
+
+    # Keep the advanced POI planner for genuinely strong scenic objectives.
+    # A category already named by the region itself (e.g. "Lac des Settons")
+    # does not need another detour search merely to prove that the lake exists.
+    location = _fold(getattr(state.route_data, "region", ""))
+    priorities = intent.get("priorities") or {}
+    for key, default in _DEFAULT_PRIORITIES.items():
+        try:
+            value = float(priorities.get(key, default))
+        except (TypeError, ValueError):
+            value = default
+        if value < 4.5 or value <= default + 0.5:
+            continue
+        if key == "lake" and "lac" in location:
+            continue
+        return False
+    return True
 
 
 def _build_backbone(
@@ -85,6 +153,23 @@ def _build_backbone(
     if canonical_result is not None:
         state.phases.append("route:canonical-gr340")
         return canonical_result
+
+    if _can_fast_route_first_loop(state):
+        direct = getattr(roundtrip, "_build_roundtrip", None)
+        if callable(direct):
+            try:
+                result = direct(state.route_data, legacy_main, v3)
+                if isinstance(result, dict) and (result.get("route_preview") or {}).get("fallback") is False:
+                    state.phases.append("route:fast-roundtrip")
+                    planner = result.setdefault("planner", {})
+                    if isinstance(planner, dict):
+                        planner["fast_roundtrip"] = True
+                    return result
+            except Exception:
+                # The direct probe is an optimization, never a new failure mode.
+                # Circuit breakers still prevent a timed-out ORS provider from
+                # triggering another retry storm in the generic stack.
+                state.phases.append("route:fast-roundtrip-miss")
 
     state.phases.append("route:generic")
     return base_build(state.route_data, legacy_main)
