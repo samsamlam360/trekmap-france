@@ -689,6 +689,73 @@ def _route_distance(result: dict[str, Any], coords, legacy_main) -> float:
         return 0.0
 
 
+
+def _attach_preloaded_terrain(
+    result: dict[str, Any],
+    rows: list[dict[str, Any]],
+    preloaded: bool,
+) -> None:
+    if preloaded:
+        result["_terrain_osm_preloaded"] = True
+    if not rows:
+        return
+
+    water = [dict(x) for x in (result.get("water") or []) if isinstance(x, dict)]
+    food = [
+        dict(x)
+        for x in (result.get("resources") or result.get("food") or [])
+        if isinstance(x, dict)
+    ]
+
+    def coord_key(item):
+        try:
+            return (round(float(item.get("lat")), 5), round(float(item.get("lon")), 5))
+        except (TypeError, ValueError):
+            return None
+
+    seen_water = {key for item in water if (key := coord_key(item)) is not None}
+    seen_food = {key for item in food if (key := coord_key(item)) is not None}
+
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        key = coord_key(row)
+        if key is None:
+            continue
+        kind = str(row.get("category") or "")
+        if kind == "water" and key not in seen_water:
+            seen_water.add(key)
+            status = str(row.get("water_status") or "unverified")
+            water.append({
+                "name": row.get("name") or "Point d'eau",
+                "lat": row.get("lat"),
+                "lon": row.get("lon"),
+                "category": "water",
+                "type": "Point d'eau",
+                "status": status,
+                "water_status": status,
+                "notes": "Point d'eau cartographié près du tracé ; disponibilité et potabilité à vérifier.",
+                "source_url": row.get("source_url") or "",
+                "display_only": True,
+            })
+        elif kind == "food" and key not in seen_food:
+            seen_food.add(key)
+            food.append({
+                "name": row.get("name") or "Ravitaillement",
+                "lat": row.get("lat"),
+                "lon": row.get("lon"),
+                "category": "food",
+                "type": "Ravitaillement",
+                "notes": "Commerce cartographié près du tracé ; horaires et disponibilité à vérifier.",
+                "source_url": row.get("source_url") or "",
+                "display_only": True,
+            })
+
+    result["water"] = water
+    result["resources"] = food
+    result["food"] = food
+
+
 def _attach_logistics(result: dict[str, Any], data, legacy_main, v3, roundtrip, stay_rescue, ors, intent, category: str):
     route = result.get("route_preview") or {}
     coords = route.get("coords") or []
@@ -704,8 +771,15 @@ def _attach_logistics(result: dict[str, Any], data, legacy_main, v3, roundtrip, 
         start = {"name": "Départ", "lat": float(coords[0][0]), "lon": float(coords[0][1])}
 
     logistics_started = time.monotonic()
+    want_terrain = bool(intent.get("water") or intent.get("food"))
     chosen, discovered, discovery_meta = _discover_stays(
-        v3, roundtrip, stay_rescue, coords, start, category, days, daily_target, strict_walk
+        v3, roundtrip, stay_rescue, coords, start, category, days,
+        daily_target, strict_walk, want_terrain=want_terrain,
+    )
+    _attach_preloaded_terrain(
+        result,
+        list(discovery_meta.get("terrain_rows") or []),
+        bool(discovery_meta.get("terrain_preloaded")),
     )
     by_night = {index + 1: stay for index, stay in enumerate(chosen[: max(0, days - 1)])}
 
