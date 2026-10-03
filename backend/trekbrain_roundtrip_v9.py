@@ -169,6 +169,74 @@ def _polygon_loop_candidates(start, target_km: float, daily_min: float, daily_ma
     return variants
 
 
+def _matrix_subloop_candidates(route, start, target_km: float, daily_min: float, daily_max: float, days: int, v3):
+    """Rank compact routed cycles through real points from an oversized ORS loop."""
+    coords = [[float(p[0]), float(p[1])] for p in (route.get("coords") or []) if isinstance(p, (list, tuple)) and len(p) >= 2]
+    if len(coords) < 24:
+        return []
+    cum = _cumulative(coords)
+    if not cum or cum[-1] <= 0:
+        return []
+    start_coord = [float(start["lat"]), float(start["lon"])]
+    samples = []
+    for fraction in [0.07 + 0.86 * i / 8 for i in range(9)]:
+        idx = _route_index_for_progress(cum, cum[-1] * fraction)
+        if 1 < idx < len(coords) - 2 and (not samples or idx != samples[-1][0]):
+            samples.append((idx, float(cum[idx]) / float(cum[-1]), coords[idx]))
+    if len(samples) < 5:
+        return []
+    points = [start_coord] + [x[2] for x in samples]
+    result = ors.get_distance_matrix(points)
+    matrix = result.get("distances") if isinstance(result, dict) else None
+    if not isinstance(matrix, list) or len(matrix) != len(points):
+        return []
+    low = max(3.0, float(daily_min) * max(days, 1))
+    high = float(daily_max) * max(days, 1)
+    predicted = []
+    lat0 = math.radians(start_coord[0])
+    for i in range(len(samples) - 1):
+        for j in range(i + 1, len(samples)):
+            if samples[j][1] - samples[i][1] < 0.18:
+                continue
+            try:
+                legs = (float(matrix[0][i+1]), float(matrix[i+1][j+1]), float(matrix[j+1][0]))
+            except (IndexError, TypeError, ValueError):
+                continue
+            if not all(math.isfinite(x) and x > 0.05 for x in legs):
+                continue
+            a, b = samples[i][2], samples[j][2]
+            ax=(a[1]-start_coord[1])*111.320*math.cos(lat0); ay=(a[0]-start_coord[0])*110.574
+            bx=(b[1]-start_coord[1])*111.320*math.cos(lat0); by=(b[0]-start_coord[0])*110.574
+            area2=abs(ax*by-bx*ay)
+            perimeter=math.hypot(ax,ay)+math.hypot(bx-ax,by-ay)+math.hypot(bx,by)
+            shape=area2/max(perimeter*perimeter,1e-6)
+            if shape < 0.004:
+                continue
+            total=sum(legs)
+            outside=max(0.0, low*0.90-total)*5 + max(0.0, total-high)*6
+            predicted.append((abs(total-target_km)+outside-min(shape*40,2), i, j, total, shape))
+    predicted.sort(key=lambda x:x[0])
+    variants=[]
+    for _, i, j, estimate, shape in predicted[:5]:
+        routed=ors.get_route([start_coord, samples[i][2], samples[j][2], start_coord], _polyline_haversine)
+        if not isinstance(routed,dict) or routed.get("fallback") is not False:
+            continue
+        rc=routed.get("coords") or []
+        if len(rc)<4 or _haversine(rc[0],start_coord)>0.15 or _haversine(rc[-1],start_coord)>0.15:
+            continue
+        try: distance=float(routed.get("distance") or 0)
+        except (TypeError,ValueError): continue
+        retrace=float(v3._route_retrace_ratio(rc)) if hasattr(v3,"_route_retrace_ratio") else 0.0
+        if not math.isfinite(distance) or distance<=0 or retrace>0.42:
+            continue
+        candidate=dict(routed)
+        candidate.update({"distance":round(distance,2),"fallback":False,"routing_mode":"ors-matrix-subloop","matrix_subloop":True,"shortened_from_km":round(float(route.get("distance") or 0),2),"matrix_predicted_km":round(estimate,2),"matrix_shape_score":round(shape,4),"matrix_subloop_retrace":round(retrace,4)})
+        variants.append(candidate)
+        if low*0.90 <= distance <= high+0.35 or len(variants)>=2:
+            break
+    return variants
+
+
 def _shortcut_oversized_loop(route, start, target_km: float, daily_min: float, daily_max: float, days: int, v3):
     """Shorten one oversized real loop with one ORS Matrix + one Directions call.
 
