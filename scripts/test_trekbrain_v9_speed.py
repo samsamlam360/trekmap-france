@@ -28,7 +28,7 @@ speed.install_fast_planning(v3, v5, v9)
 
 # The fast wrapper must stay signature-compatible with v5 candidate prompt
 # generation, including TrekBrain's isolated internal strategy hint.
-assert speed.FAST_PLANNING_WRAPPER_VERSION == 2
+assert speed.FAST_PLANNING_WRAPPER_VERSION == 3
 prompt_rows = v5._candidate_prompts(
     "boucle 2 jours 16 km par jour avec hebergement",
     [],
