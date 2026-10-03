@@ -21,6 +21,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 import math
+import re
+import unicodedata
 from typing import Any, Callable
 
 from fastapi import HTTPException
@@ -50,6 +52,35 @@ def _route_request(logistics_module, data, category: str | None):
     if category is None:
         return data
     return logistics_module._clone_route_only(data)
+
+
+
+def _fold(value: str) -> str:
+    text = unicodedata.normalize("NFKD", str(value or ""))
+    return "".join(c for c in text if not unicodedata.combining(c)).casefold()
+
+
+def _fast_generic_loop_allowed(intent: dict[str, Any]) -> bool:
+    """Use the stable ORS loop engine directly for simple short loops."""
+    if _fold(intent.get("route_type") or "") != "boucle":
+        return False
+    try:
+        days = int(intent.get("days") or 1)
+        total = float(intent.get("total_target") or 0)
+    except (TypeError, ValueError):
+        return False
+    if days < 2 or days > 3 or total <= 0 or total > 65.0:
+        return False
+    if intent.get("start_query") or intent.get("end_query") or intent.get("via_query"):
+        return False
+    if intent.get("max_dplus_day"):
+        return False
+    if intent.get("avoid"):
+        return False
+    raw = _fold(intent.get("raw") or "")
+    if re.search(r"\b(?:gr\s*\d+|grp\b|pr\s*\d+)\b", raw):
+        return False
+    return True
 
 
 def _build_backbone(
@@ -85,6 +116,15 @@ def _build_backbone(
     if canonical_result is not None:
         state.phases.append("route:canonical-gr340")
         return canonical_result
+
+    if _fast_generic_loop_allowed(state.intent):
+        state.phases.append("route:generic-fast-ors")
+        try:
+            return roundtrip._build_roundtrip(state.route_data, legacy_main, v3)
+        except HTTPException:
+            # Keep the advanced planner as a safety net if the direct loop
+            # engine cannot produce a valid pedestrian circuit.
+            state.phases.append("route:generic-fast-miss")
 
     state.phases.append("route:generic")
     return base_build(state.route_data, legacy_main)
