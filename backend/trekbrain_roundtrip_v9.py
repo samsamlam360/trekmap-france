@@ -576,13 +576,28 @@ def _best_roundtrip(start, target_km: float, daily_min: float, daily_max: float,
             if abs(calibrated - target_km) >= 2.0:
                 add_candidate(calibrated, 7)
 
-        # Matrix-first recovery: compare dozens of on-network arc shortcuts in
-        # one request, then render at most two detailed connectors.
+        # First try compact cycles through real points already proven routable
+        # by the oversized ORS loop. This can shrink the circuit much more than
+        # keeping most of the original arc.
         if all(float(row[1].get("distance") or 0) > feasible_high + 0.35 for row in rows):
-            source = min(
-                rows,
-                key=lambda row: abs(float(row[1].get("distance") or 0) - target_km),
-            )[1]
+            source = min(rows, key=lambda row: abs(float(row[1].get("distance") or 0) - target_km))[1]
+            for variant in _matrix_subloop_candidates(
+                source, start, target_km, daily_min, daily_max, days, v3
+            ):
+                distance = float(variant.get("distance") or 0)
+                per_day = distance / max(days, 1)
+                retrace = float(v3._route_retrace_ratio(variant.get("coords") or [])) if hasattr(v3, "_route_retrace_ratio") else 0.0
+                range_penalty = max(0.0, daily_min - per_day) * 5 + max(0.0, per_day - daily_max) * 8
+                rows.append((abs(distance - target_km) + range_penalty + retrace * 80, variant))
+
+        feasible_now = [
+            row for row in rows
+            if feasible_low * 0.90 <= float(row[1].get("distance") or 0) <= feasible_high + 0.35
+        ]
+
+        # If no compact cycle fits, try replacing a large internal arc.
+        if not feasible_now and all(float(row[1].get("distance") or 0) > feasible_high + 0.35 for row in rows):
+            source = min(rows, key=lambda row: abs(float(row[1].get("distance") or 0) - target_km))[1]
             for variant in _shortcut_oversized_loop(
                 source, start, target_km, daily_min, daily_max, days, v3
             ):
@@ -590,10 +605,7 @@ def _best_roundtrip(start, target_km: float, daily_min: float, daily_max: float,
                 per_day = distance / max(days, 1)
                 retrace = float(v3._route_retrace_ratio(variant.get("coords") or [])) if hasattr(v3, "_route_retrace_ratio") else 0.0
                 range_penalty = max(0.0, daily_min - per_day) * 5 + max(0.0, per_day - daily_max) * 8
-                rows.append((
-                    abs(distance - target_km) + range_penalty + retrace * 80,
-                    variant,
-                ))
+                rows.append((abs(distance - target_km) + range_penalty + retrace * 80, variant))
 
         # Keep the older cut-and-close recovery as a bounded fallback only when
         # Matrix could not produce a feasible circuit.
@@ -1135,6 +1147,7 @@ __all__ = [
     "_build_roundtrip",
     "_equal_anchors",
     "_best_roundtrip",
+    "_matrix_subloop_candidates",
     "_constraint_near_start",
     "_balanced_corridor_stays",
     "_route_points_with_stays",
