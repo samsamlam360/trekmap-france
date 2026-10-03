@@ -186,6 +186,67 @@ route3 = roundtrip._best_roundtrip(start3, 90.0, 12.0, 25.0, 5, v3)
 assert route3["routing_mode"] == "ors-round-trip"
 assert len(generic_calls) == 1
 
+# Canonical Belle-Île planning must degrade back to the generic validated
+# pipeline when every live OSM relation source is temporarily unavailable.
+from backend import trekbrain_belle_ile_canonical_v9 as canonical
+
+class CanonicalV3:
+    @staticmethod
+    def _parse_intent(_data):
+        return {
+            "route_type": "Boucle",
+            "days": 5,
+            "daily_target": 18.0,
+            "daily_min": 13.5,
+            "daily_max": 22.5,
+            "total_target": 90.0,
+            "accommodation": "balanced",
+        }
+
+    @staticmethod
+    def _fold(value):
+        return str(value or "").casefold()
+
+    @staticmethod
+    def _location(_data):
+        return "Belle-Île-en-Mer"
+
+    @staticmethod
+    def _geocode(_query):
+        return [{"name": "Belle-Île-en-Mer", "lat": 47.31, "lon": -3.20}]
+
+
+class CanonicalBelle:
+    @staticmethod
+    def _is_belle_ile(_point):
+        return True
+
+    @staticmethod
+    def _targeted_gr340(*_args, **_kwargs):
+        return None, "synthetic provider outage"
+
+
+class CanonicalData:
+    region = "Belle-Île-en-Mer"
+    prompt = "Tour de Belle-Île-en-Mer en boucle sur 5 jours"
+    days = 5
+    daily_km = 18
+    difficulty = "medium"
+
+
+degraded_canonical = canonical._build_canonical(
+    CanonicalData(),
+    object(),
+    CanonicalV3(),
+    object(),
+    object(),
+    object(),
+    object(),
+    object(),
+    CanonicalBelle(),
+)
+assert degraded_canonical is None
+
 print("Belle-Île GR 340 survives an open Overpass circuit: OK")
 
 # Also run the canonical end-to-end planner regression for the exact daily
