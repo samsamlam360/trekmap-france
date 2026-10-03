@@ -189,6 +189,12 @@ old_request_json = v7.v5.v3._request_json
 try:
     def fake_route_resource_json(url, **kwargs):
         params = kwargs.get("params") or {}
+        if "/api/" not in str(url):
+            raise AssertionError(f"post-route Photon should use forward API, got {url!r}")
+        if not params.get("q"):
+            raise AssertionError(f"post-route Photon query missing: {params!r}")
+        if "lat" not in params or "lon" not in params:
+            raise AssertionError(f"post-route Photon bias missing: {params!r}")
         tags = params.get("osm_tag") or []
         if isinstance(tags, str):
             tags = [tags]

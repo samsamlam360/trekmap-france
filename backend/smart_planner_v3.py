@@ -726,18 +726,38 @@ def _photon_anchor_resource(anchor, category: str, osm_tags, radius_km: float):
     if not (math.isfinite(lat) and math.isfinite(lon)):
         return None
 
-    reverse_url = str(PHOTON_URL).replace("/api/", "/reverse")
+    # Forward Photon search is more reliable for POI classes than reverse
+    # lookup on the public instance. Coordinates only bias ranking; every result
+    # is still distance-filtered below before it is accepted.
+    tags = list(osm_tags)
+    if category == "water":
+        query = "fontaine"
+    elif category == "transit":
+        query = "gare"
+    elif category == "stay":
+        if any("hotel" in str(tag) or "hostel" in str(tag) or "guest_house" in str(tag) for tag in tags):
+            query = "hotel"
+        elif any("camp_site" in str(tag) for tag in tags):
+            query = "camping"
+        else:
+            query = "refuge"
+    else:
+        query = "point utile"
+
     params = {
+        "q": query,
         "lat": round(lat, 6),
         "lon": round(lon, 6),
-        "radius": round(float(radius_km), 1),
-        "limit": 5,
+        "zoom": 11,
+        "location_bias_scale": 0.1,
+        "countrycode": "FR",
+        "limit": 6,
         "lang": "fr",
-        "osm_tag": list(osm_tags),
+        "osm_tag": tags,
     }
     try:
         payload = _request_json(
-            reverse_url,
+            PHOTON_URL,
             params=params,
             timeout=2.6,
             ttl=21600,
@@ -835,7 +855,7 @@ def _postroute_corridor_resources(boundaries, intent, existing_items):
         if intent.get("water") and _closest(waters, boundary, 4.5) is None:
             jobs.append((boundary, "water", (
                 "amenity:drinking_water", "man_made:water_tap", "natural:spring"
-            ), 4.5))
+            ), 5.5))
         if (
             intent.get("sleep")
             and intent.get("accommodation") != "bivouac"
@@ -851,7 +871,7 @@ def _postroute_corridor_resources(boundaries, intent, existing_items):
                     "tourism:camp_site", "tourism:hotel", "tourism:hostel",
                     "tourism:guest_house", "tourism:alpine_hut", "tourism:wilderness_hut"
                 )
-            jobs.append((boundary, "stay", tags, 6.0))
+            jobs.append((boundary, "stay", tags, 8.0))
 
     if not jobs:
         return []
