@@ -102,7 +102,13 @@ def _parse_intent(data: AIPlanRequest) -> dict[str, Any]:
     # priorities may use that context, but hard user constraints must never be
     # inferred from it (e.g. "campings ou refuges" must not become an explicit
     # camping request).
-    explicit_original = original.partition("\n\nPriorité interne TrekBrain :")[0].strip()
+    parts = re.split(
+        r"\bpriorit(?:é|e)\s+interne\s+trekbrain\s*:",
+        original,
+        maxsplit=1,
+        flags=re.IGNORECASE,
+    )
+    explicit_original = parts[0].strip()
     text = _fold(original)
     explicit_text = _fold(explicit_original)
     days = int(data.days)
