@@ -97,6 +97,18 @@ def main() -> None:
         except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as exc:
             fail(f"régression TrekBrain détectée dans {script.name}: {exc}")
 
+    if os.getenv("TREKBRAIN_RUN_BENCHMARK", "").strip().casefold() in {"1", "true", "yes", "on"}:
+        benchmark = root / "scripts" / "benchmark_trekbrain_v9_render.py"
+        try:
+            subprocess.run(
+                [sys.executable, str(benchmark)],
+                cwd=root,
+                check=True,
+                timeout=180,
+            )
+        except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as exc:
+            fail(f"benchmark TrekBrain Render interrompu: {exc}")
+
     import backend.app_v5 as app_v5
 
     routes = [route.path for route in app_v5.app.routes]
