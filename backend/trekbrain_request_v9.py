@@ -69,6 +69,25 @@ def _route_type_from_prompt(prompt: str) -> str | None:
     return None
 
 
+def _explicit_endpoint_pair(prompt: str) -> tuple[str, str] | None:
+    """Extract strong natural point-to-point wording such as Tours -> Chinon."""
+    text = re.sub(r"\s+", " ", str(prompt or "")).strip()
+    match = re.search(
+        r"\b(?:aller|marcher)\s+(?:de|depuis)\s+(.+?)\s+(?:à|a|au|aux)\s+(.+?)"
+        r"(?=\s+(?:à|a)\s+pied\b|\s+en\s+\d{1,2}\s*(?:jours?|j)\b|"
+        r"\s+(?:avec|sans|pour)\b|[,.;!?]|$)",
+        text,
+        flags=re.I,
+    )
+    if not match:
+        return None
+    start = _clean_place(match.group(1))
+    end = _clean_place(match.group(2))
+    if len(start) < 2 or len(end) < 2:
+        return None
+    return start, end
+
+
 def _clean_place(value: str) -> str:
     value = re.sub(r"\s+", " ", str(value or "")).strip(" ,.;:-")
     value = re.sub(r"^(?:le|la|les|l['’])\s*", "", value, flags=re.I)
@@ -186,6 +205,7 @@ def reconcile_request(data):
     form_region = str(getattr(data, "region", "") or "").strip()
     form_route_type = str(getattr(data, "route_type", "") or "").strip() or "Boucle"
     places = _extract_prompt_places(prompt)
+    endpoint_pair = _explicit_endpoint_pair(prompt)
     form_in_prompt = bool(form_region and _fold(form_region) in _fold(prompt))
 
     explicit_area = next((x for x in places if x["kind"] == "route_area"), None)
@@ -200,6 +220,21 @@ def reconcile_request(data):
     region_overridden = False
     forced_waypoint = None
     reason = "form-region-kept"
+
+    if endpoint_pair:
+        start_name, end_name = endpoint_pair
+        start_point = _geocode_one(start_name)
+        end_point = _geocode_one(end_name)
+        if start_point and end_point:
+            anchor_point = start_point
+            anchor_name = str(start_point.get("short_name") or start_name).strip()[:120]
+            # Explicit "de X à Y" is stronger geographic evidence than a stale
+            # form region. Use X as the planning area; Y remains an explicit
+            # route endpoint in the planner parser.
+            effective_region = anchor_name
+            region_overridden = _fold(effective_region) != _fold(form_region)
+            reason = "explicit-endpoint-pair"
+            selected = None
 
     if selected:
         anchor_point = _geocode_one(selected["place"])
@@ -277,6 +312,7 @@ def reconcile_request(data):
         "after_trip_places": [x["place"] for x in places if x.get("after_trip")],
         "island_access_mode": "transport-then-hike" if belle_ile_tour else None,
         "preferred_trail": "GR 340" if belle_ile_tour else None,
+        "endpoint_pair": list(endpoint_pair) if endpoint_pair else None,
     }
     return effective, meta
 
