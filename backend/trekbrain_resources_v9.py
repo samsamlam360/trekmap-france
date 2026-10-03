@@ -16,6 +16,7 @@ from sqlalchemy import text
 
 from . import smart_planner_v7 as v7
 from .trekbrain_geo_safety_v9 import (
+    _filter_active,
     activate_region,
     install_geo_filters,
     reset_region,
