@@ -216,6 +216,63 @@ assert len(chosen_fast) == 4, chosen_fast
 assert order_calls == {"bbox": 1, "photon": 0}, order_calls
 assert meta_fast["elapsed_ms"] >= 0
 
+# When water/food are requested, the lodging corridor OSM response is reused
+# instead of paying for a second terrain query after planning.
+real_bundle_terrain = logistics._bbox_route_bundle
+real_photon_terrain = logistics._photon_split_stays
+try:
+    logistics._bbox_route_bundle = lambda _coords, category: (
+        [dict(x) for x in camps],
+        [
+            {
+                "name": "Fontaine terrain",
+                "lat": 0.0,
+                "lon": 0.25,
+                "category": "water",
+                "water_status": "potable_referenced",
+                "source_url": "osm://water",
+            },
+            {
+                "name": "Épicerie terrain",
+                "lat": 0.0,
+                "lon": 0.45,
+                "category": "food",
+                "source_url": "osm://food",
+            },
+        ],
+        True,
+    )
+    logistics._photon_split_stays = lambda *args, **kwargs: []
+    chosen_terrain, _projected_terrain, meta_terrain = logistics._discover_stays(
+        FakeV3(),
+        FakeRoundtrip,
+        FakeStayRescue,
+        coords,
+        {"name": "Départ", "lat": 0.0, "lon": 0.0},
+        "camping",
+        5,
+        20.0,
+        False,
+        want_terrain=True,
+    )
+finally:
+    logistics._bbox_route_bundle = real_bundle_terrain
+    logistics._photon_split_stays = real_photon_terrain
+
+assert len(chosen_terrain) == 4, chosen_terrain
+assert meta_terrain["terrain_preloaded"] is True
+assert {x.get("category") for x in meta_terrain["terrain_rows"]} == {"water", "food"}
+
+terrain_plan = {"water": [], "resources": [], "food": []}
+logistics._attach_preloaded_terrain(
+    terrain_plan,
+    meta_terrain["terrain_rows"],
+    meta_terrain["terrain_preloaded"],
+)
+assert terrain_plan["_terrain_osm_preloaded"] is True
+assert terrain_plan["water"][0]["name"] == "Fontaine terrain"
+assert terrain_plan["resources"][0]["name"] == "Épicerie terrain"
+
 # Generic lodging may be a separate transfer without reshaping the hiking line.
 # Keep candidates up to ~10 km off-route when the user did not demand 100% walk.
 generic_lodging = [
