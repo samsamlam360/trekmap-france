@@ -68,6 +68,36 @@ assert plan["transport"]["return_point"]["name"] == "Arrêt de bus arrivée"
 assert plan["trail_context"]["near_route"][0]["name"] == "GR Test"
 
 
+# Route-day assignment must follow walked distance, not coordinate-array index.
+# Router geometries are intentionally non-uniform: the third point is still
+# near the start despite sitting halfway through the array.
+uneven = sample_plan()
+uneven["route_preview"]["coords"] = [
+    [45.0000, 5.0000],
+    [45.0010, 5.0000],
+    [45.0020, 5.0000],
+    [45.0990, 5.0000],
+    [45.1000, 5.0000],
+]
+uneven["water"] = [
+    {
+        "name": "Fontaine encore jour 1",
+        "lat": 45.0020,
+        "lon": 5.0000,
+        "status": "potable_referenced",
+        "source_url": "https://www.openstreetmap.org/node/101",
+    }
+]
+uneven["accommodations"] = []
+uneven["points_of_interest"] = []
+uneven_plan = enrich_resources(uneven)
+uneven_water = next(
+    point for point in uneven_plan["map_resources"]["points"]
+    if point["name"] == "Fontaine encore jour 1"
+)
+assert uneven_water["route_day"] == 1, uneven_water
+
+
 # The final resource overlay must not duplicate water or normal route-first
 # lodging discovery. Food and transport remain active because they are not
 # guaranteed by the lodging layer.
