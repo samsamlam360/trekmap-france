@@ -25,8 +25,9 @@ EXPLICIT_TRAVERSE_PRUNING_VERSION = 1
 _CURRENT_TERMS = (
     "horaire", "horaires", "ouvert", "ouverte", "ouverture", "fermé", "ferme",
     "fermeture", "travaux", "déviation", "deviation", "interdit", "réglement",
-    "reglement", "météo", "meteo", "marée", "maree", "train", "gare", "bus",
-    "transport", "festival", "fête", "fete", "agenda", "événement", "evenement",
+    "reglement", "météo", "meteo", "marée", "maree",
+    "retard", "annulé", "annule", "circulation", "grève", "greve",
+    "festival", "fête", "fete", "agenda", "événement", "evenement",
 )
 
 
@@ -131,8 +132,8 @@ def install_fast_planning(v3, v5, v9) -> None:
     #    three servers at 18 seconds each. The planner performs several such
     #    queries, so a slow public service could turn one click into minutes.
     # ------------------------------------------------------------------
-    overpass_budget = _env_seconds("TREKBRAIN_OVERPASS_BUDGET_SECONDS", 5.0, 2.0, 10.0)
-    overpass_attempt = _env_seconds("TREKBRAIN_OVERPASS_ATTEMPT_SECONDS", 3.0, 1.0, 6.0)
+    overpass_budget = _env_seconds("TREKBRAIN_OVERPASS_BUDGET_SECONDS", 3.0, 1.5, 8.0)
+    overpass_attempt = _env_seconds("TREKBRAIN_OVERPASS_ATTEMPT_SECONDS", 1.8, 1.0, 5.0)
     geocode_timeout = _env_seconds("TREKBRAIN_GEOCODE_TIMEOUT_SECONDS", 4.5, 2.0, 8.0)
 
     def fast_request_json(url, *, params=None, data=None, timeout=20, ttl=1800, service="service cartographique", retries=2):
@@ -315,8 +316,8 @@ def install_fast_planning(v3, v5, v9) -> None:
     #    and then be repeated for snapped/segmented variants. Cap the interactive
     #    calls while retaining the exact same response validation.
     # ------------------------------------------------------------------
-    ors_timeout = _env_seconds("TREKBRAIN_ORS_TIMEOUT_SECONDS", 7.0, 3.0, 14.0)
-    matrix_timeout = _env_seconds("TREKBRAIN_MATRIX_TIMEOUT_SECONDS", 7.0, 3.0, 14.0)
+    ors_timeout = _env_seconds("TREKBRAIN_ORS_TIMEOUT_SECONDS", 5.5, 3.0, 12.0)
+    matrix_timeout = _env_seconds("TREKBRAIN_MATRIX_TIMEOUT_SECONDS", 5.0, 3.0, 12.0)
 
     def fast_request_route(coords, distance_gps, snap_radius_m=None):
         payload = {
@@ -451,9 +452,23 @@ def install_fast_planning(v3, v5, v9) -> None:
             candidate["round_trip_requested_km"] = round(requested_km, 2)
             candidate["round_trip_target_km"] = round(float(target_km), 2)
             rows.append((score, candidate))
-            # Healthy first result: stop immediately instead of asking ORS for
-            # two cosmetic alternatives.
-            if daily_min <= per_day <= daily_max and retrace <= 0.25 and abs(distance - target_km) <= max(4.0, target_km * 0.12):
+            # A soft ~km/day request already accepts roughly +/-25%. If the
+            # first *validated* ORS loop lands inside that real product window,
+            # stop here. Previously Mont-Saint-Michel could be accepted later at
+            # 20.4 km/day but still paid for another ORS recovery because this
+            # early gate insisted on <=20.0 km/day.
+            target_per_day = float(target_km) / max(int(days), 1)
+            soft_window = float(daily_max) >= target_per_day * 1.20 - 0.05
+            accepted_high = float(daily_max) + (0.75 if soft_window else 0.35)
+            accepted_low = max(3.0, float(daily_min) * 0.90)
+            if (
+                accepted_low <= per_day <= accepted_high
+                and retrace <= 0.25
+            ):
+                candidate["fast_accept_window"] = {
+                    "low_km_day": round(accepted_low, 2),
+                    "high_km_day": round(accepted_high, 2),
+                }
                 return candidate
 
             # Keep the same two-call budget, but make the second call corrective.
