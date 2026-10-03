@@ -18,6 +18,9 @@ _INSTALLED = False
 _STAY_POOL_LOCK = Lock()
 _STAY_POOLS: list[dict[str, Any]] = []
 
+FAST_PLANNING_WRAPPER_VERSION = 2
+
+
 _CURRENT_TERMS = (
     "horaire", "horaires", "ouvert", "ouverte", "ouverture", "fermé", "ferme",
     "fermeture", "travaux", "déviation", "deviation", "interdit", "réglement",

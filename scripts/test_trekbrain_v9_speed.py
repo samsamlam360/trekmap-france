@@ -25,6 +25,17 @@ speed._INSTALLED = False
 speed._STAY_POOLS.clear()
 speed.install_fast_planning(v3, v5, v9)
 
+# The fast wrapper must stay signature-compatible with v5 candidate prompt
+# generation, including TrekBrain's isolated internal strategy hint.
+assert speed.FAST_PLANNING_WRAPPER_VERSION == 2
+prompt_rows = v5._candidate_prompts(
+    "boucle 2 jours 16 km par jour avec hebergement",
+    [],
+    {},
+    "logistique ; campings ou refuges comme préférence interne",
+)
+assert prompt_rows and "Priorité interne TrekBrain" in prompt_rows[0], prompt_rows
+
 # A second complete geographic hypothesis is not part of the default interactive
 # path. The lower layers already compare route candidates.
 assert v9.seconds("TREKBRAIN_RETRY_BUDGET_SECONDS", 10) == 0.0
