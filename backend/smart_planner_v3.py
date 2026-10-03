@@ -10,12 +10,14 @@ import math
 import os
 import re
 import unicodedata
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from typing import Any
 
 from fastapi import Depends, HTTPException
 
 from . import ors
+from . import free_planner_v2 as free
 from .free_planner_v2 import (
     AIPlanRequest,
     _closest,
@@ -714,6 +716,135 @@ def _stage_distances(route_coords, boundaries, legacy_main, total_distance):
     return distances
 
 
+def _photon_reverse_resource(anchor, category: str, osm_tag: str, radius_km: float):
+    """Return one real OSM resource near an anchor through Photon reverse search."""
+    try:
+        lat, lon = float(anchor["lat"]), float(anchor["lon"])
+    except (KeyError, TypeError, ValueError):
+        return None
+    reverse_url = str(getattr(free, "PHOTON_URL", "https://photon.komoot.io/api/")).replace("/api/", "/reverse")
+    try:
+        payload = free._request_json(
+            reverse_url,
+            params={
+                "lat": round(lat, 6),
+                "lon": round(lon, 6),
+                "radius": round(float(radius_km), 1),
+                "limit": 3,
+                "lang": "fr",
+                "osm_tag": osm_tag,
+            },
+            timeout=2.8,
+            ttl=21600,
+            service="Photon corridor",
+            retries=1,
+        )
+    except Exception:
+        return None
+
+    best = None
+    for feature in (payload.get("features") or []) if isinstance(payload, dict) else []:
+        props = feature.get("properties") or {}
+        country_code = str(props.get("countrycode") or props.get("country_code") or "").upper()
+        if country_code and country_code != "FR":
+            continue
+        coords = (feature.get("geometry") or {}).get("coordinates") or []
+        if len(coords) < 2:
+            continue
+        try:
+            flon, flat = float(coords[0]), float(coords[1])
+        except (TypeError, ValueError):
+            continue
+        item = {"lat": flat, "lon": flon}
+        distance = _dist(anchor, item)
+        if distance > float(radius_km) + 0.35:
+            continue
+        osm_type = str(props.get("osm_type") or "").upper()
+        kind = {"N": "node", "W": "way", "R": "relation"}.get(osm_type, "")
+        osm_id = props.get("osm_id")
+        source_url = (
+            f"https://www.openstreetmap.org/{kind}/{osm_id}"
+            if kind and osm_id is not None
+            else _map_url(flat, flon)
+        )
+        name_parts = [
+            props.get("name"), props.get("city"), props.get("county"),
+        ]
+        name = ", ".join(dict.fromkeys(str(x).strip() for x in name_parts if x))
+        row = {
+            "name": name or CATEGORY_LABEL.get(category, category).title(),
+            "category": category,
+            "lat": flat,
+            "lon": flon,
+            "source_url": source_url,
+            "opening_hours": "",
+            "water_status": "potable_referenced" if category == "water" and osm_tag == "amenity:drinking_water" else "unverified",
+            "_corridor_resource": True,
+            "_distance_to_anchor_km": round(distance, 2),
+        }
+        if best is None or distance < best[0]:
+            best = (distance, row)
+    return best[1] if best else None
+
+
+def _corridor_resource_items(boundaries, intent):
+    """Bounded resource fallback for an already validated explicit traverse.
+
+    Overpass is excellent for bulk POIs but occasionally slow. On a route whose
+    geometry is already known, Photon reverse queries can ask only for the few
+    resources the user needs near daily split points. Calls are parallel and
+    individually capped so resource discovery cannot dominate route latency.
+    """
+    if len(boundaries or []) < 2:
+        return []
+    nights = list(boundaries[1:-1])
+    jobs = []
+    if intent.get("transit"):
+        jobs.extend([
+            (boundaries[0], "transit", "railway:station", 12.0),
+            (boundaries[-1], "transit", "railway:station", 12.0),
+        ])
+    if intent.get("water"):
+        jobs.extend((anchor, "water", "amenity:drinking_water", 5.5) for anchor in nights)
+    if intent.get("food"):
+        jobs.extend((anchor, "food", "shop:supermarket", 5.5) for anchor in nights)
+    if intent.get("sleep") and intent.get("accommodation") != "bivouac":
+        if intent.get("accommodation") == "refuge":
+            jobs.extend((anchor, "refuge", "tourism:wilderness_hut", 8.0) for anchor in nights)
+        else:
+            jobs.extend((anchor, "camping", "tourism:camp_site", 8.0) for anchor in nights)
+
+    if not jobs:
+        return []
+    out = []
+    workers = min(4, len(jobs))
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        futures = [
+            pool.submit(_photon_reverse_resource, anchor, category, osm_tag, radius)
+            for anchor, category, osm_tag, radius in jobs
+        ]
+        for future in as_completed(futures):
+            try:
+                item = future.result()
+            except Exception:
+                item = None
+            if item:
+                out.append(item)
+
+    seen, deduped = set(), []
+    for item in out:
+        key = (
+            item.get("category"),
+            round(float(item.get("lat")), 5),
+            round(float(item.get("lon")), 5),
+        )
+        if key in seen:
+            continue
+        seen.add(key)
+        deduped.append(item)
+    return deduped[:24]
+
+
 def _equal_progress_boundaries(route_coords, start, end, days: int):
     """Place hiking-day boundaries on an already validated route geometry.
 
@@ -890,34 +1021,73 @@ def _build(data: AIPlanRequest, legacy_main):
     base_categories = ["viewpoint", "water", "camping", "refuge", "food", "transit"]
     radius = min(30.0, max(10.0, intent["daily_target"] * min(intent["days"], 4) * 0.42))
     notes = []
-    try:
-        base = _nearby(center["lat"], center["lon"], radius, base_categories)
-    except RuntimeError as exc:
-        notes.append(str(exc))
-        base = _photon_category_candidates(location, center, base_categories)
-    extra, extra_notes = _extra_nearby(center, radius)
-    notes += extra_notes
+    direct_corridor_route = None
+    direct_corridor_candidate = None
+    corridor_resource_mode = None
 
-    # A corridor search can legitimately outlive one slow Overpass mirror.
-    # Complete the POI pool around the *real* endpoints instead of falling back
-    # to the stale form region (e.g. Chartres for an explicit Tours -> Chinon).
-    if corridor_centered and len(base) + len(extra) < 4:
-        corridor_fallback = []
-        for anchor in (forced_start, forced_end):
-            if not anchor:
-                continue
-            label = str(anchor.get("short_name") or anchor.get("name") or "").strip()
-            if not label:
-                continue
+    non_loop = _fold(intent.get("route_type") or "") not in {"boucle", "aller-retour", "aller retour"}
+    if corridor_centered and non_loop and forced_start and forced_end and not forced_via:
+        try:
+            probe = _route_cached([forced_start, forced_end], legacy_main)
+        except Exception:
+            probe = None
+        if isinstance(probe, dict) and probe.get("fallback") is False:
             try:
-                corridor_fallback.extend(
-                    _photon_category_candidates(label, anchor, base_categories)
+                probe_distance = float(probe.get("distance") or 0)
+            except (TypeError, ValueError):
+                probe_distance = 0.0
+            maximum_total = max(
+                float(intent["total_target"]) * 1.30,
+                float(intent["daily_max"]) * max(1, int(intent["days"])),
+            )
+            minimum_total = max(3.0, float(intent["total_target"]) * 0.68)
+            boundaries = _equal_progress_boundaries(
+                probe.get("coords") or [], forced_start, forced_end, int(intent["days"])
+            )
+            if (
+                minimum_total <= probe_distance <= maximum_total
+                and len(boundaries) == int(intent["days"]) + 1
+            ):
+                direct_corridor_route = probe
+                direct_corridor_candidate = Candidate(
+                    boundaries, "corridor-direct-route-split", -120.0
                 )
-            except Exception:
-                continue
-        if corridor_fallback:
-            base += corridor_fallback
-            notes.append("POI du corridor complétés près du départ et de l'arrivée.")
+
+    if direct_corridor_candidate is not None:
+        # The route is already validated: avoid a broad Overpass + serial Photon
+        # fallback cascade. Query only resources near the actual day boundaries.
+        base = _corridor_resource_items(direct_corridor_candidate.boundaries, intent)
+        extra = []
+        corridor_resource_mode = "photon-route-anchors"
+    else:
+        try:
+            base = _nearby(center["lat"], center["lon"], radius, base_categories)
+        except RuntimeError as exc:
+            notes.append(str(exc))
+            base = _photon_category_candidates(location, center, base_categories)
+        extra, extra_notes = _extra_nearby(center, radius)
+        notes += extra_notes
+
+        # A corridor search can legitimately outlive one slow Overpass mirror.
+        # Complete the POI pool around the real endpoints only when the direct
+        # validated fast path was unavailable.
+        if corridor_centered and len(base) + len(extra) < 4:
+            corridor_fallback = []
+            for anchor in (forced_start, forced_end):
+                if not anchor:
+                    continue
+                label = str(anchor.get("short_name") or anchor.get("name") or "").strip()
+                if not label:
+                    continue
+                try:
+                    corridor_fallback.extend(
+                        _photon_category_candidates(label, anchor, base_categories)
+                    )
+                except Exception:
+                    continue
+            if corridor_fallback:
+                base += corridor_fallback
+                corridor_resource_mode = "photon-endpoint-fallback"
 
     items = _dedupe(base + extra + [x for x in (forced_start, forced_end, forced_via) if x], center, max_km=max(40, radius * 1.45))
     if len(items) < 4 and not (corridor_centered and forced_start and forced_end and len(items) >= 2):
@@ -927,8 +1097,11 @@ def _build(data: AIPlanRequest, legacy_main):
     end = _choose_end(start, center, items, intent, forced_end)
 
     raw_candidates = []
-    for strategy in ("balanced", "scenic", "logistics"):
-        raw_candidates += _beam_candidates(start, end, center, items, intent, strategy, width=6)
+    if direct_corridor_candidate is not None:
+        raw_candidates = [direct_corridor_candidate]
+    else:
+        for strategy in ("balanced", "scenic", "logistics"):
+            raw_candidates += _beam_candidates(start, end, center, items, intent, strategy, width=6)
     unique, candidates = set(), []
     for candidate in sorted(raw_candidates, key=lambda c: c.heuristic):
         key = tuple(round(float(p["lat"]), 5) for p in candidate.boundaries) + tuple(round(float(p["lon"]), 5) for p in candidate.boundaries)
@@ -943,8 +1116,17 @@ def _build(data: AIPlanRequest, legacy_main):
 
     evaluated = []
     for candidate in candidates[:6]:
-        route_points, stage_highlights = _route_points_for_candidate(candidate, items, intent, forced_via)
-        route = _route_cached(route_points, legacy_main)
+        if (
+            direct_corridor_candidate is not None
+            and candidate is direct_corridor_candidate
+            and isinstance(direct_corridor_route, dict)
+        ):
+            route_points = list(candidate.boundaries)
+            stage_highlights = [[] for _ in range(max(0, len(candidate.boundaries) - 1))]
+            route = direct_corridor_route
+        else:
+            route_points, stage_highlights = _route_points_for_candidate(candidate, items, intent, forced_via)
+            route = _route_cached(route_points, legacy_main)
         score, distance, stage_dist, elevation, route_coords = _candidate_score(candidate, route_points, route, intent, items, legacy_main, compute_elevation=False)
         evaluated.append((score, candidate, route_points, stage_highlights, route, distance, stage_dist, route_coords))
     evaluated.sort(key=lambda x: x[0])
@@ -1135,7 +1317,7 @@ def _build(data: AIPlanRequest, legacy_main):
     sources, seen = [], set()
     for item in source_items:
         url = item.get("source_url")
-        if not url or url in seen:
+        if not url or str(url).startswith("route-split:") or url in seen:
             continue
         seen.add(url)
         sources.append({"title": item["name"], "url": url, "purpose": CATEGORY_LABEL.get(item.get("category"), item.get("category", "géographie"))})
@@ -1206,6 +1388,8 @@ def _build(data: AIPlanRequest, legacy_main):
             "candidates_compared": len(evaluated),
             "corridor_centered": corridor_centered,
             "corridor_search_version": CORRIDOR_SEARCH_VERSION,
+            "corridor_resource_mode": corridor_resource_mode,
+            "direct_corridor_fast_path": direct_corridor_candidate is not None,
             "search_center": {
                 "lat": round(float(center["lat"]), 6),
                 "lon": round(float(center["lon"]), 6),
