@@ -2,6 +2,7 @@
 from pathlib import Path
 import os
 import sys
+import math
 
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
@@ -372,6 +373,78 @@ finally:
 assert len(three_day_calls) == 2, three_day_calls
 assert three_day_matrix_calls["count"] == 0, three_day_matrix_calls
 assert three_day_loop.get("routing_mode") == "ors-round-trip", three_day_loop
+
+# A naturally elongated two-day coastal circuit may have a low triangle shape
+# score while still being a legitimate closed pedestrian loop. The relaxed
+# short-loop floor must allow it, but ORS still renders the final geometry and
+# the normal closure/retrace checks remain active.
+real_matrix_distance = ors.get_distance_matrix
+real_matrix_route = ors.get_route
+real_matrix_retrace = v3._route_retrace_ratio
+
+coastal_start = {"lat": 48.636, "lon": -1.511}
+coastal_coords = []
+center_lat = coastal_start["lat"]
+center_lon = coastal_start["lon"] - 0.12
+for idx in range(80):
+    theta = 2 * math.pi * idx / 79
+    coastal_coords.append([
+        center_lat + 0.003 * math.sin(theta),
+        center_lon + 0.12 * math.cos(theta),
+    ])
+coastal_coords[0] = [coastal_start["lat"], coastal_start["lon"]]
+coastal_coords[-1] = [coastal_start["lat"], coastal_start["lon"]]
+
+def fake_coastal_matrix(points):
+    n = len(points)
+    matrix = [[0.0 if i == j else 99.0 for j in range(n)] for i in range(n)]
+    # samples pair i=0, j=4 -> matrix indices 1 and 5. Its shape is ~0.003,
+    # below the historical 0.004 floor but above the short-loop 0.0022 guard.
+    matrix[0][1] = matrix[1][0] = 10.4
+    matrix[1][5] = matrix[5][1] = 10.5
+    matrix[5][0] = matrix[0][5] = 10.6
+    return {"distances": matrix, "fallback": False, "routing_mode": "ors-matrix"}
+
+def fake_coastal_route(points, distance_gps):
+    return {
+        "coords": [
+            [coastal_start["lat"], coastal_start["lon"]],
+            list(points[1]),
+            list(points[2]),
+            [coastal_start["lat"], coastal_start["lon"]],
+        ],
+        "distance": 33.0,
+        "fallback": False,
+        "routing_mode": "ors",
+        "profile": "foot-hiking",
+    }
+
+ors.get_distance_matrix = fake_coastal_matrix
+ors.get_route = fake_coastal_route
+v3._route_retrace_ratio = lambda coords: 0.18
+try:
+    coastal_variants = roundtrip._matrix_subloop_candidates(
+        {
+            "coords": coastal_coords,
+            "distance": 40.86,
+            "fallback": False,
+            "routing_mode": "ors-round-trip",
+        },
+        coastal_start,
+        32.0,
+        12.0,
+        20.0,
+        2,
+        v3,
+    )
+finally:
+    ors.get_distance_matrix = real_matrix_distance
+    ors.get_route = real_matrix_route
+    v3._route_retrace_ratio = real_matrix_retrace
+
+assert coastal_variants, coastal_variants
+assert coastal_variants[0].get("routing_mode") == "ors-matrix-subloop", coastal_variants
+assert 0.0022 <= float(coastal_variants[0].get("matrix_shape_score") or 0) < 0.004, coastal_variants[0]
 
 # Route-first lodging must not start a third route-probe network path after
 # Photon and the single bounded bbox lookup fail.
