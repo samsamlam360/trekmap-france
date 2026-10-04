@@ -123,7 +123,10 @@ def install_circuit_breakers(v3, ors, roundtrip) -> None:
             )
         except RuntimeError as exc:
             if is_nominatim and _network_failure(str(exc)):
-                _open("nominatim")
+                # The breaker is reset at the start of every public v9 request.
+                # Keep Nominatim out for the remainder of a slow request instead
+                # of retrying the same unavailable provider 15 seconds later.
+                _open("nominatim", seconds=60.0)
             raise
 
     # _nearby executes in free_planner_v2 and resolves _overpass from that
