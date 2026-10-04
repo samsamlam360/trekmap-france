@@ -525,6 +525,23 @@ def _bbox_route_water_food(result: dict[str, Any], intent: dict[str, Any]) -> li
     return rows
 
 
+def _missing_terrain_intent(result: dict[str, Any], intent: dict[str, Any]) -> dict[str, Any]:
+    """Return only terrain categories that are still missing from the plan."""
+    adjusted = dict(intent or {})
+    has_water = any(
+        isinstance(item, dict) and _point(item) is not None
+        for item in (result.get("water") or [])
+    )
+    food_rows = result.get("resources") or result.get("food") or []
+    has_food = any(
+        isinstance(item, dict) and _point(item) is not None
+        for item in food_rows
+    )
+    adjusted["water"] = bool((intent or {}).get("water") and not has_water)
+    adjusted["food"] = bool((intent or {}).get("food") and not has_food)
+    return adjusted
+
+
 def _supplement_route_resources(result: dict[str, Any], data) -> dict[str, Any]:
     """Bounded Photon safety net on final day anchors, never used for routing."""
     try:
@@ -560,18 +577,9 @@ def _supplement_route_resources(result: dict[str, Any], data) -> dict[str, Any]:
         # found water. If OSM returned no usable point, keep one bounded Photon
         # fallback in the same resource wave. This restores coverage without
         # reintroducing a sequential network phase.
-        has_water = any(
-            isinstance(item, dict) and _point(item) is not None
-            for item in (result.get("water") or [])
-        )
-        food_rows = result.get("resources") or result.get("food") or []
-        has_food = any(
-            isinstance(item, dict) and _point(item) is not None
-            for item in food_rows
-        )
-
-        post_intent["water"] = bool(intent.get("water") and not has_water)
-        post_intent["food"] = bool(intent.get("food") and not has_food)
+        terrain_intent = _missing_terrain_intent(result, intent)
+        post_intent["water"] = bool(terrain_intent.get("water"))
+        post_intent["food"] = bool(terrain_intent.get("food"))
 
         transit_items = [
             item for item in (result.get("points_of_interest") or [])
@@ -718,12 +726,12 @@ def _install_plan_overlay(app, legacy_main):
         # Candidate discovery becomes island-aware for the duration of this
         # request. The ContextVar keeps concurrent requests isolated.
         token = activate_region(data.region or "")
-        overlay_started = time.monotonic()
         try:
             result = original_endpoint(data, user)
             if not isinstance(result, dict):
                 return result
 
+            overlay_started = time.monotonic()
             safety_started = time.monotonic()
             report = route_safety_report(result, data)
             safety_ms = round((time.monotonic() - safety_started) * 1000)
@@ -747,6 +755,10 @@ def _install_plan_overlay(app, legacy_main):
                 intent = {}
             snapshot = deepcopy(result)
             terrain_preloaded = bool(result.get("_terrain_osm_preloaded"))
+            terrain_intent = _missing_terrain_intent(snapshot, intent)
+            terrain_lookup_needed = bool(
+                terrain_intent.get("water") or terrain_intent.get("food")
+            )
             terrain_rows = []
 
             resource_started = time.monotonic()
@@ -758,13 +770,13 @@ def _install_plan_overlay(app, legacy_main):
                     result = _supplement_route_resources(result, data)
                 except Exception:
                     pass
-            else:
+            elif terrain_lookup_needed:
                 with ThreadPoolExecutor(max_workers=2) as pool:
                     logistics_future = pool.submit(
                         _supplement_route_resources, result, data
                     )
                     terrain_future = pool.submit(
-                        _bbox_route_water_food, snapshot, intent
+                        _bbox_route_water_food, snapshot, terrain_intent
                     )
                     try:
                         result = logistics_future.result()
@@ -780,6 +792,15 @@ def _install_plan_overlay(app, legacy_main):
                         result,
                         _filter_active(list(terrain_rows)),
                     )
+                result["_terrain_osm_preloaded"] = True
+            else:
+                # Water/food are already present in the validated route result.
+                # Keep transit or a genuinely missing lodging supplement eligible
+                # without reopening an OSM terrain request that cannot add value.
+                try:
+                    result = _supplement_route_resources(result, data)
+                except Exception:
+                    pass
                 result["_terrain_osm_preloaded"] = True
             resource_fetch_ms = round((time.monotonic() - resource_started) * 1000)
 
@@ -807,6 +828,7 @@ def _install_plan_overlay(app, legacy_main):
                     "annotate_ms": annotate_ms,
                     "quality_refresh_ms": quality_refresh_ms,
                     "terrain_preloaded": terrain_preloaded,
+                    "terrain_lookup_needed": terrain_lookup_needed,
                     "terrain_rows": len(terrain_rows),
                     "water_count": len(result.get("water") or []),
                     "food_count": len(food_rows),
