@@ -71,6 +71,10 @@ def _generic_relation_section_allowed(intent: dict[str, Any] | None, target_km: 
         return False
     if days < 2 or days > 12 or target < 24.0 or target > 260.0:
         return False
+    # Open-relation closure is a heavier second-pass strategy. Short loops keep
+    # the established fast router unless the coastal strategy explicitly opts in.
+    if days < 5 and target < 90.0:
+        return False
     if intent.get("start_query") or intent.get("end_query") or intent.get("via_query"):
         return False
     return True
@@ -262,6 +266,25 @@ def _relation_loop(v3, gr, start: dict[str, Any], target_km: float):
         # old planner stopped there and never consulted its secondary index.
         # Merge Waymarked candidates before giving up so an unseen named route
         # can still win by distance/name/continuity evidence.
+        # Tier 2: broaden Overpass only after the fast GR/high-network query
+        # produced no compatible closed candidate.
+        try:
+            generic = list(gr._discover_generic(v3, start, radius) or [])
+        except Exception:
+            generic = []
+        known = {
+            str(x.get("id") or x.get("source_url") or x.get("ref") or x.get("name") or "")
+            for x in trails
+        }
+        merged = list(trails)
+        for trail in generic:
+            identity = str(trail.get("id") or trail.get("source_url") or trail.get("ref") or trail.get("name") or "")
+            if identity and identity not in known:
+                known.add(identity)
+                merged.append(trail)
+
+        # Tier 3: use the independent Waymarked OSM route index if Overpass still
+        # has not supplied enough evidence.
         try:
             secondary = list(gr._discover_waymarked(start, radius) or [])
         except Exception:
@@ -270,7 +293,7 @@ def _relation_loop(v3, gr, start: dict[str, Any], target_km: float):
             str(x.get("id") or x.get("source_url") or x.get("ref") or x.get("name") or "")
             for x in trails
         }
-        merged = list(trails)
+        # Preserve generic candidates already merged above.
         for trail in secondary:
             identity = str(trail.get("id") or trail.get("source_url") or trail.get("ref") or trail.get("name") or "")
             if identity and identity not in known:
@@ -278,7 +301,9 @@ def _relation_loop(v3, gr, start: dict[str, Any], target_km: float):
                 merged.append(trail)
         if len(merged) > len(trails):
             _LAST_DISCOVERED_TRAILS.set(merged)
-            for trail in merged[len(trails):]:
+            for trail in merged:
+                if trail in trails:
+                    continue
                 raw = trail.get("coords") or []
                 if len(raw) < 8:
                     continue
