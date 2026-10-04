@@ -322,3 +322,29 @@ assert trail_candidates._generic_relation_section_allowed({
 assert trail_candidates._generic_relation_section_allowed({
     **candidate_intent, "start_query": "A", "end_query": "B",
 }, 108.0) is False
+
+
+# Section ranking must use semantic route evidence too. A named itinerary that
+# matches an unseen request should beat an equally shaped unrelated relation.
+section_intent = {
+    **candidate_intent,
+    "raw": "Je veux faire le Tour des Plateaux Inconnus en 6 jours en boucle",
+}
+token = trail_candidates._ACTIVE_INTENT.set(section_intent)
+try:
+    start = {"lat": 45.0, "lon": 6.0}
+    def synthetic_trail(name):
+        coords = []
+        for i in range(80):
+            coords.append([45.0 + i * 0.004, 6.0 + i * 0.002])
+        return {"name": name, "ref": "", "network": "rwn", "coords": coords}
+    named_rows = trail_candidates._section_candidates(
+        [synthetic_trail("Tour des Plateaux Inconnus")], start, 108.0
+    )
+    unrelated_rows = trail_candidates._section_candidates(
+        [synthetic_trail("Sentier régional sans rapport")], start, 108.0
+    )
+finally:
+    trail_candidates._ACTIVE_INTENT.reset(token)
+if named_rows and unrelated_rows:
+    assert named_rows[0][0] < unrelated_rows[0][0] - 10.0
