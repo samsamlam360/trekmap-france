@@ -325,6 +325,84 @@ def _relation_loop(v3, gr, start: dict[str, Any], target_km: float):
                 score = _preferred_score(trail, target_km, start_off, relation_km)
                 rows.append((score, trail, closed, idx, start_off, relation_km))
 
+    if not rows and secondary:
+        # /list/segments is clipped to the discovery bbox. For long established
+        # tours that clipped geometry can look open even though the underlying
+        # OSM relation is a real loop. Hydrate only the two strongest Waymarked
+        # candidates from the provider's full relation tree before inventing a
+        # generic loop or accepting a large interior closure.
+        hydrate = getattr(gr, "_hydrate_waymarked_relation", None)
+        ranked_secondary = []
+        if callable(hydrate):
+            for candidate in secondary:
+                raw = candidate.get("coords") or []
+                if len(raw) < 8:
+                    continue
+                idx, start_off = _nearest_index(raw, start)
+                if start_off > max(_MAX_START_OFFSET_KM, 18.0):
+                    continue
+                length_km = float(candidate.get("length_km") or _length(raw))
+                ranked_secondary.append((
+                    _preferred_score(candidate, target_km, start_off, length_km),
+                    candidate,
+                ))
+            ranked_secondary.sort(key=lambda row: row[0])
+
+        hydrated = []
+        for _score, candidate in ranked_secondary[:2]:
+            try:
+                full = hydrate(candidate)
+            except Exception:
+                full = None
+            if not isinstance(full, dict):
+                continue
+            hydrated.append(full)
+            raw = full.get("coords") or []
+            if len(raw) < 8:
+                continue
+            closed, reason = _close_relation(raw, _length)
+            if not closed:
+                if reason:
+                    reasons.append(reason)
+                continue
+            relation_km = _length(closed)
+            if (
+                relation_km < max(10.0, float(target_km) * 0.62)
+                or relation_km > float(target_km) * 1.42
+            ):
+                continue
+            idx, start_off = _nearest_index(closed[:-1], start)
+            if start_off > _MAX_START_OFFSET_KM:
+                continue
+            score = _preferred_score(full, target_km, start_off, relation_km)
+            rows.append((score, full, closed, idx, start_off, relation_km))
+
+        if hydrated:
+            # Keep the authoritative full geometry available to the section
+            # fallback too, in case the relation is genuinely open rather than
+            # merely bbox-clipped.
+            full_by_id = {
+                str(row.get("id")): row
+                for row in hydrated
+                if row.get("id") is not None
+            }
+            refreshed = []
+            for row in (_LAST_DISCOVERED_TRAILS.get() or merged):
+                replacement = full_by_id.get(str(row.get("id")))
+                refreshed.append(replacement or row)
+            known_ids = {str(row.get("id")) for row in refreshed if row.get("id") is not None}
+            for row in hydrated:
+                if row.get("id") is None or str(row.get("id")) not in known_ids:
+                    refreshed.append(row)
+            _LAST_DISCOVERED_TRAILS.set(refreshed)
+            _coastal_section_log(
+                "full-relation-recovery",
+                attempted=min(2, len(ranked_secondary)),
+                hydrated=len(hydrated),
+                accepted=len(rows),
+                target=round(float(target_km), 1),
+            )
+
     if not rows:
         detail = reasons[0] if reasons else "aucune relation fermée de longueur compatible"
         return None, detail
