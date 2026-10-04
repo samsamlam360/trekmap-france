@@ -348,3 +348,31 @@ finally:
     trail_candidates._ACTIVE_INTENT.reset(token)
 if named_rows and unrelated_rows:
     assert named_rows[0][0] < unrelated_rows[0][0] - 10.0
+
+
+# Discovery tiers must remain reachable when the cheap first pass returns no
+# relation. This is the exact generic shape that long unseen mountain loops need.
+class _TieredDiscovery:
+    def __init__(self):
+        self.generic_calls = 0
+        self.secondary_calls = 0
+    def _discover(self, v3, start, radius):
+        return []
+    def _discover_generic(self, v3, start, radius):
+        self.generic_calls += 1
+        return []
+    def _discover_waymarked(self, start, radius):
+        self.secondary_calls += 1
+        return []
+
+tiered = _TieredDiscovery()
+route, warning = trail_candidates._relation_loop(
+    type("_V3", (), {})(),
+    tiered,
+    {"lat": 45.0, "lon": 6.0, "name": "Synthetic start"},
+    126.0,
+)
+assert route is None
+assert tiered.generic_calls == 1
+assert tiered.secondary_calls == 1
+assert warning
