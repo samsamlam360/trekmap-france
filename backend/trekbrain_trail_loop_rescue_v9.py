@@ -118,6 +118,59 @@ def _coastal_section_allowed(intent: dict[str, Any] | None, target_km: float) ->
 
 
 
+def _named_relation_section_allowed(
+    intent: dict[str, Any] | None,
+    target_km: float,
+    *,
+    days_override: int | None = None,
+    known_loop: bool = False,
+) -> bool:
+    """Allow section+closure for explicit named/official hiking itineraries.
+
+    A request such as "Tour des Fiz" already opted into expensive relation
+    discovery. If that relation is open or provider-clipped, discarding it only
+    because the trek is below the generic 90 km threshold wastes both evidence
+    and latency. Ordinary short loops remain excluded.
+    """
+    intent = intent or {}
+    if not known_loop and _fold(intent.get("route_type") or "") != "boucle":
+        return False
+    try:
+        days = int(days_override if days_override is not None else (intent.get("days") or 1))
+        target = float(target_km or intent.get("total_target") or 0)
+    except (TypeError, ValueError):
+        return False
+    if days < 2 or days > 12 or target < 24.0 or target > 260.0:
+        return False
+    if intent.get("start_query") or intent.get("end_query") or intent.get("via_query"):
+        return False
+    if intent.get("max_dplus_day") or intent.get("avoid"):
+        return False
+
+    raw = _fold(intent.get("raw") or "")
+    if not raw:
+        return False
+    if re.search(r"\b(?:gr|grp)\s*\d*\b", raw):
+        return True
+    if re.search(r"\bgrande\s+randonnee\b", raw):
+        return True
+    if re.search(
+        r"\b(?:tour|circuit)\s+(?:du|de\s+la|des|de\s+l[' ]|d[' ])\s*[a-z0-9]",
+        raw,
+    ):
+        return True
+    return any(phrase in raw for phrase in (
+        "itineraire de randonnee existant",
+        "itineraire existant",
+        "itineraires de randonnee existants",
+        "itineraires existants",
+        "vrai trace",
+        "trace officiel",
+        "trace officielle",
+        "boucle artificielle",
+    ))
+
+
 def _relation_first_allowed(
     intent: dict[str, Any] | None,
     target_km: float,
@@ -141,36 +194,12 @@ def _relation_first_allowed(
     ):
         return True
 
-    raw = _fold(intent.get("raw") or "")
-    if not raw:
-        return False
-
-    # Explicit long-distance trail/network wording.
-    if re.search(r"\b(?:gr|grp)\s*\d*\b", raw):
-        return True
-    if re.search(r"\bgrande\s+randonnee\b", raw):
-        return True
-
-    # Named-tour wording such as "Tour des Fiz" should stay evidence-first even
-    # below the generic long-loop threshold. Ordinary "autour du Hohneck" or
-    # "privilégier les sentiers" deliberately does not match this.
-    if re.search(
-        r"\b(?:tour|circuit)\s+(?:du|de\s+la|des|de\s+l[' ]|d[' ])\s*[a-z0-9]",
-        raw,
-    ):
-        return True
-
-    # Strong request to reuse an existing named/official itinerary.
-    if any(phrase in raw for phrase in (
-        "itineraire de randonnee existant",
-        "itineraire existant",
-        "vrai trace",
-        "trace officiel",
-        "trace officielle",
-        "boucle artificielle",
-    )):
-        return True
-    return False
+    return _named_relation_section_allowed(
+        intent,
+        target_km,
+        days_override=days,
+        known_loop=True,
+    )
 
 
 def _trail_rejection_snapshot(
@@ -1039,7 +1068,23 @@ def install_trail_loop_rescue(roundtrip, gr) -> None:
             days_override=days,
             known_loop=True,
         )
-        if _coastal_section_allowed(intent, target_km) or generic_allowed:
+        named_allowed = _named_relation_section_allowed(
+            intent,
+            target_km,
+            days_override=days,
+            known_loop=True,
+        )
+        # Short named tours may reuse the relation evidence already paid for,
+        # but must not open another provider wave solely because a tour was named.
+        named_preloaded = bool(
+            named_allowed
+            and _section_candidates(
+                _LAST_DISCOVERED_TRAILS.get() or [],
+                start,
+                target_km,
+            )
+        )
+        if _coastal_section_allowed(intent, target_km) or generic_allowed or named_preloaded:
             section, section_warning = _relation_section_loop(
                 v3,
                 gr,
@@ -1140,6 +1185,7 @@ __all__ = [
     "_matrix_rank_section_candidates",
     "_coastal_section_allowed",
     "_relation_first_allowed",
+    "_named_relation_section_allowed",
     "_trail_rejection_snapshot",
     "_compact_route_points",
 ]
