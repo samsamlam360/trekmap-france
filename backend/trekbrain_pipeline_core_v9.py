@@ -82,6 +82,18 @@ def _fast_generic_loop_allowed(intent: dict[str, Any]) -> bool:
     raw = _fold(intent.get("raw") or "")
     if re.search(r"\b(?:gr\s*\d+|grp\b|pr\s*\d+)\b", raw):
         return False
+
+    # Explicit coastal-corridor requests deserve the advanced trail planner.
+    # The fast one-point ORS round-trip engine is excellent for generic inland
+    # loops, but on peninsulas/coasts it may oscillate between a huge circuit
+    # and an over-corrected short loop. Let the normal planner discover nearby
+    # hiking relations and use them as routing guidance instead.
+    if re.search(
+        r"\b(?:sentiers?\s+cotiers?|chemins?\s+cotiers?|"
+        r"sentiers?\s+du\s+littoral|littoral|bord\s+de\s+mer)\b",
+        raw,
+    ):
+        return False
     return True
 
 
