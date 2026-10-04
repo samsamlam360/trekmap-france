@@ -204,6 +204,49 @@ assert full_route["relation_ref"] == "GR 58", full_route
 assert rescue._dist(full_route["coords"][0], full_route["coords"][-1]) < 0.05
 assert hydrate_calls == [580058], hydrate_calls
 
+# Long regional loops may start on a real long-distance trail a little more
+# than 12 km from the geocoded area centre, provided no explicit start/end/via
+# constraint exists upstream. Short loops keep the historical 12 km ceiling.
+assert rescue._section_start_offset_limit(80.0) == 12.0
+assert 15.0 <= rescue._section_start_offset_limit(126.0) <= 15.2
+assert rescue._section_start_offset_limit(300.0) == 18.0
+
+# Synthetic ~100 km continuous ring. The requested regional anchor sits about
+# 13 km outside its western edge, reproducing the Queyras-style 12.5 km miss.
+ring_center_lat, ring_center_lon = 45.50, 6.80
+ring_radius_km = 16.0
+long_ring = []
+for i in range(241):
+    theta = math.pi + 2 * math.pi * i / 240
+    long_ring.append([
+        ring_center_lat + ring_radius_km * math.sin(theta) / 110.574,
+        ring_center_lon + ring_radius_km * math.cos(theta) / (
+            111.320 * math.cos(math.radians(ring_center_lat))
+        ),
+    ])
+regional_start = {
+    "name": "Centre régional",
+    "lat": ring_center_lat,
+    "lon": ring_center_lon - (ring_radius_km + 13.0) / (
+        111.320 * math.cos(math.radians(ring_center_lat))
+    ),
+    "category": "place",
+}
+long_trail = {
+    "id": 580058,
+    "name": "Grand tour régional",
+    "ref": "GR 58",
+    "network": "rwn",
+    "coords": long_ring,
+    "length_km": rescue._length(long_ring),
+}
+_long_idx, long_off = rescue._nearest_index(long_ring, regional_start)
+assert 12.0 < long_off < 14.0, long_off
+long_rows = rescue._section_candidates([long_trail], regional_start, 126.0)
+assert long_rows, (long_off, rescue._length(long_ring))
+short_rows = rescue._section_candidates([long_trail], regional_start, 80.0)
+assert short_rows == [], short_rows
+
 # A transient cold-provider timeout must get exactly one shorter retry. This
 # mirrors the production Crozon failure where the first Waymarked lookup missed
 # but an identical benchmark immediately afterwards recovered GR 34.
