@@ -117,6 +117,91 @@ def _coastal_section_allowed(intent: dict[str, Any] | None, target_km: float) ->
     ))
 
 
+
+def _relation_first_allowed(
+    intent: dict[str, Any] | None,
+    target_km: float,
+    days: int,
+) -> bool:
+    """Gate the expensive relation-discovery stack to requests that benefit.
+
+    Closed/open hiking-relation discovery is valuable for named tours, coastal
+    itineraries and long multi-day loops. Running Overpass + Waymarked +
+    hydration before every ordinary two/three-day loop adds large cold latency
+    and often falls back to the same ORS round trip anyway.
+    """
+    intent = intent or {}
+    if _coastal_section_allowed(intent, target_km):
+        return True
+    if _generic_relation_section_allowed(
+        intent,
+        target_km,
+        days_override=days,
+        known_loop=True,
+    ):
+        return True
+
+    raw = _fold(intent.get("raw") or "")
+    if not raw:
+        return False
+
+    # Explicit long-distance trail/network wording.
+    if re.search(r"\b(?:gr|grp)\s*\d*\b", raw):
+        return True
+    if re.search(r"\bgrande\s+randonnee\b", raw):
+        return True
+
+    # Named-tour wording such as "Tour des Fiz" should stay evidence-first even
+    # below the generic long-loop threshold. Ordinary "autour du Hohneck" or
+    # "privilégier les sentiers" deliberately does not match this.
+    if re.search(
+        r"\b(?:tour|circuit)\s+(?:du|de\s+la|des|de\s+l[' ]|d[' ])\s*[a-z0-9]",
+        raw,
+    ):
+        return True
+
+    # Strong request to reuse an existing named/official itinerary.
+    if any(phrase in raw for phrase in (
+        "itineraire de randonnee existant",
+        "itineraire existant",
+        "vrai trace",
+        "trace officiel",
+        "trace officielle",
+        "boucle artificielle",
+    )):
+        return True
+    return False
+
+
+def _trail_rejection_snapshot(
+    trails: list[dict[str, Any]],
+    start: dict[str, Any],
+    limit: int = 6,
+) -> str:
+    """Compact local diagnostics for relation candidates rejected pre-Matrix."""
+    rows = []
+    for trail in list(trails or [])[: max(1, int(limit))]:
+        coords = trail.get("coords") or []
+        try:
+            length_km = float(trail.get("length_km") or _length(coords))
+        except (TypeError, ValueError):
+            length_km = 0.0
+        try:
+            _idx, start_off = _nearest_index(coords, start)
+        except Exception:
+            start_off = float("inf")
+        try:
+            gap = _max_gap(coords)
+        except Exception:
+            gap = float("inf")
+        label = str(trail.get("ref") or trail.get("name") or trail.get("id") or "trail")
+        rows.append(
+            f"{label[:24]}:{len(coords)}pt/{length_km:.1f}km/"
+            f"off={start_off:.1f}/gap={gap:.1f}"
+        )
+    return "|".join(rows)[:700]
+
+
 def _dist(a, b) -> float:
     if isinstance(a, dict):
         a = [a["lat"], a["lon"]]
@@ -649,7 +734,12 @@ def _relation_section_loop(
 
     rows = _section_candidates(trails, start, target_km)
     if not rows:
-        _coastal_section_log("no-candidates", trails=len(trails), target=round(float(target_km), 1))
+        _coastal_section_log(
+            "no-candidates",
+            trails=len(trails),
+            target=round(float(target_km), 1),
+            snapshot=_trail_rejection_snapshot(trails, start),
+        )
         return None, "aucune section de relation côtière compatible"
 
     feasible_low = max(float(target_km) * 0.82, float(daily_min) * max(days, 1) * 0.90)
@@ -876,12 +966,18 @@ def install_trail_loop_rescue(roundtrip, gr) -> None:
     def best_roundtrip(start, target_km, daily_min, daily_max, days, v3):
         _LAST_META.set(None)
         _LAST_DISCOVERED_TRAILS.set([])
+        intent = _ACTIVE_INTENT.get()
+
+        # Do not make every small generic loop pay the full Overpass/Waymarked
+        # relation-discovery stack before the already-bounded ORS round trip.
+        if not _relation_first_allowed(intent, target_km, days):
+            return original_best(start, target_km, daily_min, daily_max, days, v3)
+
         relation, relation_warning = _relation_loop(v3, gr, start, target_km)
         if relation is not None:
             return relation
 
         section_warning = None
-        intent = _ACTIVE_INTENT.get()
         generic_allowed = _generic_relation_section_allowed(
             intent,
             target_km,
@@ -987,5 +1083,7 @@ __all__ = [
     "_diverse_section_candidates",
     "_matrix_rank_section_candidates",
     "_coastal_section_allowed",
+    "_relation_first_allowed",
+    "_trail_rejection_snapshot",
     "_compact_route_points",
 ]
