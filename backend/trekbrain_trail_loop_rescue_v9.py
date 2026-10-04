@@ -411,11 +411,18 @@ def _relation_section_loop(
     """
     trails = list(trails if trails is not None else (_LAST_DISCOVERED_TRAILS.get() or []))
     if not trails:
+        radius = min(45.0, max(16.0, float(target_km) * 0.42))
         try:
-            radius = min(45.0, max(16.0, float(target_km) * 0.42))
-            trails = list(gr._discover(v3, start, radius) or [])
+            trails = list(gr._discover_waymarked(start, radius) or [])
         except Exception:
             trails = []
+        if trails:
+            _coastal_section_log(
+                "secondary-trails",
+                provider="waymarked",
+                trails=len(trails),
+                longest=round(max(float(x.get("length_km") or 0) for x in trails), 1),
+            )
     if not trails:
         _coastal_section_log("no-trails", target=round(float(target_km), 1))
         return None, "aucune relation longue de randonnée trouvée"
