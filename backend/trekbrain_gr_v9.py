@@ -12,11 +12,21 @@ from __future__ import annotations
 from contextvars import ContextVar
 import math
 import re
+import time
 import unicodedata
 from typing import Any
 
+import requests
+
 _ACTIVE_TRAILS: ContextVar[list[dict[str, Any]]] = ContextVar("trekbrain_gr_trails", default=[])
 _INSTALLED = False
+
+_WAYMARKED_BASE = "https://hiking.waymarkedtrails.org/api/v1"
+_WAYMARKED_LIST_TIMEOUT_S = 2.4
+_WAYMARKED_SEGMENTS_TIMEOUT_S = 3.0
+_WAYMARKED_CACHE_TTL_S = 1800
+_WAYMARKED_CACHE: dict[tuple[float, float, int], tuple[float, list[dict[str, Any]]]] = {}
+_MERCATOR_R = 6378137.0
 
 
 def _fold(value: str) -> str:
@@ -115,6 +125,248 @@ def _downsample(coords: list[list[float]], max_points: int = 500) -> list[list[f
     if sampled[-1] != coords[-1]:
         sampled.append(coords[-1])
     return sampled
+
+
+def _lonlat_to_mercator(lon: float, lat: float) -> tuple[float, float]:
+    lat = max(-85.05112878, min(85.05112878, float(lat)))
+    x = _MERCATOR_R * math.radians(float(lon))
+    y = _MERCATOR_R * math.log(math.tan(math.pi / 4 + math.radians(lat) / 2))
+    return x, y
+
+
+def _mercator_to_latlon(x: float, y: float) -> list[float]:
+    lon = math.degrees(float(x) / _MERCATOR_R)
+    lat = math.degrees(2 * math.atan(math.exp(float(y) / _MERCATOR_R)) - math.pi / 2)
+    return [lat, lon]
+
+
+def _waymarked_bbox(center: dict[str, Any], radius_km: float) -> str:
+    lat = float(center["lat"])
+    lon = float(center["lon"])
+    radius = max(8.0, min(float(radius_km), 45.0))
+    lat_pad = radius / 111.0
+    cos_lat = max(0.15, abs(math.cos(math.radians(lat))))
+    lon_pad = radius / (111.0 * cos_lat)
+    minx, miny = _lonlat_to_mercator(lon - lon_pad, lat - lat_pad)
+    maxx, maxy = _lonlat_to_mercator(lon + lon_pad, lat + lat_pad)
+    return f"{minx:.1f},{miny:.1f},{maxx:.1f},{maxy:.1f}"
+
+
+def _waymarked_request(path: str, params: dict[str, Any], timeout_s: float) -> dict[str, Any]:
+    response = requests.get(
+        _WAYMARKED_BASE + path,
+        params=params,
+        headers={
+            "Accept": "application/json",
+            "Accept-Language": "fr",
+            "User-Agent": "TrekMap-France/9.0 (+https://trekmap-france.onrender.com)",
+        },
+        timeout=float(timeout_s),
+    )
+    response.raise_for_status()
+    payload = response.json()
+    return payload if isinstance(payload, dict) else {}
+
+
+def _waymarked_lines(geometry: Any) -> list[list[list[float]]]:
+    """Return WGS84 [lat, lon] lines from Waymarked EPSG:3857 GeoJSON."""
+    if not isinstance(geometry, dict):
+        return []
+    kind = str(geometry.get("type") or "")
+    coords = geometry.get("coordinates")
+    raw_lines = []
+    if kind == "LineString" and isinstance(coords, list):
+        raw_lines = [coords]
+    elif kind == "MultiLineString" and isinstance(coords, list):
+        raw_lines = coords
+    else:
+        return []
+
+    lines = []
+    for raw in raw_lines:
+        line = []
+        for point in raw or []:
+            if not isinstance(point, (list, tuple)) or len(point) < 2:
+                continue
+            x, y = _number(point[0]), _number(point[1])
+            if x is None or y is None:
+                continue
+            row = _mercator_to_latlon(x, y)
+            if not line or _dist(line[-1], row) > 0.002:
+                line.append(row)
+        if len(line) >= 2:
+            lines.append(line)
+    return lines
+
+
+def _join_waymarked_lines(lines: list[list[list[float]]], max_gap_km: float = 1.6) -> list[list[float]]:
+    """Greedily assemble clipped relation pieces and keep the longest component."""
+    pending = [[list(p) for p in line] for line in lines if len(line) >= 2]
+    components = []
+    while pending:
+        current = pending.pop(0)
+        while pending:
+            best = None
+            for idx, line in enumerate(pending):
+                options = (
+                    (_dist(current[-1], line[0]), "append", False),
+                    (_dist(current[-1], line[-1]), "append", True),
+                    (_dist(current[0], line[-1]), "prepend", False),
+                    (_dist(current[0], line[0]), "prepend", True),
+                )
+                distance, side, reverse = min(options, key=lambda row: row[0])
+                if best is None or distance < best[0]:
+                    best = (distance, idx, side, reverse)
+            if best is None or best[0] > max_gap_km:
+                break
+            _distance, idx, side, reverse = best
+            line = pending.pop(idx)
+            if reverse:
+                line.reverse()
+            if side == "append":
+                if _dist(current[-1], line[0]) <= 0.03:
+                    current.extend(line[1:])
+                else:
+                    current.extend(line)
+            else:
+                if _dist(line[-1], current[0]) <= 0.03:
+                    current = line[:-1] + current
+                else:
+                    current = line + current
+        components.append(current)
+    return max(components, key=_path_length) if components else []
+
+
+def _waymarked_trails_from_payloads(
+    routes_payload: dict[str, Any],
+    segments_payload: dict[str, Any],
+) -> list[dict[str, Any]]:
+    routes = {}
+    for item in routes_payload.get("results") or []:
+        if not isinstance(item, dict):
+            continue
+        try:
+            relation_id = int(item.get("id"))
+        except (TypeError, ValueError):
+            continue
+        ref = str(item.get("ref") or "").strip()
+        name = str(item.get("name") or item.get("local_name") or ref or "").strip()
+        if not _is_priority_relation({"ref": ref, "name": name, "network": ""}):
+            continue
+        routes[relation_id] = item
+    if not routes:
+        return []
+
+    lines_by_id: dict[int, list[list[list[float]]]] = {relation_id: [] for relation_id in routes}
+    for feature in segments_payload.get("features") or []:
+        if not isinstance(feature, dict):
+            continue
+        try:
+            relation_id = int(feature.get("id"))
+        except (TypeError, ValueError):
+            continue
+        if relation_id not in routes:
+            continue
+        lines_by_id[relation_id].extend(_waymarked_lines(feature.get("geometry")))
+
+    trails = []
+    for relation_id, item in routes.items():
+        coords = _join_waymarked_lines(lines_by_id.get(relation_id) or [])
+        if len(coords) < 8:
+            continue
+        length = _path_length(coords)
+        if length < 4.0:
+            continue
+        ref = str(item.get("ref") or "").strip()
+        name = str(item.get("name") or item.get("local_name") or ref or "Itinéraire de randonnée").strip()
+        trails.append({
+            "id": relation_id,
+            "name": name[:160],
+            "ref": ref[:60],
+            "network": "",
+            "coords": _downsample(coords),
+            "length_km": round(length, 1),
+            "source_url": f"https://www.openstreetmap.org/relation/{relation_id}",
+            "confidence": "high-route-evidence-secondary",
+            "discovery_provider": "Waymarked Trails (OpenStreetMap-derived)",
+        })
+    trails.sort(key=lambda t: (0 if _fold(t.get("ref")).startswith("gr") else 1, -t["length_km"]))
+    return trails[:8]
+
+
+def _discover_waymarked(center: dict[str, Any], radius_km: float) -> list[dict[str, Any]]:
+    """Bounded secondary discovery for explicit trail/coastal rescue only.
+
+    Waymarked Trails indexes OpenStreetMap route relations and can return route
+    geometry clipped to a local bbox. It is deliberately not called by the
+    normal planner path; the coastal rescue invokes it only after Overpass has
+    returned no usable hiking relation.
+    """
+    radius = max(12.0, min(float(radius_km), 45.0))
+    key = (round(float(center["lat"]), 3), round(float(center["lon"]), 3), int(round(radius)))
+    cached = _WAYMARKED_CACHE.get(key)
+    now = time.monotonic()
+    if cached and now - cached[0] < _WAYMARKED_CACHE_TTL_S:
+        return [
+            {**trail, "coords": [list(p) for p in (trail.get("coords") or [])]}
+            for trail in cached[1]
+        ]
+
+    bbox = _waymarked_bbox(center, radius)
+    try:
+        routes_payload = _waymarked_request(
+            "/list/by_area",
+            {"bbox": bbox, "limit": 20},
+            _WAYMARKED_LIST_TIMEOUT_S,
+        )
+    except Exception:
+        return []
+
+    priority = []
+    seen = set()
+    for item in routes_payload.get("results") or []:
+        if not isinstance(item, dict):
+            continue
+        try:
+            relation_id = int(item.get("id"))
+        except (TypeError, ValueError):
+            continue
+        ref = str(item.get("ref") or "").strip()
+        name = str(item.get("name") or item.get("local_name") or "").strip()
+        if relation_id in seen or not _is_priority_relation({"ref": ref, "name": name, "network": ""}):
+            continue
+        seen.add(relation_id)
+        priority.append(item)
+    priority.sort(key=lambda item: (
+        0 if _fold(item.get("ref") or "").startswith("gr") else 1,
+        0 if "gr" in _fold(item.get("name") or "") else 1,
+    ))
+    priority = priority[:6]
+    if not priority:
+        return []
+
+    relation_ids = [int(item["id"]) for item in priority]
+    try:
+        segments_payload = _waymarked_request(
+            "/list/segments",
+            {"bbox": bbox, "relations": ",".join(str(x) for x in relation_ids)},
+            _WAYMARKED_SEGMENTS_TIMEOUT_S,
+        )
+    except Exception:
+        return []
+
+    trails = _waymarked_trails_from_payloads(
+        {"results": priority},
+        segments_payload,
+    )
+    if trails:
+        _WAYMARKED_CACHE[key] = (
+            now,
+            [{**trail, "coords": [list(p) for p in trail["coords"]]} for trail in trails],
+        )
+        while len(_WAYMARKED_CACHE) > 32:
+            _WAYMARKED_CACHE.pop(next(iter(_WAYMARKED_CACHE)))
+    return trails
 
 
 def _discover(v3, center: dict[str, Any], radius_km: float) -> list[dict[str, Any]]:
@@ -419,4 +671,5 @@ def install_gr_guidance(v3) -> None:
 __all__ = [
     "install_gr_guidance", "clear_gr_context", "active_trail_summary",
     "gr_candidates", "_join_relation_members", "_is_priority_relation",
+    "_discover_waymarked", "_waymarked_trails_from_payloads", "_join_waymarked_lines",
 ]
