@@ -54,6 +54,26 @@ def _mentions_belle_ile(value: str) -> bool:
     return bool(re.search(r"\bbelle[ -]?ile(?:\s+en\s+mer)?\b", text))
 
 
+def _mentions_tour_du_mont_blanc(value: str) -> bool:
+    """Recognise the established Tour du Mont-Blanc itinerary, not the summit."""
+    text = _fold(value).replace("-", " ")
+    return bool(
+        re.search(r"\btour\s+(?:du|de\s+la?)\s+mont\s+blanc\b", text)
+        or re.search(r"\b(?:tmb|tour\s+mont\s+blanc)\b", text)
+    )
+
+
+def _generic_mont_blanc_region(value: str) -> bool:
+    """Return True for a massif/summit label that is unsafe as a hiking start."""
+    text = re.sub(r"\s+", " ", _fold(value).replace("-", " ")).strip()
+    return text in {
+        "mont blanc",
+        "le mont blanc",
+        "massif du mont blanc",
+        "massif mont blanc",
+    }
+
+
 def _route_type_from_prompt(prompt: str) -> str | None:
     """Return an explicit route shape stated in natural language.
 
@@ -248,6 +268,7 @@ def reconcile_request(data):
     region_overridden = False
     forced_waypoint = None
     reason = "form-region-kept"
+    tmb_tour_requested = _mentions_tour_du_mont_blanc(prompt)
 
     if endpoint_pair:
         start_name, end_name = endpoint_pair
@@ -260,6 +281,22 @@ def reconcile_request(data):
         effective_region = anchor_name
         region_overridden = _fold(effective_region) != _fold(form_region)
         reason = "explicit-endpoint-pair-deferred-geocode"
+        selected = None
+
+    # "Tour du Mont-Blanc" names a hiking itinerary. A generic form value such
+    # as "Mont blanc" otherwise geocodes to the 4,800 m summit, which is not an
+    # ORS foot-hiking graph node and causes Cannot find point 0. When the user
+    # has not supplied explicit A→B endpoints, start from the standard TMB access
+    # village instead and keep the full TMB preference in the prompt.
+    if (
+        not endpoint_pair
+        and tmb_tour_requested
+        and _generic_mont_blanc_region(form_region)
+    ):
+        anchor_name = "Les Houches"
+        effective_region = "Les Houches"
+        region_overridden = _fold(effective_region) != _fold(form_region)
+        reason = "tour-du-mont-blanc-canonical-start"
         selected = None
 
     if (
@@ -317,6 +354,7 @@ def reconcile_request(data):
         and effective_route_type == "Boucle"
         and re.search(r"\b(?:faire\s+)?(?:le\s+)?tour\b", _fold(prompt))
     )
+    tmb_tour = bool(tmb_tour_requested and effective_route_type == "Boucle")
 
     effective_prompt = prompt
     if forced_waypoint:
@@ -337,6 +375,16 @@ def reconcile_request(data):
         if "gr 340" not in _fold(effective_prompt):
             effective_prompt = (effective_prompt + " ; " + marker).strip()[:4000]
 
+    if tmb_tour:
+        marker = (
+            "Tour du Mont-Blanc (TMB) ; "
+            "départ pédestre depuis Les Houches ; "
+            "suivre prioritairement la relation de randonnée TMB ; "
+            "ne pas utiliser le sommet du Mont Blanc comme point de départ"
+        )
+        if "relation de randonnée tmb" not in _fold(effective_prompt):
+            effective_prompt = (effective_prompt + " ; " + marker).strip()[:4000]
+
     effective = data.model_copy(update={
         "region": effective_region,
         "prompt": effective_prompt,
@@ -355,7 +403,8 @@ def reconcile_request(data):
         "form_region_mentioned_in_prompt": form_in_prompt,
         "after_trip_places": [x["place"] for x in places if x.get("after_trip")],
         "island_access_mode": "transport-then-hike" if belle_ile_tour else None,
-        "preferred_trail": "GR 340" if belle_ile_tour else None,
+        "trail_access_mode": "canonical-tmb-start" if tmb_tour and reason == "tour-du-mont-blanc-canonical-start" else None,
+        "preferred_trail": "GR 340" if belle_ile_tour else "TMB" if tmb_tour else None,
         "endpoint_pair": list(endpoint_pair) if endpoint_pair else None,
     }
     return effective, meta
@@ -366,4 +415,6 @@ __all__ = [
     "_extract_prompt_places",
     "_route_type_from_prompt",
     "_mentions_belle_ile",
+    "_mentions_tour_du_mont_blanc",
+    "_generic_mont_blanc_region",
 ]
