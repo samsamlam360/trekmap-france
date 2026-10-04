@@ -236,8 +236,6 @@ def _relation_loop(v3, gr, start: dict[str, Any], target_km: float):
     except Exception as exc:
         return None, f"découverte des GR impossible ({exc.__class__.__name__})"
     _LAST_DISCOVERED_TRAILS.set(trails)
-    if not trails:
-        return None, "aucune relation de randonnée GR/GRP trouvée"
 
     rows = []
     reasons = []
@@ -291,7 +289,7 @@ def _relation_loop(v3, gr, start: dict[str, Any], target_km: float):
             secondary = []
         known = {
             str(x.get("id") or x.get("source_url") or x.get("ref") or x.get("name") or "")
-            for x in trails
+            for x in merged
         }
         # Preserve generic candidates already merged above.
         for trail in secondary:
