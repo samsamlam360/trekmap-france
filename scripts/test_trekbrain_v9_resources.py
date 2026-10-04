@@ -189,6 +189,23 @@ finally:
 
 assert network_calls["count"] == 0, network_calls
 
+# The outer terrain overlay must use the same resolved-category logic. When
+# real water and food points already exist, a second OSM corridor lookup has
+# nothing left to discover.
+resolved_terrain = resources_module._missing_terrain_intent(
+    complete_plan,
+    {"water": True, "food": True},
+)
+assert resolved_terrain.get("water") is False, resolved_terrain
+assert resolved_terrain.get("food") is False, resolved_terrain
+
+missing_terrain = resources_module._missing_terrain_intent(
+    {**complete_plan, "water": []},
+    {"water": True, "food": True},
+)
+assert missing_terrain.get("water") is True, missing_terrain
+assert missing_terrain.get("food") is False, missing_terrain
+
 # Both route endpoints have concrete transit access, so the final supplement
 # must not reopen Photon merely because require_transit=True.
 assert any(
