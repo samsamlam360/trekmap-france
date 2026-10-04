@@ -400,6 +400,79 @@ assert coastal_variants, coastal_variants
 assert coastal_variants[0].get("routing_mode") == "ors-matrix-subloop", coastal_variants
 assert 0.0022 <= float(coastal_variants[0].get("matrix_shape_score") or 0) < 0.004, coastal_variants[0]
 
+# If no triangle cycle can be rendered, the same Matrix result may close a
+# prefix of the validated oversized loop back to the start. This must use no
+# second Matrix request and still render the connector through ORS.
+real_prefix_matrix = ors.get_distance_matrix
+real_prefix_route = ors.get_route
+real_prefix_retrace = v3._route_retrace_ratio
+prefix_matrix_calls = {"count": 0}
+prefix_route_calls = {"triangle": 0, "connector": 0}
+
+def fake_prefix_matrix(points):
+    prefix_matrix_calls["count"] += 1
+    n = len(points)
+    matrix = [[0.0 if i == j else 99.0 for j in range(n)] for i in range(n)]
+    # The seventh sample is near 59% route progress: ~24 km of the 40.86 km
+    # loop plus an ~8 km network return gives a ~32 km circuit.
+    matrix[0][7] = matrix[7][0] = 8.0
+    return {"distances": matrix, "fallback": False, "routing_mode": "ors-matrix"}
+
+def fake_prefix_route(points, distance_gps):
+    if len(points) == 4:
+        prefix_route_calls["triangle"] += 1
+        return {
+            "coords": [],
+            "distance": 0.0,
+            "fallback": True,
+            "warning": "triangle deliberately unavailable",
+        }
+    prefix_route_calls["connector"] += 1
+    a, b = points[0], points[1]
+    return {
+        "coords": [
+            list(a),
+            [(float(a[0]) + float(b[0])) / 2, (float(a[1]) + float(b[1])) / 2],
+            list(b),
+        ],
+        "distance": 8.2,
+        "fallback": False,
+        "routing_mode": "ors",
+        "profile": "foot-hiking",
+    }
+
+ors.get_distance_matrix = fake_prefix_matrix
+ors.get_route = fake_prefix_route
+v3._route_retrace_ratio = lambda coords: 0.18
+try:
+    prefix_variants = roundtrip._matrix_subloop_candidates(
+        {
+            "coords": coastal_coords,
+            "distance": 40.86,
+            "fallback": False,
+            "routing_mode": "ors-round-trip",
+            "profile": "foot-hiking",
+        },
+        coastal_start,
+        32.0,
+        12.0,
+        20.0,
+        2,
+        v3,
+    )
+finally:
+    ors.get_distance_matrix = real_prefix_matrix
+    ors.get_route = real_prefix_route
+    v3._route_retrace_ratio = real_prefix_retrace
+
+prefix_rows = [x for x in prefix_variants if x.get("matrix_prefix_loop")]
+assert prefix_matrix_calls["count"] == 1, prefix_matrix_calls
+assert prefix_rows, prefix_variants
+assert prefix_route_calls["connector"] >= 1, prefix_route_calls
+assert prefix_rows[0].get("routing_mode") == "ors-matrix-prefix-loop", prefix_rows[0]
+assert abs(float(prefix_rows[0].get("distance") or 0) - 32.0) <= 3.0, prefix_rows[0]
+assert float(prefix_rows[0].get("matrix_subloop_retrace") or 1) <= 0.30, prefix_rows[0]
+
 # Route-first lodging must not start a third route-probe network path after
 # Photon and the single bounded bbox lookup fail.
 real_photon_split = logistics._photon_split_stays
