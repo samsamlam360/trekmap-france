@@ -121,9 +121,15 @@ def _build_backbone(
         state.phases.append("route:generic-fast-ors")
         try:
             return roundtrip._build_roundtrip(state.route_data, legacy_main, v3)
-        except HTTPException:
-            # Keep the advanced planner as a safety net if the direct loop
-            # engine cannot produce a valid pedestrian circuit.
+        except HTTPException as exc:
+            # A geographic/constraint failure (4xx) may still be recoverable by
+            # the richer planner. A provider outage (5xx) is different: the
+            # direct loop path has already exhausted its bounded ORS -> Valhalla
+            # failover. Running the generic stack would mostly repeat the same
+            # network work and turn one timeout into a 20-40 s request.
+            if int(getattr(exc, "status_code", 500) or 500) >= 500:
+                state.phases.append("route:generic-fast-provider-failure")
+                raise
             state.phases.append("route:generic-fast-miss")
 
     state.phases.append("route:generic")
