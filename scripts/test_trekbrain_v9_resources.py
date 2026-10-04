@@ -115,6 +115,15 @@ def fake_postroute_resources(boundaries, intent, existing_items):
 resources_module.v7.v5.v3._postroute_corridor_resources = fake_postroute_resources
 try:
     dedupe_plan = sample_plan()
+    dedupe_plan["resources"] = [{
+        "name": "Épicerie déjà trouvée",
+        "type": "Ravitaillement",
+        "category": "food",
+        "lat": 45.050,
+        "lon": 5.050,
+        "source_url": "https://www.openstreetmap.org/node/201",
+    }]
+    dedupe_plan["food"] = list(dedupe_plan["resources"])
     dedupe_plan["logistics"] = {"status": "partial"}
     dedupe_request = AIPlanRequest(
         prompt=(
