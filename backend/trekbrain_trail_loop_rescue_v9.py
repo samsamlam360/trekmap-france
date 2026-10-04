@@ -762,6 +762,12 @@ def _relation_section_loop(
     feasible_high = min(float(target_km) * 1.18, float(daily_max) * max(days, 1) + 0.75)
     evaluated = []
     warnings = []
+    route_rejections = []
+
+    def reject(reason: str) -> None:
+        reason = str(reason or "fermeture rejetée")
+        warnings.append(reason)
+        route_rejections.append(reason)
 
     from . import ors
 
@@ -800,7 +806,7 @@ def _relation_section_loop(
         route_rows = [
             (score, trail, section, start_off, section_km, direction, None, None)
             for score, trail, section, start_off, section_km, direction
-            in rows[:_SECTION_MAX_ATTEMPTS]
+            in _diverse_section_candidates(rows)[:_SECTION_MAX_ATTEMPTS]
         ]
         if matrix_warning:
             warnings.append(matrix_warning)
@@ -818,10 +824,10 @@ def _relation_section_loop(
         try:
             connector = ors.get_route([end_coord, start_coord], _length)
         except Exception as exc:
-            warnings.append(f"fermeture intérieure indisponible ({exc.__class__.__name__})")
+            reject(f"fermeture intérieure indisponible ({exc.__class__.__name__})")
             continue
         if not isinstance(connector, dict) or connector.get("fallback") is not False:
-            warnings.append(str((connector or {}).get("warning") or "fermeture intérieure non validée"))
+            reject(str((connector or {}).get("warning") or "fermeture intérieure non validée"))
             continue
         connector_coords = [
             [float(p[0]), float(p[1])]
@@ -829,13 +835,13 @@ def _relation_section_loop(
             if isinstance(p, (list, tuple)) and len(p) >= 2
         ]
         if len(connector_coords) < 2:
-            warnings.append("fermeture intérieure vide")
+            reject("fermeture intérieure vide")
             continue
         if _dist(end_coord, connector_coords[0]) > _SECTION_JOIN_KM:
-            warnings.append("départ de fermeture trop éloigné du sentier")
+            reject("départ de fermeture trop éloigné du sentier")
             continue
         if _dist(connector_coords[-1], start_coord) > _SECTION_JOIN_KM:
-            warnings.append("retour intérieur trop éloigné du départ")
+            reject("retour intérieur trop éloigné du départ")
             continue
 
         merged = [list(p) for p in section]
@@ -845,7 +851,7 @@ def _relation_section_loop(
         if _dist(merged[-1], start_coord) <= _DIRECT_CLOSE_KM and merged[-1] != start_coord:
             merged.append(list(start_coord))
         if _dist(merged[-1], start_coord) > _SECTION_JOIN_KM:
-            warnings.append("boucle côtière non refermée")
+            reject("boucle côtière non refermée")
             continue
 
         total = _length(merged)
@@ -853,14 +859,14 @@ def _relation_section_loop(
         closure_share = closure_km / max(total, 0.1)
         relation_share = float(section_km) / max(total, 0.1)
         if total < feasible_low or total > feasible_high:
-            warnings.append(f"section refermée hors cible ({total:.1f} km)")
+            reject(f"section refermée hors cible ({total:.1f} km)")
             continue
         if closure_share > _SECTION_MAX_CLOSURE_SHARE or relation_share < _SECTION_MIN_RELATION_SHARE:
-            warnings.append("fermeture intérieure trop importante par rapport au sentier")
+            reject("fermeture intérieure trop importante par rapport au sentier")
             continue
         gap = _max_gap(merged)
         if gap > _MAX_RELATION_GAP_KM:
-            warnings.append(f"géométrie section+fermeture discontinue ({gap:.1f} km)")
+            reject(f"géométrie section+fermeture discontinue ({gap:.1f} km)")
             continue
         retrace = (
             float(v3._route_retrace_ratio(merged))
@@ -868,7 +874,7 @@ def _relation_section_loop(
             else 0.0
         )
         if retrace > 0.44:
-            warnings.append(f"boucle trop répétitive ({retrace:.2f})")
+            reject(f"boucle trop répétitive ({retrace:.2f})")
             continue
 
         score = (
@@ -883,12 +889,18 @@ def _relation_section_loop(
         ))
 
     if not evaluated:
+        failure = (
+            route_rejections[0]
+            if route_rejections
+            else warnings[0] if warnings
+            else "aucune fermeture intérieure validée"
+        )
         _coastal_section_log(
             "rejected",
             routed=len(route_rows),
-            first_reason=(warnings[0] if warnings else "aucune fermeture validée")[:100],
+            first_reason=str(failure)[:100],
         )
-        return None, (warnings[0] if warnings else "aucune fermeture intérieure validée")
+        return None, str(failure)
 
     evaluated.sort(key=lambda row: row[0])
     (
