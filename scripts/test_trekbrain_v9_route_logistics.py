@@ -324,6 +324,89 @@ assert len(chosen_generic) == 4, chosen_generic
 assert all(10.0 < float(x.get("_offroute_km") or 0) <= 12.5 for x in chosen_generic), chosen_generic
 
 
+# One generic night on a two-day loop may be outside the ideal midpoint
+# window while still being a perfectly usable transfer. Keep the route intact
+# and surface that lodging instead of reporting no night at all.
+two_day_lodging = [
+    {"name": "Hôtel transfert", "lat": 0.110, "lon": 0.10, "category": "lodging", "source_url": "osm://transfer"}
+]
+real_photon_two_day = logistics._photon_split_stays
+real_bbox_two_day = logistics._bbox_route_stays
+try:
+    logistics._photon_split_stays = lambda *args, **kwargs: [dict(x) for x in two_day_lodging]
+    logistics._bbox_route_stays = lambda *args, **kwargs: []
+    chosen_two_day, projected_two_day, _meta_two_day = logistics._discover_stays(
+        FakeV3(),
+        FakeRoundtrip,
+        FakeStayRescue,
+        coords,
+        {"name": "Départ", "lat": 0.0, "lon": 0.0},
+        "lodging",
+        2,
+        20.0,
+        False,
+    )
+finally:
+    logistics._photon_split_stays = real_photon_two_day
+    logistics._bbox_route_stays = real_bbox_two_day
+
+assert len(projected_two_day) == 1, projected_two_day
+assert len(chosen_two_day) == 1, chosen_two_day
+assert chosen_two_day[0]["name"] == "Hôtel transfert"
+assert float(chosen_two_day[0].get("_offroute_km") or 0) > logistics._WALK_CONNECTOR_LIMIT_KM
+
+two_day_result = {
+    "title": "Boucle 2 jours",
+    "route_type": "Boucle",
+    "duration_days": 2,
+    "start": {"name": "Départ", "lat": 0.0, "lon": 0.0},
+    "end": {"name": "Départ", "lat": 0.0, "lon": 0.0},
+    "route_preview": {"coords": coords, "distance_km": 40.0, "distance": 40.0, "fallback": False, "routing_mode": "ors"},
+    "stages": [{"day": 1, "distance_km": 20.0}, {"day": 2, "distance_km": 20.0}],
+    "advisor_notes": [],
+    "planner": {},
+}
+real_discover_two_day = logistics._discover_stays
+try:
+    logistics._discover_stays = lambda *args, **kwargs: (
+        [dict(chosen_two_day[0])],
+        [dict(chosen_two_day[0])],
+        {
+            "budget_seconds": 4.0,
+            "elapsed_ms": 1,
+            "budget_exhausted": False,
+            "terrain_rows": [],
+            "terrain_preloaded": False,
+        },
+    )
+    attached_two_day = logistics._attach_logistics(
+        two_day_result,
+        Data(),
+        FakeLegacy,
+        FakeV3(),
+        FakeRoundtrip,
+        FakeStayRescue,
+        FakeORS,
+        {
+            "days": 2,
+            "daily_target": 20.0,
+            "daily_max": 25.0,
+            "water": False,
+            "food": False,
+        },
+        "lodging",
+    )
+finally:
+    logistics._discover_stays = real_discover_two_day
+
+assert attached_two_day["route_preview"]["coords"] == coords
+assert attached_two_day["route_preview"]["distance_km"] == 40.0
+assert attached_two_day["logistics"]["route_immutable"] is True
+assert attached_two_day["logistics"]["status"] == "complete"
+assert attached_two_day["logistics"]["nights_resolved"] == 1
+assert attached_two_day["logistics"]["nights"][0]["access_mode"] == "transfer"
+assert "transfert" in attached_two_day["stages"][0]["overnight"].casefold()
+
 # Generic lodging sends gîte + hotel in the same bounded Photon wave.
 class PhotonRoundtrip(FakeRoundtrip):
     @staticmethod
