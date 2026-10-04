@@ -248,11 +248,32 @@ def install_matrix_resilience(campsite_loop, roundtrip) -> None:
             )
 
     def best_roundtrip(start, target_km: float, daily_min: float, daily_max: float, days: int, v3):
-        if float(target_km) <= 99.0:
+        # Always let the previously installed candidate chain run first. For
+        # >99 km requests that chain can still return a real OSM hiking relation
+        # or a validated relation-section loop; only its raw ORS fallback has the
+        # 99 km safety cap. The old shortcut bypassed all relation discovery for
+        # long treks and sent them straight to an artificial multilobe circuit.
+        try:
             return original_best_roundtrip(start, target_km, daily_min, daily_max, days, v3)
-        return _multi_lobe_roundtrip(
-            roundtrip, start, target_km, daily_min, daily_max, days, v3
-        )
+        except HTTPException as exc:
+            if float(target_km) <= 99.0:
+                raise
+            detail = str(getattr(exc, "detail", exc) or "")
+            # Preserve hard candidate validation failures unless the chain reached
+            # the generic long-roundtrip limitation / had no usable route evidence.
+            folded = detail.casefold()
+            fallback_ok = (
+                "limité à environ 100 km" in folded
+                or "limite a environ 100 km" in folded
+                or "aucun routeur pédestre" in folded
+                or "aucune relation" in folded
+                or "secours gr/grp" in folded
+            )
+            if not fallback_ok:
+                raise
+            return _multi_lobe_roundtrip(
+                roundtrip, start, target_km, daily_min, daily_max, days, v3
+            )
 
     campsite_loop._recover = recover
     roundtrip._best_roundtrip = best_roundtrip

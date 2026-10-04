@@ -386,3 +386,12 @@ assert trail_candidates._generic_relation_section_allowed(
 assert trail_candidates._generic_relation_section_allowed(
     None, 54.0, days_override=3, known_loop=True
 ) is False
+
+
+# Architecture contract: long loops must not bypass relation discovery merely
+# because the raw ORS round-trip endpoint is capped near 100 km. Matrix Rescue
+# is a fallback after the candidate chain, never a pre-dispatch shortcut.
+from backend import trekbrain_matrix_rescue_v9 as matrix_rescue_contract
+source = __import__("inspect").getsource(matrix_rescue_contract.install_matrix_resilience)
+assert "return original_best_roundtrip(start, target_km, daily_min, daily_max, days, v3)" in source
+assert source.index("return original_best_roundtrip") < source.index("_multi_lobe_roundtrip(")
