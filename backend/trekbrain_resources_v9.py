@@ -764,16 +764,15 @@ def _install_plan_overlay(app, legacy_main):
             terrain_ms = 0
 
             def _timed_resource_call(kind, func, *args):
+                nonlocal supplement_ms, terrain_ms
                 started = time.monotonic()
                 try:
                     return func(*args)
                 finally:
                     elapsed = round((time.monotonic() - started) * 1000)
                     if kind == "supplement":
-                        nonlocal supplement_ms
                         supplement_ms = elapsed
                     elif kind == "terrain":
-                        nonlocal terrain_ms
                         terrain_ms = elapsed
 
             resource_started = time.monotonic()
@@ -823,7 +822,9 @@ def _install_plan_overlay(app, legacy_main):
                 # Keep transit or a genuinely missing lodging supplement eligible
                 # without reopening an OSM terrain request that cannot add value.
                 try:
-                    result = _supplement_route_resources(result, data)
+                    result = _timed_resource_call(
+                        "supplement", _supplement_route_resources, result, data
+                    )
                 except Exception:
                     pass
                 result["_terrain_osm_preloaded"] = True
