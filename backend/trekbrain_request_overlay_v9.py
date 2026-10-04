@@ -138,6 +138,13 @@ def _wrap_post(app, path: str, legacy_main, *, add_note: bool):
                 )
                 if note not in notes:
                     notes.insert(0, note)
+            if meta.get("trail_access_mode") == "canonical-tmb-start":
+                note = (
+                    "🏔️ Tour du Mont-Blanc : « Mont Blanc » désigne ici l’itinéraire TMB, pas le sommet. "
+                    "Le départ pédestre est donc ancré aux Houches afin de rester sur un réseau de randonnée routable."
+                )
+                if note not in notes:
+                    notes.insert(0, note)
         return result
 
 
