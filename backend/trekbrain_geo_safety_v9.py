@@ -47,6 +47,20 @@ def _discover_island_bounds(region: str) -> dict[str, float] | None:
     """Resolve an island bounding box only when the request actually looks island-like."""
     if not _is_island_hint(region):
         return None
+
+    # Belle-Île is a first-class canonical TrekBrain route. A conservative
+    # static safety box avoids a cold Nominatim request on every fresh Render
+    # instance while still excluding Quiberon/mainland POIs across the channel.
+    folded = _fold(region).replace("-", " ")
+    if "belle ile" in folded:
+        return {
+            "south": 47.24,
+            "north": 47.43,
+            "west": -3.31,
+            "east": -3.00,
+            "island": 1.0,
+        }
+
     try:
         rows = geo._request_json(
             geo.NOMINATIM_URL,

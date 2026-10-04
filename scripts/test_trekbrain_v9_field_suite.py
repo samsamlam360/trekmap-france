@@ -110,6 +110,38 @@ finally:
 if FIELD_SCENARIO_COUNT != 40:
     failures.append(f"field scenario count changed unexpectedly: {FIELD_SCENARIO_COUNT}")
 
+# Matching written/form regions must not trigger a redundant geocoder call in
+# the request-reconciliation layer. The geographic planner will geocode once
+# later when it actually needs coordinates.
+real_request_geocode = request_v9.geo._geocode
+matching_geocode_calls = []
+def forbidden_matching_geocode(query):
+    matching_geocode_calls.append(query)
+    raise AssertionError(f"redundant reconciliation geocode: {query}")
+
+request_v9.geo._geocode = forbidden_matching_geocode
+try:
+    sancy_req = AIPlanRequest(
+        prompt="Je veux une rando dans le massif du Sancy en 3 jours, 17 km par jour.",
+        region="Massif du Sancy",
+        days=3,
+        daily_km=17,
+        difficulty="medium",
+        route_type="Boucle",
+    )
+    sancy_resolved, sancy_meta = request_v9.reconcile_request(sancy_req)
+finally:
+    request_v9.geo._geocode = real_request_geocode
+
+if matching_geocode_calls:
+    failures.append(f"matching region geocoded redundantly: {matching_geocode_calls!r}")
+if sancy_resolved.region != "Massif du Sancy":
+    failures.append(f"matching region changed unexpectedly: {sancy_resolved.region!r}")
+if sancy_meta.get("reason") != "explicit-route-area-form-match":
+    failures.append(f"matching region reason={sancy_meta.get('reason')!r}")
+if not request_v9._same_place_hint("lac des Settons", "Lac des Settons, Morvan"):
+    failures.append("same-place lexical regression for Lac des Settons/Morvan")
+
 # Explicit point-to-point phrasing must override stale geographic context.
 corridor_req = AIPlanRequest(
     prompt=(

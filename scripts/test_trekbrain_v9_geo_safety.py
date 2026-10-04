@@ -12,7 +12,9 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+from backend import trekbrain_geo_safety_v9 as geo_safety
 from backend.trekbrain_geo_safety_v9 import (
+    _discover_island_bounds,
     _inside_bounds,
     _is_island_hint,
     route_safety_report,
@@ -94,6 +96,25 @@ assert any("camping" in item.casefold() for item in camp_report["blockers"]), ca
 assert _is_island_hint("Belle-Île-en-Mer")
 assert _is_island_hint("île de Groix")
 assert not _is_island_hint("Vercors")
+
+# Belle-Île is canonical and must not spend a cold Nominatim request merely
+# to rediscover its safety box.
+real_request_json = geo_safety.geo._request_json
+static_calls = []
+def forbidden_nominatim(*args, **kwargs):
+    static_calls.append((args, kwargs))
+    raise AssertionError("Belle-Île static bounds must not call Nominatim")
+
+geo_safety.geo._request_json = forbidden_nominatim
+try:
+    belle_bounds = _discover_island_bounds("Belle-Île-en-Mer")
+finally:
+    geo_safety.geo._request_json = real_request_json
+
+assert belle_bounds is not None, belle_bounds
+assert static_calls == [], static_calls
+assert belle_bounds["south"] <= 47.25 and belle_bounds["north"] >= 47.40, belle_bounds
+assert belle_bounds["west"] <= -3.30 and belle_bounds["east"] >= -3.05, belle_bounds
 
 bounds = {"south": 47.25, "north": 47.40, "west": -3.30, "east": -3.05}
 assert _inside_bounds({"lat": 47.33, "lon": -3.18}, bounds)

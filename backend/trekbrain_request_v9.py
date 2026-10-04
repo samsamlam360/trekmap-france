@@ -21,6 +21,34 @@ def _fold(value: str) -> str:
     return "".join(c for c in text if not unicodedata.combining(c)).casefold()
 
 
+
+_PLACE_STOPWORDS = {"de", "du", "des", "la", "le", "les", "l", "d", "dans", "autour"}
+
+
+def _same_place_hint(place: str, form_region: str) -> bool:
+    """Return True when the prompt place is already represented by the form region.
+
+    This is deliberately lexical, not geographic: its only purpose is to avoid a
+    redundant geocoder call when both user inputs already agree.
+    """
+    a = _fold(place).replace("-", " ")
+    b = _fold(form_region).replace("-", " ")
+    if not a or not b:
+        return False
+    if a == b:
+        return True
+    ta = {x for x in re.findall(r"[a-z0-9]+", a) if x not in _PLACE_STOPWORDS}
+    tb = {x for x in re.findall(r"[a-z0-9]+", b) if x not in _PLACE_STOPWORDS}
+    if not ta or not tb:
+        return False
+    smaller, larger = (ta, tb) if len(ta) <= len(tb) else (tb, ta)
+    # One-token matches are accepted only when the full folded strings are
+    # identical (e.g. Vercors/Vercors), avoiding broad matches such as "France".
+    if len(smaller) == 1:
+        return a == b
+    return smaller.issubset(larger)
+
+
 def _mentions_belle_ile(value: str) -> bool:
     text = _fold(value).replace("’", "'")
     return bool(re.search(r"\bbelle[ -]?ile(?:\s+en\s+mer)?\b", text))
@@ -232,6 +260,20 @@ def reconcile_request(data):
         effective_region = anchor_name
         region_overridden = _fold(effective_region) != _fold(form_region)
         reason = "explicit-endpoint-pair-deferred-geocode"
+        selected = None
+
+    if (
+        selected
+        and selected["kind"] == "route_area"
+        and form_region
+        and _same_place_hint(selected["place"], form_region)
+    ):
+        # The written place and the form already describe the same area. Keep
+        # the user's explicit form value and let the geographic planner geocode
+        # it once when coordinates are actually needed.
+        anchor_name = form_region[:120]
+        effective_region = form_region
+        reason = "explicit-route-area-form-match"
         selected = None
 
     if selected:

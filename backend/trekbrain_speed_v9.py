@@ -453,6 +453,7 @@ def install_fast_planning(v3, v5, v9) -> None:
             candidate = dict(route)
             candidate["round_trip_requested_km"] = round(requested_km, 2)
             candidate["round_trip_target_km"] = round(float(target_km), 2)
+            candidate["round_trip_retrace_ratio"] = round(float(retrace), 4)
             rows.append((score, candidate))
             # Stop after one ORS call only when the route is already close to
             # the requested target, not merely inside the broad +/-25% safety
@@ -479,8 +480,27 @@ def install_fast_planning(v3, v5, v9) -> None:
             from fastapi import HTTPException
             detail = warnings[0] if warnings else "OpenRouteService n'a produit aucune boucle pédestre."
             raise HTTPException(status_code=503, detail=detail)
-        rows.sort(key=lambda row: row[0])
-        selected = rows[0][1]
+        # Distance accuracy outranks a modest retrace difference when the
+        # corrective ORS attempt is materially closer to the user's target.
+        # This keeps the same two network calls while avoiding cases where the
+        # historical retrace*80 term preferred a ~28% oversized loop.
+        precision_limit = max(4.0, float(target_km) * 0.18)
+        precision_rows = [
+            row for row in rows
+            if abs(float(row[1].get("distance") or 0) - float(target_km)) <= precision_limit
+            and float(row[1].get("round_trip_retrace_ratio") or 0.0) <= 0.30
+        ]
+        if precision_rows:
+            precision_rows.sort(key=lambda row: (
+                abs(float(row[1].get("distance") or 0) - float(target_km)),
+                float(row[1].get("round_trip_retrace_ratio") or 0.0),
+                row[0],
+            ))
+            selected = precision_rows[0][1]
+            selected["distance_precision_preferred"] = True
+        else:
+            rows.sort(key=lambda row: row[0])
+            selected = rows[0][1]
 
         # _recover_unranked_oversized_roundtrip exists for raw ORS routes that
         # bypassed candidate ranking. fast_best_roundtrip has already compared
@@ -505,6 +525,8 @@ def install_fast_planning(v3, v5, v9) -> None:
                 {
                     "mode": str(candidate.get("routing_mode") or "unknown"),
                     "km": round(float(candidate.get("distance") or 0), 1),
+                    "requested_km": candidate.get("round_trip_requested_km"),
+                    "retrace": candidate.get("round_trip_retrace_ratio"),
                 }
                 for _score, candidate in rows
             ]
