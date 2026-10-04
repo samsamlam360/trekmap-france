@@ -15,6 +15,7 @@ from __future__ import annotations
 from contextvars import ContextVar
 import math
 import re
+import unicodedata
 from typing import Any
 
 from fastapi import HTTPException
@@ -23,11 +24,57 @@ _INSTALLED = False
 _LAST_META: ContextVar[dict[str, Any] | None] = ContextVar(
     "trekbrain_v9_trail_loop_meta", default=None
 )
+_ACTIVE_INTENT: ContextVar[dict[str, Any] | None] = ContextVar(
+    "trekbrain_v9_trail_loop_intent", default=None
+)
+_LAST_DISCOVERED_TRAILS: ContextVar[list[dict[str, Any]]] = ContextVar(
+    "trekbrain_v9_trail_loop_discovered", default=[]
+)
 _DIRECT_CLOSE_KM = 0.10
 _ROUTABLE_CLOSE_KM = 1.8
 _MAX_START_OFFSET_KM = 12.0
 _MAX_RELATION_GAP_KM = 2.2
 _MAX_SECONDARY_POINTS = 21
+_SECTION_MAX_ATTEMPTS = 2
+_SECTION_JOIN_KM = 0.12
+_SECTION_MAX_CLOSURE_SHARE = 0.42
+_SECTION_MIN_RELATION_SHARE = 0.58
+
+
+def _fold(value: str) -> str:
+    text = unicodedata.normalize("NFKD", str(value or ""))
+    return "".join(c for c in text if not unicodedata.combining(c)).casefold()
+
+
+def _coastal_section_allowed(intent: dict[str, Any] | None, target_km: float) -> bool:
+    """Restrict the section-and-close strategy to genuine coastal loop intent.
+
+    This deliberately does not change the generic inland dispatch. The previous
+    experiment sent every coastal request through the full advanced planner and
+    paid a large latency cost without improving geometry. Here we stay inside
+    the fast round-trip path and use one already-discovered hiking relation only
+    when the user's wording clearly asks for the coast/littoral.
+    """
+    intent = intent or {}
+    if _fold(intent.get("route_type") or "") != "boucle":
+        return False
+    try:
+        days = int(intent.get("days") or 1)
+        target = float(target_km or intent.get("total_target") or 0)
+    except (TypeError, ValueError):
+        return False
+    if days < 2 or days > 4 or target < 24.0 or target > 85.0:
+        return False
+    if intent.get("start_query") or intent.get("end_query") or intent.get("via_query"):
+        return False
+    if intent.get("max_dplus_day") or intent.get("avoid"):
+        return False
+    raw = _fold(intent.get("raw") or "")
+    return bool(re.search(
+        r"\b(?:sentiers?\s+cotiers?|chemins?\s+cotiers?|sentiers?\s+du\s+littoral|"
+        r"littoral|bord\s+de\s+mer|cote\s+bretonne|cotes?\s+bretonnes?)\b",
+        raw,
+    ))
 
 
 def _dist(a, b) -> float:
@@ -129,6 +176,7 @@ def _relation_loop(v3, gr, start: dict[str, Any], target_km: float):
         trails = list(gr._discover(v3, start, radius) or [])
     except Exception as exc:
         return None, f"découverte des GR impossible ({exc.__class__.__name__})"
+    _LAST_DISCOVERED_TRAILS.set(trails)
     if not trails:
         return None, "aucune relation de randonnée GR/GRP trouvée"
 
@@ -196,6 +244,221 @@ def _relation_loop(v3, gr, start: dict[str, Any], target_km: float):
     return result, None
 
 
+def _section_path(coords, start_idx: int, end_idx: int) -> list[list[float]]:
+    if end_idx >= start_idx:
+        return [list(p) for p in coords[start_idx:end_idx + 1]]
+    return [list(p) for p in reversed(coords[end_idx:start_idx + 1])]
+
+
+def _section_candidates(trails, start: dict[str, Any], target_km: float):
+    """Rank long real hiking-relation sections before making any routing call."""
+    rows = []
+    target = float(target_km)
+    for trail in trails or []:
+        coords = [[float(p[0]), float(p[1])] for p in (trail.get("coords") or [])]
+        if len(coords) < 18:
+            continue
+        relation_km = float(trail.get("length_km") or _length(coords))
+        if relation_km < target * 1.05:
+            continue
+        start_idx, start_off = _nearest_index(coords, start)
+        if start_off > _MAX_START_OFFSET_KM:
+            continue
+
+        for direction in (1, -1):
+            arc = 0.0
+            prev = start_idx
+            idx = start_idx + direction
+            while 0 <= idx < len(coords):
+                step = _dist(coords[prev], coords[idx])
+                if step > _MAX_RELATION_GAP_KM:
+                    break
+                arc += step
+                if arc > target * 0.94:
+                    break
+                if arc >= target * 0.54:
+                    closure_air = _dist(coords[idx], coords[start_idx])
+                    if 0.35 <= closure_air <= target * 0.40:
+                        estimated = arc + closure_air * 1.28
+                        # Prefer a distance fit, then more time on the marked
+                        # corridor and a departure close to the requested area.
+                        score = (
+                            abs(estimated - target)
+                            + max(0.0, 0.68 - arc / max(target, 0.1)) * 12.0
+                            + start_off * 0.35
+                        )
+                        rows.append((
+                            score,
+                            trail,
+                            _section_path(coords, start_idx, idx),
+                            start_off,
+                            arc,
+                            direction,
+                        ))
+                prev = idx
+                idx += direction
+    rows.sort(key=lambda row: row[0])
+    return rows
+
+
+def _relation_section_loop(
+    v3,
+    gr,
+    start: dict[str, Any],
+    target_km: float,
+    daily_min: float,
+    daily_max: float,
+    days: int,
+    trails=None,
+):
+    """Extract a real long-distance trail section and close it on foot.
+
+    The coastal section remains untouched. Only the final return to the same
+    trail departure is delegated to the pedestrian router. No straight-line
+    bridge is accepted, and at most two closure candidates are routed.
+    """
+    trails = list(trails if trails is not None else (_LAST_DISCOVERED_TRAILS.get() or []))
+    if not trails:
+        try:
+            radius = min(45.0, max(16.0, float(target_km) * 0.42))
+            trails = list(gr._discover(v3, start, radius) or [])
+        except Exception:
+            trails = []
+    if not trails:
+        return None, "aucune relation longue de randonnée trouvée"
+
+    rows = _section_candidates(trails, start, target_km)
+    if not rows:
+        return None, "aucune section de relation côtière compatible"
+
+    feasible_low = max(float(target_km) * 0.82, float(daily_min) * max(days, 1) * 0.90)
+    feasible_high = min(float(target_km) * 1.18, float(daily_max) * max(days, 1) + 0.75)
+    evaluated = []
+    warnings = []
+
+    from . import ors
+
+    for _rank, trail, section, start_off, section_km, direction in rows[:_SECTION_MAX_ATTEMPTS]:
+        if len(section) < 8 or _max_gap(section) > _MAX_RELATION_GAP_KM:
+            continue
+        start_coord = section[0]
+        end_coord = section[-1]
+        try:
+            connector = ors.get_route([end_coord, start_coord], _length)
+        except Exception as exc:
+            warnings.append(f"fermeture intérieure indisponible ({exc.__class__.__name__})")
+            continue
+        if not isinstance(connector, dict) or connector.get("fallback") is not False:
+            warnings.append(str((connector or {}).get("warning") or "fermeture intérieure non validée"))
+            continue
+        connector_coords = [
+            [float(p[0]), float(p[1])]
+            for p in (connector.get("coords") or [])
+            if isinstance(p, (list, tuple)) and len(p) >= 2
+        ]
+        if len(connector_coords) < 2:
+            warnings.append("fermeture intérieure vide")
+            continue
+        if _dist(end_coord, connector_coords[0]) > _SECTION_JOIN_KM:
+            warnings.append("départ de fermeture trop éloigné du sentier")
+            continue
+        if _dist(connector_coords[-1], start_coord) > _SECTION_JOIN_KM:
+            warnings.append("retour intérieur trop éloigné du départ")
+            continue
+
+        merged = [list(p) for p in section]
+        for point in connector_coords[1:]:
+            if point != merged[-1]:
+                merged.append(point)
+        if _dist(merged[-1], start_coord) <= _DIRECT_CLOSE_KM and merged[-1] != start_coord:
+            merged.append(list(start_coord))
+        if _dist(merged[-1], start_coord) > _SECTION_JOIN_KM:
+            warnings.append("boucle côtière non refermée")
+            continue
+
+        total = _length(merged)
+        closure_km = _length(connector_coords)
+        closure_share = closure_km / max(total, 0.1)
+        relation_share = float(section_km) / max(total, 0.1)
+        if total < feasible_low or total > feasible_high:
+            warnings.append(f"section refermée hors cible ({total:.1f} km)")
+            continue
+        if closure_share > _SECTION_MAX_CLOSURE_SHARE or relation_share < _SECTION_MIN_RELATION_SHARE:
+            warnings.append("fermeture intérieure trop importante par rapport au sentier")
+            continue
+        gap = _max_gap(merged)
+        if gap > _MAX_RELATION_GAP_KM:
+            warnings.append(f"géométrie section+fermeture discontinue ({gap:.1f} km)")
+            continue
+        retrace = (
+            float(v3._route_retrace_ratio(merged))
+            if hasattr(v3, "_route_retrace_ratio")
+            else 0.0
+        )
+        if retrace > 0.44:
+            warnings.append(f"boucle trop répétitive ({retrace:.2f})")
+            continue
+
+        score = (
+            abs(total - float(target_km))
+            + closure_share * 6.0
+            + retrace * 14.0
+            + float(start_off) * 0.30
+        )
+        evaluated.append((
+            score, trail, merged, start_off, section_km, closure_km,
+            relation_share, closure_share, direction, retrace,
+        ))
+
+    if not evaluated:
+        return None, (warnings[0] if warnings else "aucune fermeture intérieure validée")
+
+    evaluated.sort(key=lambda row: row[0])
+    (
+        _score, trail, merged, start_off, section_km, closure_km,
+        relation_share, closure_share, direction, retrace,
+    ) = evaluated[0]
+
+    first = merged[0]
+    start["lat"] = float(first[0])
+    start["lon"] = float(first[1])
+    ref = str(trail.get("ref") or "").strip()
+    label = ref or str(trail.get("name") or "itinéraire balisé").strip()
+    start["name"] = f"Départ sur {label}"[:120]
+    start["category"] = "trail"
+
+    result = {
+        "coords": merged,
+        "distance": round(_length(merged), 2),
+        "fallback": False,
+        "routing_mode": "osm-hiking-relation-section-loop",
+        "profile": "hiking-relation+pedestrian-closure",
+        "provider": "OpenStreetMap hiking relation + pedestrian closure",
+        "relation_ref": ref,
+        "relation_name": str(trail.get("name") or "")[:160],
+        "relation_source_url": trail.get("source_url"),
+        "relation_geometry": True,
+        "relation_section_km": round(float(section_km), 2),
+        "closure_route_km": round(float(closure_km), 2),
+        "relation_share": round(float(relation_share), 3),
+        "closure_share": round(float(closure_share), 3),
+        "section_direction": int(direction),
+        "section_retrace_ratio": round(float(retrace), 4),
+        "start_offset_before_snap_km": round(float(start_off), 2),
+    }
+    _LAST_META.set({
+        "ref": ref,
+        "name": str(trail.get("name") or "")[:160],
+        "source_url": trail.get("source_url"),
+        "distance_km": result["distance"],
+        "section_km": result["relation_section_km"],
+        "closure_km": result["closure_route_km"],
+        "relation_share": result["relation_share"],
+        "mode": result["routing_mode"],
+    })
+    return result, None
+
+
 def _compact_route_points(points):
     """Keep every overnight detour while staying under secondary-router budget."""
     if len(points) <= _MAX_SECONDARY_POINTS:
@@ -233,47 +496,97 @@ def install_trail_loop_rescue(roundtrip, gr) -> None:
 
     def best_roundtrip(start, target_km, daily_min, daily_max, days, v3):
         _LAST_META.set(None)
+        _LAST_DISCOVERED_TRAILS.set([])
         relation, relation_warning = _relation_loop(v3, gr, start, target_km)
         if relation is not None:
             return relation
+
+        section_warning = None
+        if _coastal_section_allowed(_ACTIVE_INTENT.get(), target_km):
+            section, section_warning = _relation_section_loop(
+                v3,
+                gr,
+                start,
+                target_km,
+                daily_min,
+                daily_max,
+                days,
+                trails=_LAST_DISCOVERED_TRAILS.get(),
+            )
+            if section is not None:
+                return section
+
         try:
             return original_best(start, target_km, daily_min, daily_max, days, v3)
         except HTTPException as exc:
             detail = str(getattr(exc, "detail", exc) or "")
-            if relation_warning:
-                detail = f"{detail} Secours GR/GRP: {relation_warning}.".strip()
+            warnings = [x for x in (relation_warning, section_warning) if x]
+            if warnings:
+                detail = f"{detail} Secours GR/GRP: {' ; '.join(warnings)}.".strip()
             raise HTTPException(status_code=exc.status_code, detail=detail)
 
     def compact_points(coords, start, stays, days):
         return _compact_route_points(original_points(coords, start, stays, days))
 
     def build_roundtrip(data, legacy_main, v3):
-        result = original_build_roundtrip(data, legacy_main, v3)
-        route_preview = result.get("route_preview") or {}
-        if route_preview.get("routing_mode") == "osm-hiking-relation-loop":
-            meta = _LAST_META.get() or {}
-            ref = str(meta.get("ref") or "GR/GRP").strip()
-            result["description"] = (
-                f"Boucle basée sur la relation de randonnée {ref} réellement cartographiée dans OpenStreetMap."
-            )
-            notes = [
-                f"Le tracé principal suit la relation de randonnée {ref} au lieu de demander à ORS d'inventer une boucle.",
-                "La relation de randonnée est une forte preuve de cheminement, mais l'état du sentier et les éventuelles déviations restent à vérifier avant le départ.",
-            ]
-            if result.get("accommodations"):
-                notes.append("Les détours vers les nuitées ont été recalculés séparément sur le réseau pédestre.")
-            result["advisor_notes"] = notes
-            result["planner_fallback"] = "osm-hiking-relation-loop"
-            confidence = result.setdefault("confidence", {})
-            confidence["score"] = max(int(confidence.get("score") or 0), 84)
-            confidence["limitations"] = [
-                "Relation OSM de randonnée utilisée comme axe principal ; vérifier fermetures et déviations temporaires."
-            ]
-            route_preview["provider"] = "OpenStreetMap hiking relation"
-            route_preview["relation_ref"] = meta.get("ref")
-            route_preview["relation_name"] = meta.get("name")
-            route_preview["relation_source_url"] = meta.get("source_url")
-        return result
+        token = None
+        try:
+            try:
+                token = _ACTIVE_INTENT.set(v3._parse_intent(data))
+            except Exception:
+                token = _ACTIVE_INTENT.set(None)
+
+            result = original_build_roundtrip(data, legacy_main, v3)
+            route_preview = result.get("route_preview") or {}
+            route_mode = str(route_preview.get("routing_mode") or "")
+            if route_mode in {"osm-hiking-relation-loop", "osm-hiking-relation-section-loop"}:
+                meta = _LAST_META.get() or {}
+                ref = str(meta.get("ref") or "GR/GRP").strip()
+                section_mode = route_mode == "osm-hiking-relation-section-loop"
+                if section_mode:
+                    result["description"] = (
+                        f"Boucle construite sur une section réelle de {ref}, puis refermée par un itinéraire pédestre intérieur."
+                    )
+                    notes = [
+                        f"Le tracé suit d'abord une section réellement cartographiée de {ref}, puis revient au départ par une liaison pédestre routée.",
+                        (
+                            f"Environ {float(meta.get('section_km') or 0):.1f} km suivent la relation de randonnée "
+                            f"et {float(meta.get('closure_km') or 0):.1f} km servent à refermer la boucle."
+                        ),
+                        "Aucune ligne droite n'est utilisée pour fermer le circuit ; la liaison intérieure doit être validée par le routeur pédestre.",
+                    ]
+                else:
+                    result["description"] = (
+                        f"Boucle basée sur la relation de randonnée {ref} réellement cartographiée dans OpenStreetMap."
+                    )
+                    notes = [
+                        f"Le tracé principal suit la relation de randonnée {ref} au lieu de demander à ORS d'inventer une boucle.",
+                        "La relation de randonnée est une forte preuve de cheminement, mais l'état du sentier et les éventuelles déviations restent à vérifier avant le départ.",
+                    ]
+                if result.get("accommodations"):
+                    notes.append("Les détours vers les nuitées ont été recalculés séparément sur le réseau pédestre.")
+                result["advisor_notes"] = notes
+                result["planner_fallback"] = route_mode
+                confidence = result.setdefault("confidence", {})
+                confidence["score"] = max(int(confidence.get("score") or 0), 84 if not section_mode else 82)
+                confidence["limitations"] = [
+                    "Relation OSM de randonnée utilisée comme axe principal ; vérifier fermetures et déviations temporaires."
+                ]
+                route_preview["provider"] = (
+                    "OpenStreetMap hiking relation + pedestrian closure"
+                    if section_mode else "OpenStreetMap hiking relation"
+                )
+                route_preview["relation_ref"] = meta.get("ref")
+                route_preview["relation_name"] = meta.get("name")
+                route_preview["relation_source_url"] = meta.get("source_url")
+                if section_mode:
+                    route_preview["relation_section_km"] = meta.get("section_km")
+                    route_preview["closure_route_km"] = meta.get("closure_km")
+                    route_preview["relation_share"] = meta.get("relation_share")
+            return result
+        finally:
+            if token is not None:
+                _ACTIVE_INTENT.reset(token)
 
     roundtrip._best_roundtrip = best_roundtrip
     roundtrip._route_points_with_stays = compact_points
@@ -283,5 +596,8 @@ def install_trail_loop_rescue(roundtrip, gr) -> None:
 __all__ = [
     "install_trail_loop_rescue",
     "_relation_loop",
+    "_relation_section_loop",
+    "_section_candidates",
+    "_coastal_section_allowed",
     "_compact_route_points",
 ]
