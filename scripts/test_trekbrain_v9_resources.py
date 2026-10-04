@@ -124,6 +124,10 @@ try:
         "source_url": "https://www.openstreetmap.org/node/201",
     }]
     dedupe_plan["food"] = list(dedupe_plan["resources"])
+    dedupe_plan["points_of_interest"] = [
+        dedupe_plan["points_of_interest"][0],
+        dedupe_plan["points_of_interest"][2],
+    ]
     dedupe_plan["logistics"] = {"status": "partial"}
     dedupe_request = AIPlanRequest(
         prompt=(
@@ -174,7 +178,7 @@ try:
         days=2,
         daily_km=18,
         route_type="Boucle",
-        require_transit=False,
+        require_transit=True,
         require_water=True,
         require_accommodation=True,
         require_food=True,
@@ -184,6 +188,13 @@ finally:
     resources_module.v7.v5.v3._postroute_corridor_resources = real_postroute_resources
 
 assert network_calls["count"] == 0, network_calls
+
+# Both route endpoints have concrete transit access, so the final supplement
+# must not reopen Photon merely because require_transit=True.
+assert any(
+    resources_module._resource_kind(item) in {"station", "transport"}
+    for item in complete_plan["points_of_interest"]
+)
 
 # If the exact OSM terrain lookup found no water, one bounded Photon fallback
 # must remain enabled. This runs inside the same post-route wave.

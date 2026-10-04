@@ -173,13 +173,20 @@ def _terrain_resource(element: dict[str, Any]) -> dict[str, Any] | None:
             status = "not_potable"
     elif tags.get("shop") in {"supermarket", "convenience", "bakery"}:
         category = "food"
+    elif (
+        tags.get("railway") in {"station", "halt"}
+        or tags.get("amenity") in {"bus_station", "ferry_terminal"}
+    ):
+        category = "transit"
     if category is None:
         return None
+    default_name = (
+        "Point d'eau" if category == "water"
+        else "Ravitaillement" if category == "food"
+        else "Transport public"
+    )
     return {
-        "name": str(
-            tags.get("name")
-            or ("Point d'eau" if category == "water" else "Ravitaillement")
-        )[:180],
+        "name": str(tags.get("name") or default_name)[:180],
         "lat": lat,
         "lon": lon,
         "category": category,
@@ -251,6 +258,10 @@ def _bbox_route_query(
         '["shop"="supermarket"]',
         '["shop"="convenience"]',
         '["shop"="bakery"]',
+        '["railway"="station"]',
+        '["railway"="halt"]',
+        '["amenity"="bus_station"]',
+        '["amenity"="ferry_terminal"]',
     ) if include_terrain else ()
 
     clauses = "".join(
@@ -690,6 +701,18 @@ def _route_distance(result: dict[str, Any], coords, legacy_main) -> float:
 
 
 
+
+def _geo_km(a: dict[str, Any] | None, b: dict[str, Any] | None) -> float:
+    try:
+        lat1, lon1 = math.radians(float(a["lat"])), math.radians(float(a["lon"]))
+        lat2, lon2 = math.radians(float(b["lat"])), math.radians(float(b["lon"]))
+    except (KeyError, TypeError, ValueError):
+        return float("inf")
+    dlat, dlon = lat2 - lat1, lon2 - lon1
+    h = math.sin(dlat / 2) ** 2 + math.cos(lat1) * math.cos(lat2) * math.sin(dlon / 2) ** 2
+    return 6371.0088 * 2 * math.asin(min(1.0, math.sqrt(max(0.0, h))))
+
+
 def _attach_preloaded_terrain(
     result: dict[str, Any],
     rows: list[dict[str, Any]],
@@ -706,6 +729,11 @@ def _attach_preloaded_terrain(
         for x in (result.get("resources") or result.get("food") or [])
         if isinstance(x, dict)
     ]
+    pois = [dict(x) for x in (result.get("points_of_interest") or []) if isinstance(x, dict)]
+    transit = [
+        dict(x) for x in rows
+        if isinstance(x, dict) and str(x.get("category") or "") == "transit"
+    ]
 
     def coord_key(item):
         try:
@@ -715,6 +743,7 @@ def _attach_preloaded_terrain(
 
     seen_water = {key for item in water if (key := coord_key(item)) is not None}
     seen_food = {key for item in food if (key := coord_key(item)) is not None}
+    seen_pois = {key for item in pois if (key := coord_key(item)) is not None}
 
     for row in rows:
         if not isinstance(row, dict):
@@ -750,10 +779,44 @@ def _attach_preloaded_terrain(
                 "source_url": row.get("source_url") or "",
                 "display_only": True,
             })
+        elif kind == "transit" and key not in seen_pois:
+            seen_pois.add(key)
+            pois.append({
+                "name": row.get("name") or "Transport public",
+                "lat": row.get("lat"),
+                "lon": row.get("lon"),
+                "category": "transit",
+                "type": "Transport public",
+                "notes": "Accès cartographié près du tracé ; desserte et horaires à vérifier.",
+                "source_url": row.get("source_url") or "",
+                "display_only": True,
+            })
 
     result["water"] = water
     result["resources"] = food
     result["food"] = food
+    result["points_of_interest"] = pois
+
+    if transit:
+        transport = result.setdefault("transport", {})
+        start = result.get("start") or {}
+        end = result.get("end") or {}
+        if start:
+            nearest = min(transit, key=lambda item: _geo_km(start, item))
+            distance = _geo_km(start, nearest)
+            if math.isfinite(distance) and distance <= 12.0:
+                transport["outbound"] = (
+                    f"{nearest.get('name') or 'Transport public'} à environ {distance:.1f} km du départ "
+                    "(desserte et horaires à vérifier)."
+                )
+        if end:
+            nearest = min(transit, key=lambda item: _geo_km(end, item))
+            distance = _geo_km(end, nearest)
+            if math.isfinite(distance) and distance <= 12.0:
+                transport["return"] = (
+                    f"{nearest.get('name') or 'Transport public'} à environ {distance:.1f} km de l'arrivée "
+                    "(desserte et horaires à vérifier)."
+                )
 
 
 def _attach_logistics(result: dict[str, Any], data, legacy_main, v3, roundtrip, stay_rescue, ors, intent, category: str):
