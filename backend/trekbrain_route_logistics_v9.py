@@ -547,7 +547,7 @@ def _discover_stays(
     rows = []
     max_offroute = (
         3.2 if strict_walk
-        else 10.0 if category == "lodging"
+        else 12.5 if category == "lodging"
         else _MAX_OFFROUTE_KM
     )
 

@@ -292,12 +292,13 @@ assert "Gare terrain" in terrain_plan["transport"]["outbound"]
 assert "Gare terrain" in terrain_plan["transport"]["return"]
 
 # Generic lodging may be a separate transfer without reshaping the hiking line.
-# Keep candidates up to ~10 km off-route when the user did not demand 100% walk.
+# Discovery already searches to 12.5 km; preserve those candidates through the
+# projection stage when the user did not demand 100% walk.
 generic_lodging = [
-    {"name": "Gîte A", "lat": 0.080, "lon": 0.20, "category": "lodging", "source_url": "osm://ga"},
-    {"name": "Gîte B", "lat": 0.080, "lon": 0.40, "category": "lodging", "source_url": "osm://gb"},
-    {"name": "Gîte C", "lat": 0.080, "lon": 0.60, "category": "lodging", "source_url": "osm://gc"},
-    {"name": "Gîte D", "lat": 0.080, "lon": 0.80, "category": "lodging", "source_url": "osm://gd"},
+    {"name": "Gîte A", "lat": 0.110, "lon": 0.20, "category": "lodging", "source_url": "osm://ga"},
+    {"name": "Gîte B", "lat": 0.110, "lon": 0.40, "category": "lodging", "source_url": "osm://gb"},
+    {"name": "Gîte C", "lat": 0.110, "lon": 0.60, "category": "lodging", "source_url": "osm://gc"},
+    {"name": "Gîte D", "lat": 0.110, "lon": 0.80, "category": "lodging", "source_url": "osm://gd"},
 ]
 real_photon_generic = logistics._photon_split_stays
 real_bbox_generic = logistics._bbox_route_stays
@@ -320,7 +321,7 @@ finally:
     logistics._bbox_route_stays = real_bbox_generic
 
 assert len(chosen_generic) == 4, chosen_generic
-assert all(6.0 < float(x.get("_offroute_km") or 0) <= 10.0 for x in chosen_generic), chosen_generic
+assert all(10.0 < float(x.get("_offroute_km") or 0) <= 12.5 for x in chosen_generic), chosen_generic
 
 
 # Generic lodging sends gîte + hotel in the same bounded Photon wave.
