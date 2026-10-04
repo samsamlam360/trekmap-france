@@ -874,7 +874,7 @@ def _relation_section_loop(
             else 0.0
         )
         if retrace > 0.44:
-            reject(f"boucle trop répétitive ({retrace:.2f})
+            reject(f"boucle trop répétitive ({retrace:.2f})")
             continue
 
         score = (
