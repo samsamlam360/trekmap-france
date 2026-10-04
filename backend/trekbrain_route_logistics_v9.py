@@ -30,6 +30,8 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from copy import deepcopy
 from typing import Any
 
+from . import trekbrain_perf_profile_v9 as perf
+
 from fastapi import HTTPException
 
 _INSTALLED = False
@@ -417,22 +419,39 @@ def _photon_split_stays(v3, roundtrip, coords, category: str, days: int) -> list
             jobs.append((anchor, None))
 
     found = []
-    with ThreadPoolExecutor(max_workers=min(4, len(jobs))) as pool:
-        futures = []
-        for anchor, query_override in jobs:
+    profile = perf.current()
+
+    def profiled_lookup(anchor, query_override):
+        started = time.perf_counter()
+        outcome = "ok"
+        try:
             if query_override:
-                futures.append(
-                    pool.submit(
-                        lookup,
-                        anchor,
-                        "stay",
-                        tags,
-                        radius,
-                        query_override=query_override,
-                    )
+                return lookup(
+                    anchor,
+                    "stay",
+                    tags,
+                    radius,
+                    query_override=query_override,
                 )
-            else:
-                futures.append(pool.submit(lookup, anchor, "stay", tags, radius))
+            return lookup(anchor, "stay", tags, radius)
+        except Exception:
+            outcome = "error"
+            raise
+        finally:
+            perf.record(
+                "photon.lookup",
+                (time.perf_counter() - started) * 1000,
+                profile=profile,
+                category=category,
+                query=query_override or category,
+                outcome=outcome,
+            )
+
+    with ThreadPoolExecutor(max_workers=min(4, len(jobs))) as pool:
+        futures = [
+            pool.submit(profiled_lookup, anchor, query_override)
+            for anchor, query_override in jobs
+        ]
 
         for future in as_completed(futures):
             try:
@@ -543,6 +562,24 @@ def _discover_stays(
     budget = _logistics_budget_seconds()
     deadline = started + budget
     needed = max(1, days - 1)
+    profile = perf.current()
+
+    def provider_call(metric, func, *args):
+        call_started = time.perf_counter()
+        outcome = "ok"
+        try:
+            return func(*args)
+        except Exception:
+            outcome = "error"
+            raise
+        finally:
+            perf.record(
+                metric,
+                (time.perf_counter() - call_started) * 1000,
+                profile=profile,
+                category=category,
+                outcome=outcome,
+            )
 
     rows = []
     max_offroute = (
@@ -561,16 +598,21 @@ def _discover_stays(
     structured = category in {"camping", "refuge"}
     if structured:
         if want_terrain:
-            bbox_stays, terrain_rows, terrain_preloaded = _bbox_route_bundle(
-                coords, category
+            bbox_stays, terrain_rows, terrain_preloaded = provider_call(
+                "logistics.overpass_bundle", _bbox_route_bundle, coords, category
             )
             rows.extend(bbox_stays)
         else:
-            rows.extend(_bbox_route_stays(coords, category))
+            rows.extend(provider_call(
+                "logistics.overpass_stays", _bbox_route_stays, coords, category
+            ))
     elif want_terrain:
         with ThreadPoolExecutor(max_workers=2) as pool:
-            bbox_future = pool.submit(_bbox_route_bundle, coords, category)
+            bbox_future = pool.submit(
+                provider_call, "logistics.overpass_bundle", _bbox_route_bundle, coords, category
+            )
             photon_future = pool.submit(
+                provider_call, "logistics.photon_wave",
                 _photon_split_stays, v3, roundtrip, coords, category, days
             )
             try:
@@ -584,7 +626,10 @@ def _discover_stays(
         rows.extend(list(bbox_stays or []))
         rows.extend(list(photon_stays or []))
     else:
-        rows.extend(_photon_split_stays(v3, roundtrip, coords, category, days))
+        rows.extend(provider_call(
+            "logistics.photon_wave",
+            _photon_split_stays, v3, roundtrip, coords, category, days
+        ))
 
     projected = _project_stays(roundtrip, coords, rows, category, max_offroute)
     chosen = _choose_stays(roundtrip, coords, projected, days, daily_target)
@@ -615,17 +660,32 @@ def _discover_stays(
 
     if len(chosen) < needed and deadline - time.monotonic() >= 1.25:
         if structured:
-            rows.extend(_photon_split_stays(v3, roundtrip, coords, category, days))
+            rows.extend(provider_call(
+                "logistics.photon_fallback",
+                _photon_split_stays, v3, roundtrip, coords, category, days
+            ))
         elif not want_terrain:
-            rows.extend(_bbox_route_stays(coords, category))
+            rows.extend(provider_call(
+                "logistics.overpass_fallback", _bbox_route_stays, coords, category
+            ))
         # For generic lodging + terrain, both OSM and Photon already ran in the
         # first wave. Do not repeat either provider.
         projected = _project_stays(roundtrip, coords, rows, category, max_offroute)
         chosen = _choose_stays(roundtrip, coords, projected, days, daily_target)
 
+    elapsed_ms = round((time.monotonic() - started) * 1000)
+    perf.record(
+        "logistics.discovery",
+        elapsed_ms,
+        profile=profile,
+        category=category,
+        resolved=len(chosen),
+        discovered=len(projected),
+        budget_seconds=budget,
+    )
     return chosen, projected, {
         "budget_seconds": budget,
-        "elapsed_ms": round((time.monotonic() - started) * 1000),
+        "elapsed_ms": elapsed_ms,
         "budget_exhausted": time.monotonic() >= deadline,
         "terrain_rows": list(terrain_rows or []),
         "terrain_preloaded": bool(terrain_preloaded),
@@ -658,7 +718,11 @@ def _matrix_connectors(ors, coords, stays) -> dict[str, dict[str, Any]]:
         if not valid or len(points) != len(valid) * 2:
             continue
         try:
-            result = ors.get_distance_matrix(points)
+            result = perf.call(
+                "logistics.matrix_connector_batch",
+                ors.get_distance_matrix,
+                points,
+            )
         except Exception:
             result = None
         matrix = result.get("distances") if isinstance(result, dict) else None
@@ -682,7 +746,9 @@ def _connector(ors, legacy_main, roundtrip, coords, stay: dict[str, Any]) -> dic
     index = max(0, min(int(stay.get("_route_index") or 0), len(coords) - 1))
     anchor = coords[index]
     try:
-        routed = ors.get_route(
+        routed = perf.call(
+            "logistics.walk_connector",
+            ors.get_route,
             [[float(anchor[0]), float(anchor[1])], [float(stay["lat"]), float(stay["lon"])]],
             legacy_main.distance_gps,
         )
