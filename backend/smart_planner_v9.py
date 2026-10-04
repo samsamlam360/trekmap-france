@@ -664,8 +664,18 @@ def install_smart_planner(app, legacy_main):
             # network attempt of this independent request. It still protects
             # retries inside _build after the first failure.
             from .trekbrain_circuit_breaker_v9 import reset_circuit_breakers
+            from . import trekbrain_perf_profile_v9 as _perf_v9
             reset_circuit_breakers()
-            result = _build(data, legacy_main, int(user["id"]))
+            profile_token = _perf_v9.begin({
+                "days": getattr(data, "days", None),
+                "route_type": getattr(data, "route_type", None),
+            })
+            try:
+                result = _build(data, legacy_main, int(user["id"]))
+            except Exception as exc:
+                _perf_v9.finish(profile_token, error=exc)
+                raise
+            _perf_v9.finish(profile_token, result)
             quality = ((result.get("trekbrain") or {}).get("quality") or {}).get("score")
             total_ms = ((result.get("agent") or {}).get("performance") or {}).get("total_ms")
             planner = result.get("planner") or {}

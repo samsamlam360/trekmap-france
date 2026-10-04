@@ -27,6 +27,8 @@ from typing import Any, Callable
 
 from fastapi import HTTPException
 
+from . import trekbrain_perf_profile_v9 as perf
+
 _INSTALLED = False
 PIPELINE_VERSION = "v9-explicit-1"
 
@@ -312,7 +314,9 @@ def install_planning_pipeline(
         )
 
         try:
-            result = _build_backbone(
+            result = perf.call(
+                "phase.route",
+                _build_backbone,
                 state,
                 legacy_main,
                 base_build=base_build,
@@ -335,7 +339,9 @@ def install_planning_pipeline(
                 raise
             state.phases.append("route:retry")
             try:
-                result = _build_backbone(
+                result = perf.call(
+                "phase.route",
+                _build_backbone,
                     state,
                     legacy_main,
                     base_build=base_build,
@@ -369,7 +375,9 @@ def install_planning_pipeline(
         if category is not None:
             state.phases.append("logistics")
             try:
-                result = logistics_module._attach_logistics(
+                result = perf.call(
+                    "phase.logistics",
+                    logistics_module._attach_logistics,
                     result,
                     data,
                     legacy_main,

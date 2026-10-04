@@ -55,16 +55,25 @@ jobs:
           else:
               raise SystemExit('Render build did not converge to '+expected[:12]+'; last='+last)
 
-      - name: Run six authenticated end-to-end treks
+      - name: Run three independent six-trek passes
         env:
           EXPECTED_SHA: ${{ github.sha }}
           TREKBRAIN_BENCHMARK_URL: https://trekmap-france.onrender.com
-          TREKBRAIN_BENCHMARK_OUT: benchmark-results
-        run: python scripts/benchmark_trekbrain_v9_production.py
+        shell: bash
+        run: |
+          set -euo pipefail
+          for pass in 1 2 3; do
+            echo "=== TrekBrain production pass $pass/3 ==="
+            TREKBRAIN_BENCHMARK_OUT="benchmark-results/pass-$pass" \
+            GITHUB_RUN_ID="${GITHUB_RUN_ID}-$pass" \
+            python scripts/benchmark_trekbrain_v9_production.py
+          done
 
-      - name: Show benchmark report
+      - name: Show benchmark reports
         if: always()
-        run: cat benchmark-results/trekbrain-production-benchmark.md 2>/dev/null || true
+        shell: bash
+        run: |
+          find benchmark-results -name 'trekbrain-production-benchmark.md' -print -exec cat {} \; 2>/dev/null || true
 
       - name: Upload benchmark report
         if: always()
