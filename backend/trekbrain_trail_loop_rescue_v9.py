@@ -245,6 +245,7 @@ def _relation_loop(v3, gr, start: dict[str, Any], target_km: float):
 
     rows = []
     reasons = []
+    secondary = []
     for trail in trails:
         raw = trail.get("coords") or []
         if len(raw) < 8:
