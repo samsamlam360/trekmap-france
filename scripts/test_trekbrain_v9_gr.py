@@ -14,7 +14,10 @@ from backend import ors
 
 assert gr._is_priority_relation({"route": "hiking", "ref": "GR 223"})
 assert gr._is_priority_relation({"route": "hiking", "network": "nwn", "name": "Coastal walk"})
-assert not gr._is_priority_relation({"route": "hiking", "network": "lwn", "name": "Promenade locale"})
+# Local walking-network relations are now discovery candidates too. They are
+# not automatically selected: length/proximity/name matching still decides.
+assert gr._is_priority_relation({"route": "hiking", "network": "lwn", "name": "Promenade locale"})
+assert not gr._is_priority_relation({"route": "bicycle", "network": "lcn", "name": "Promenade cyclable"})
 
 members = [
     {"type": "way", "geometry": [{"lat": 48.60, "lon": -1.60}, {"lat": 48.60, "lon": -1.50}, {"lat": 48.60, "lon": -1.40}]},

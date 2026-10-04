@@ -108,6 +108,63 @@ EXTENDED_SCENARIOS = [
         "expect_close": True,
     },
     {
+        "id": "tour-des-fiz-unseen-loop",
+        "prompt": (
+            "Je veux faire le Tour des Fiz en 4 jours, environ 16 km par jour, en boucle. "
+            "Je veux privilégier l'itinéraire de randonnée existant, avec refuge ou gîte pour dormir "
+            "et des points d'eau. Je ne veux pas d'une boucle artificielle inventée autour du massif."
+        ),
+        "region": "Passy, Haute-Savoie",
+        "days": 4,
+        "daily_km": 16,
+        "difficulty": "hard",
+        "route_type": "Boucle",
+        "require_transit": False,
+        "require_water": True,
+        "require_accommodation": True,
+        "require_food": False,
+        "expect_type": "boucle",
+        "expect_close": True,
+    },
+    {
+        "id": "queyras-named-trail-unseen-loop",
+        "prompt": (
+            "Je veux une itinérance en boucle de 7 jours dans le Queyras, environ 18 km par jour. "
+            "S'il existe un itinéraire de grande randonnée cohérent avec cette demande, privilégie son vrai tracé "
+            "plutôt que d'inventer une boucle. Je veux des refuges ou gîtes, de l'eau et du ravitaillement."
+        ),
+        "region": "Ceillac, Queyras",
+        "days": 7,
+        "daily_km": 18,
+        "difficulty": "hard",
+        "route_type": "Boucle",
+        "require_transit": False,
+        "require_water": True,
+        "require_accommodation": True,
+        "require_food": True,
+        "expect_type": "boucle",
+        "expect_close": True,
+    },
+    {
+        "id": "beaufortain-unseen-loop",
+        "prompt": (
+            "Je veux faire un trek en boucle de 6 jours dans le Beaufortain, autour de 18 km par jour, "
+            "sur des itinéraires de randonnée existants autant que possible. Je veux dormir en refuge ou gîte "
+            "et avoir des informations sur l'eau et le ravitaillement."
+        ),
+        "region": "Beaufort, Savoie",
+        "days": 6,
+        "daily_km": 18,
+        "difficulty": "hard",
+        "route_type": "Boucle",
+        "require_transit": False,
+        "require_water": True,
+        "require_accommodation": True,
+        "require_food": True,
+        "expect_type": "boucle",
+        "expect_close": True,
+    },
+    {
         "id": "dijon-beaune-traverse",
         "prompt": (
             "Je veux aller de Dijon à Beaune à pied en 3 jours, environ 16 km par jour. Ce n'est pas une boucle. "

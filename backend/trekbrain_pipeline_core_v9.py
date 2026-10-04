@@ -62,6 +62,28 @@ def _fold(value: str) -> str:
     return "".join(c for c in text if not unicodedata.combining(c)).casefold()
 
 
+def _relation_candidate_loop_allowed(intent: dict[str, Any]) -> bool:
+    """Try real hiking-route evidence before generic routing for multi-day loops.
+
+    This is deliberately broad and destination-agnostic. It does not know TMB,
+    GR340, Crozon or any other route name. Long loops are exactly where asking a
+    generic router to invent the whole trek is weakest, while an existing hiking
+    relation is strong evidence when its geometry, length and start proximity fit.
+    """
+    if _fold(intent.get("route_type") or "") != "boucle":
+        return False
+    try:
+        days = int(intent.get("days") or 1)
+        total = float(intent.get("total_target") or 0)
+    except (TypeError, ValueError):
+        return False
+    if days < 2 or days > 12 or total < 24.0 or total > 260.0:
+        return False
+    if intent.get("start_query") or intent.get("end_query") or intent.get("via_query"):
+        return False
+    return True
+
+
 def _fast_generic_loop_allowed(intent: dict[str, Any]) -> bool:
     """Use the stable ORS loop engine directly for simple short loops."""
     if _fold(intent.get("route_type") or "") != "boucle":
@@ -119,13 +141,23 @@ def _build_backbone(
         state.phases.append("route:canonical-gr340")
         return canonical_result
 
-    if _fast_generic_loop_allowed(state.intent):
+    # Candidate-first planning: for any compatible multi-day loop, let the
+    # relation-aware round-trip stack inspect real hiking evidence before the
+    # legacy planner asks ORS to invent a circuit. The patched _best_roundtrip
+    # checks relations first; if no relation fits, long routes fail cheaply at
+    # the ORS safety cap and continue to the generic planner below.
+    if _relation_candidate_loop_allowed(state.intent):
+        state.phases.append("route:candidate-relations")
+        try:
+            return roundtrip._build_roundtrip(state.route_data, legacy_main, v3)
+        except HTTPException:
+            state.phases.append("route:candidate-miss")
+
+    elif _fast_generic_loop_allowed(state.intent):
         state.phases.append("route:generic-fast-ors")
         try:
             return roundtrip._build_roundtrip(state.route_data, legacy_main, v3)
         except HTTPException:
-            # Keep the advanced planner as a safety net if the direct loop
-            # engine cannot produce a valid pedestrian circuit.
             state.phases.append("route:generic-fast-miss")
 
     state.phases.append("route:generic")
@@ -422,4 +454,5 @@ __all__ = [
     "install_planning_pipeline",
     "_build_backbone",
     "_rebalance_stage_count",
+    "_relation_candidate_loop_allowed",
 ]

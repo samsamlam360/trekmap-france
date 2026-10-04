@@ -1273,10 +1273,18 @@ def _build_roundtrip(data, legacy_main, v3):
         })
 
     end = dict(start)
-    notes = [
-        "Planificateur avancé indisponible pour cette demande : boucle de secours calculée directement par ORS sur le réseau pédestre.",
-        "Les distances sont réelles côté routage ; les services et conditions terrain restent à vérifier avant le départ.",
-    ]
+    relation_geometry = bool(route.get("relation_geometry"))
+    if relation_geometry:
+        relation_label = str(route.get("relation_ref") or route.get("relation_name") or "itinéraire balisé")
+        notes = [
+            f"Tracé construit prioritairement à partir de la relation de randonnée « {relation_label} » réellement découverte près de la zone demandée.",
+            "La relation n'est pas acceptée par son nom seul : longueur, proximité, continuité et contraintes quotidiennes restent contrôlées.",
+        ]
+    else:
+        notes = [
+            "Aucune relation de randonnée suffisamment compatible n'a été retenue : boucle calculée sur le réseau pédestre OpenRouteService.",
+            "Les distances sont réelles côté routage ; les services et conditions terrain restent à vérifier avant le départ.",
+        ]
     if stays:
         notes.append(
             "Les fins d'étape ont été adaptées aux campings réellement trouvés le long de la boucle, puis tous les détours ont été revalidés par ORS."
@@ -1301,6 +1309,13 @@ def _build_roundtrip(data, legacy_main, v3):
             "fallback": False,
             "routing_mode": route.get("routing_mode") or "ors-round-trip",
             "profile": route.get("profile") or ors.ORS_PROFILE,
+            "provider": route.get("provider"),
+            "relation_geometry": bool(route.get("relation_geometry")),
+            "relation_ref": route.get("relation_ref"),
+            "relation_name": route.get("relation_name"),
+            "relation_source_url": route.get("relation_source_url"),
+            "relation_share": route.get("relation_share"),
+            "closure_share": route.get("closure_share"),
         },
         "accommodations": accommodations,
         "water": [],
@@ -1314,8 +1329,10 @@ def _build_roundtrip(data, legacy_main, v3):
             "score": 78,
             "limitations": ["Boucle ORS de secours : moins optimisée pour les POI que le planificateur principal."],
         },
-        "planner_fallback": "ors-round-trip",
+        "planner_fallback": "relation-candidate" if relation_geometry else "ors-round-trip",
         "planner": {
+            "candidate_first": True,
+            "selected_evidence": "hiking-relation" if relation_geometry else "pedestrian-network",
             "fast_roundtrip": roundtrip_diag,
         },
     }

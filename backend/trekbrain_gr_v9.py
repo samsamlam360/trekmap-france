@@ -63,14 +63,23 @@ def _path_length(coords: list[list[float]]) -> float:
 
 
 def _is_priority_relation(tags: dict[str, Any]) -> bool:
-    ref = _fold(tags.get("ref") or "")
-    name = _fold(tags.get("name") or "")
+    """Return whether a hiking relation is useful route evidence.
+
+    v9 used to keep only GR/GRP or high-level networks. That made the planner
+    excellent on routes we had already encountered, but blind to established
+    named itineraries such as many local/regional tours. A general planner must
+    consider any identified hiking relation, then rank it instead of hard-coding
+    its name.
+    """
+    ref = str(tags.get("ref") or "").strip()
+    name = str(tags.get("name") or tags.get("local_name") or "").strip()
     network = _fold(tags.get("network") or "")
-    return (
-        bool(re.search(r"\bgr\s*\d|\bgrp\b", ref))
-        or bool(re.search(r"\bgr\s*\d|\bgrp\b", name))
-        or network in {"iwn", "nwn", "rwn"}
-    )
+    route = _fold(tags.get("route") or "hiking")
+    if route and route not in {"hiking", "foot", "walking"}:
+        return False
+    if network in {"iwn", "nwn", "rwn", "lwn"}:
+        return True
+    return bool(ref or name)
 
 
 def _member_geometry(member: dict[str, Any]) -> list[list[float]]:
@@ -291,7 +300,7 @@ def _waymarked_trails_from_payloads(
             continue
         ref = str(item.get("ref") or "").strip()
         name = str(item.get("name") or item.get("local_name") or ref or "").strip()
-        if not _is_priority_relation({"ref": ref, "name": name, "network": ""}):
+        if not _is_priority_relation({"ref": ref, "name": name, "network": "", "route": "hiking"}):
             continue
         routes[relation_id] = item
     if not routes:
@@ -330,8 +339,12 @@ def _waymarked_trails_from_payloads(
             "confidence": "high-route-evidence-secondary",
             "discovery_provider": "Waymarked Trails (OpenStreetMap-derived)",
         })
-    trails.sort(key=lambda t: (0 if _fold(t.get("ref")).startswith("gr") else 1, -t["length_km"]))
-    return trails[:8]
+    trails.sort(key=lambda t: (
+        0 if _fold(t.get("network")) in {"iwn", "nwn", "rwn"} else 1,
+        0 if _fold(t.get("ref")).startswith("gr") else 1,
+        -t["length_km"],
+    ))
+    return trails[:12]
 
 
 def _discover_waymarked(center: dict[str, Any], radius_km: float) -> list[dict[str, Any]]:
@@ -373,7 +386,7 @@ def _discover_waymarked(center: dict[str, Any], radius_km: float) -> list[dict[s
             continue
         ref = str(item.get("ref") or "").strip()
         name = str(item.get("name") or item.get("local_name") or "").strip()
-        if relation_id in seen or not _is_priority_relation({"ref": ref, "name": name, "network": ""}):
+        if relation_id in seen or not _is_priority_relation({"ref": ref, "name": name, "network": "", "route": "hiking"}):
             continue
         seen.add(relation_id)
         priority.append(item)
@@ -413,9 +426,10 @@ def _discover(v3, center: dict[str, Any], radius_km: float) -> list[dict[str, An
     radius_m = max(3000, min(int(max(radius_km, 12.0) * 1000), 45000))
     query = (
         "[out:json][timeout:20];("
-        f"relation(around:{radius_m},{center['lat']},{center['lon']})[\"route\"=\"hiking\"][\"network\"~\"^(iwn|nwn|rwn)$\"];"
-        f"relation(around:{radius_m},{center['lat']},{center['lon']})[\"route\"=\"hiking\"][\"ref\"~\"^(GR|GRP)\",i];"
-        ");out geom tags 36;"
+        f"relation(around:{radius_m},{center['lat']},{center['lon']})[\"route\"=\"hiking\"][\"network\"~\"^(iwn|nwn|rwn|lwn)$\"];"
+        f"relation(around:{radius_m},{center['lat']},{center['lon']})[\"route\"=\"hiking\"][\"ref\"];"
+        f"relation(around:{radius_m},{center['lat']},{center['lon']})[\"route\"=\"hiking\"][\"name\"];"
+        ");out geom tags 48;"
     )
     try:
         payload = v3._overpass(query)

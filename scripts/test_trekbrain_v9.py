@@ -12,6 +12,9 @@ from backend.smart_planner_v9 import precision_audit
 from backend.web_research_v9 import source_score
 from backend import trekbrain_request_v9 as request_reconcile
 from backend.trekbrain_request_overlay_v9 import _effective_payload
+from backend import trekbrain_gr_v9 as gr_candidates
+from backend import trekbrain_trail_loop_rescue_v9 as trail_candidates
+from backend import trekbrain_pipeline_core_v9 as pipeline_core
 
 request = AIPlanRequest(
     prompt="Je veux une boucle de 4 jours, 16 km par jour, avec eau et camping",
@@ -265,3 +268,47 @@ runpy.run_path(str(ROOT / "scripts" / "test_trekbrain_v9_geo_safety.py"), run_na
 
 print("TrekBrain v9 precision tests: OK")
 print("good=", good["score"], "bad=", bad["score"], "trusted=", trusted, "social=", social)
+
+
+# Generic candidate-engine contract. These are deliberately synthetic route
+# names: the production code must rank evidence, not recognise a destination.
+assert gr_candidates._is_priority_relation({
+    "route": "hiking", "name": "Circuit des Aiguilles Inventées", "ref": "", "network": "lwn",
+}) is True
+assert gr_candidates._is_priority_relation({
+    "route": "hiking", "name": "Tour des Plateaux Inconnus", "ref": "", "network": "",
+}) is True
+assert gr_candidates._is_priority_relation({
+    "route": "bicycle", "name": "Tour cyclable", "ref": "V99", "network": "lcn",
+}) is False
+
+candidate_intent = {
+    "raw": "Je veux faire le Tour des Plateaux Inconnus en 6 jours",
+    "route_type": "Boucle",
+    "days": 6,
+    "daily_target": 18.0,
+    "daily_min": 13.5,
+    "daily_max": 22.5,
+    "total_target": 108.0,
+}
+token = trail_candidates._ACTIVE_INTENT.set(candidate_intent)
+try:
+    named_score = trail_candidates._preferred_score(
+        {"name": "Tour des Plateaux Inconnus", "ref": "", "network": "rwn"},
+        108.0, 0.4, 110.0,
+    )
+    unrelated_score = trail_candidates._preferred_score(
+        {"name": "Sentier régional du Val", "ref": "GR 999", "network": "rwn"},
+        108.0, 0.4, 110.0,
+    )
+finally:
+    trail_candidates._ACTIVE_INTENT.reset(token)
+assert named_score < unrelated_score - 10.0, (named_score, unrelated_score)
+
+assert pipeline_core._relation_candidate_loop_allowed(candidate_intent) is True
+assert pipeline_core._relation_candidate_loop_allowed({
+    **candidate_intent, "route_type": "Traversée",
+}) is False
+assert pipeline_core._relation_candidate_loop_allowed({
+    **candidate_intent, "days": 14, "total_target": 252.0,
+}) is False

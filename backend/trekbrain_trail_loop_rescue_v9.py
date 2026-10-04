@@ -113,14 +113,39 @@ def _nearest_index(coords, point) -> tuple[int, float]:
     return best_i, best_d
 
 
+def _intent_tokens() -> set[str]:
+    raw = _fold((_ACTIVE_INTENT.get() or {}).get("raw") or "")
+    stop = {
+        "je", "veux", "faire", "un", "une", "de", "du", "des", "le", "la", "les",
+        "en", "dans", "sur", "pour", "avec", "trek", "randonnee", "jours", "jour",
+        "km", "environ", "autour", "boucle", "tour",
+    }
+    return {
+        token for token in re.findall(r"[a-z0-9]{3,}", raw)
+        if token not in stop and not token.isdigit()
+    }
+
+
+def _trail_text_score(trail: dict[str, Any]) -> float:
+    """Reward evidence whose name/ref actually matches the user's wording."""
+    tokens = _intent_tokens()
+    if not tokens:
+        return 0.0
+    text = _fold(f"{trail.get('ref') or ''} {trail.get('name') or ''}")
+    matched = sum(1 for token in tokens if token in text)
+    # A named match is stronger evidence than the old GR-specific tie-break.
+    return -min(30.0, matched * 8.0)
+
+
 def _preferred_score(trail: dict[str, Any], target_km: float, start_off: float, length_km: float) -> float:
-    ref = str(trail.get("ref") or "").casefold().replace(" ", "")
-    name = str(trail.get("name") or "").casefold()
-    gr_bonus = -14.0 if re.search(r"\bgr\s*\d", str(trail.get("ref") or ""), flags=re.I) else 0.0
-    # GR 340 gets no hard-coded route geometry; this only breaks ties when it is
-    # actually returned by OSM near the request and its length fits the trek.
-    gr340_bonus = -6.0 if "gr340" in ref or "gr 340" in name else 0.0
-    return abs(length_km - float(target_km)) + start_off * 0.7 + gr_bonus + gr340_bonus
+    network = _fold(trail.get("network") or "")
+    network_bonus = -5.0 if network in {"iwn", "nwn", "rwn"} else 0.0
+    return (
+        abs(length_km - float(target_km))
+        + start_off * 0.7
+        + network_bonus
+        + _trail_text_score(trail)
+    )
 
 
 def _close_relation(coords, legacy_distance=None):
@@ -207,6 +232,45 @@ def _relation_loop(v3, gr, start: dict[str, Any], target_km: float):
             continue
         score = _preferred_score(trail, target_km, start_off, relation_km)
         rows.append((score, trail, closed, idx, start_off, relation_km))
+
+    if not rows:
+        # Overpass can return perfectly valid but irrelevant local relations. The
+        # old planner stopped there and never consulted its secondary index.
+        # Merge Waymarked candidates before giving up so an unseen named route
+        # can still win by distance/name/continuity evidence.
+        try:
+            secondary = list(gr._discover_waymarked(start, radius) or [])
+        except Exception:
+            secondary = []
+        known = {
+            str(x.get("id") or x.get("source_url") or x.get("ref") or x.get("name") or "")
+            for x in trails
+        }
+        merged = list(trails)
+        for trail in secondary:
+            identity = str(trail.get("id") or trail.get("source_url") or trail.get("ref") or trail.get("name") or "")
+            if identity and identity not in known:
+                known.add(identity)
+                merged.append(trail)
+        if len(merged) > len(trails):
+            _LAST_DISCOVERED_TRAILS.set(merged)
+            for trail in merged[len(trails):]:
+                raw = trail.get("coords") or []
+                if len(raw) < 8:
+                    continue
+                closed, reason = _close_relation(raw, _length)
+                if not closed:
+                    if reason:
+                        reasons.append(reason)
+                    continue
+                relation_km = _length(closed)
+                if relation_km < max(10.0, float(target_km) * 0.62) or relation_km > float(target_km) * 1.42:
+                    continue
+                idx, start_off = _nearest_index(closed[:-1], start)
+                if start_off > _MAX_START_OFFSET_KM:
+                    continue
+                score = _preferred_score(trail, target_km, start_off, relation_km)
+                rows.append((score, trail, closed, idx, start_off, relation_km))
 
     if not rows:
         detail = reasons[0] if reasons else "aucune relation fermée de longueur compatible"
