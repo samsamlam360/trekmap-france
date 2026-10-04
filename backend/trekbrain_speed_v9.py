@@ -470,8 +470,8 @@ def install_fast_planning(v3, v5, v9) -> None:
             # better loop.
             if (
                 daily_min <= per_day <= daily_max
-                and retrace <= 0.30
-                and abs(distance - target_km) <= max(4.0, target_km * 0.20)
+                and retrace <= 0.25
+                and abs(distance - target_km) <= max(4.0, target_km * 0.12)
             ):
                 candidate["round_trip_attempt_count"] = len(attempt_rows)
                 candidate["round_trip_attempts"] = list(attempt_rows)
@@ -484,7 +484,6 @@ def install_fast_planning(v3, v5, v9) -> None:
                     "retrace": candidate.get("round_trip_retrace_ratio"),
                 }]
                 candidate["fast_ranked"] = True
-                candidate["single_call_good_enough"] = True
                 return candidate
 
             # Keep the same two-call budget, but make the second call corrective.
