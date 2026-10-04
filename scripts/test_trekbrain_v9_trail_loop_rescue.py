@@ -125,6 +125,23 @@ ranked_provider = gr_module._rank_waymarked_route_items(
 assert ranked_provider[0]["id"] == 9711201, ranked_provider
 assert 9711201 in [row["id"] for row in ranked_provider[:6]], ranked_provider
 
+# Naive stride sampling can cut mountain switchbacks and silently shorten a
+# long relation. The full-relation reducer must retain at least 97% of the
+# source geometry length or keep more points.
+zigzag = []
+for i in range(6000):
+    zigzag.append([
+        44.60 + (0.0012 if i % 2 else -0.0012),
+        6.70 + i * 0.00002,
+    ])
+zigzag_source_km = gr_module._path_length(zigzag)
+zigzag_reduced = gr_module._downsample_preserve_length(zigzag)
+zigzag_reduced_km = gr_module._path_length(zigzag_reduced)
+assert zigzag_reduced_km >= zigzag_source_km * 0.97, (
+    zigzag_source_km, zigzag_reduced_km, len(zigzag_reduced)
+)
+assert len(zigzag_reduced) <= len(zigzag)
+
 # The relation-detail endpoint exposes the provider's full route-builder tree.
 # Parse its ordered Web-Mercator BaseWays instead of reconstructing a long loop
 # from bbox-clipped /list/segments fragments.
