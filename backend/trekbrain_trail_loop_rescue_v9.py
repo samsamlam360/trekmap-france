@@ -330,6 +330,7 @@ def _relation_loop(v3, gr, start: dict[str, Any], target_km: float):
 
     rows = []
     reasons = []
+    secondary = []
     for trail in trails:
         raw = trail.get("coords") or []
         if len(raw) < 8:
@@ -375,7 +376,18 @@ def _relation_loop(v3, gr, start: dict[str, Any], target_km: float):
         # Tier 3: use the independent Waymarked OSM route index if Overpass still
         # has not supplied enough evidence.
         try:
-            secondary = list(gr._discover_waymarked(start, radius) or [])
+            try:
+                secondary = list(
+                    gr._discover_waymarked(
+                        start,
+                        radius,
+                        preferred_tokens=_intent_tokens(),
+                    ) or []
+                )
+            except TypeError:
+                # Compatibility with deterministic test doubles and older
+                # extension modules that still expose the two-argument shape.
+                secondary = list(gr._discover_waymarked(start, radius) or [])
         except Exception:
             secondary = []
         known = {
@@ -410,16 +422,34 @@ def _relation_loop(v3, gr, start: dict[str, Any], target_km: float):
                 score = _preferred_score(trail, target_km, start_off, relation_km)
                 rows.append((score, trail, closed, idx, start_off, relation_km))
 
-    if not rows and secondary:
+    intent = _ACTIVE_INTENT.get() or {}
+    try:
+        intent_days = int(intent.get("days") or 1)
+    except (TypeError, ValueError):
+        intent_days = 1
+    full_relation_allowed = intent_days >= 5 or float(target_km) >= 90.0
+
+    semantic_secondary = [
+        candidate for candidate in secondary
+        if _trail_text_score(candidate) < 0
+    ]
+    hydration_pool = semantic_secondary if rows else secondary
+    should_hydrate_full = bool(
+        full_relation_allowed
+        and secondary
+        and (not rows or semantic_secondary)
+    )
+
+    if should_hydrate_full:
         # /list/segments is clipped to the discovery bbox. For long established
-        # tours that clipped geometry can look open even though the underlying
-        # OSM relation is a real loop. Hydrate only the two strongest Waymarked
-        # candidates from the provider's full relation tree before inventing a
-        # generic loop or accepting a large interior closure.
+        # tours that clipped geometry can look open or deceptively complete even
+        # though the provider has a better full relation tree. When the route
+        # name explicitly matches the request, authoritative full geometry may
+        # replace the bbox version even if the latter already passed basic gates.
         hydrate = getattr(gr, "_hydrate_waymarked_relation", None)
         ranked_secondary = []
         if callable(hydrate):
-            for candidate in secondary:
+            for candidate in hydration_pool:
                 raw = candidate.get("coords") or []
                 if len(raw) < 8:
                     continue
@@ -702,7 +732,16 @@ def _relation_section_loop(
     # request actually needed. Merge both evidence sources, then rank them.
     radius = min(45.0, max(16.0, float(target_km) * 0.42))
     try:
-        secondary = list(gr._discover_waymarked(start, radius) or [])
+        try:
+            secondary = list(
+                gr._discover_waymarked(
+                    start,
+                    radius,
+                    preferred_tokens=_intent_tokens(),
+                ) or []
+            )
+        except TypeError:
+            secondary = list(gr._discover_waymarked(start, radius) or [])
     except Exception:
         secondary = []
     if secondary:

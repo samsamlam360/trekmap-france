@@ -106,6 +106,42 @@ assert waymarked[0]["discovery_provider"].startswith("Waymarked Trails")
 assert abs(waymarked[0]["coords"][0][0] - sample_wgs[0][0]) < 1e-5
 assert abs(waymarked[0]["coords"][0][1] - sample_wgs[0][1]) < 1e-5
 
+# Waymarked list/by_area may contain many overlapping GRs. A route whose
+# name explicitly matches the user's request must survive the six-relation
+# segment budget even when it appears later in provider order.
+provider_items = [
+    {"id": 1, "ref": "GR 5", "name": "Sentier de l'Europe"},
+    {"id": 2, "ref": "GR 69", "name": "La Routo"},
+    {"id": 3, "ref": "GR 6", "name": "Des Alpes à la Nouvelle Aquitaine"},
+    {"id": 4, "ref": "GRV", "name": "Sur les pas des Vaudois"},
+    {"id": 5, "ref": "GR 5c", "name": "GR 5c"},
+    {"id": 6, "ref": "GR 5b", "name": "GR 5b"},
+    {"id": 9711201, "ref": "GR 58", "name": "Tour du Queyras"},
+]
+ranked_provider = gr_module._rank_waymarked_route_items(
+    provider_items,
+    {"queyras", "itinérance", "refuge"},
+)
+assert ranked_provider[0]["id"] == 9711201, ranked_provider
+assert 9711201 in [row["id"] for row in ranked_provider[:6]], ranked_provider
+
+# Naive stride sampling can cut mountain switchbacks and silently shorten a
+# long relation. The full-relation reducer must retain at least 97% of the
+# source geometry length or keep more points.
+zigzag = []
+for i in range(6000):
+    zigzag.append([
+        44.60 + (0.0012 if i % 2 else -0.0012),
+        6.70 + i * 0.00002,
+    ])
+zigzag_source_km = gr_module._path_length(zigzag)
+zigzag_reduced = gr_module._downsample_preserve_length(zigzag)
+zigzag_reduced_km = gr_module._path_length(zigzag_reduced)
+assert zigzag_reduced_km >= zigzag_source_km * 0.97, (
+    zigzag_source_km, zigzag_reduced_km, len(zigzag_reduced)
+)
+assert len(zigzag_reduced) <= len(zigzag)
+
 # The relation-detail endpoint exposes the provider's full route-builder tree.
 # Parse its ordered Web-Mercator BaseWays instead of reconstructing a long loop
 # from bbox-clipped /list/segments fragments.
@@ -194,15 +230,51 @@ full_start = {
     "category": "place",
 }
 full_target = rescue._length(full_ring)
-full_route, full_warning = rescue._relation_loop(
-    v3, fake_gr_full, full_start, full_target
-)
+intent_token = rescue._ACTIVE_INTENT.set({
+    "route_type": "Boucle",
+    "days": 7,
+    "total_target": full_target,
+    "raw": "grand tour de randonnée",
+})
+try:
+    full_route, full_warning = rescue._relation_loop(
+        v3, fake_gr_full, full_start, full_target
+    )
+finally:
+    rescue._ACTIVE_INTENT.reset(intent_token)
 assert full_warning is None, full_warning
 assert full_route is not None, full_route
 assert full_route["routing_mode"] == "osm-hiking-relation-loop", full_route
 assert full_route["relation_ref"] == "GR 58", full_route
 assert rescue._dist(full_route["coords"][0], full_route["coords"][-1]) < 0.05
 assert hydrate_calls == [580058], hydrate_calls
+
+# Short loops keep the established fast path: relation-detail hydration is a
+# long-trek rescue, not another provider call every time a local relation is
+# clipped.
+short_hydrate_calls = []
+fake_gr_short = SimpleNamespace(
+    _discover=lambda *_args: [],
+    _discover_generic=lambda *_args: [],
+    _discover_waymarked=lambda *_args: [clipped],
+    _hydrate_waymarked_relation=lambda candidate: (
+        short_hydrate_calls.append(candidate["id"]) or dict(hydrated)
+    ),
+)
+short_token = rescue._ACTIVE_INTENT.set({
+    "route_type": "Boucle",
+    "days": 2,
+    "total_target": 32.0,
+    "raw": "petite boucle",
+})
+try:
+    short_route, _short_warning = rescue._relation_loop(
+        v3, fake_gr_short, dict(full_start), 32.0
+    )
+finally:
+    rescue._ACTIVE_INTENT.reset(short_token)
+assert short_route is None, short_route
+assert short_hydrate_calls == [], short_hydrate_calls
 
 # A transient cold-provider timeout must get exactly one shorter retry. This
 # mirrors the production Crozon failure where the first Waymarked lookup missed

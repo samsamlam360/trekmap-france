@@ -26,7 +26,7 @@ _WAYMARKED_BASE = "https://hiking.waymarkedtrails.org/api/v1"
 _WAYMARKED_LIST_TIMEOUT_S = 2.4
 _WAYMARKED_SEGMENTS_TIMEOUT_S = 3.0
 _WAYMARKED_CACHE_TTL_S = 1800
-_WAYMARKED_CACHE: dict[tuple[float, float, int], tuple[float, list[dict[str, Any]]]] = {}
+_WAYMARKED_CACHE: dict[tuple[Any, ...], tuple[float, list[dict[str, Any]]]] = {}
 _WAYMARKED_DETAIL_CACHE: dict[int, tuple[float, dict[str, Any]]] = {}
 _MERCATOR_R = 6378137.0
 
@@ -136,6 +136,32 @@ def _downsample(coords: list[list[float]], max_points: int = 500) -> list[list[f
     if sampled[-1] != coords[-1]:
         sampled.append(coords[-1])
     return sampled
+
+
+def _downsample_preserve_length(
+    coords: list[list[float]],
+    max_points: int = 2400,
+    min_length_ratio: float = 0.97,
+) -> list[list[float]]:
+    """Reduce payload size without turning mountain switchbacks into chords."""
+    if len(coords) <= max_points:
+        return [list(point) for point in coords]
+    original_km = _path_length(coords)
+    if not math.isfinite(original_km) or original_km <= 0:
+        return _downsample(coords, max_points)
+
+    for budget in (max_points, max_points * 2, max_points * 3):
+        if budget >= len(coords):
+            candidate = [list(point) for point in coords]
+        else:
+            candidate = _downsample(coords, budget)
+        candidate_km = _path_length(candidate)
+        if candidate_km >= original_km * float(min_length_ratio):
+            return candidate
+
+    # Authoritative route geometry is more important than shaving a few tens of
+    # kilobytes from this rare long-loop rescue.
+    return [list(point) for point in coords]
 
 
 def _lonlat_to_mercator(lon: float, lat: float) -> tuple[float, float]:
@@ -330,13 +356,19 @@ def _waymarked_trails_from_payloads(
             continue
         ref = str(item.get("ref") or "").strip()
         name = str(item.get("name") or item.get("local_name") or ref or "Itinéraire de randonnée").strip()
+        reduced = (
+            _downsample_preserve_length(coords)
+            if length >= 90.0
+            else _downsample(coords)
+        )
         trails.append({
             "id": relation_id,
             "name": name[:160],
             "ref": ref[:60],
             "network": "",
-            "coords": _downsample(coords),
+            "coords": reduced,
             "length_km": round(length, 1),
+            "source_geometry_length_km": round(length, 2),
             "source_url": f"https://www.openstreetmap.org/relation/{relation_id}",
             "confidence": "high-route-evidence-secondary",
             "discovery_provider": "Waymarked Trails (OpenStreetMap-derived)",
@@ -474,8 +506,9 @@ def _hydrate_waymarked_relation(trail: dict[str, Any]) -> dict[str, Any] | None:
         "name": str(payload.get("name") or trail.get("name") or "Itinéraire de randonnée")[:160],
         "ref": str(payload.get("ref") or trail.get("ref") or "")[:60],
         "network": str(payload.get("group") or trail.get("network") or "")[:20],
-        "coords": _downsample(coords),
+        "coords": _downsample_preserve_length(coords),
         "length_km": round(length, 1),
+        "source_geometry_length_km": round(length, 2),
         "source_url": trail.get("source_url") or f"https://www.openstreetmap.org/relation/{relation_id}",
         "confidence": "high-route-evidence-secondary-full",
         "discovery_provider": "Waymarked Trails full relation (OpenStreetMap-derived)",
@@ -489,7 +522,42 @@ def _hydrate_waymarked_relation(trail: dict[str, Any]) -> dict[str, Any] | None:
     return full
 
 
-def _discover_waymarked(center: dict[str, Any], radius_km: float) -> list[dict[str, Any]]:
+def _rank_waymarked_route_items(
+    items: list[dict[str, Any]],
+    preferred_tokens: set[str] | None = None,
+) -> list[dict[str, Any]]:
+    """Rank list/by_area metadata before paying for relation segments.
+
+    Explicit request words are strong evidence. This prevents a named long tour
+    from being dropped simply because six unrelated GR relations happen to cross
+    the same 45 km search box.
+    """
+    tokens = {
+        _fold(token).strip()
+        for token in (preferred_tokens or set())
+        if len(_fold(token).strip()) >= 3
+    }
+
+    def semantic_hits(item: dict[str, Any]) -> int:
+        text = _fold(f"{item.get('ref') or ''} {item.get('name') or ''} {item.get('local_name') or ''}")
+        return sum(1 for token in tokens if token in text)
+
+    rows = list(items or [])
+    rows.sort(key=lambda item: (
+        -semantic_hits(item),
+        0 if _fold(item.get("ref") or "").startswith("gr") else 1,
+        0 if "gr" in _fold(item.get("name") or "") else 1,
+        str(item.get("ref") or ""),
+        str(item.get("name") or ""),
+    ))
+    return rows
+
+
+def _discover_waymarked(
+    center: dict[str, Any],
+    radius_km: float,
+    preferred_tokens: set[str] | None = None,
+) -> list[dict[str, Any]]:
     """Bounded secondary discovery for explicit trail/coastal rescue only.
 
     Waymarked Trails indexes OpenStreetMap route relations and can return route
@@ -498,7 +566,13 @@ def _discover_waymarked(center: dict[str, Any], radius_km: float) -> list[dict[s
     returned no usable hiking relation.
     """
     radius = max(12.0, min(float(radius_km), 45.0))
-    key = (round(float(center["lat"]), 3), round(float(center["lon"]), 3), int(round(radius)))
+    token_key = "|".join(sorted(_fold(x) for x in (preferred_tokens or set()) if str(x).strip()))
+    key = (
+        round(float(center["lat"]), 3),
+        round(float(center["lon"]), 3),
+        int(round(radius)),
+        token_key,
+    )
     cached = _WAYMARKED_CACHE.get(key)
     now = time.monotonic()
     if cached and now - cached[0] < _WAYMARKED_CACHE_TTL_S:
@@ -532,10 +606,7 @@ def _discover_waymarked(center: dict[str, Any], radius_km: float) -> list[dict[s
             continue
         seen.add(relation_id)
         priority.append(item)
-    priority.sort(key=lambda item: (
-        0 if _fold(item.get("ref") or "").startswith("gr") else 1,
-        0 if "gr" in _fold(item.get("name") or "") else 1,
-    ))
+    priority = _rank_waymarked_route_items(priority, preferred_tokens)
     priority = priority[:6]
     if not priority:
         return []
