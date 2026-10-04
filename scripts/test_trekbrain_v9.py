@@ -376,3 +376,13 @@ assert route is None
 assert tiered.generic_calls == 1
 assert tiered.secondary_calls == 1
 assert warning
+
+
+# Eligibility must not depend on ContextVar propagation. _best_roundtrip already
+# knows it is building a loop and has authoritative day/target inputs.
+assert trail_candidates._generic_relation_section_allowed(
+    None, 126.0, days_override=7, known_loop=True
+) is True
+assert trail_candidates._generic_relation_section_allowed(
+    None, 54.0, days_override=3, known_loop=True
+) is False
