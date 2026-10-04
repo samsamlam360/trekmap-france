@@ -426,10 +426,9 @@ def _discover(v3, center: dict[str, Any], radius_km: float) -> list[dict[str, An
     radius_m = max(3000, min(int(max(radius_km, 12.0) * 1000), 45000))
     query = (
         "[out:json][timeout:20];("
-        f"relation(around:{radius_m},{center['lat']},{center['lon']})[\"route\"=\"hiking\"][\"network\"~\"^(iwn|nwn|rwn|lwn)$\"];"
-        f"relation(around:{radius_m},{center['lat']},{center['lon']})[\"route\"=\"hiking\"][\"ref\"];"
-        f"relation(around:{radius_m},{center['lat']},{center['lon']})[\"route\"=\"hiking\"][\"name\"];"
-        ");out geom tags 48;"
+        f"relation(around:{radius_m},{center['lat']},{center['lon']})[\"route\"=\"hiking\"][\"network\"~\"^(iwn|nwn|rwn)$\"];"
+        f"relation(around:{radius_m},{center['lat']},{center['lon']})[\"route\"=\"hiking\"][\"ref\"~\"^(GR|GRP)\",i];"
+        ");out geom tags 36;"
     )
     try:
         payload = v3._overpass(query)
@@ -467,6 +466,59 @@ def _discover(v3, center: dict[str, Any], radius_km: float) -> list[dict[str, An
         })
     trails.sort(key=lambda t: (0 if _fold(t.get("ref")).startswith("gr") else 1, -t["length_km"]))
     return trails[:8]
+
+
+def _discover_generic(v3, center: dict[str, Any], radius_km: float) -> list[dict[str, Any]]:
+    """Broader second-pass relation discovery used only after fast evidence misses."""
+    radius_m = max(3000, min(int(max(radius_km, 12.0) * 1000), 45000))
+    query = (
+        "[out:json][timeout:20];("
+        f"relation(around:{radius_m},{center['lat']},{center['lon']})[\"route\"=\"hiking\"][\"network\"~\"^(iwn|nwn|rwn|lwn)$\"];"
+        f"relation(around:{radius_m},{center['lat']},{center['lon']})[\"route\"=\"hiking\"][\"ref\"];"
+        f"relation(around:{radius_m},{center['lat']},{center['lon']})[\"route\"=\"hiking\"][\"name\"];"
+        ");out geom tags 48;"
+    )
+    try:
+        payload = v3._overpass(query)
+    except Exception:
+        return []
+
+    trails = []
+    seen = set()
+    for element in payload.get("elements") or []:
+        if element.get("type") != "relation":
+            continue
+        tags = element.get("tags") or {}
+        if not _is_priority_relation(tags):
+            continue
+        coords = _join_relation_members(element.get("members") or [])
+        if len(coords) < 8:
+            continue
+        length = _path_length(coords)
+        if length < 4.0:
+            continue
+        ref = str(tags.get("ref") or "").strip()
+        name = str(tags.get("name") or ref or "Itinéraire de randonnée").strip()
+        identity = (element.get("id"), ref.casefold(), name.casefold())
+        if identity in seen:
+            continue
+        seen.add(identity)
+        trails.append({
+            "id": element.get("id"),
+            "name": name[:160],
+            "ref": ref[:60],
+            "network": str(tags.get("network") or "")[:20],
+            "coords": _downsample(coords),
+            "length_km": round(length, 1),
+            "source_url": f"https://www.openstreetmap.org/relation/{element.get('id')}",
+            "confidence": "high-route-evidence",
+        })
+    trails.sort(key=lambda t: (
+        0 if _fold(t.get("network")) in {"iwn", "nwn", "rwn"} else 1,
+        0 if _fold(t.get("ref")).startswith("gr") else 1,
+        -t["length_km"],
+    ))
+    return trails[:12]
 
 
 def _nearest_index(point: dict[str, Any], trail: dict[str, Any]) -> tuple[int, float]:
