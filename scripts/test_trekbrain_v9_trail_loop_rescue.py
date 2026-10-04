@@ -208,7 +208,7 @@ assert section_route["relation_share"] >= 0.58
 assert section_route["closure_share"] <= 0.42
 assert rescue._dist(section_route["coords"][0], section_route["coords"][-1]) <= 0.12
 assert len(matrix_calls) == 1
-assert len(matrix_calls[0]) <= 24
+assert len(matrix_calls[0]) <= 16
 assert 1 <= len(closure_calls) <= 2
 
 # Non-closed / wildly discontinuous relations must never be promoted just to

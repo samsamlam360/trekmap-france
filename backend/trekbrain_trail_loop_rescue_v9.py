@@ -36,7 +36,11 @@ _MAX_START_OFFSET_KM = 12.0
 _MAX_RELATION_GAP_KM = 2.2
 _MAX_SECONDARY_POINTS = 21
 _SECTION_MAX_ATTEMPTS = 2
-_SECTION_MATRIX_MAX_CANDIDATES = 12
+# Sixteen Matrix locations (8 candidate endpoint/start pairs) are much more
+# reliable on public ORS than the previous 24-location request, which produced
+# intermittent HTTP 500s in production. We still keep enough distance/direction
+# diversity to avoid overfitting the closure choice.
+_SECTION_MATRIX_MAX_CANDIDATES = 8
 _SECTION_DIVERSITY_KM = 2.0
 _SECTION_JOIN_KM = 0.12
 _SECTION_MAX_CLOSURE_SHARE = 0.42
