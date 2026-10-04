@@ -368,6 +368,7 @@ open_trail = {
     "coords": open_coast,
     "length_km": rescue._length(open_coast),
     "source_url": "https://www.openstreetmap.org/relation/34",
+    "discovery_provider": "Waymarked Trails (OpenStreetMap-derived)",
 }
 open_start = {
     "name": "Presqu'île de test",
@@ -407,12 +408,17 @@ def fake_closure(points, _distance_gps):
         "routing_mode": "fake-pedestrian-closure",
     }
 
+secondary_waymarked_calls = []
+def forbidden_secondary_waymarked(*_args, **_kwargs):
+    secondary_waymarked_calls.append(1)
+    return []
+
 real_ors.get_distance_matrix = fake_matrix
 real_ors.get_route = fake_closure
 try:
     section_route, warning = rescue._relation_section_loop(
         v3,
-        SimpleNamespace(_discover=lambda *_args: [open_trail]),
+        SimpleNamespace(_discover_waymarked=forbidden_secondary_waymarked),
         open_start,
         47.0,
         11.75,
@@ -436,6 +442,7 @@ assert rescue._dist(section_route["coords"][0], section_route["coords"][-1]) <= 
 assert len(matrix_calls) == 1
 assert len(matrix_calls[0]) <= 16
 assert 1 <= len(closure_calls) <= 2
+assert secondary_waymarked_calls == [], secondary_waymarked_calls
 
 # If Matrix is unavailable, the two exact Directions attempts must come from
 # diverse relation-section families. Otherwise two neighbouring endpoints of
