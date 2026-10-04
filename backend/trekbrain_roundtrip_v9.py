@@ -246,6 +246,99 @@ def _matrix_subloop_candidates(route, start, target_km: float, daily_min: float,
         variants.append(candidate)
         if low*0.90 <= distance <= high+0.35 or len(variants)>=2:
             break
+
+    # Coastal fallback: reuse the same Matrix result to close a prefix of the
+    # already validated oversized loop back to the start. This is equivalent to
+    # cutting away the final arc and replacing it with one real ORS pedestrian
+    # connector. No second Matrix request is needed.
+    precision_limit = max(4.0, float(target_km) * 0.18)
+    has_precise = any(
+        abs(float(row.get("distance") or 0) - float(target_km)) <= precision_limit
+        and float(row.get("matrix_subloop_retrace") or 0.0) <= 0.30
+        for row in variants
+    )
+    if compact_two_day and not has_precise:
+        try:
+            routed_total = float(route.get("distance") or 0)
+        except (TypeError, ValueError):
+            routed_total = 0.0
+
+        prefix_predictions = []
+        if math.isfinite(routed_total) and routed_total > 0:
+            for sample_index, (coord_index, fraction, coord) in enumerate(samples):
+                if fraction < 0.34 or fraction > 0.86:
+                    continue
+                try:
+                    return_km = float(matrix[sample_index + 1][0])
+                except (IndexError, TypeError, ValueError):
+                    continue
+                if not math.isfinite(return_km) or return_km <= 0.05:
+                    continue
+
+                prefix_km = routed_total * float(fraction)
+                removed_km = routed_total - prefix_km
+                # The connector must actually shorten the original remaining
+                # arc, otherwise this is merely another expensive shape.
+                if return_km >= removed_km - 0.6:
+                    continue
+
+                estimate = prefix_km + return_km
+                outside = max(0.0, low * 0.90 - estimate) * 5 + max(0.0, estimate - high) * 6
+                prefix_predictions.append((
+                    abs(estimate - float(target_km)) + outside,
+                    sample_index,
+                    coord_index,
+                    float(fraction),
+                    coord,
+                    estimate,
+                ))
+
+        prefix_predictions.sort(key=lambda row: row[0])
+        for _score, _sample_index, coord_index, fraction, coord, estimate in prefix_predictions[:2]:
+            connector = ors.get_route([coord, start_coord], _polyline_haversine)
+            if not isinstance(connector, dict) or connector.get("fallback") is not False:
+                continue
+            connector_coords = connector.get("coords") or []
+            if len(connector_coords) < 2:
+                continue
+            if _haversine(connector_coords[0], coord) > 0.20 or _haversine(connector_coords[-1], start_coord) > 0.20:
+                continue
+            try:
+                connector_distance = float(connector.get("distance") or 0)
+            except (TypeError, ValueError):
+                continue
+            if not math.isfinite(connector_distance) or connector_distance <= 0:
+                continue
+
+            prefix_distance = routed_total * float(fraction)
+            total = prefix_distance + connector_distance
+            if total < low * 0.90 or total > high + 0.35:
+                continue
+
+            prefix = coords[: int(coord_index) + 1]
+            merged = _merge_coords(prefix, connector_coords[1:])
+            if len(merged) < 12 or _haversine(merged[0], start_coord) > 0.15 or _haversine(merged[-1], start_coord) > 0.15:
+                continue
+            retrace = float(v3._route_retrace_ratio(merged)) if hasattr(v3, "_route_retrace_ratio") else 0.0
+            if retrace > 0.42:
+                continue
+
+            variants.append({
+                "coords": merged,
+                "distance": round(total, 2),
+                "fallback": False,
+                "routing_mode": "ors-matrix-prefix-loop",
+                "profile": connector.get("profile") or route.get("profile") or ors.ORS_PROFILE,
+                "provider": connector.get("provider") or "OpenRouteService",
+                "matrix_prefix_loop": True,
+                "shortened_from_km": round(routed_total, 2),
+                "matrix_predicted_km": round(float(estimate), 2),
+                "prefix_fraction": round(float(fraction), 4),
+                "closing_route_km": round(connector_distance, 2),
+                "matrix_subloop_retrace": round(retrace, 4),
+            })
+            if abs(total - float(target_km)) <= precision_limit and retrace <= 0.30:
+                break
     return variants
 
 
