@@ -138,6 +138,12 @@ def install_fast_planning(v3, v5, v9) -> None:
     # ------------------------------------------------------------------
     overpass_budget = _env_seconds("TREKBRAIN_OVERPASS_BUDGET_SECONDS", 3.0, 1.5, 8.0)
     overpass_attempt = _env_seconds("TREKBRAIN_OVERPASS_ATTEMPT_SECONDS", 1.8, 1.0, 5.0)
+    # Production profiling on 2026-10-04 showed the fallback mirror repeatedly
+    # consuming ~2.45-2.57 s and returning no data on every tested loop. Keep
+    # the redundancy, but do not let a secondary mirror own the critical path.
+    overpass_secondary_attempt = _env_seconds(
+        "TREKBRAIN_OVERPASS_SECONDARY_ATTEMPT_SECONDS", 0.85, 0.65, 1.25
+    )
     geocode_timeout = _env_seconds("TREKBRAIN_GEOCODE_TIMEOUT_SECONDS", 4.5, 2.0, 8.0)
 
     def fast_request_json(url, *, params=None, data=None, timeout=20, ttl=1800, service="service cartographique", retries=2):
@@ -189,11 +195,16 @@ def install_fast_planning(v3, v5, v9) -> None:
         errors = []
         # Two independent public mirrors are enough for an interactive request.
         # A third 18-second wait used to add reliability on paper and misery in UI.
-        for url in list(free.OVERPASS_URLS)[:2]:
+        for mirror_index, url in enumerate(list(free.OVERPASS_URLS)[:2]):
             remaining = deadline - time.monotonic()
             if remaining < 0.65:
                 break
-            timeout = min(overpass_attempt, max(0.65, remaining))
+            attempt_cap = (
+                overpass_attempt
+                if mirror_index == 0
+                else min(overpass_attempt, overpass_secondary_attempt)
+            )
+            timeout = min(attempt_cap, max(0.65, remaining))
             try:
                 return free._request_json(
                     url,
