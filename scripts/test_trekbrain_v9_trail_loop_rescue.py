@@ -117,7 +117,17 @@ open_start = {
 
 from backend import ors as real_ors
 original_get_route = real_ors.get_route
+original_get_distance_matrix = real_ors.get_distance_matrix
 closure_calls = []
+matrix_calls = []
+
+def fake_matrix(coords):
+    matrix_calls.append(coords)
+    matrix = []
+    for a in coords:
+        matrix.append([round(rescue._dist(a, b), 3) for b in coords])
+    return {"distances": matrix, "fallback": False, "routing_mode": "fake-matrix"}
+
 
 def fake_closure(points, _distance_gps):
     closure_calls.append(points)
@@ -136,6 +146,7 @@ def fake_closure(points, _distance_gps):
         "routing_mode": "fake-pedestrian-closure",
     }
 
+real_ors.get_distance_matrix = fake_matrix
 real_ors.get_route = fake_closure
 try:
     section_route, warning = rescue._relation_section_loop(
@@ -150,6 +161,7 @@ try:
     )
 finally:
     real_ors.get_route = original_get_route
+    real_ors.get_distance_matrix = original_get_distance_matrix
 
 assert warning is None, warning
 assert section_route is not None
@@ -160,6 +172,8 @@ assert 38.5 <= section_route["distance"] <= 55.5
 assert section_route["relation_share"] >= 0.58
 assert section_route["closure_share"] <= 0.42
 assert rescue._dist(section_route["coords"][0], section_route["coords"][-1]) <= 0.12
+assert len(matrix_calls) == 1
+assert len(matrix_calls[0]) <= 24
 assert 1 <= len(closure_calls) <= 2
 
 # Non-closed / wildly discontinuous relations must never be promoted just to
