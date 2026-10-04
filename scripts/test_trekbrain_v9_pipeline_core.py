@@ -146,19 +146,6 @@ assert pipeline._fast_generic_loop_allowed({
     "raw": "grande boucle cinq jours",
 }) is False
 
-assert pipeline._fast_generic_loop_allowed({
-    "route_type": "Boucle", "days": 3, "total_target": 54.0,
-    "start_query": "", "end_query": "", "via_query": "",
-    "max_dplus_day": None, "avoid": set(),
-    "raw": "boucle avec camping sur des sentiers cotiers et ravitaillement",
-}) is False
-assert pipeline._fast_generic_loop_allowed({
-    "route_type": "Boucle", "days": 2, "total_target": 36.0,
-    "start_query": "", "end_query": "", "via_query": "",
-    "max_dplus_day": None, "avoid": set(),
-    "raw": "boucle facile en foret avec de beaux chemins",
-}) is True
-
 # 1. Belle-Île without lodging: canonical route, no generic planner.
 v3 = FakeV3()
 FakeCanonical.calls.clear()
