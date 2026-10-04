@@ -589,6 +589,30 @@ def _discover_stays(
     projected = _project_stays(roundtrip, coords, rows, category, max_offroute)
     chosen = _choose_stays(roundtrip, coords, projected, days, daily_target)
 
+    # For a single generic night, a valid lodging already discovered inside the
+    # transfer radius is more useful than reporting "no lodging" merely because
+    # it does not sit near the exact geometric midpoint of the loop. Keep the
+    # hiking line immutable: downstream connector logic will mark it as a
+    # separate transfer whenever it is not a short validated walking link.
+    if (
+        not chosen
+        and int(days) == 2
+        and category == "lodging"
+        and not strict_walk
+        and projected
+    ):
+        total = float(roundtrip._cumulative(coords)[-1] or 0)
+        target = total / 2.0 if total > 0 else float(daily_target)
+        chosen = [
+            min(
+                projected,
+                key=lambda row: (
+                    abs(float(row.get("_route_progress_km") or 0) - target) * 0.20
+                    + float(row.get("_offroute_km") or 0) * 1.0
+                ),
+            )
+        ]
+
     if len(chosen) < needed and deadline - time.monotonic() >= 1.25:
         if structured:
             rows.extend(_photon_split_stays(v3, roundtrip, coords, category, days))
