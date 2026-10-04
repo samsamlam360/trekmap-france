@@ -290,7 +290,18 @@ def _relation_loop(v3, gr, start: dict[str, Any], target_km: float):
         # Tier 3: use the independent Waymarked OSM route index if Overpass still
         # has not supplied enough evidence.
         try:
-            secondary = list(gr._discover_waymarked(start, radius) or [])
+            try:
+                secondary = list(
+                    gr._discover_waymarked(
+                        start,
+                        radius,
+                        preferred_tokens=_intent_tokens(),
+                    ) or []
+                )
+            except TypeError:
+                # Compatibility with deterministic test doubles and older
+                # extension modules that still expose the two-argument shape.
+                secondary = list(gr._discover_waymarked(start, radius) or [])
         except Exception:
             secondary = []
         known = {
