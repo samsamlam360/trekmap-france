@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import math
+import time
 from concurrent.futures import ThreadPoolExecutor
 from copy import deepcopy
 from typing import Any
@@ -717,12 +718,15 @@ def _install_plan_overlay(app, legacy_main):
         # Candidate discovery becomes island-aware for the duration of this
         # request. The ContextVar keeps concurrent requests isolated.
         token = activate_region(data.region or "")
+        overlay_started = time.monotonic()
         try:
             result = original_endpoint(data, user)
             if not isinstance(result, dict):
                 return result
 
+            safety_started = time.monotonic()
             report = route_safety_report(result, data)
+            safety_ms = round((time.monotonic() - safety_started) * 1000)
             if not report["safe"]:
                 # Never expose ORS fallback points as a hiking line. A clear
                 # refusal is much safer than a convincing-looking route at sea.
@@ -745,6 +749,7 @@ def _install_plan_overlay(app, legacy_main):
             terrain_preloaded = bool(result.get("_terrain_osm_preloaded"))
             terrain_rows = []
 
+            resource_started = time.monotonic()
             if terrain_preloaded:
                 # Lodging discovery already queried this exact route corridor
                 # and attached its water/food rows. Only the bounded Photon
@@ -776,10 +781,38 @@ def _install_plan_overlay(app, legacy_main):
                         _filter_active(list(terrain_rows)),
                     )
                 result["_terrain_osm_preloaded"] = True
+            resource_fetch_ms = round((time.monotonic() - resource_started) * 1000)
+
+            enrich_started = time.monotonic()
             result = enrich_resources(result)
+            enrich_ms = round((time.monotonic() - enrich_started) * 1000)
             result.pop("_terrain_osm_preloaded", None)
+
+            annotate_started = time.monotonic()
             result = _annotate_stage_resources(result)
-            return _refresh_quality_after_resources(result, data)
+            annotate_ms = round((time.monotonic() - annotate_started) * 1000)
+
+            quality_started = time.monotonic()
+            result = _refresh_quality_after_resources(result, data)
+            quality_refresh_ms = round((time.monotonic() - quality_started) * 1000)
+
+            planner = result.setdefault("planner", {})
+            if isinstance(planner, dict):
+                food_rows = result.get("resources") or result.get("food") or []
+                planner["resource_overlay"] = {
+                    "total_ms": round((time.monotonic() - overlay_started) * 1000),
+                    "safety_ms": safety_ms,
+                    "resource_fetch_ms": resource_fetch_ms,
+                    "enrich_ms": enrich_ms,
+                    "annotate_ms": annotate_ms,
+                    "quality_refresh_ms": quality_refresh_ms,
+                    "terrain_preloaded": terrain_preloaded,
+                    "terrain_rows": len(terrain_rows),
+                    "water_count": len(result.get("water") or []),
+                    "food_count": len(food_rows),
+                    "accommodation_count": len(result.get("accommodations") or []),
+                }
+            return result
         finally:
             reset_region(token)
 

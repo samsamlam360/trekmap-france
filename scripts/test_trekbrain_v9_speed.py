@@ -201,6 +201,42 @@ finally:
 assert nearby_calls["count"] <= 1, nearby_calls
 assert isinstance(probe_rows, list)
 
+# A route that already satisfies the existing fast-path quality threshold
+# returns after one provider call, and the diagnostic metadata must make that
+# fact observable in production benchmarks.
+real_good_request = roundtrip._roundtrip_request
+real_good_retrace = v3._route_retrace_ratio
+good_calls = []
+
+def fake_good_roundtrip(start, requested_km, seed):
+    good_calls.append((float(requested_km), int(seed)))
+    return {
+        "coords": [[45.53, 2.82], [45.60, 2.90], [45.48, 2.95], [45.53, 2.82]],
+        "distance": 55.0,
+        "fallback": False,
+        "routing_mode": "ors-round-trip",
+    }, None
+
+roundtrip._roundtrip_request = fake_good_roundtrip
+v3._route_retrace_ratio = lambda coords: 0.22
+try:
+    good_loop = roundtrip._best_roundtrip(
+        {"lat": 45.53, "lon": 2.82},
+        51.0,
+        12.75,
+        21.25,
+        3,
+        v3,
+    )
+finally:
+    roundtrip._roundtrip_request = real_good_request
+    v3._route_retrace_ratio = real_good_retrace
+
+assert len(good_calls) == 1, good_calls
+assert good_loop.get("round_trip_attempt_count") == 1, good_loop
+assert len(good_loop.get("round_trip_attempts") or []) == 1, good_loop
+assert good_loop.get("candidate_pool_size") == 1, good_loop
+
 # A route that is technically inside the broad +/-25% feasibility window but
 # still far from the requested target must receive the corrective second ORS
 # call. This protects Vercors quality: ~18.7 km/day is feasible for a 15 km
