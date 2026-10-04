@@ -210,7 +210,7 @@ def _normalise_place(name: str, lat: float, lon: float):
     }
 
 
-def _geocode_nominatim(query: str):
+def _geocode_nominatim(query: str, *, retries: int = 2):
     data = _request_json(
         NOMINATIM_URL,
         params={
@@ -223,7 +223,7 @@ def _geocode_nominatim(query: str):
         timeout=12,
         ttl=43200,
         service="Nominatim",
-        retries=2,
+        retries=max(1, int(retries)),
     )
     out = []
     for row in data if isinstance(data, list) else []:
@@ -283,15 +283,26 @@ def _local_geocode(query: str):
     return []
 
 
-def _geocode(query: str):
+def _geocode(query: str, *, nominatim_retries: int = 2):
+    """Geocode with Nominatim -> Photon -> local fallback.
+
+    The default keeps the historical two Nominatim attempts. Callers with an
+    independent Photon fallback and a strict interactive budget may explicitly
+    request one Nominatim attempt without changing legacy/free planner behavior.
+    """
     errors = []
-    for provider in (_geocode_nominatim, _geocode_photon):
-        try:
-            result = provider(query)
-            if result:
-                return result
-        except RuntimeError as exc:
-            errors.append(str(exc))
+    try:
+        result = _geocode_nominatim(query, retries=nominatim_retries)
+        if result:
+            return result
+    except RuntimeError as exc:
+        errors.append(str(exc))
+    try:
+        result = _geocode_photon(query)
+        if result:
+            return result
+    except RuntimeError as exc:
+        errors.append(str(exc))
     local = _local_geocode(query)
     if local:
         return local
