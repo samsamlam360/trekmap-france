@@ -98,9 +98,10 @@ uneven_water = next(
 assert uneven_water["route_day"] == 1, uneven_water
 
 
-# The final resource overlay must not duplicate water or normal route-first
-# lodging discovery. Food and transport remain active because they are not
-# guaranteed by the lodging layer.
+# The final resource overlay must not duplicate water, food or normal
+# route-first lodging discovery once usable route-relative rows already exist.
+# Transport remains active when explicitly requested because it is a distinct
+# access requirement.
 from backend import trekbrain_resources_v9 as resources_module
 from backend.free_planner_v2 import AIPlanRequest
 
@@ -135,8 +136,45 @@ finally:
 
 assert captured_post_intent.get("water") is False, captured_post_intent
 assert captured_post_intent.get("sleep") is False, captured_post_intent
-assert captured_post_intent.get("food") is True, captured_post_intent
+assert captured_post_intent.get("food") is False, captured_post_intent
 assert captured_post_intent.get("transit") is True, captured_post_intent
+
+# With no transit request, fully resolved route resources must short-circuit
+# before opening any Photon post-route wave.
+network_calls = {"count": 0}
+def forbidden_complete_lookup(boundaries, intent, existing_items):
+    network_calls["count"] += 1
+    raise AssertionError("redundant Photon resource wave")
+
+resources_module.v7.v5.v3._postroute_corridor_resources = forbidden_complete_lookup
+try:
+    complete_plan = sample_plan()
+    complete_plan["resources"] = [{
+        "name": "Épicerie proche",
+        "type": "Ravitaillement",
+        "category": "food",
+        "lat": 45.050,
+        "lon": 5.050,
+        "source_url": "https://www.openstreetmap.org/node/202",
+    }]
+    complete_plan["food"] = list(complete_plan["resources"])
+    complete_plan["logistics"] = {"status": "complete"}
+    complete_request = AIPlanRequest(
+        prompt="Boucle de 2 jours avec eau, ravitaillement et hébergement.",
+        region="Zone test",
+        days=2,
+        daily_km=18,
+        route_type="Boucle",
+        require_transit=False,
+        require_water=True,
+        require_accommodation=True,
+        require_food=True,
+    )
+    resources_module._supplement_route_resources(complete_plan, complete_request)
+finally:
+    resources_module.v7.v5.v3._postroute_corridor_resources = real_postroute_resources
+
+assert network_calls["count"] == 0, network_calls
 
 # If the exact OSM terrain lookup found no water, one bounded Photon fallback
 # must remain enabled. This runs inside the same post-route wave.
