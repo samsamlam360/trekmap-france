@@ -20,6 +20,8 @@ from backend import trekbrain_ors_resilience_v9 as resilience
 # This test validates the default interactive profile, not an operator override.
 os.environ.pop("TREKBRAIN_RETRY_BUDGET_SECONDS", None)
 os.environ.pop("TREKBRAIN_OVERPASS_BUDGET_SECONDS", None)
+os.environ.pop("TREKBRAIN_OVERPASS_ATTEMPT_SECONDS", None)
+os.environ.pop("TREKBRAIN_OVERPASS_SECONDARY_ATTEMPT_SECONDS", None)
 os.environ.pop("TREKBRAIN_ORS_TIMEOUT_SECONDS", None)
 os.environ.pop("TREKBRAIN_MATRIX_TIMEOUT_SECONDS", None)
 
@@ -154,7 +156,11 @@ try:
 finally:
     free._request_json = real_request_json
 assert 1 <= len(overpass_calls) <= 2, overpass_calls
-assert all(timeout <= 3.1 for _, timeout in overpass_calls), overpass_calls
+assert overpass_calls[0][1] <= 1.81, overpass_calls
+if len(overpass_calls) > 1:
+    # The production profiler found this exact fallback mirror taking ~2.5 s
+    # and returning no data repeatedly. Keep the fallback, but hard-cap it.
+    assert overpass_calls[1][1] <= 0.86, overpass_calls
 
 # Campsite lookup used to execute roughly three OSM searches per night. Fast
 # mode must fetch one broad pool and filter it locally for nearby stage probes.
