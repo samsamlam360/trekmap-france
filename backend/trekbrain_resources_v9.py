@@ -563,10 +563,29 @@ def _supplement_route_resources(result: dict[str, Any], data) -> dict[str, Any]:
             isinstance(item, dict) and _point(item) is not None
             for item in (result.get("water") or [])
         )
+        food_rows = result.get("resources") or result.get("food") or []
+        has_food = any(
+            isinstance(item, dict) and _point(item) is not None
+            for item in food_rows
+        )
+
         post_intent["water"] = bool(intent.get("water") and not has_water)
+        post_intent["food"] = bool(intent.get("food") and not has_food)
+
         logistics_status = str((result.get("logistics") or {}).get("status") or "")
         if logistics_status in {"complete", "partial"}:
             post_intent["sleep"] = False
+
+        # Everything requested may already have been resolved by the route-first
+        # logistics/terrain pass. Do not open a Photon wave merely to rediscover
+        # the same water, food or lodging. Transit remains eligible when the
+        # request explicitly needs it and no concrete transit resource is known.
+        if not any(
+            bool(post_intent.get(key))
+            for key in ("transit", "water", "food", "sleep")
+        ):
+            return result
+
         try:
             rows = v3._postroute_corridor_resources(boundaries, post_intent, existing)
         except Exception:
