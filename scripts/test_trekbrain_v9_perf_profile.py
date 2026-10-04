@@ -1,5 +1,11 @@
 """Regression tests for request-local TrekBrain v9 performance profiling."""
 from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
+import sys
+
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
 
 from backend import trekbrain_perf_profile_v9 as perf
 
