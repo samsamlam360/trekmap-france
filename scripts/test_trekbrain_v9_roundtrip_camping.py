@@ -7,6 +7,7 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+from backend import free_planner_v2 as free
 from backend import trekbrain_roundtrip_v9 as roundtrip
 
 
@@ -82,3 +83,42 @@ assert route_points[-1]["name"] == "Départ"
 assert sum(1 for x in route_points if x.get("category") == "route_anchor") >= 8, route_points
 
 print("Adaptive campsite corridor recovery: OK")
+
+# The latency-sensitive v9 round-trip path explicitly asks for one Nominatim
+# attempt. Historical/free geocoding keeps two attempts by default.
+seen_retry_budgets = []
+original_request_json = free._request_json
+
+def fake_request_json(_url, **kwargs):
+    seen_retry_budgets.append((kwargs.get("service"), kwargs.get("retries")))
+    return []
+
+free._request_json = fake_request_json
+try:
+    free._geocode_nominatim("Zone test", retries=1)
+    free._geocode_nominatim("Zone test historique")
+finally:
+    free._request_json = original_request_json
+
+assert seen_retry_budgets == [("Nominatim", 1), ("Nominatim", 2)], seen_retry_budgets
+
+roundtrip_retry_budgets = []
+
+class FastGeoV3:
+    @staticmethod
+    def _geocode(query, **kwargs):
+        roundtrip_retry_budgets.append(kwargs.get("nominatim_retries"))
+        return [{"name": query, "lat": 48.2, "lon": -4.5}]
+
+assert roundtrip._roundtrip_geocode(FastGeoV3, "Presqu'île test")
+assert roundtrip_retry_budgets == [1], roundtrip_retry_budgets
+
+class LegacyGeoV3:
+    @staticmethod
+    def _geocode(query):
+        return [{"name": query, "lat": 48.2, "lon": -4.5}]
+
+assert roundtrip._roundtrip_geocode(LegacyGeoV3, "Zone historique")
+
+print("Fast round-trip geocoding retry budget: OK")
+
