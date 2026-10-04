@@ -237,14 +237,6 @@ def _relation_loop(v3, gr, start: dict[str, Any], target_km: float):
         "relation_geometry": True,
         "start_offset_before_snap_km": round(float(start_off), 2),
     }
-    _coastal_section_log(
-        "accepted",
-        ref=(ref or "trail"),
-        total=round(_length(merged), 1),
-        section=round(float(section_km), 1),
-        closure=round(float(closure_km), 1),
-        relation_share=round(float(relation_share), 2),
-    )
     _LAST_META.set({
         "ref": ref,
         "name": str(trail.get("name") or "")[:160],
@@ -583,6 +575,14 @@ def _relation_section_loop(
         "section_retrace_ratio": round(float(retrace), 4),
         "start_offset_before_snap_km": round(float(start_off), 2),
     }
+    _coastal_section_log(
+        "accepted",
+        ref=(ref or "trail"),
+        total=round(_length(merged), 1),
+        section=round(float(section_km), 1),
+        closure=round(float(closure_km), 1),
+        relation_share=round(float(relation_share), 2),
+    )
     _LAST_META.set({
         "ref": ref,
         "name": str(trail.get("name") or "")[:160],
