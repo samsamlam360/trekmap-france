@@ -395,3 +395,11 @@ from backend import trekbrain_matrix_rescue_v9 as matrix_rescue_contract
 source = __import__("inspect").getsource(matrix_rescue_contract.install_matrix_resilience)
 assert "return original_best_roundtrip(start, target_km, daily_min, daily_max, days, v3)" in source
 assert source.index("return original_best_roundtrip") < source.index("_multi_lobe_roundtrip(")
+
+
+# Matrix is an optimisation layer. Zero viable Matrix pairs must still permit
+# at most the bounded Directions attempts; final geometry checks remain strict.
+import inspect as _inspect_matrix_fallback
+_section_source = _inspect_matrix_fallback.getsource(trail_candidates._relation_section_loop)
+assert "matrix-zero-viable-fallback" in _section_source
+assert "_diverse_section_candidates(rows)[:_SECTION_MAX_ATTEMPTS]" in _section_source
