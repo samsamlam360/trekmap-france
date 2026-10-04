@@ -60,6 +60,35 @@ jobs:
               (x.get("id"), x.get("ref"), x.get("name"), x.get("length_km"))
               for x in candidates
           ])
+          from backend import trekbrain_trail_loop_rescue_v9 as rescue
+          class EmptyOverpassV3:
+              @staticmethod
+              def _overpass(_query):
+                  return {"elements": []}
+          start = {"name": "Ceillac", "lat": 44.66845, "lon": 6.77816, "category": "place"}
+          token = rescue._ACTIVE_INTENT.set({
+              "raw": (
+                  "itinérance en boucle de 7 jours dans le Queyras environ 18 km par jour "
+                  "privilégier un itinéraire de grande randonnée cohérent refuges gîtes eau ravitaillement"
+              ),
+              "route_type": "Boucle",
+              "days": 7,
+              "total_target": 126.0,
+          })
+          try:
+              recovered, warning = rescue._relation_loop(EmptyOverpassV3(), gr, start, 126.0)
+          finally:
+              rescue._ACTIVE_INTENT.reset(token)
+          print("QUEYRAS_RECOVERY", {
+              "warning": warning,
+              "mode": (recovered or {}).get("routing_mode"),
+              "ref": (recovered or {}).get("relation_ref"),
+              "name": (recovered or {}).get("relation_name"),
+              "distance": (recovered or {}).get("distance"),
+          })
+          assert recovered is not None, warning
+          assert recovered.get("routing_mode") == "osm-hiking-relation-loop", recovered
+          assert recovered.get("relation_ref") == "GR 58", recovered
           PY
       - name: Python syntax
         run: python -m compileall -q backend scripts
