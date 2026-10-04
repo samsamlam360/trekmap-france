@@ -594,7 +594,22 @@ def _relation_section_loop(
             target=round(float(target_km), 1),
         )
         if not route_rows:
-            return None, "Matrix pédestre: aucune section côtière ne respecte la distance cible"
+            # Matrix is a ranking optimisation, not the final geometry validator.
+            # A public Matrix can snap endpoint pairs differently from Directions,
+            # especially on sparse mountain networks. Give at most two diverse,
+            # already-ranked relation sections one exact Directions attempt; the
+            # strict distance/share/gap/retrace checks below remain authoritative.
+            route_rows = [
+                (score, trail, section, start_off, section_km, direction, None, None)
+                for score, trail, section, start_off, section_km, direction
+                in _diverse_section_candidates(rows)[:_SECTION_MAX_ATTEMPTS]
+            ]
+            _coastal_section_log(
+                "matrix-zero-viable-fallback",
+                candidates=len(rows),
+                routed=len(route_rows),
+                target=round(float(target_km), 1),
+            )
     else:
         # Matrix is an optimisation/selection layer, not a safety dependency.
         # Preserve the old bounded two-candidate fallback if the provider is down.
