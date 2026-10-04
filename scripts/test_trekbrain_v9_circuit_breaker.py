@@ -10,7 +10,7 @@ if str(ROOT) not in sys.path:
 from backend import trekbrain_circuit_breaker_v9 as cb
 from backend import free_planner_v2 as free
 
-calls = {"overpass": 0, "route": 0, "matrix": 0, "roundtrip": 0}
+calls = {"overpass": 0, "route": 0, "matrix": 0, "roundtrip": 0, "nominatim": 0, "photon": 0}
 
 
 def slow_overpass(query):
@@ -32,14 +32,33 @@ def slow_roundtrip(start, target_km, seed):
     calls["roundtrip"] += 1
     return None, "OpenRouteService round-trip : délai interactif dépassé."
 
+
+def slow_request_json(
+    url,
+    *,
+    params=None,
+    data=None,
+    timeout=20,
+    ttl=1800,
+    service="service cartographique",
+    retries=2,
+):
+    if str(service).casefold().startswith("nominatim"):
+        calls["nominatim"] += 1
+        raise RuntimeError("Nominatim a dépassé le délai d'attente.")
+    calls["photon"] += 1
+    return {"features": []}
+
 v3 = SimpleNamespace(_overpass=slow_overpass)
 ors = SimpleNamespace(_request_route=slow_route, get_distance_matrix=slow_matrix)
 roundtrip = SimpleNamespace(_roundtrip_request=slow_roundtrip)
 
 real_free_overpass = free._overpass
+real_free_request_json = free._request_json
 try:
+    free._request_json = slow_request_json
     cb._INSTALLED = False
-    cb._STATE.update({"overpass": 0.0, "ors": 0.0, "matrix": 0.0})
+    cb._STATE.update({"overpass": 0.0, "ors": 0.0, "matrix": 0.0, "nominatim": 0.0})
     cb.install_circuit_breakers(v3, ors, roundtrip)
 
     for _ in range(2):
@@ -64,7 +83,44 @@ try:
     route, warning = roundtrip._roundtrip_request({"lat": 0, "lon": 0}, 20, 3)
     assert route is None and "timeout" in warning.casefold(), warning
     assert calls["roundtrip"] == 0, calls
+
+    # One Nominatim timeout is enough for this request. Later geocoding variants
+    # must fall through immediately instead of paying the same dead provider
+    # twice. A fresh user request resets the breaker.
+    for query in ("Presqu'île de Crozon, France", "Presqu'île de Crozon"):
+        try:
+            free._request_json(
+                free.NOMINATIM_URL,
+                params={"q": query},
+                service="Nominatim",
+                retries=1,
+            )
+        except RuntimeError:
+            pass
+    assert calls["nominatim"] == 1, calls
+
+    # Other geocoders are not suppressed by a Nominatim outage.
+    free._request_json(
+        free.PHOTON_URL,
+        params={"q": "Presqu'île de Crozon"},
+        service="Photon",
+        retries=1,
+    )
+    assert calls["photon"] == 1, calls
+
+    cb.reset_circuit_breakers()
+    try:
+        free._request_json(
+            free.NOMINATIM_URL,
+            params={"q": "Nouvelle demande"},
+            service="Nominatim",
+            retries=1,
+        )
+    except RuntimeError:
+        pass
+    assert calls["nominatim"] == 2, calls
 finally:
     free._overpass = real_free_overpass
+    free._request_json = real_free_request_json
 
 print("TrekBrain v9 timeout circuit breakers: OK")
