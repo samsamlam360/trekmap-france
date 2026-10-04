@@ -572,6 +572,30 @@ def _supplement_route_resources(result: dict[str, Any], data) -> dict[str, Any]:
         post_intent["water"] = bool(intent.get("water") and not has_water)
         post_intent["food"] = bool(intent.get("food") and not has_food)
 
+        transit_items = [
+            item for item in (result.get("points_of_interest") or [])
+            if isinstance(item, dict) and _resource_kind(item) in {"station", "transport"}
+        ]
+        start_point = _point(result.get("start"))
+        end_point = _point(result.get("end"))
+        has_start_transit = bool(
+            start_point and any(
+                (point := _point(item)) is not None
+                and _distance_km(start_point, point) <= 12.0
+                for item in transit_items
+            )
+        )
+        has_end_transit = bool(
+            end_point and any(
+                (point := _point(item)) is not None
+                and _distance_km(end_point, point) <= 12.0
+                for item in transit_items
+            )
+        )
+        post_intent["transit"] = bool(
+            intent.get("transit") and not (has_start_transit and has_end_transit)
+        )
+
         logistics_status = str((result.get("logistics") or {}).get("status") or "")
         if logistics_status in {"complete", "partial"}:
             post_intent["sleep"] = False
