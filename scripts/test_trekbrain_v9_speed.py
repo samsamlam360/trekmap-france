@@ -404,6 +404,44 @@ assert timeout_ors.calls == 1, timeout_ors.calls
 assert timeout_status == 599, (timeout_warning, timeout_status)
 assert resilience._is_transport_failure(timeout_warning, None) is True
 
+# A persistent Matrix authorization refusal must not be repaid by every
+# subsequent trek on the same worker. Directions remain untouched; only Matrix
+# is cooled down, then retried after the cooldown/reset.
+class MatrixForbiddenResponse:
+    status_code = 403
+    ok = False
+    def json(self):
+        return {"error": {"message": "forbidden"}}
+
+auth_post_calls = []
+real_auth_post = ors.requests.post
+real_auth_key = ors.ORS_API_KEY
+ors.ORS_API_KEY = "test-key"
+speed._reset_matrix_auth_cooldown()
+
+def fake_auth_post(url, **kwargs):
+    auth_post_calls.append((url, float(kwargs.get("timeout") or 0)))
+    return MatrixForbiddenResponse()
+
+ors.requests.post = fake_auth_post
+try:
+    denied_once = ors.get_distance_matrix([[48.60, -1.50], [48.61, -1.40]])
+    denied_cached = ors.get_distance_matrix([[48.62, -1.52], [48.63, -1.42]])
+finally:
+    ors.requests.post = real_auth_post
+    ors.ORS_API_KEY = real_auth_key
+
+assert denied_once.get("fallback") is True, denied_once
+assert "HTTP 403" in str(denied_once.get("warning") or ""), denied_once
+assert denied_cached.get("fallback") is True, denied_cached
+assert "refus HTTP 403 récent" in str(denied_cached.get("warning") or ""), denied_cached
+assert len(auth_post_calls) == 1, auth_post_calls
+assert speed._matrix_auth_cooldown_status() == 403
+
+# Reset is test-only here; production naturally retries after the bounded TTL.
+speed._reset_matrix_auth_cooldown()
+assert speed._matrix_auth_cooldown_status() is None
+
 # ORS Matrix must inherit the short interactive timeout instead of its historical
 # 15-second timeout. Use a deterministic fake successful response.
 class MatrixResponse:
@@ -421,6 +459,7 @@ def fake_post(url, **kwargs):
     post_calls.append((url, float(kwargs.get("timeout") or 0)))
     return MatrixResponse()
 
+speed._reset_matrix_auth_cooldown()
 ors.requests.post = fake_post
 try:
     result = ors.get_distance_matrix([[48.60, -1.50], [48.61, -1.40]])

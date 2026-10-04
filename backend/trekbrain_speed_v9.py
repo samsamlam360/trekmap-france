@@ -19,6 +19,8 @@ from . import trekbrain_perf_profile_v9 as perf
 _INSTALLED = False
 _STAY_POOL_LOCK = Lock()
 _STAY_POOLS: list[dict[str, Any]] = []
+_MATRIX_AUTH_LOCK = Lock()
+_MATRIX_AUTH_STATE: dict[str, Any] = {"until": 0.0, "status": None}
 
 FAST_PLANNING_WRAPPER_VERSION = 3
 EXPLICIT_TRAVERSE_PRUNING_VERSION = 1
@@ -39,6 +41,41 @@ def _env_seconds(name: str, default: float, minimum: float, maximum: float) -> f
     except (TypeError, ValueError):
         value = default
     return max(minimum, min(value, maximum))
+
+
+def _matrix_auth_cooldown_status(now: float | None = None) -> int | None:
+    """Return the recent persistent Matrix auth status while its cooldown is active."""
+    current = time.monotonic() if now is None else float(now)
+    with _MATRIX_AUTH_LOCK:
+        if current < float(_MATRIX_AUTH_STATE.get("until") or 0.0):
+            try:
+                return int(_MATRIX_AUTH_STATE.get("status"))
+            except (TypeError, ValueError):
+                return 403
+        _MATRIX_AUTH_STATE["until"] = 0.0
+        _MATRIX_AUTH_STATE["status"] = None
+    return None
+
+
+def _open_matrix_auth_cooldown(status: int) -> None:
+    cooldown = _env_seconds(
+        "TREKBRAIN_MATRIX_AUTH_COOLDOWN_SECONDS",
+        300.0,
+        30.0,
+        1800.0,
+    )
+    with _MATRIX_AUTH_LOCK:
+        _MATRIX_AUTH_STATE["until"] = max(
+            float(_MATRIX_AUTH_STATE.get("until") or 0.0),
+            time.monotonic() + cooldown,
+        )
+        _MATRIX_AUTH_STATE["status"] = int(status)
+
+
+def _reset_matrix_auth_cooldown() -> None:
+    with _MATRIX_AUTH_LOCK:
+        _MATRIX_AUTH_STATE["until"] = 0.0
+        _MATRIX_AUTH_STATE["status"] = None
 
 
 def _empty_research() -> dict[str, Any]:
@@ -408,6 +445,23 @@ def install_fast_planning(v3, v5, v9) -> None:
         if len(coords) < 2:
             return {"distances": None, "fallback": True, "warning": "Au moins deux points sont nécessaires."}
         coords = coords[:24]
+        blocked_status = _matrix_auth_cooldown_status()
+        if blocked_status is not None:
+            perf.mark(
+                "ors.matrix",
+                cache_hit=True,
+                outcome="auth-cooldown",
+                points=len(coords),
+                status=blocked_status,
+            )
+            return {
+                "distances": None,
+                "fallback": True,
+                "warning": (
+                    "OpenRouteService Matrix temporairement ignorée après "
+                    f"un refus HTTP {blocked_status} récent."
+                ),
+            }
         key = ors._matrix_key(coords)
         now = time.monotonic()
         cached = ors._MATRIX_CACHE.get(key)
@@ -448,7 +502,10 @@ def install_fast_planning(v3, v5, v9) -> None:
                 status=status,
                 outcome=outcome,
             )
-        if response.status_code in {401, 403, 429} or response.status_code >= 500 or not response.ok:
+        if response.status_code in {401, 403}:
+            _open_matrix_auth_cooldown(response.status_code)
+            return {"distances": None, "fallback": True, "warning": f"OpenRouteService Matrix HTTP {response.status_code}."}
+        if response.status_code == 429 or response.status_code >= 500 or not response.ok:
             return {"distances": None, "fallback": True, "warning": f"OpenRouteService Matrix HTTP {response.status_code}."}
         try:
             data = response.json()
