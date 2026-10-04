@@ -187,6 +187,16 @@ def _multi_lobe_roundtrip(roundtrip, start, target_km: float, daily_min: float, 
     warnings = []
     seeds = (3, 11, 29, 47, 61, 73)
 
+    feasible_low = max(
+        target_km * 0.82,
+        float(daily_min) * max(int(days), 1) * 0.90,
+    )
+    feasible_high = min(
+        target_km * 1.18,
+        float(daily_max) * max(int(days), 1) + 0.75,
+    )
+    used_lobes = 0
+
     for index in range(pieces):
         route = None
         warning = None
@@ -208,6 +218,15 @@ def _multi_lobe_roundtrip(roundtrip, start, target_km: float, daily_min: float, 
             coords = coords[1:]
         merged.extend(coords)
         total += float(route.get("distance") or 0)
+        used_lobes += 1
+
+        # ORS round-trip length is an objective, not a hard output. In sparse
+        # mountain networks a request for one 60–70 km lobe can legitimately
+        # return a validated 100+ km loop. If that first real loop already fits
+        # the user's global multi-day distance window, stop here instead of
+        # blindly concatenating another lobe and doubling the trek.
+        if feasible_low <= total <= feasible_high:
+            break
 
     if len(merged) < 2:
         raise HTTPException(status_code=503, detail="Le secours multi-boucles n'a produit aucune géométrie exploitable.")
@@ -215,10 +234,15 @@ def _multi_lobe_roundtrip(roundtrip, start, target_km: float, daily_min: float, 
         "coords": merged,
         "distance": round(total, 2),
         "fallback": False,
-        "routing_mode": "ors-round-trip-multilobe",
+        "routing_mode": (
+            "ors-round-trip"
+            if used_lobes == 1
+            else "ors-round-trip-multilobe"
+        ),
         "profile": getattr(roundtrip.ors, "ORS_PROFILE", "foot-hiking"),
-        "round_trip_lobes": pieces,
+        "round_trip_lobes": used_lobes,
         "requested_distance_km": round(target_km, 1),
+        "long_roundtrip_early_accept": used_lobes < pieces,
     }
 
 
