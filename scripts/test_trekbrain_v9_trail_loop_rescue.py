@@ -106,6 +106,25 @@ assert waymarked[0]["discovery_provider"].startswith("Waymarked Trails")
 assert abs(waymarked[0]["coords"][0][0] - sample_wgs[0][0]) < 1e-5
 assert abs(waymarked[0]["coords"][0][1] - sample_wgs[0][1]) < 1e-5
 
+# Waymarked list/by_area may contain many overlapping GRs. A route whose
+# name explicitly matches the user's request must survive the six-relation
+# segment budget even when it appears later in provider order.
+provider_items = [
+    {"id": 1, "ref": "GR 5", "name": "Sentier de l'Europe"},
+    {"id": 2, "ref": "GR 69", "name": "La Routo"},
+    {"id": 3, "ref": "GR 6", "name": "Des Alpes à la Nouvelle Aquitaine"},
+    {"id": 4, "ref": "GRV", "name": "Sur les pas des Vaudois"},
+    {"id": 5, "ref": "GR 5c", "name": "GR 5c"},
+    {"id": 6, "ref": "GR 5b", "name": "GR 5b"},
+    {"id": 9711201, "ref": "GR 58", "name": "Tour du Queyras"},
+]
+ranked_provider = gr_module._rank_waymarked_route_items(
+    provider_items,
+    {"queyras", "itinérance", "refuge"},
+)
+assert ranked_provider[0]["id"] == 9711201, ranked_provider
+assert 9711201 in [row["id"] for row in ranked_provider[:6]], ranked_provider
+
 # The relation-detail endpoint exposes the provider's full route-builder tree.
 # Parse its ordered Web-Mercator BaseWays instead of reconstructing a long loop
 # from bbox-clipped /list/segments fragments.
