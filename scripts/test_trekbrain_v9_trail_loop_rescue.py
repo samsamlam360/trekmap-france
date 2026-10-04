@@ -106,6 +106,104 @@ assert waymarked[0]["discovery_provider"].startswith("Waymarked Trails")
 assert abs(waymarked[0]["coords"][0][0] - sample_wgs[0][0]) < 1e-5
 assert abs(waymarked[0]["coords"][0][1] - sample_wgs[0][1]) < 1e-5
 
+# The relation-detail endpoint exposes the provider's full route-builder tree.
+# Parse its ordered Web-Mercator BaseWays instead of reconstructing a long loop
+# from bbox-clipped /list/segments fragments.
+full_ring = rectangle_loop()
+quarter = max(2, (len(full_ring) - 1) // 4)
+ring_parts = [
+    full_ring[0:quarter + 1],
+    full_ring[quarter:2 * quarter + 1],
+    full_ring[2 * quarter:3 * quarter + 1],
+    full_ring[3 * quarter:],
+]
+
+def mercator_line(points, ident):
+    coords = []
+    for lat, lon in points:
+        x, y = gr_module._lonlat_to_mercator(lon, lat)
+        coords.append([x, y])
+    return {
+        "route_type": "base",
+        "start": 0,
+        "id": ident,
+        "tags": {},
+        "length": 1,
+        "direction": 0,
+        "role": "",
+        "geometry": {"type": "LineString", "coordinates": coords},
+    }
+
+full_route_tree = {
+    "route_type": "route",
+    "length": 80000,
+    "linear": "yes",
+    "start": 0,
+    "main": [
+        {
+            "route_type": "linear",
+            "start": 0,
+            "length": 20000,
+            "ways": [mercator_line(part, 100 + i)],
+        }
+        for i, part in enumerate(ring_parts)
+    ],
+    "appendices": [],
+}
+detail_lines = gr_module._waymarked_route_lines(full_route_tree)
+detail_coords = gr_module._join_ordered_waymarked_lines(detail_lines)
+assert len(detail_lines) == 4, len(detail_lines)
+assert len(detail_coords) > 100, len(detail_coords)
+assert rescue._dist(detail_coords[0], detail_coords[-1]) < 0.05, (
+    detail_coords[0], detail_coords[-1]
+)
+
+# A clipped Waymarked candidate may look open even though its authoritative
+# full relation is closed. Hydrate only that candidate, then select the real
+# hiking loop without asking a generic round-trip router to invent one.
+clipped = {
+    "id": 580058,
+    "name": "Tour de test",
+    "ref": "GR 58",
+    "network": "rwn",
+    "coords": full_ring[:190],
+    "length_km": rescue._length(full_ring[:190]),
+    "source_url": "https://www.openstreetmap.org/relation/580058",
+    "confidence": "high-route-evidence-secondary",
+    "discovery_provider": "Waymarked Trails (OpenStreetMap-derived)",
+}
+hydrated = {
+    **clipped,
+    "coords": full_ring,
+    "length_km": rescue._length(full_ring),
+    "confidence": "high-route-evidence-secondary-full",
+}
+hydrate_calls = []
+fake_gr_full = SimpleNamespace(
+    _discover=lambda *_args: [],
+    _discover_generic=lambda *_args: [],
+    _discover_waymarked=lambda *_args: [clipped],
+    _hydrate_waymarked_relation=lambda candidate: (
+        hydrate_calls.append(candidate["id"]) or dict(hydrated)
+    ),
+)
+full_start = {
+    "name": "Départ test",
+    "lat": full_ring[0][0],
+    "lon": full_ring[0][1],
+    "category": "place",
+}
+full_target = rescue._length(full_ring)
+full_route, full_warning = rescue._relation_loop(
+    v3, fake_gr_full, full_start, full_target
+)
+assert full_warning is None, full_warning
+assert full_route is not None, full_route
+assert full_route["routing_mode"] == "osm-hiking-relation-loop", full_route
+assert full_route["relation_ref"] == "GR 58", full_route
+assert rescue._dist(full_route["coords"][0], full_route["coords"][-1]) < 0.05
+assert hydrate_calls == [580058], hydrate_calls
+
 # A transient cold-provider timeout must get exactly one shorter retry. This
 # mirrors the production Crozon failure where the first Waymarked lookup missed
 # but an identical benchmark immediately afterwards recovered GR 34.

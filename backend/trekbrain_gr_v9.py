@@ -10,6 +10,7 @@ gate, so a relation never authorises a straight-line or water crossing fallback.
 from __future__ import annotations
 
 from contextvars import ContextVar
+import json
 import math
 import re
 import time
@@ -26,6 +27,7 @@ _WAYMARKED_LIST_TIMEOUT_S = 2.4
 _WAYMARKED_SEGMENTS_TIMEOUT_S = 3.0
 _WAYMARKED_CACHE_TTL_S = 1800
 _WAYMARKED_CACHE: dict[tuple[float, float, int], tuple[float, list[dict[str, Any]]]] = {}
+_WAYMARKED_DETAIL_CACHE: dict[int, tuple[float, dict[str, Any]]] = {}
 _MERCATOR_R = 6378137.0
 
 
@@ -345,6 +347,146 @@ def _waymarked_trails_from_payloads(
         -t["length_km"],
     ))
     return trails[:12]
+
+
+
+def _waymarked_route_lines(route: Any) -> list[list[list[float]]]:
+    """Extract ordered WGS84 lines from Waymarked's full route tree.
+
+    The detail endpoint exposes the server-side route-builder representation,
+    whose BaseWay geometries are Web-Mercator LineStrings. Appendices are not
+    part of the primary itinerary. For split sections, the forward branch is
+    the canonical direction of the route.
+    """
+    if isinstance(route, str):
+        try:
+            route = json.loads(route)
+        except (TypeError, ValueError, json.JSONDecodeError):
+            return []
+    if not isinstance(route, dict):
+        return []
+
+    kind = str(route.get("route_type") or "")
+    if kind == "base":
+        geometry = route.get("geometry")
+        return _waymarked_lines(geometry) if isinstance(geometry, dict) else []
+
+    if kind == "linear":
+        rows = []
+        for way in route.get("ways") or []:
+            rows.extend(_waymarked_route_lines(way))
+        return rows
+
+    if kind == "route":
+        rows = []
+        for segment in route.get("main") or []:
+            rows.extend(_waymarked_route_lines(segment))
+        return rows
+
+    if kind == "split":
+        rows = []
+        branch = route.get("forward") or route.get("backward") or []
+        for segment in branch:
+            rows.extend(_waymarked_route_lines(segment))
+        return rows
+
+    # Appendix geometry intentionally stays out of the backbone: approaches and
+    # alternatives may be useful map context but must not inflate the trek.
+    return []
+
+
+def _join_ordered_waymarked_lines(
+    lines: list[list[list[float]]],
+    max_gap_km: float = 1.6,
+) -> list[list[float]]:
+    """Join the provider's already ordered route tree without global reordering."""
+    components: list[list[list[float]]] = []
+    current: list[list[float]] = []
+    for raw in lines or []:
+        line = [list(point) for point in raw if isinstance(point, (list, tuple)) and len(point) >= 2]
+        if len(line) < 2:
+            continue
+        if not current:
+            current = line
+            continue
+
+        first_gap = _dist(current[-1], line[0])
+        last_gap = _dist(current[-1], line[-1])
+        if last_gap < first_gap:
+            line.reverse()
+            first_gap = last_gap
+
+        if first_gap <= max_gap_km:
+            if _dist(current[-1], line[0]) <= 0.03:
+                current.extend(line[1:])
+            else:
+                current.extend(line)
+        else:
+            components.append(current)
+            current = line
+
+    if current:
+        components.append(current)
+    return max(components, key=_path_length) if components else []
+
+
+def _hydrate_waymarked_relation(trail: dict[str, Any]) -> dict[str, Any] | None:
+    """Fetch one full Waymarked relation after clipped bbox evidence proved weak.
+
+    This is a bounded rescue, not normal discovery. The caller limits it to the
+    best one or two candidates, so unseen long treks gain authoritative route
+    geometry without turning every request into another provider wave.
+    """
+    try:
+        relation_id = int(trail.get("id"))
+    except (TypeError, ValueError):
+        return None
+    if relation_id <= 0:
+        return None
+
+    now = time.monotonic()
+    cached = _WAYMARKED_DETAIL_CACHE.get(relation_id)
+    if cached and now - cached[0] < _WAYMARKED_CACHE_TTL_S:
+        return {
+            **cached[1],
+            "coords": [list(point) for point in (cached[1].get("coords") or [])],
+        }
+
+    try:
+        payload = _waymarked_request(
+            f"/details/relation/{relation_id}",
+            {},
+            max(_WAYMARKED_SEGMENTS_TIMEOUT_S, 3.0),
+        )
+    except Exception:
+        return None
+
+    lines = _waymarked_route_lines(payload.get("route"))
+    coords = _join_ordered_waymarked_lines(lines)
+    if len(coords) < 8:
+        return None
+    length = _path_length(coords)
+    if not math.isfinite(length) or length < 4.0:
+        return None
+
+    full = {
+        **trail,
+        "name": str(payload.get("name") or trail.get("name") or "Itinéraire de randonnée")[:160],
+        "ref": str(payload.get("ref") or trail.get("ref") or "")[:60],
+        "network": str(payload.get("group") or trail.get("network") or "")[:20],
+        "coords": _downsample(coords),
+        "length_km": round(length, 1),
+        "source_url": trail.get("source_url") or f"https://www.openstreetmap.org/relation/{relation_id}",
+        "confidence": "high-route-evidence-secondary-full",
+        "discovery_provider": "Waymarked Trails full relation (OpenStreetMap-derived)",
+    }
+    _WAYMARKED_DETAIL_CACHE[relation_id] = (
+        now,
+        {**full, "coords": [list(point) for point in full["coords"]]},
+    )
+    while len(_WAYMARKED_DETAIL_CACHE) > 32:
+        _WAYMARKED_DETAIL_CACHE.pop(next(iter(_WAYMARKED_DETAIL_CACHE)))
+    return full
 
 
 def _discover_waymarked(center: dict[str, Any], radius_km: float) -> list[dict[str, Any]]:
