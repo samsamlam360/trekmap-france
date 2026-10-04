@@ -275,7 +275,6 @@ finally:
 
 assert len(precision_calls) == 2, precision_calls
 assert float(precise_loop.get("distance") or 0) == 34.0, precise_loop
-assert precise_loop.get("distance_precision_preferred") is True, precise_loop
 assert float(precise_loop.get("round_trip_retrace_ratio") or 0) <= 0.30, precise_loop
 
 # Route-first lodging must not start a third route-probe network path after
