@@ -41,10 +41,13 @@ def _is_belle_ile_en_mer(value: str) -> bool:
 
 
 def guarded_geocode_factory(original):
-    def geocode(query: str):
+    def geocode(query: str, **kwargs):
         if _is_belle_ile_en_mer(query):
             return [dict(BELLE_ILE)]
-        return original(query)
+        # Preserve optional geocoder controls added by v9 (for example the
+        # Nominatim retry budget). Dropping these kwargs silently re-enabled a
+        # redundant Nominatim lookup on the round-trip fallback path.
+        return original(query, **kwargs)
 
     return geocode
 
