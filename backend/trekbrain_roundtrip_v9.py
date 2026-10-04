@@ -1119,16 +1119,17 @@ def _constraint_near_start(v3, query: str, location: str, start: dict, max_km: f
             return False
 
 
-def _roundtrip_geocode(v3, query: str):
-    """Use one Nominatim attempt on the latency-sensitive v9 round-trip path.
+def _roundtrip_geocode(v3, query: str, *, nominatim_retries: int = 1):
+    """Bound Nominatim work on the latency-sensitive v9 round-trip path.
 
-    Photon and the local fallback remain unchanged. Older test doubles and
-    alternate planners that expose only the historical one-argument geocoder are
-    still supported without changing their behaviour.
+    The primary spelling gets one Nominatim attempt. A secondary spelling can
+    explicitly use zero attempts and fall straight through to Photon/local.
+    Older test doubles exposing only the historical one-argument geocoder remain
+    compatible.
     """
     geocode = v3._geocode
     try:
-        return geocode(query, nominatim_retries=1)
+        return geocode(query, nominatim_retries=nominatim_retries)
     except TypeError as exc:
         if "unexpected keyword argument" not in str(exc):
             raise
@@ -1141,7 +1142,9 @@ def _build_roundtrip(data, legacy_main, v3):
         raise HTTPException(status_code=422, detail="Le mode de secours round-trip ne s'applique qu'aux boucles.")
 
     location = v3._location(data)
-    geo = _roundtrip_geocode(v3, f"{location}, France") or _roundtrip_geocode(v3, location)
+    geo = _roundtrip_geocode(v3, f"{location}, France", nominatim_retries=1)
+    if not geo:
+        geo = _roundtrip_geocode(v3, location, nominatim_retries=0)
     if not geo:
         raise HTTPException(status_code=422, detail=f"Impossible de localiser « {location} ».")
     center = geo[0]

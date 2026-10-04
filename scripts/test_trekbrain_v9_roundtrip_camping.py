@@ -102,6 +102,34 @@ finally:
 
 assert seen_retry_budgets == [("Nominatim", 1), ("Nominatim", 2)], seen_retry_budgets
 
+# Zero is reserved for a secondary spelling fallback: do not call Nominatim,
+# but still allow Photon/local to resolve the place.
+skip_calls = []
+original_nominatim = free._geocode_nominatim
+original_photon = free._geocode_photon
+original_local = free._local_geocode
+
+def should_not_call_nominatim(*_args, **_kwargs):
+    skip_calls.append("nominatim")
+    raise AssertionError("Nominatim must be skipped for zero retry budget")
+
+def fake_photon(query):
+    skip_calls.append(("photon", query))
+    return [{"name": query, "lat": 48.2, "lon": -4.5}]
+
+free._geocode_nominatim = should_not_call_nominatim
+free._geocode_photon = fake_photon
+free._local_geocode = lambda _query: []
+try:
+    rows = free._geocode("Variante secondaire", nominatim_retries=0)
+finally:
+    free._geocode_nominatim = original_nominatim
+    free._geocode_photon = original_photon
+    free._local_geocode = original_local
+
+assert rows and rows[0]["name"] == "Variante secondaire"
+assert skip_calls == [("photon", "Variante secondaire")], skip_calls
+
 roundtrip_retry_budgets = []
 
 class FastGeoV3:
@@ -111,7 +139,10 @@ class FastGeoV3:
         return [{"name": query, "lat": 48.2, "lon": -4.5}]
 
 assert roundtrip._roundtrip_geocode(FastGeoV3, "Presqu'île test")
-assert roundtrip_retry_budgets == [1], roundtrip_retry_budgets
+assert roundtrip._roundtrip_geocode(
+    FastGeoV3, "Presqu'île test sans France", nominatim_retries=0
+)
+assert roundtrip_retry_budgets == [1, 0], roundtrip_retry_budgets
 
 class LegacyGeoV3:
     @staticmethod

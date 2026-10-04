@@ -286,17 +286,23 @@ def _local_geocode(query: str):
 def _geocode(query: str, *, nominatim_retries: int = 2):
     """Geocode with Nominatim -> Photon -> local fallback.
 
-    The default keeps the historical two Nominatim attempts. Callers with an
-    independent Photon fallback and a strict interactive budget may explicitly
-    request one Nominatim attempt without changing legacy/free planner behavior.
+    The default keeps the historical two Nominatim attempts. A caller with a
+    strict interactive budget may request one attempt, or zero to skip
+    Nominatim entirely for a secondary spelling variant and go straight to the
+    independent Photon/local fallbacks.
     """
     errors = []
     try:
-        result = _geocode_nominatim(query, retries=nominatim_retries)
-        if result:
-            return result
-    except RuntimeError as exc:
-        errors.append(str(exc))
+        retry_budget = int(nominatim_retries)
+    except (TypeError, ValueError):
+        retry_budget = 2
+    if retry_budget > 0:
+        try:
+            result = _geocode_nominatim(query, retries=retry_budget)
+            if result:
+                return result
+        except RuntimeError as exc:
+            errors.append(str(exc))
     try:
         result = _geocode_photon(query)
         if result:
