@@ -437,6 +437,103 @@ assert len(matrix_calls) == 1
 assert len(matrix_calls[0]) <= 16
 assert 1 <= len(closure_calls) <= 2
 
+# If Matrix is unavailable, the two exact Directions attempts must come from
+# diverse relation-section families. Otherwise two neighbouring endpoints of
+# the same arc can consume the whole fallback budget while a distinct valid
+# closure sits immediately behind them.
+def fallback_arc(center_lat):
+    center_lon = 6.80
+    radius_km = 22.5
+    angle = 4.0
+    out = []
+    for i in range(121):
+        theta = angle * i / 120
+        out.append([
+            center_lat + radius_km * math.sin(theta) / 110.574,
+            center_lon + radius_km * math.cos(theta) / (
+                111.320 * math.cos(math.radians(center_lat))
+            ),
+        ])
+    return out
+
+fallback_trail = {
+    "id": 580058,
+    "name": "Grand tour de secours",
+    "ref": "GR 58",
+    "network": "rwn",
+}
+fallback_sections = [
+    fallback_arc(45.00),
+    fallback_arc(45.35),
+    fallback_arc(45.80),
+]
+fallback_rows = [
+    (0.0, fallback_trail, fallback_sections[0], 3.0, 90.0, 1),
+    (0.1, fallback_trail, fallback_sections[1], 3.0, 90.4, 1),
+    (0.2, fallback_trail, fallback_sections[2], 3.0, 90.0, -1),
+]
+
+original_section_candidates = rescue._section_candidates
+original_matrix_rank = rescue._matrix_rank_section_candidates
+original_fallback_route = real_ors.get_route
+fallback_closure_calls = []
+
+def synthetic_sections(*_args, **_kwargs):
+    return list(fallback_rows)
+
+def unavailable_matrix(*_args, **_kwargs):
+    return [], False, "OpenRouteService Matrix HTTP 500."
+
+def selective_closure(points, _distance_gps):
+    fallback_closure_calls.append(points)
+    a, b = points
+    # First diverse family fails; the second diverse direction succeeds.
+    if float(a[0]) < 45.6:
+        return {
+            "coords": [],
+            "distance": 0.0,
+            "fallback": True,
+            "warning": "synthetic first-family miss",
+        }
+    coords = []
+    for i in range(31):
+        t = i / 30
+        coords.append([
+            a[0] + (b[0] - a[0]) * t,
+            a[1] + (b[1] - a[1]) * t,
+        ])
+    return {
+        "coords": coords,
+        "distance": rescue._length(coords),
+        "fallback": False,
+        "routing_mode": "fake-diverse-closure",
+    }
+
+rescue._section_candidates = synthetic_sections
+rescue._matrix_rank_section_candidates = unavailable_matrix
+real_ors.get_route = selective_closure
+try:
+    diverse_route, diverse_warning = rescue._relation_section_loop(
+        SimpleNamespace(),
+        SimpleNamespace(_discover_waymarked=lambda *_args: []),
+        {"name": "Zone longue", "lat": 45.0, "lon": 6.8, "category": "place"},
+        126.0,
+        13.5,
+        22.5,
+        7,
+        trails=[fallback_trail],
+    )
+finally:
+    rescue._section_candidates = original_section_candidates
+    rescue._matrix_rank_section_candidates = original_matrix_rank
+    real_ors.get_route = original_fallback_route
+
+assert diverse_warning is None, diverse_warning
+assert diverse_route is not None, diverse_route
+assert diverse_route["routing_mode"] == "osm-hiking-relation-section-loop", diverse_route
+assert len(fallback_closure_calls) == 2, fallback_closure_calls
+assert float(fallback_closure_calls[1][0][0]) > 45.6, fallback_closure_calls
+
 # Non-closed / wildly discontinuous relations must never be promoted just to
 # make an error disappear.
 bad = dict(trail)
