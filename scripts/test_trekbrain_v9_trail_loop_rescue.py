@@ -106,6 +106,43 @@ assert waymarked[0]["discovery_provider"].startswith("Waymarked Trails")
 assert abs(waymarked[0]["coords"][0][0] - sample_wgs[0][0]) < 1e-5
 assert abs(waymarked[0]["coords"][0][1] - sample_wgs[0][1]) < 1e-5
 
+# A transient cold-provider timeout must get exactly one shorter retry. This
+# mirrors the production Crozon failure where the first Waymarked lookup missed
+# but an identical benchmark immediately afterwards recovered GR 34.
+original_waymarked_get = gr_module.requests.get
+waymarked_http_calls = []
+
+class FakeWaymarkedResponse:
+    status_code = 200
+
+    @staticmethod
+    def raise_for_status():
+        return None
+
+    @staticmethod
+    def json():
+        return {"results": [{"id": 34, "ref": "GR 34"}]}
+
+def flaky_waymarked_get(url, **kwargs):
+    waymarked_http_calls.append((url, float(kwargs.get("timeout") or 0)))
+    if len(waymarked_http_calls) == 1:
+        raise gr_module.requests.Timeout("synthetic cold timeout")
+    return FakeWaymarkedResponse()
+
+gr_module.requests.get = flaky_waymarked_get
+try:
+    retry_payload = gr_module._waymarked_request(
+        "/list/by_area",
+        {"bbox": "0,0,1,1", "limit": 20},
+        2.4,
+    )
+finally:
+    gr_module.requests.get = original_waymarked_get
+
+assert retry_payload["results"][0]["ref"] == "GR 34", retry_payload
+assert len(waymarked_http_calls) == 2, waymarked_http_calls
+assert waymarked_http_calls[1][1] < waymarked_http_calls[0][1], waymarked_http_calls
+
 # A long open coastal relation can be used as the real backbone of a loop:
 # follow the mapped trail, then close only the final return through a pedestrian
 # router. This is the generic Crozon-style case the closed-relation rescue could
