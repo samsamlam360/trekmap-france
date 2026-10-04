@@ -325,7 +325,7 @@ def evaluate(case, result, elapsed_s, clarify):
             for key in (
                 "pipeline_version", "pipeline_phases", "strategy",
                 "candidates_compared", "corridor_centered", "search_center",
-                "stage_rebalanced", "logistics_mode",
+                "stage_rebalanced", "logistics_mode", "resource_overlay",
             )
             if key in (result.get("planner") or {})
         },
