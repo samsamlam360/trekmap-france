@@ -760,6 +760,21 @@ def _install_plan_overlay(app, legacy_main):
                 terrain_intent.get("water") or terrain_intent.get("food")
             )
             terrain_rows = []
+            supplement_ms = 0
+            terrain_ms = 0
+
+            def _timed_resource_call(kind, func, *args):
+                started = time.monotonic()
+                try:
+                    return func(*args)
+                finally:
+                    elapsed = round((time.monotonic() - started) * 1000)
+                    if kind == "supplement":
+                        nonlocal supplement_ms
+                        supplement_ms = elapsed
+                    elif kind == "terrain":
+                        nonlocal terrain_ms
+                        terrain_ms = elapsed
 
             resource_started = time.monotonic()
             if terrain_preloaded:
@@ -767,16 +782,26 @@ def _install_plan_overlay(app, legacy_main):
                 # and attached its water/food rows. Only the bounded Photon
                 # supplement may still add something such as public transport.
                 try:
-                    result = _supplement_route_resources(result, data)
+                    result = _timed_resource_call(
+                        "supplement", _supplement_route_resources, result, data
+                    )
                 except Exception:
                     pass
             elif terrain_lookup_needed:
                 with ThreadPoolExecutor(max_workers=2) as pool:
                     logistics_future = pool.submit(
-                        _supplement_route_resources, result, data
+                        _timed_resource_call,
+                        "supplement",
+                        _supplement_route_resources,
+                        result,
+                        data,
                     )
                     terrain_future = pool.submit(
-                        _bbox_route_water_food, snapshot, terrain_intent
+                        _timed_resource_call,
+                        "terrain",
+                        _bbox_route_water_food,
+                        snapshot,
+                        terrain_intent,
                     )
                     try:
                         result = logistics_future.result()
@@ -824,6 +849,8 @@ def _install_plan_overlay(app, legacy_main):
                     "total_ms": round((time.monotonic() - overlay_started) * 1000),
                     "safety_ms": safety_ms,
                     "resource_fetch_ms": resource_fetch_ms,
+                    "supplement_ms": supplement_ms,
+                    "terrain_ms": terrain_ms,
                     "enrich_ms": enrich_ms,
                     "annotate_ms": annotate_ms,
                     "quality_refresh_ms": quality_refresh_ms,
