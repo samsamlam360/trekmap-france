@@ -36,6 +36,8 @@ _MAX_START_OFFSET_KM = 12.0
 _MAX_RELATION_GAP_KM = 2.2
 _MAX_SECONDARY_POINTS = 21
 _SECTION_MAX_ATTEMPTS = 2
+_SECTION_MATRIX_MAX_CANDIDATES = 12
+_SECTION_DIVERSITY_KM = 2.0
 _SECTION_JOIN_KM = 0.12
 _SECTION_MAX_CLOSURE_SHARE = 0.42
 _SECTION_MIN_RELATION_SHARE = 0.58
@@ -278,7 +280,7 @@ def _section_candidates(trails, start: dict[str, Any], target_km: float):
                     break
                 if arc >= target * 0.54:
                     closure_air = _dist(coords[idx], coords[start_idx])
-                    if 0.35 <= closure_air <= target * 0.40:
+                    if 0.35 <= closure_air <= target * 0.43:
                         estimated = arc + closure_air * 1.28
                         # Prefer a distance fit, then more time on the marked
                         # corridor and a departure close to the requested area.
@@ -299,6 +301,96 @@ def _section_candidates(trails, start: dict[str, Any], target_km: float):
                 idx += direction
     rows.sort(key=lambda row: row[0])
     return rows
+
+
+def _diverse_section_candidates(rows, limit: int = _SECTION_MATRIX_MAX_CANDIDATES):
+    """Keep useful distance/direction diversity before one bounded Matrix call."""
+    chosen = []
+    buckets = set()
+    for row in rows or []:
+        _score, trail, _section, _start_off, section_km, direction = row
+        identity = str(trail.get("id") or trail.get("ref") or trail.get("name") or "")
+        bucket = int(round(float(section_km) / _SECTION_DIVERSITY_KM))
+        key = (identity, int(direction), bucket)
+        if key in buckets:
+            continue
+        buckets.add(key)
+        chosen.append(row)
+        if len(chosen) >= max(1, int(limit)):
+            break
+    return chosen
+
+
+def _matrix_rank_section_candidates(rows, ors, target_km: float, feasible_low: float, feasible_high: float):
+    """Use one real pedestrian Matrix to rank closure endpoints.
+
+    Each candidate contributes exactly two Matrix locations: its relation endpoint
+    and its own snapped relation start. Twelve candidates therefore fit the local
+    24-location ORS Matrix cap. The Matrix chooses plausibly sized closures; only
+    the best one or two then need Directions geometry.
+    """
+    shortlist = _diverse_section_candidates(rows)
+    if not shortlist:
+        return [], False, "aucune section diverse à évaluer"
+
+    matrix_coords = []
+    for _score, _trail, section, _start_off, _section_km, _direction in shortlist:
+        if len(section) < 2:
+            continue
+        matrix_coords.extend([section[-1], section[0]])
+    if len(matrix_coords) != len(shortlist) * 2:
+        return [], False, "sections incomplètes avant Matrix"
+
+    try:
+        result = ors.get_distance_matrix(matrix_coords)
+    except Exception as exc:
+        return [], False, f"Matrix fermeture indisponible ({exc.__class__.__name__})"
+    matrix = result.get("distances") if isinstance(result, dict) else None
+    if not matrix or len(matrix) < len(matrix_coords):
+        warning = str((result or {}).get("warning") or "Matrix fermeture incomplète")
+        return [], False, warning
+
+    ranked = []
+    target = float(target_km)
+    for index, row in enumerate(shortlist):
+        _rough_score, trail, section, start_off, section_km, direction = row
+        endpoint_idx = index * 2
+        start_idx = endpoint_idx + 1
+        try:
+            closure_km = matrix[endpoint_idx][start_idx]
+        except (IndexError, TypeError):
+            closure_km = None
+        if closure_km is None:
+            continue
+        try:
+            closure_km = float(closure_km)
+        except (TypeError, ValueError):
+            continue
+        if closure_km <= 0.2:
+            continue
+        estimated_total = float(section_km) + closure_km
+        if estimated_total < feasible_low or estimated_total > feasible_high:
+            continue
+        closure_share = closure_km / max(estimated_total, 0.1)
+        relation_share = float(section_km) / max(estimated_total, 0.1)
+        if closure_share > _SECTION_MAX_CLOSURE_SHARE or relation_share < _SECTION_MIN_RELATION_SHARE:
+            continue
+        score = (
+            abs(estimated_total - target)
+            + closure_share * 6.0
+            + float(start_off) * 0.30
+        )
+        ranked.append((
+            score, trail, section, start_off, section_km, direction,
+            closure_km, estimated_total,
+        ))
+    ranked.sort(key=lambda row: row[0])
+    return ranked, True, None
+
+
+def _coastal_section_log(event: str, **values) -> None:
+    bits = [f"{key}={value}" for key, value in values.items()]
+    print(f"[TrekBrain v9][coastal-section] {event} " + " ".join(bits), flush=True)
 
 
 def _relation_section_loop(
@@ -325,10 +417,12 @@ def _relation_section_loop(
         except Exception:
             trails = []
     if not trails:
+        _coastal_section_log("no-trails", target=round(float(target_km), 1))
         return None, "aucune relation longue de randonnée trouvée"
 
     rows = _section_candidates(trails, start, target_km)
     if not rows:
+        _coastal_section_log("no-candidates", trails=len(trails), target=round(float(target_km), 1))
         return None, "aucune section de relation côtière compatible"
 
     feasible_low = max(float(target_km) * 0.82, float(daily_min) * max(days, 1) * 0.90)
@@ -338,7 +432,37 @@ def _relation_section_loop(
 
     from . import ors
 
-    for _rank, trail, section, start_off, section_km, direction in rows[:_SECTION_MAX_ATTEMPTS]:
+    matrix_ranked, matrix_ok, matrix_warning = _matrix_rank_section_candidates(
+        rows, ors, target_km, feasible_low, feasible_high
+    )
+    if matrix_ok:
+        route_rows = matrix_ranked[:_SECTION_MAX_ATTEMPTS]
+        _coastal_section_log(
+            "matrix-select",
+            candidates=len(rows),
+            shortlist=len(_diverse_section_candidates(rows)),
+            viable=len(matrix_ranked),
+            target=round(float(target_km), 1),
+        )
+        if not route_rows:
+            return None, "Matrix pédestre: aucune section côtière ne respecte la distance cible"
+    else:
+        # Matrix is an optimisation/selection layer, not a safety dependency.
+        # Preserve the old bounded two-candidate fallback if the provider is down.
+        route_rows = [
+            (score, trail, section, start_off, section_km, direction, None, None)
+            for score, trail, section, start_off, section_km, direction
+            in rows[:_SECTION_MAX_ATTEMPTS]
+        ]
+        if matrix_warning:
+            warnings.append(matrix_warning)
+        _coastal_section_log(
+            "matrix-fallback",
+            candidates=len(rows),
+            reason=(matrix_warning or "unknown")[:80],
+        )
+
+    for _rank, trail, section, start_off, section_km, direction, matrix_closure_km, matrix_total_km in route_rows:
         if len(section) < 8 or _max_gap(section) > _MAX_RELATION_GAP_KM:
             continue
         start_coord = section[0]
@@ -411,6 +535,11 @@ def _relation_section_loop(
         ))
 
     if not evaluated:
+        _coastal_section_log(
+            "rejected",
+            routed=len(route_rows),
+            first_reason=(warnings[0] if warnings else "aucune fermeture validée")[:100],
+        )
         return None, (warnings[0] if warnings else "aucune fermeture intérieure validée")
 
     evaluated.sort(key=lambda row: row[0])
@@ -446,6 +575,14 @@ def _relation_section_loop(
         "section_retrace_ratio": round(float(retrace), 4),
         "start_offset_before_snap_km": round(float(start_off), 2),
     }
+    _coastal_section_log(
+        "accepted",
+        ref=(ref or "trail"),
+        total=round(_length(merged), 1),
+        section=round(float(section_km), 1),
+        closure=round(float(closure_km), 1),
+        relation_share=round(float(relation_share), 2),
+    )
     _LAST_META.set({
         "ref": ref,
         "name": str(trail.get("name") or "")[:160],
@@ -598,6 +735,8 @@ __all__ = [
     "_relation_loop",
     "_relation_section_loop",
     "_section_candidates",
+    "_diverse_section_candidates",
+    "_matrix_rank_section_candidates",
     "_coastal_section_allowed",
     "_compact_route_points",
 ]
