@@ -635,7 +635,16 @@ def _relation_section_loop(
     # request actually needed. Merge both evidence sources, then rank them.
     radius = min(45.0, max(16.0, float(target_km) * 0.42))
     try:
-        secondary = list(gr._discover_waymarked(start, radius) or [])
+        try:
+            secondary = list(
+                gr._discover_waymarked(
+                    start,
+                    radius,
+                    preferred_tokens=_intent_tokens(),
+                ) or []
+            )
+        except TypeError:
+            secondary = list(gr._discover_waymarked(start, radius) or [])
     except Exception:
         secondary = []
     if secondary:
