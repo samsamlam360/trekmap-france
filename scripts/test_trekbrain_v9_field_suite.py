@@ -122,7 +122,7 @@ def forbidden_matching_geocode(query):
 request_v9.geo._geocode = forbidden_matching_geocode
 try:
     sancy_req = AIPlanRequest(
-        prompt="Je veux une boucle de 3 jours dans le massif du Sancy, 17 km par jour.",
+        prompt="Je veux une rando de 3 jours dans le massif du Sancy, 17 km par jour.",
         region="Massif du Sancy",
         days=3,
         daily_km=17,
