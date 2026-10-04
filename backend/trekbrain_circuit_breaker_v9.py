@@ -12,7 +12,7 @@ from threading import Lock
 
 _INSTALLED = False
 _LOCK = Lock()
-_STATE = {"overpass": 0.0, "ors": 0.0, "matrix": 0.0}
+_STATE = {"overpass": 0.0, "ors": 0.0, "matrix": 0.0, "nominatim": 0.0}
 
 
 def _open(name: str, seconds: float = 15.0) -> None:
@@ -56,6 +56,7 @@ def install_circuit_breakers(v3, ors, roundtrip) -> None:
     current_request_route = ors._request_route
     current_matrix = ors.get_distance_matrix
     current_roundtrip = roundtrip._roundtrip_request
+    current_request_json = free._request_json
 
     def guarded_overpass(query: str):
         if not _closed("overpass"):
@@ -94,10 +95,42 @@ def install_circuit_breakers(v3, ors, roundtrip) -> None:
             _open("ors")
         return result, warning
 
+    def guarded_request_json(
+        url: str,
+        *,
+        params=None,
+        data=None,
+        timeout=20,
+        ttl=1800,
+        service="service cartographique",
+        retries=2,
+    ):
+        label = str(service or "")
+        is_nominatim = label.casefold().startswith("nominatim")
+        if is_nominatim and not _closed("nominatim"):
+            raise RuntimeError(
+                "Nominatim ignoré après un échec réseau récent pour préserver le budget interactif."
+            )
+        try:
+            return current_request_json(
+                url,
+                params=params,
+                data=data,
+                timeout=timeout,
+                ttl=ttl,
+                service=service,
+                retries=retries,
+            )
+        except RuntimeError as exc:
+            if is_nominatim and _network_failure(str(exc)):
+                _open("nominatim")
+            raise
+
     # _nearby executes in free_planner_v2 and resolves _overpass from that
     # module's globals, while GR/network code calls v3._overpass directly.
     v3._overpass = guarded_overpass
     free._overpass = guarded_overpass
+    free._request_json = guarded_request_json
     ors._request_route = guarded_request_route
     ors.get_distance_matrix = guarded_matrix
     roundtrip._roundtrip_request = guarded_roundtrip
