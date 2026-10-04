@@ -150,8 +150,17 @@ def _build_backbone(
         state.phases.append("route:candidate-relations")
         try:
             return roundtrip._build_roundtrip(state.route_data, legacy_main, v3)
-        except HTTPException:
+        except HTTPException as exc:
             state.phases.append("route:candidate-miss")
+            detail = str(getattr(exc, "detail", exc) or "")
+            print(
+                "[TrekBrain v9][candidate-miss] "
+                f"status={getattr(exc, 'status_code', 422)} "
+                f"days={state.intent.get('days')} "
+                f"target={state.intent.get('total_target')} "
+                f"detail={detail[:700]}",
+                flush=True,
+            )
 
     elif _fast_generic_loop_allowed(state.intent):
         state.phases.append("route:generic-fast-ors")
