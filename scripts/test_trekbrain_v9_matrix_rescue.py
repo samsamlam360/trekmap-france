@@ -148,5 +148,41 @@ assert long_route["routing_mode"] == "ors-round-trip-multilobe"
 assert long_route["round_trip_lobes"] == 2
 assert 130.0 <= long_route["distance"] <= 140.0, long_route
 assert len(roundtrip_calls) >= 2
+assert long_route.get("long_roundtrip_early_accept") is False, long_route
+
+# Sparse mountain networks may overshoot one requested lobe dramatically. If
+# the first validated ORS loop already fits the global 7-day target window,
+# return it directly instead of concatenating a second loop and doubling the
+# trek distance.
+real_roundtrip_request = roundtrip._roundtrip_request
+overshoot_calls = []
+
+def overshooting_roundtrip_request(start, target_km, seed):
+    overshoot_calls.append((target_km, seed))
+    return {
+        "coords": [
+            [float(start["lat"]), float(start["lon"])],
+            [float(start["lat"]) + 0.18, float(start["lon"]) + 0.08],
+            [float(start["lat"]) + 0.05, float(start["lon"]) + 0.14],
+            [float(start["lat"]), float(start["lon"])],
+        ],
+        "distance": 110.6,
+        "fallback": False,
+        "profile": "foot-hiking",
+        "routing_mode": "ors-round-trip",
+    }, None
+
+roundtrip._roundtrip_request = overshooting_roundtrip_request
+try:
+    early = roundtrip._best_roundtrip(START, 126.0, 13.5, 22.5, 7, V3)
+finally:
+    roundtrip._roundtrip_request = real_roundtrip_request
+
+assert early["fallback"] is False, early
+assert early["routing_mode"] == "ors-round-trip", early
+assert early["round_trip_lobes"] == 1, early
+assert early["long_roundtrip_early_accept"] is True, early
+assert abs(float(early["distance"]) - 110.6) < 0.01, early
+assert len(overshoot_calls) == 1, overshoot_calls
 
 print("Matrix HTTP 500 + long-loop resilience: OK")
