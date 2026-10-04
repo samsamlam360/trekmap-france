@@ -508,8 +508,7 @@ def install_fast_planning(v3, v5, v9) -> None:
             )[1]
             closest_distance = float(closest.get("distance") or 0)
             if (
-                int(days) <= 2
-                and float(target_km) > 0
+                float(target_km) > 0
                 and closest_distance > float(target_km) * 1.20
                 and float(target_km) <= 50.0
             ):
