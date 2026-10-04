@@ -343,16 +343,27 @@ def _relation_loop(v3, gr, start: dict[str, Any], target_km: float):
         intent_days = 1
     full_relation_allowed = intent_days >= 5 or float(target_km) >= 90.0
 
-    if not rows and secondary and full_relation_allowed:
+    semantic_secondary = [
+        candidate for candidate in secondary
+        if _trail_text_score(candidate) < 0
+    ]
+    hydration_pool = semantic_secondary if rows else secondary
+    should_hydrate_full = bool(
+        full_relation_allowed
+        and secondary
+        and (not rows or semantic_secondary)
+    )
+
+    if should_hydrate_full:
         # /list/segments is clipped to the discovery bbox. For long established
-        # tours that clipped geometry can look open even though the underlying
-        # OSM relation is a real loop. Hydrate only the two strongest Waymarked
-        # candidates from the provider's full relation tree before inventing a
-        # generic loop or accepting a large interior closure.
+        # tours that clipped geometry can look open or deceptively complete even
+        # though the provider has a better full relation tree. When the route
+        # name explicitly matches the request, authoritative full geometry may
+        # replace the bbox version even if the latter already passed basic gates.
         hydrate = getattr(gr, "_hydrate_waymarked_relation", None)
         ranked_secondary = []
         if callable(hydrate):
-            for candidate in secondary:
+            for candidate in hydration_pool:
                 raw = candidate.get("coords") or []
                 if len(raw) < 8:
                     continue
