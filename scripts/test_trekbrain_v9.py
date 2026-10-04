@@ -312,3 +312,13 @@ assert pipeline_core._relation_candidate_loop_allowed({
 assert pipeline_core._relation_candidate_loop_allowed({
     **candidate_intent, "days": 14, "total_target": 252.0,
 }) is False
+
+# Open/clipped relation geometry is a generic candidate too, not a coastal
+# special case. The safety gate lives inside _relation_section_loop.
+assert trail_candidates._generic_relation_section_allowed(candidate_intent, 108.0) is True
+assert trail_candidates._generic_relation_section_allowed({
+    **candidate_intent, "route_type": "Traversée",
+}, 108.0) is False
+assert trail_candidates._generic_relation_section_allowed({
+    **candidate_intent, "start_query": "A", "end_query": "B",
+}, 108.0) is False
