@@ -482,14 +482,75 @@ def install_fast_planning(v3, v5, v9) -> None:
             raise HTTPException(status_code=503, detail=detail)
         # Distance accuracy outranks a modest retrace difference when the
         # corrective ORS attempt is materially closer to the user's target.
-        # This keeps the same two network calls while avoiding cases where the
-        # historical retrace*80 term preferred a ~28% oversized loop.
+        # This keeps the same two round-trip calls while avoiding cases where
+        # the historical retrace*80 term preferred a ~28% oversized loop.
         precision_limit = max(4.0, float(target_km) * 0.18)
-        precision_rows = [
-            row for row in rows
-            if abs(float(row[1].get("distance") or 0) - float(target_km)) <= precision_limit
-            and float(row[1].get("round_trip_retrace_ratio") or 0.0) <= 0.30
-        ]
+
+        def precision_candidates():
+            return [
+                row for row in rows
+                if abs(float(row[1].get("distance") or 0) - float(target_km)) <= precision_limit
+                and float(row[1].get("round_trip_retrace_ratio") or 0.0) <= 0.30
+            ]
+
+        precision_rows = precision_candidates()
+
+        # If both bounded round-trip attempts remain badly oversized, do not
+        # spend more round-trip requests. Reuse the best validated loop as a
+        # network scaffold and ask ORS Matrix for one compact cycle through real
+        # points from that geometry. This path is deliberately narrow: it is
+        # only enabled above 20% overshoot, so Vercors/Sancy/Morvan keep their
+        # current fast path.
+        if not precision_rows and rows:
+            closest = min(
+                rows,
+                key=lambda row: abs(float(row[1].get("distance") or 0) - float(target_km)),
+            )[1]
+            closest_distance = float(closest.get("distance") or 0)
+            if (
+                float(target_km) > 0
+                and closest_distance > float(target_km) * 1.20
+                and float(target_km) <= 50.0
+            ):
+                try:
+                    compact_variants = roundtrip._matrix_subloop_candidates(
+                        closest,
+                        start,
+                        target_km,
+                        daily_min,
+                        daily_max,
+                        days,
+                        v3_module,
+                    )
+                except Exception:
+                    compact_variants = []
+                for variant in compact_variants:
+                    try:
+                        distance = float(variant.get("distance") or 0)
+                    except (TypeError, ValueError):
+                        continue
+                    if distance <= 0:
+                        continue
+                    retrace = (
+                        float(v3_module._route_retrace_ratio(variant.get("coords") or []))
+                        if hasattr(v3_module, "_route_retrace_ratio")
+                        else 0.0
+                    )
+                    per_day = distance / max(int(days), 1)
+                    range_penalty = (
+                        max(0.0, daily_min - per_day) * 5
+                        + max(0.0, per_day - daily_max) * 8
+                    )
+                    candidate = dict(variant)
+                    candidate["round_trip_target_km"] = round(float(target_km), 2)
+                    candidate["round_trip_retrace_ratio"] = round(float(retrace), 4)
+                    candidate["compact_recovery"] = True
+                    rows.append((
+                        abs(distance - target_km) + range_penalty + retrace * 80,
+                        candidate,
+                    ))
+                precision_rows = precision_candidates()
+
         if precision_rows:
             precision_rows.sort(key=lambda row: (
                 abs(float(row[1].get("distance") or 0) - float(target_km)),
