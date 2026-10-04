@@ -153,19 +153,59 @@ def _waymarked_bbox(center: dict[str, Any], radius_km: float) -> str:
 
 
 def _waymarked_request(path: str, params: dict[str, Any], timeout_s: float) -> dict[str, Any]:
-    response = requests.get(
-        _WAYMARKED_BASE + path,
-        params=params,
-        headers={
-            "Accept": "application/json",
-            "Accept-Language": "fr",
-            "User-Agent": "TrekMap-France/9.0 (+https://trekmap-france.onrender.com)",
-        },
-        timeout=float(timeout_s),
-    )
-    response.raise_for_status()
-    payload = response.json()
-    return payload if isinstance(payload, dict) else {}
+    """Fetch Waymarked once, with one short retry for transient network/5xx failures.
+
+    Crozon production runs showed that a single cold Waymarked miss can collapse
+    an otherwise excellent GR 34 loop to the generic ORS fallback. The retry is
+    deliberately narrow: no retry for ordinary 4xx responses, and the second
+    socket budget is shorter than the first.
+    """
+    headers = {
+        "Accept": "application/json",
+        "Accept-Language": "fr",
+        "User-Agent": "TrekMap-France/9.0 (+https://trekmap-france.onrender.com)",
+    }
+    first_timeout = max(0.8, float(timeout_s))
+    retry_timeout = max(0.9, min(1.6, first_timeout * 0.55))
+    timeouts = (first_timeout, retry_timeout)
+    last_error = None
+
+    for attempt, request_timeout in enumerate(timeouts, start=1):
+        try:
+            response = requests.get(
+                _WAYMARKED_BASE + path,
+                params=params,
+                headers=headers,
+                timeout=request_timeout,
+            )
+            status = int(getattr(response, "status_code", 200) or 200)
+            if status >= 500:
+                last_error = RuntimeError(f"Waymarked Trails HTTP {status}")
+                if attempt < len(timeouts):
+                    print(
+                        f"[TrekBrain v9][waymarked] retry path={path} "
+                        f"reason=http-{status} timeout_s={retry_timeout:.2f}",
+                        flush=True,
+                    )
+                    continue
+                raise last_error
+            response.raise_for_status()
+            payload = response.json()
+            return payload if isinstance(payload, dict) else {}
+        except (requests.Timeout, requests.ConnectionError) as exc:
+            last_error = exc
+            if attempt < len(timeouts):
+                print(
+                    f"[TrekBrain v9][waymarked] retry path={path} "
+                    f"reason={exc.__class__.__name__} timeout_s={retry_timeout:.2f}",
+                    flush=True,
+                )
+                continue
+            raise
+
+    if last_error is not None:
+        raise last_error
+    return {}
 
 
 def _waymarked_lines(geometry: Any) -> list[list[list[float]]]:
