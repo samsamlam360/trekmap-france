@@ -4,6 +4,9 @@ on:
   push:
     branches: [main]
     paths:
+      - 'backend/free_planner*.py'
+      - 'backend/smart_planner_v*.py'
+      - 'backend/trekbrain*.py'
       - 'scripts/benchmark_trekbrain_v9_extended.py'
       - '.github/workflows/trekbrain-extended-benchmark.yml'
   workflow_dispatch:
