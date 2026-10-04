@@ -511,6 +511,7 @@ def install_fast_planning(v3, v5, v9) -> None:
                 float(target_km) > 0
                 and closest_distance > float(target_km) * 1.20
                 and float(target_km) <= 50.0
+                and int(days) <= 2
             ):
                 try:
                     compact_variants = roundtrip._matrix_subloop_candidates(
