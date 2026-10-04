@@ -90,6 +90,27 @@ assert len(calls) == 4, len(calls)
 assert all(len(call) == 3 for call in calls)
 assert route["coords"][0] == route["coords"][-1]
 
+# Section-loop metadata must survive campsite stitching. Otherwise the final
+# result would look like a full closed GR relation even though part of the loop
+# is intentionally an inland pedestrian closure.
+section_relation = dict(relation)
+section_relation.update({
+    "routing_mode": "osm-hiking-relation-section-loop",
+    "relation_section_km": 61.0,
+    "closure_route_km": 12.0,
+    "relation_share": 0.836,
+    "closure_share": 0.164,
+})
+section_stitched, warning = stitch._stitch_relation_with_stays(
+    section_relation, stays[:1], FakeORS, legacy
+)
+assert warning is None, warning
+assert section_stitched is not None
+assert section_stitched["routing_mode"] == "osm-hiking-relation-section-loop-with-routed-stays"
+assert section_stitched["relation_section_km"] == 61.0
+assert section_stitched["closure_route_km"] == 12.0
+assert section_stitched["relation_share"] == 0.836
+
 # Reproduce the production symptom: a secondary router returns one connector
 # with a multi-kilometre jump. It must be rejected here, before final safety sees
 # a mysterious 5.8 km discontinuity.
