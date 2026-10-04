@@ -130,17 +130,28 @@ def _stitch_relation_with_stays(relation, stays, ors, legacy_main):
     # means a provider probably returned malformed geometry.
     if expected > 0 and not (0.82 <= polyline_km / expected <= 1.18):
         return None, "distance des connecteurs incohérente avec leur géométrie"
+    section_mode = "section-loop" in str(relation.get("routing_mode") or "")
     return {
         "coords": out,
         "distance": round(polyline_km, 2),
         "fallback": False,
-        "routing_mode": "osm-hiking-relation-loop-with-routed-stays",
+        "routing_mode": (
+            "osm-hiking-relation-section-loop-with-routed-stays"
+            if section_mode else "osm-hiking-relation-loop-with-routed-stays"
+        ),
         "profile": "hiking-relation+pedestrian-connectors",
-        "provider": "OpenStreetMap hiking relation + pedestrian connectors",
+        "provider": (
+            "OpenStreetMap hiking relation section + pedestrian closure/connectors"
+            if section_mode else "OpenStreetMap hiking relation + pedestrian connectors"
+        ),
         "relation_ref": relation.get("relation_ref"),
         "relation_name": relation.get("relation_name"),
         "relation_source_url": relation.get("relation_source_url"),
         "relation_geometry": True,
+        "relation_section_km": relation.get("relation_section_km"),
+        "closure_route_km": relation.get("closure_route_km"),
+        "relation_share": relation.get("relation_share"),
+        "closure_share": relation.get("closure_share"),
         "connector_modes": connector_modes,
         "max_segment_gap_km": round(gap, 3),
     }, None
@@ -216,12 +227,24 @@ def install_relation_stitch(roundtrip, ors, v3) -> None:
             "relation_name": route.get("relation_name"),
             "relation_source_url": route.get("relation_source_url"),
             "relation_geometry": True,
+            "relation_section_km": route.get("relation_section_km"),
+            "closure_route_km": route.get("closure_route_km"),
+            "relation_share": route.get("relation_share"),
+            "closure_share": route.get("closure_share"),
             "max_segment_gap_km": round(_max_gap(coords), 3),
         }
-        result["planner_fallback"] = "osm-hiking-relation-loop-with-local-stays"
+        section_mode = "section-loop" in str(route.get("routing_mode") or "")
+        result["planner_fallback"] = (
+            "osm-hiking-relation-section-loop-with-local-stays"
+            if section_mode else "osm-hiking-relation-loop-with-local-stays"
+        )
         notes = list(result.get("advisor_notes") or [])
         notes.append(
-            "Le GR reste l'axe principal ; seules les petites branches vers les nuitées sont routées séparément, puis raccordées au même point du GR."
+            (
+                "La section de GR et sa fermeture pédestre restent l'axe principal ; seules les petites branches vers les nuitées sont routées séparément."
+                if section_mode
+                else "Le GR reste l'axe principal ; seules les petites branches vers les nuitées sont routées séparément, puis raccordées au même point du GR."
+            )
         )
         result["advisor_notes"] = list(dict.fromkeys(notes))
         return result
