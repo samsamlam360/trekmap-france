@@ -489,7 +489,42 @@ def _hydrate_waymarked_relation(trail: dict[str, Any]) -> dict[str, Any] | None:
     return full
 
 
-def _discover_waymarked(center: dict[str, Any], radius_km: float) -> list[dict[str, Any]]:
+def _rank_waymarked_route_items(
+    items: list[dict[str, Any]],
+    preferred_tokens: set[str] | None = None,
+) -> list[dict[str, Any]]:
+    """Rank list/by_area metadata before paying for relation segments.
+
+    Explicit request words are strong evidence. This prevents a named long tour
+    from being dropped simply because six unrelated GR relations happen to cross
+    the same 45 km search box.
+    """
+    tokens = {
+        _fold(token).strip()
+        for token in (preferred_tokens or set())
+        if len(_fold(token).strip()) >= 3
+    }
+
+    def semantic_hits(item: dict[str, Any]) -> int:
+        text = _fold(f"{item.get('ref') or ''} {item.get('name') or ''} {item.get('local_name') or ''}")
+        return sum(1 for token in tokens if token in text)
+
+    rows = list(items or [])
+    rows.sort(key=lambda item: (
+        -semantic_hits(item),
+        0 if _fold(item.get("ref") or "").startswith("gr") else 1,
+        0 if "gr" in _fold(item.get("name") or "") else 1,
+        str(item.get("ref") or ""),
+        str(item.get("name") or ""),
+    ))
+    return rows
+
+
+def _discover_waymarked(
+    center: dict[str, Any],
+    radius_km: float,
+    preferred_tokens: set[str] | None = None,
+) -> list[dict[str, Any]]:
     """Bounded secondary discovery for explicit trail/coastal rescue only.
 
     Waymarked Trails indexes OpenStreetMap route relations and can return route
@@ -498,7 +533,13 @@ def _discover_waymarked(center: dict[str, Any], radius_km: float) -> list[dict[s
     returned no usable hiking relation.
     """
     radius = max(12.0, min(float(radius_km), 45.0))
-    key = (round(float(center["lat"]), 3), round(float(center["lon"]), 3), int(round(radius)))
+    token_key = "|".join(sorted(_fold(x) for x in (preferred_tokens or set()) if str(x).strip()))
+    key = (
+        round(float(center["lat"]), 3),
+        round(float(center["lon"]), 3),
+        int(round(radius)),
+        token_key,
+    )
     cached = _WAYMARKED_CACHE.get(key)
     now = time.monotonic()
     if cached and now - cached[0] < _WAYMARKED_CACHE_TTL_S:
@@ -532,10 +573,7 @@ def _discover_waymarked(center: dict[str, Any], radius_km: float) -> list[dict[s
             continue
         seen.add(relation_id)
         priority.append(item)
-    priority.sort(key=lambda item: (
-        0 if _fold(item.get("ref") or "").startswith("gr") else 1,
-        0 if "gr" in _fold(item.get("name") or "") else 1,
-    ))
+    priority = _rank_waymarked_route_items(priority, preferred_tokens)
     priority = priority[:6]
     if not priority:
         return []
