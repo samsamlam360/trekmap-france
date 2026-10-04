@@ -314,7 +314,10 @@ def install_planning_pipeline(
         )
 
         try:
-            result = perf.call(\n                "phase.route",\n                _build_backbone,\n                state,
+            result = perf.call(
+                "phase.route",
+                _build_backbone,
+                state,
                 legacy_main,
                 base_build=base_build,
                 v3=v3,
@@ -336,7 +339,10 @@ def install_planning_pipeline(
                 raise
             state.phases.append("route:retry")
             try:
-                result = perf.call(\n                "phase.route",\n                _build_backbone,\n                    state,
+                result = perf.call(
+                "phase.route",
+                _build_backbone,
+                    state,
                     legacy_main,
                     base_build=base_build,
                     v3=v3,
@@ -369,7 +375,10 @@ def install_planning_pipeline(
         if category is not None:
             state.phases.append("logistics")
             try:
-                result = perf.call(\n                    "phase.logistics",\n                    logistics_module._attach_logistics,\n                    result,
+                result = perf.call(
+                    "phase.logistics",
+                    logistics_module._attach_logistics,
+                    result,
                     data,
                     legacy_main,
                     v3,
