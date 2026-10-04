@@ -318,8 +318,8 @@ def install_fast_planning(v3, v5, v9) -> None:
     #    and then be repeated for snapped/segmented variants. Cap the interactive
     #    calls while retaining the exact same response validation.
     # ------------------------------------------------------------------
-    ors_timeout = _env_seconds("TREKBRAIN_ORS_TIMEOUT_SECONDS", 7.0, 3.0, 14.0)
-    matrix_timeout = _env_seconds("TREKBRAIN_MATRIX_TIMEOUT_SECONDS", 7.0, 3.0, 14.0)
+    ors_timeout = _env_seconds("TREKBRAIN_ORS_TIMEOUT_SECONDS", 3.5, 2.5, 8.0)
+    matrix_timeout = _env_seconds("TREKBRAIN_MATRIX_TIMEOUT_SECONDS", 3.5, 2.5, 8.0)
 
     def fast_request_route(coords, distance_gps, snap_radius_m=None):
         payload = {
@@ -439,11 +439,23 @@ def install_fast_planning(v3, v5, v9) -> None:
         rows = []
         warnings = []
         requested_km = float(target_km)
+
+        def network_failure(value) -> bool:
+            low = str(value or "").casefold()
+            return any(token in low for token in (
+                "délai", "delai", "timeout", "inaccessible", "ignoré",
+                "ignore", "indisponible", "connexion", "connection",
+            ))
+
+        provider_failed = False
         for attempt, seed in enumerate((3, 11)):
             route, warning = roundtrip._roundtrip_request(start, requested_km, seed)
             if route is None:
                 if warning:
                     warnings.append(warning)
+                if network_failure(warning):
+                    provider_failed = True
+                    break
                 continue
             distance = float(route.get("distance") or 0)
             per_day = distance / max(int(days), 1)
@@ -476,9 +488,52 @@ def install_fast_planning(v3, v5, v9) -> None:
                 correction = float(target_km) / distance
                 correction = max(0.72, min(1.28, correction))
                 requested_km = max(6.0, min(99.0, float(target_km) * correction))
+        if not rows and provider_failed:
+            # ORS round-trip has already tripped the request-local circuit.
+            # Recover through the normal pedestrian router, which can now skip
+            # ORS immediately and use Valhalla. Keep this to two bounded fan
+            # attempts so an outage cannot turn into another retry storm.
+            try:
+                recovered = roundtrip._polygon_loop_candidates(
+                    start,
+                    target_km,
+                    daily_min,
+                    daily_max,
+                    days,
+                    v3_module,
+                    max_attempts=2,
+                )
+            except Exception:
+                recovered = []
+            for route in recovered:
+                try:
+                    distance = float(route.get("distance") or 0)
+                except (TypeError, ValueError):
+                    continue
+                if distance <= 0:
+                    continue
+                per_day = distance / max(int(days), 1)
+                retrace = (
+                    float(v3_module._route_retrace_ratio(route.get("coords") or []))
+                    if hasattr(v3_module, "_route_retrace_ratio")
+                    else 0.0
+                )
+                range_penalty = (
+                    max(0.0, daily_min - per_day) * 5
+                    + max(0.0, per_day - daily_max) * 8
+                )
+                candidate = dict(route)
+                candidate["round_trip_target_km"] = round(float(target_km), 2)
+                candidate["round_trip_retrace_ratio"] = round(float(retrace), 4)
+                candidate["provider_failover"] = True
+                rows.append((
+                    abs(distance - target_km) + range_penalty + retrace * 80,
+                    candidate,
+                ))
+
         if not rows:
             from fastapi import HTTPException
-            detail = warnings[0] if warnings else "OpenRouteService n'a produit aucune boucle pédestre."
+            detail = warnings[0] if warnings else "Aucun routeur pédestre n'a produit de boucle exploitable."
             raise HTTPException(status_code=503, detail=detail)
         # Distance accuracy outranks a modest retrace difference when the
         # corrective ORS attempt is materially closer to the user's target.
