@@ -9,6 +9,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from backend import trekbrain_trail_loop_rescue_v9 as rescue
+from backend import trekbrain_gr_v9 as gr_module
 
 
 def rectangle_loop():
@@ -70,6 +71,40 @@ assert len(compact) <= 21, len(compact)
 assert sum(1 for p in compact if p.get("category") == "camping") == 4
 assert compact[0]["name"] == "Départ"
 assert compact[-1]["name"] == "Arrivée"
+
+# The secondary trail index returns clipped OSM relation geometry in Web
+# Mercator. Parsing it must preserve the real relation id/ref and reconstruct
+# WGS84 [lat, lon] geometry without involving the network in CI.
+sample_wgs = [[48.20 + 0.006 * i, -4.72 + 0.020 * i] for i in range(21)]
+sample_merc = []
+for lat, lon in sample_wgs:
+    x, y = gr_module._lonlat_to_mercator(lon, lat)
+    sample_merc.append([x, y])
+waymarked = gr_module._waymarked_trails_from_payloads(
+    {
+        "results": [
+            {"type": "relation", "id": 340034, "ref": "GR 34", "name": "Sentier des douaniers"},
+            {"type": "relation", "id": 99, "ref": "", "name": "Promenade locale"},
+        ]
+    },
+    {
+        "type": "FeatureCollection",
+        "features": [
+            {
+                "type": "Feature",
+                "id": 340034,
+                "geometry": {"type": "LineString", "coordinates": sample_merc},
+            }
+        ],
+    },
+)
+assert len(waymarked) == 1
+assert waymarked[0]["id"] == 340034
+assert waymarked[0]["ref"] == "GR 34"
+assert waymarked[0]["length_km"] > 20
+assert waymarked[0]["discovery_provider"].startswith("Waymarked Trails")
+assert abs(waymarked[0]["coords"][0][0] - sample_wgs[0][0]) < 1e-5
+assert abs(waymarked[0]["coords"][0][1] - sample_wgs[0][1]) < 1e-5
 
 # A long open coastal relation can be used as the real backbone of a loop:
 # follow the mapped trail, then close only the final return through a pedestrian
