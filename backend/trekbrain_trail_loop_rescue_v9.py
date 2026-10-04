@@ -52,6 +52,30 @@ def _fold(value: str) -> str:
     return "".join(c for c in text if not unicodedata.combining(c)).casefold()
 
 
+def _generic_relation_section_allowed(intent: dict[str, Any] | None, target_km: float) -> bool:
+    """Allow section+pedestrian-closure for ordinary multi-day loops too.
+
+    A route relation may be open in the local extract even when it is excellent
+    hiking evidence. Rejecting it merely because the provider clipped the full
+    circuit forces ORS to invent a huge loop. Safety remains unchanged: the
+    section must be continuous, dominate the final geometry, fit the requested
+    distance window, and its closure must be a real pedestrian route.
+    """
+    intent = intent or {}
+    if _fold(intent.get("route_type") or "") != "boucle":
+        return False
+    try:
+        days = int(intent.get("days") or 1)
+        target = float(target_km or intent.get("total_target") or 0)
+    except (TypeError, ValueError):
+        return False
+    if days < 2 or days > 12 or target < 24.0 or target > 260.0:
+        return False
+    if intent.get("start_query") or intent.get("end_query") or intent.get("via_query"):
+        return False
+    return True
+
+
 def _coastal_section_allowed(intent: dict[str, Any] | None, target_km: float) -> bool:
     """Restrict the section-and-close strategy to genuine coastal loop intent.
 
@@ -714,7 +738,8 @@ def install_trail_loop_rescue(roundtrip, gr) -> None:
             return relation
 
         section_warning = None
-        if _coastal_section_allowed(_ACTIVE_INTENT.get(), target_km):
+        intent = _ACTIVE_INTENT.get()
+        if _coastal_section_allowed(intent, target_km) or _generic_relation_section_allowed(intent, target_km):
             section, section_warning = _relation_section_loop(
                 v3,
                 gr,
