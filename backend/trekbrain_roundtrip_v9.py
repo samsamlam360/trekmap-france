@@ -183,7 +183,9 @@ def _matrix_subloop_candidates(route, start, target_km: float, daily_min: float,
         return []
     start_coord = [float(start["lat"]), float(start["lon"])]
     samples = []
-    for fraction in [0.07 + 0.86 * i / 8 for i in range(9)]:
+    compact_two_day = int(days) <= 2 and float(target_km) <= 40.0
+    sample_count = 11 if compact_two_day else 9
+    for fraction in [0.06 + 0.88 * i / max(1, sample_count - 1) for i in range(sample_count)]:
         idx = _route_index_for_progress(cum, cum[-1] * fraction)
         if 1 < idx < len(coords) - 2 and (not samples or idx != samples[-1][0]):
             samples.append((idx, float(cum[idx]) / float(cum[-1]), coords[idx]))
@@ -214,14 +216,21 @@ def _matrix_subloop_candidates(route, start, target_km: float, daily_min: float,
             area2=abs(ax*by-bx*ay)
             perimeter=math.hypot(ax,ay)+math.hypot(bx-ax,by-ay)+math.hypot(bx,by)
             shape=area2/max(perimeter*perimeter,1e-6)
-            if shape < 0.004:
+            # Coastal two-day loops can be naturally elongated. Keep a strict
+            # non-degenerate triangle requirement, but allow a narrower shape
+            # only for the short-loop recovery path used by requests such as
+            # Mont-Saint-Michel. Every surviving candidate is still routed by
+            # ORS and then checked for closure/retrace below.
+            shape_floor = 0.0022 if compact_two_day else 0.004
+            if shape < shape_floor:
                 continue
             total=sum(legs)
             outside=max(0.0, low*0.90-total)*5 + max(0.0, total-high)*6
             predicted.append((abs(total-target_km)+outside-min(shape*40,2), i, j, total, shape))
     predicted.sort(key=lambda x:x[0])
     variants=[]
-    for _, i, j, estimate, shape in predicted[:5]:
+    max_rendered_candidates = 7 if compact_two_day else 5
+    for _, i, j, estimate, shape in predicted[:max_rendered_candidates]:
         routed=ors.get_route([start_coord, samples[i][2], samples[j][2], start_coord], _polyline_haversine)
         if not isinstance(routed,dict) or routed.get("fallback") is not False:
             continue
