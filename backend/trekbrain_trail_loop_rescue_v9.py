@@ -380,6 +380,7 @@ def _section_candidates(trails, start: dict[str, Any], target_km: float):
                             abs(estimated - target)
                             + max(0.0, 0.68 - arc / max(target, 0.1)) * 12.0
                             + start_off * 0.35
+                            + _trail_text_score(trail)
                         )
                         rows.append((
                             score,
@@ -471,6 +472,7 @@ def _matrix_rank_section_candidates(rows, ors, target_km: float, feasible_low: f
             abs(estimated_total - target)
             + closure_share * 6.0
             + float(start_off) * 0.30
+            + _trail_text_score(trail)
         )
         ranked.append((
             score, trail, section, start_off, section_km, direction,
@@ -502,19 +504,38 @@ def _relation_section_loop(
     bridge is accepted, and at most two closure candidates are routed.
     """
     trails = list(trails if trails is not None else (_LAST_DISCOVERED_TRAILS.get() or []))
-    if not trails:
-        radius = min(45.0, max(16.0, float(target_km) * 0.42))
-        try:
-            trails = list(gr._discover_waymarked(start, radius) or [])
-        except Exception:
-            trails = []
-        if trails:
-            _coastal_section_log(
-                "secondary-trails",
-                provider="waymarked",
-                trails=len(trails),
-                longest=round(max(float(x.get("length_km") or 0) for x in trails), 1),
-            )
+    # Primary discovery may return several perfectly valid but irrelevant local
+    # relations. Treating a non-empty list as "discovery succeeded" prevented the
+    # secondary route index from ever contributing the long/named itinerary the
+    # request actually needed. Merge both evidence sources, then rank them.
+    radius = min(45.0, max(16.0, float(target_km) * 0.42))
+    try:
+        secondary = list(gr._discover_waymarked(start, radius) or [])
+    except Exception:
+        secondary = []
+    if secondary:
+        known = {
+            str(x.get("id") or x.get("source_url") or x.get("ref") or x.get("name") or "")
+            for x in trails
+        }
+        added = 0
+        for trail in secondary:
+            identity = str(trail.get("id") or trail.get("source_url") or trail.get("ref") or trail.get("name") or "")
+            if identity and identity in known:
+                continue
+            if identity:
+                known.add(identity)
+            trails.append(trail)
+            added += 1
+        _coastal_section_log(
+            "secondary-trails",
+            provider="waymarked",
+            trails=len(secondary),
+            added=added,
+            combined=len(trails),
+            longest=round(max(float(x.get("length_km") or 0) for x in secondary), 1),
+        )
+    _LAST_DISCOVERED_TRAILS.set(trails)
     if not trails:
         _coastal_section_log("no-trails", target=round(float(target_km), 1))
         return None, "aucune relation longue de randonnée trouvée"
