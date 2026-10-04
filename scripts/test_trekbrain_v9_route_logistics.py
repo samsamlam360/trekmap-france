@@ -239,6 +239,13 @@ try:
                 "category": "food",
                 "source_url": "osm://food",
             },
+            {
+                "name": "Gare terrain",
+                "lat": 0.0,
+                "lon": 0.01,
+                "category": "transit",
+                "source_url": "osm://station",
+            },
         ],
         True,
     )
@@ -261,9 +268,17 @@ finally:
 
 assert len(chosen_terrain) == 4, chosen_terrain
 assert meta_terrain["terrain_preloaded"] is True
-assert {x.get("category") for x in meta_terrain["terrain_rows"]} == {"water", "food"}
+assert {x.get("category") for x in meta_terrain["terrain_rows"]} == {"water", "food", "transit"}
 
-terrain_plan = {"water": [], "resources": [], "food": []}
+terrain_plan = {
+    "water": [],
+    "resources": [],
+    "food": [],
+    "points_of_interest": [],
+    "transport": {},
+    "start": {"name": "Départ", "lat": 0.0, "lon": 0.0},
+    "end": {"name": "Arrivée", "lat": 0.0, "lon": 0.0},
+}
 logistics._attach_preloaded_terrain(
     terrain_plan,
     meta_terrain["terrain_rows"],
@@ -272,6 +287,9 @@ logistics._attach_preloaded_terrain(
 assert terrain_plan["_terrain_osm_preloaded"] is True
 assert terrain_plan["water"][0]["name"] == "Fontaine terrain"
 assert terrain_plan["resources"][0]["name"] == "Épicerie terrain"
+assert terrain_plan["points_of_interest"][0]["name"] == "Gare terrain"
+assert "Gare terrain" in terrain_plan["transport"]["outbound"]
+assert "Gare terrain" in terrain_plan["transport"]["return"]
 
 # Generic lodging may be a separate transfer without reshaping the hiking line.
 # Keep candidates up to ~10 km off-route when the user did not demand 100% walk.
