@@ -622,6 +622,91 @@ def _diverse_section_candidates(rows, limit: int = _SECTION_MATRIX_MAX_CANDIDATE
     return chosen
 
 
+def _exact_closure_fallback_candidates(
+    rows,
+    target_km: float,
+    feasible_low: float,
+    feasible_high: float,
+    limit: int = _SECTION_MAX_ATTEMPTS,
+):
+    """Rank exact Directions fallbacks without relying on ORS Matrix.
+
+    Air distance is only a lower bound for the pedestrian closure, so keep a
+    healthy safety margin below the final closure-share ceiling. The ranking
+    favours more kilometres on the real hiking relation while still keeping the
+    estimated total close to the requested target. It performs no network call.
+    """
+    target = max(0.1, float(target_km))
+    pool = _diverse_section_candidates(
+        rows,
+        limit=max(_SECTION_MATRIX_MAX_CANDIDATES * 3, int(limit) * 6),
+    )
+    ranked = []
+    for row in pool:
+        rough_score, trail, section, start_off, section_km, direction = row
+        if len(section) < 2:
+            continue
+        closure_air = _dist(section[-1], section[0])
+        if not math.isfinite(closure_air) or closure_air <= 0.2:
+            continue
+
+        # Mountain pedestrian closures are commonly longer than straight-line
+        # distance. Use a conservative local estimate for selection only; exact
+        # Directions geometry remains the sole authority afterwards.
+        estimated_closure = closure_air * 1.55
+        estimated_total = float(section_km) + estimated_closure
+        estimated_share = estimated_closure / max(estimated_total, 0.1)
+
+        outside = (
+            max(0.0, float(feasible_low) - estimated_total) * 2.5
+            + max(0.0, estimated_total - float(feasible_high)) * 3.5
+        )
+        # Start penalising well before the hard 42% final ceiling so the exact
+        # route can be longer than the air-distance estimate without immediately
+        # failing the relation-share guard.
+        share_margin = max(0.0, estimated_share - 0.32) * 45.0
+        score = (
+            abs(estimated_total - target)
+            + outside
+            + share_margin
+            + estimated_share * 5.0
+            + float(start_off) * 0.30
+            + _trail_text_score(trail)
+            + float(rough_score) * 0.08
+        )
+        ranked.append((
+            score,
+            row,
+            closure_air,
+            estimated_total,
+            estimated_share,
+        ))
+
+    ranked.sort(key=lambda item: item[0])
+
+    # Preserve diversity across relation/direction/distance family even after
+    # the closure-share re-ranking.
+    selected = []
+    seen = set()
+    for _score, row, closure_air, estimated_total, estimated_share in ranked:
+        _rough, trail, _section, _start_off, section_km, direction = row
+        identity = str(trail.get("id") or trail.get("ref") or trail.get("name") or "")
+        bucket = int(round(float(section_km) / _SECTION_DIVERSITY_KM))
+        key = (identity, int(direction), bucket)
+        if key in seen:
+            continue
+        seen.add(key)
+        selected.append((
+            row,
+            closure_air,
+            estimated_total,
+            estimated_share,
+        ))
+        if len(selected) >= max(1, int(limit)):
+            break
+    return selected
+
+
 def _matrix_rank_section_candidates(rows, ors, target_km: float, feasible_low: float, feasible_high: float):
     """Use one real pedestrian Matrix to rank closure endpoints.
 
@@ -789,24 +874,40 @@ def _relation_section_loop(
             # especially on sparse mountain networks. Give at most two diverse,
             # already-ranked relation sections one exact Directions attempt; the
             # strict distance/share/gap/retrace checks below remain authoritative.
+            fallback_rows = _exact_closure_fallback_candidates(
+                rows, target_km, feasible_low, feasible_high
+            )
             route_rows = [
                 (score, trail, section, start_off, section_km, direction, None, None)
-                for score, trail, section, start_off, section_km, direction
-                in _diverse_section_candidates(rows)[:_SECTION_MAX_ATTEMPTS]
+                for (
+                    (score, trail, section, start_off, section_km, direction),
+                    _closure_air, _estimated_total, _estimated_share,
+                ) in fallback_rows
             ]
             _coastal_section_log(
                 "matrix-zero-viable-fallback",
                 candidates=len(rows),
                 routed=len(route_rows),
                 target=round(float(target_km), 1),
+                fallback=(
+                    "|".join(
+                        f"{float(row[0][4]):.1f}+air{float(row[1]):.1f}/share~{float(row[3]):.2f}"
+                        for row in fallback_rows
+                    )[:220]
+                ),
             )
     else:
         # Matrix is an optimisation/selection layer, not a safety dependency.
         # Preserve the old bounded two-candidate fallback if the provider is down.
+        fallback_rows = _exact_closure_fallback_candidates(
+            rows, target_km, feasible_low, feasible_high
+        )
         route_rows = [
             (score, trail, section, start_off, section_km, direction, None, None)
-            for score, trail, section, start_off, section_km, direction
-            in _diverse_section_candidates(rows)[:_SECTION_MAX_ATTEMPTS]
+            for (
+                (score, trail, section, start_off, section_km, direction),
+                _closure_air, _estimated_total, _estimated_share,
+            ) in fallback_rows
         ]
         if matrix_warning:
             warnings.append(matrix_warning)
@@ -814,6 +915,12 @@ def _relation_section_loop(
             "matrix-fallback",
             candidates=len(rows),
             reason=(matrix_warning or "unknown")[:80],
+            fallback=(
+                "|".join(
+                    f"{float(row[0][4]):.1f}+air{float(row[1]):.1f}/share~{float(row[3]):.2f}"
+                    for row in fallback_rows
+                )[:220]
+            ),
         )
 
     for _rank, trail, section, start_off, section_km, direction, matrix_closure_km, matrix_total_km in route_rows:
@@ -1111,6 +1218,7 @@ __all__ = [
     "_section_start_offset_limit",
     "_diverse_section_candidates",
     "_matrix_rank_section_candidates",
+    "_exact_closure_fallback_candidates",
     "_coastal_section_allowed",
     "_relation_first_allowed",
     "_trail_rejection_snapshot",
