@@ -536,6 +536,22 @@ def _section_path(coords, start_idx: int, end_idx: int) -> list[list[float]]:
     return [list(p) for p in reversed(coords[end_idx:start_idx + 1])]
 
 
+def _section_start_offset_limit(target_km: float) -> float:
+    """Allow a modest regional-centre snap for long loops only.
+
+    Generic relation-section rescue is disabled whenever the user supplied an
+    explicit start/end/via constraint. For a long regional loop, however, the
+    geocoded place is only an area anchor; insisting on exactly 12 km can reject
+    a strong long-distance trail for a few hundred metres. Keep short loops at
+    the historical 12 km limit and grow gently, capped at 18 km.
+    """
+    try:
+        target = max(0.0, float(target_km))
+    except (TypeError, ValueError):
+        target = 0.0
+    return max(_MAX_START_OFFSET_KM, min(18.0, target * 0.12))
+
+
 def _section_candidates(trails, start: dict[str, Any], target_km: float):
     """Rank long real hiking-relation sections before making any routing call."""
     rows = []
@@ -548,7 +564,7 @@ def _section_candidates(trails, start: dict[str, Any], target_km: float):
         if relation_km < target * 0.62:
             continue
         start_idx, start_off = _nearest_index(coords, start)
-        if start_off > _MAX_START_OFFSET_KM:
+        if start_off > _section_start_offset_limit(target):
             continue
 
         for direction in (1, -1):
@@ -1080,6 +1096,7 @@ __all__ = [
     "_relation_loop",
     "_relation_section_loop",
     "_section_candidates",
+    "_section_start_offset_limit",
     "_diverse_section_candidates",
     "_matrix_rank_section_candidates",
     "_coastal_section_allowed",
