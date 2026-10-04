@@ -277,6 +277,56 @@ assert len(precision_calls) == 2, precision_calls
 assert float(precise_loop.get("distance") or 0) == 34.0, precise_loop
 assert float(precise_loop.get("round_trip_retrace_ratio") or 0) <= 0.30, precise_loop
 
+# If both round-trip attempts remain >20% oversized, one compact Matrix
+# recovery may reuse the validated loop geometry. This must not add a third
+# round-trip request, and a precise compact cycle wins.
+real_compact_request = roundtrip._roundtrip_request
+real_compact_matrix = roundtrip._matrix_subloop_candidates
+real_compact_retrace = v3._route_retrace_ratio
+compact_calls = []
+compact_matrix_calls = {"count": 0}
+
+def fake_oversized_roundtrip(start, requested_km, seed):
+    compact_calls.append((float(requested_km), int(seed)))
+    return {
+        "coords": [[48.636, -1.511], [48.700, -1.430], [48.600, -1.350], [48.636, -1.511]],
+        "distance": 40.86,
+        "fallback": False,
+        "routing_mode": "ors-round-trip",
+    }, None
+
+def fake_compact_candidates(route, start, target_km, daily_min, daily_max, days, v3_module):
+    compact_matrix_calls["count"] += 1
+    return [{
+        "coords": [[48.636, -1.511], [48.675, -1.455], [48.610, -1.400], [48.636, -1.511]],
+        "distance": 33.2,
+        "fallback": False,
+        "routing_mode": "ors-matrix-subloop",
+    }]
+
+roundtrip._roundtrip_request = fake_oversized_roundtrip
+roundtrip._matrix_subloop_candidates = fake_compact_candidates
+v3._route_retrace_ratio = lambda coords: 0.16
+try:
+    compact_loop = roundtrip._best_roundtrip(
+        {"lat": 48.636, "lon": -1.511},
+        32.0,
+        12.0,
+        20.0,
+        2,
+        v3,
+    )
+finally:
+    roundtrip._roundtrip_request = real_compact_request
+    roundtrip._matrix_subloop_candidates = real_compact_matrix
+    v3._route_retrace_ratio = real_compact_retrace
+
+assert len(compact_calls) == 2, compact_calls
+assert compact_matrix_calls["count"] == 1, compact_matrix_calls
+assert float(compact_loop.get("distance") or 0) == 33.2, compact_loop
+assert compact_loop.get("compact_recovery") is True, compact_loop
+assert compact_loop.get("routing_mode") == "ors-matrix-subloop", compact_loop
+
 # Route-first lodging must not start a third route-probe network path after
 # Photon and the single bounded bbox lookup fail.
 real_photon_split = logistics._photon_split_stays
@@ -410,6 +460,8 @@ def fake_ranked_roundtrip(start, requested_km, seed):
     }, None
 
 roundtrip._roundtrip_request = fake_ranked_roundtrip
+real_ranked_matrix = roundtrip._matrix_subloop_candidates
+roundtrip._matrix_subloop_candidates = lambda *args, **kwargs: []
 try:
     ranked = roundtrip._best_roundtrip(
         {"lat": 48.636, "lon": -1.511},
@@ -421,6 +473,7 @@ try:
     )
 finally:
     roundtrip._roundtrip_request = real_roundtrip_request_ranked
+    roundtrip._matrix_subloop_candidates = real_ranked_matrix
 
 assert len(ranked_calls) == 2, ranked_calls
 assert ranked.get("fast_ranked") is True, ranked
