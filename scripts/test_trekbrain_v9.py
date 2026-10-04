@@ -217,6 +217,48 @@ try:
 finally:
     request_reconcile.geo._geocode = real_geocode
 
+# Production regression from mobile: "Mont blanc" by itself geocodes to the
+# summit (45.8327, 6.8652), which ORS cannot use as a pedestrian graph start.
+# "Tour du Mont Blanc" must instead be understood as the TMB itinerary and start
+# from a routable access village without performing a summit lookup here.
+tmb_geocode_calls = []
+real_geocode = request_reconcile.geo._geocode
+
+def forbidden_tmb_geocode(query):
+    tmb_geocode_calls.append(query)
+    raise AssertionError(f"TMB reconciliation must not geocode the summit: {query}")
+
+request_reconcile.geo._geocode = forbidden_tmb_geocode
+try:
+    tmb = AIPlanRequest(
+        prompt=(
+            "Je veux faire un trek de 8 jours qui fait le tour du Mont Blanc "
+            "je veux que tu m'indiques des refuge pour la nuit et je veux faire "
+            "environ 22 km par jour"
+        ),
+        region="Mont blanc",
+        days=8,
+        daily_km=22,
+        difficulty="medium",
+        route_type="Boucle",
+        require_transit=True,
+        require_water=True,
+        require_accommodation=True,
+        require_food=True,
+    )
+    effective_tmb, tmb_meta = _effective_payload(tmb)
+finally:
+    request_reconcile.geo._geocode = real_geocode
+
+assert not tmb_geocode_calls, tmb_geocode_calls
+assert effective_tmb.region == "Les Houches", (effective_tmb.region, tmb_meta)
+assert effective_tmb.route_type == "Boucle", effective_tmb
+assert effective_tmb.days == 8 and float(effective_tmb.daily_km) == 22.0, effective_tmb
+assert "relation de randonnée TMB" in effective_tmb.prompt, effective_tmb.prompt
+assert tmb_meta["reason"] == "tour-du-mont-blanc-canonical-start", tmb_meta
+assert tmb_meta["preferred_trail"] == "TMB", tmb_meta
+assert tmb_meta["trail_access_mode"] == "canonical-tmb-start", tmb_meta
+
 # The geographic gate is part of the mandatory precision suite so a future
 # routing refactor cannot reintroduce direct lines across water unnoticed.
 runpy.run_path(str(ROOT / "scripts" / "test_trekbrain_v9_geo_safety.py"), run_name="__trekbrain_geo_safety__")
