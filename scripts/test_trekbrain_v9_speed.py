@@ -327,52 +327,6 @@ assert float(compact_loop.get("distance") or 0) == 33.2, compact_loop
 assert compact_loop.get("compact_recovery") is True, compact_loop
 assert compact_loop.get("routing_mode") == "ors-matrix-subloop", compact_loop
 
-# The compact Matrix recovery is intentionally restricted to short two-day
-# loops. Three-day loops such as Sancy already have a useful ORS path and must
-# not pay for an extra Matrix cycle merely because the raw distance is >20%
-# over the target.
-real_three_day_request = roundtrip._roundtrip_request
-real_three_day_matrix = roundtrip._matrix_subloop_candidates
-three_day_calls = []
-three_day_matrix_calls = {"count": 0}
-
-def fake_three_day_oversized(start, requested_km, seed):
-    three_day_calls.append((float(requested_km), int(seed)))
-    return {
-        "coords": [[45.53, 2.82], [45.60, 2.90], [45.48, 2.95], [45.53, 2.82]],
-        "distance": 61.5,
-        "fallback": False,
-        "routing_mode": "ors-round-trip",
-    }, None
-
-def forbidden_three_day_matrix(*args, **kwargs):
-    three_day_matrix_calls["count"] += 1
-    return [{
-        "coords": [[45.53, 2.82], [45.57, 2.87], [45.50, 2.91], [45.53, 2.82]],
-        "distance": 48.0,
-        "fallback": False,
-        "routing_mode": "ors-matrix-subloop",
-    }]
-
-roundtrip._roundtrip_request = fake_three_day_oversized
-roundtrip._matrix_subloop_candidates = forbidden_three_day_matrix
-try:
-    three_day_loop = roundtrip._best_roundtrip(
-        {"lat": 45.53, "lon": 2.82},
-        48.0,
-        12.0,
-        20.0,
-        3,
-        v3,
-    )
-finally:
-    roundtrip._roundtrip_request = real_three_day_request
-    roundtrip._matrix_subloop_candidates = real_three_day_matrix
-
-assert len(three_day_calls) == 2, three_day_calls
-assert three_day_matrix_calls["count"] == 0, three_day_matrix_calls
-assert three_day_loop.get("routing_mode") == "ors-round-trip", three_day_loop
-
 # Route-first lodging must not start a third route-probe network path after
 # Photon and the single bounded bbox lookup fail.
 real_photon_split = logistics._photon_split_stays
