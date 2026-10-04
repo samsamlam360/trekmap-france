@@ -325,7 +325,14 @@ def _relation_loop(v3, gr, start: dict[str, Any], target_km: float):
                 score = _preferred_score(trail, target_km, start_off, relation_km)
                 rows.append((score, trail, closed, idx, start_off, relation_km))
 
-    if not rows and secondary:
+    intent = _ACTIVE_INTENT.get() or {}
+    try:
+        intent_days = int(intent.get("days") or 1)
+    except (TypeError, ValueError):
+        intent_days = 1
+    full_relation_allowed = intent_days >= 5 or float(target_km) >= 90.0
+
+    if not rows and secondary and full_relation_allowed:
         # /list/segments is clipped to the discovery bbox. For long established
         # tours that clipped geometry can look open even though the underlying
         # OSM relation is a real loop. Hydrate only the two strongest Waymarked
