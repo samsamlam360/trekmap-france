@@ -313,6 +313,52 @@ assert len(precision_calls) == 2, precision_calls
 assert float(precise_loop.get("distance") or 0) == 34.0, precise_loop
 assert float(precise_loop.get("round_trip_retrace_ratio") or 0) <= 0.30, precise_loop
 
+# A network outage on ORS round-trip must stop after one primary attempt and
+# recover through the bounded waypoint path (which production can route via the
+# secondary pedestrian provider). Do not burn the second ORS seed.
+real_outage_request = roundtrip._roundtrip_request
+real_outage_polygon = roundtrip._polygon_loop_candidates
+real_outage_retrace = v3._route_retrace_ratio
+outage_calls = {"roundtrip": 0, "polygon": 0, "max_attempts": None}
+
+def fake_outage_roundtrip(start, requested_km, seed):
+    outage_calls["roundtrip"] += 1
+    return None, "OpenRouteService round-trip : délai interactif dépassé."
+
+def fake_outage_polygon(start, target_km, daily_min, daily_max, days, v3_module, max_attempts=None):
+    outage_calls["polygon"] += 1
+    outage_calls["max_attempts"] = max_attempts
+    return [{
+        "coords": [[46.0, 3.0], [46.05, 3.08], [45.97, 3.10], [46.0, 3.0]],
+        "distance": 47.5,
+        "fallback": False,
+        "routing_mode": "secondary-waypoint-loop",
+        "secondary_router": True,
+    }]
+
+roundtrip._roundtrip_request = fake_outage_roundtrip
+roundtrip._polygon_loop_candidates = fake_outage_polygon
+v3._route_retrace_ratio = lambda _coords: 0.12
+try:
+    outage_loop = roundtrip._best_roundtrip(
+        {"lat": 46.0, "lon": 3.0},
+        48.0,
+        12.0,
+        20.0,
+        3,
+        v3,
+    )
+finally:
+    roundtrip._roundtrip_request = real_outage_request
+    roundtrip._polygon_loop_candidates = real_outage_polygon
+    v3._route_retrace_ratio = real_outage_retrace
+
+assert outage_calls["roundtrip"] == 1, outage_calls
+assert outage_calls["polygon"] == 1, outage_calls
+assert outage_calls["max_attempts"] == 2, outage_calls
+assert outage_loop.get("routing_mode") == "secondary-waypoint-loop", outage_loop
+assert outage_loop.get("provider_failover") is True, outage_loop
+
 # Route-first lodging must not start a third route-probe network path after
 # Photon and the single bounded bbox lookup fail.
 real_photon_split = logistics._photon_split_stays
@@ -422,7 +468,41 @@ finally:
     ors.requests.post = real_post
     ors.ORS_API_KEY = real_key
 assert result.get("fallback") is False, result
-assert post_calls and post_calls[0][1] <= 7.1, post_calls
+assert post_calls and post_calls[0][1] <= 3.6, post_calls
+
+roundtrip_post_calls = []
+real_roundtrip_post = ors.requests.post
+real_roundtrip_key = ors.ORS_API_KEY
+ors.ORS_API_KEY = "test-key"
+
+class RoundtripResponse:
+    status_code = 200
+    ok = True
+    def json(self):
+        return {
+            "features": [{
+                "geometry": {"coordinates": [[2.0, 48.0], [2.1, 48.1], [2.0, 48.0]]},
+                "properties": {"summary": {"distance": 12000}},
+            }]
+        }
+
+def fake_roundtrip_post(url, **kwargs):
+    roundtrip_post_calls.append((url, float(kwargs.get("timeout") or 0)))
+    return RoundtripResponse()
+
+ors.requests.post = fake_roundtrip_post
+try:
+    route_timeout_probe, warning_timeout_probe = roundtrip._roundtrip_request(
+        {"lat": 48.0, "lon": 2.0},
+        12.0,
+        3,
+    )
+finally:
+    ors.requests.post = real_roundtrip_post
+    ors.ORS_API_KEY = real_roundtrip_key
+
+assert route_timeout_probe is not None and warning_timeout_probe is None
+assert roundtrip_post_calls and roundtrip_post_calls[0][1] <= 3.6, roundtrip_post_calls
 
 # A short soft-tolerance loop may legitimately end a few hundred metres
 # above daily_max after two ranked ORS variants. Once those variants have

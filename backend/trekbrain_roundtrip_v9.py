@@ -100,7 +100,10 @@ def _destination(point, distance_km: float, bearing_deg: float):
     return [math.degrees(lat2), math.degrees(lon2)]
 
 
-def _polygon_loop_candidates(start, target_km: float, daily_min: float, daily_max: float, days: int, v3):
+def _polygon_loop_candidates(
+    start, target_km: float, daily_min: float, daily_max: float, days: int, v3,
+    max_attempts: int | None = None,
+):
     """Generate bounded waypoint loops and validate every metre through ORS.
 
     ORS round_trip can overshoot its requested length badly on constrained path
@@ -120,6 +123,8 @@ def _polygon_loop_candidates(start, target_km: float, daily_min: float, daily_ma
         (0.0, 0.92),
         (270.0, 0.84),
     )
+    if max_attempts is not None:
+        attempts = attempts[: max(1, min(int(max_attempts), len(attempts)))]
     variants = []
     for orientation, scale in attempts:
         r = radius * scale

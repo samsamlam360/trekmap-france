@@ -20,7 +20,7 @@ import requests
 
 _INSTALLED = False
 _URL = os.getenv("TREKBRAIN_VALHALLA_URL", "https://valhalla1.openstreetmap.de/route").strip()
-_TIMEOUT = max(3.0, min(float(os.getenv("TREKBRAIN_VALHALLA_TIMEOUT", "7") or 7), 12.0))
+_TIMEOUT = max(2.5, min(float(os.getenv("TREKBRAIN_VALHALLA_TIMEOUT", "4") or 4), 8.0))
 _CACHE: dict[tuple, tuple[float, dict[str, Any]]] = {}
 _CACHE_TTL = 6 * 60 * 60
 _COOLDOWN_UNTIL = 0.0
