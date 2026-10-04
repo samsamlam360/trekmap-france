@@ -259,7 +259,7 @@ def _section_candidates(trails, start: dict[str, Any], target_km: float):
         if len(coords) < 18:
             continue
         relation_km = float(trail.get("length_km") or _length(coords))
-        if relation_km < target * 1.05:
+        if relation_km < target * 0.62:
             continue
         start_idx, start_off = _nearest_index(coords, start)
         if start_off > _MAX_START_OFFSET_KM:
