@@ -298,6 +298,9 @@ def evaluate(case, result, elapsed_s, clarify):
         "grade": ((result.get("trekbrain") or {}).get("quality") or {}).get("grade"),
         "decision_grade": decision.get("grade"),
         "route_type": result.get("route_type"),
+        "routing_mode": route.get("routing_mode"),
+        "planner_fallback": result.get("planner_fallback"),
+        "fast_roundtrip": (result.get("planner") or {}).get("fast_roundtrip"),
         "route_distance_km": route.get("distance_km"),
         "stage_distances_km": distances,
         "mean_daily_deviation_pct": round(mean_dev * 100, 1),
@@ -354,17 +357,21 @@ def write_reports(meta, rows):
         f"- Latence max: **{max(elapsed):.1f} s**",
         f"- Avertissements terrain: **{warnings}**",
         "",
-        "| Scénario | Statut | Qualité | Temps | Distance | Écart/jour | Alertes |",
-        "|---|---:|---:|---:|---:|---:|---|",
+        "| Scénario | Statut | Qualité | Temps | Moteur | Distance | Écart/jour | Alertes |",
+        "|---|---:|---:|---:|---|---:|---:|---|",
     ]
     for row in rows:
         alerts = "; ".join(row["hard_failures"] + row["warnings"]) or "aucune"
         quality = "n/a" if row["quality"] is None else f"{float(row['quality']):.1f}"
         distance = row["route_distance_km"]
         distance = "n/a" if distance is None else f"{float(distance):.1f} km"
+        routing = str(row.get("routing_mode") or row.get("planner_fallback") or "n/a")
+        if row.get("fast_roundtrip"):
+            routing += " · fast"
         lines.append(
             f"| {row['id']} | {'✅' if row['ok'] else '❌'} | {quality} | {row['elapsed_s']:.1f}s | "
-            f"{distance} | {row['mean_daily_deviation_pct']:.1f}% | {alerts.replace('|','/')} |"
+            f"{routing.replace('|','/')} | {distance} | {row['mean_daily_deviation_pct']:.1f}% | "
+            f"{alerts.replace('|','/')} |"
         )
     (OUT_DIR / "trekbrain-production-benchmark.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
 
