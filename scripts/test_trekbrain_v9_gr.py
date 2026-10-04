@@ -178,3 +178,10 @@ out_and_back = out_leg + list(reversed(out_leg))
 assert v3._route_retrace_ratio(real_loop) < 0.32, v3._route_retrace_ratio(real_loop)
 assert v3._route_retrace_ratio(out_and_back) > 0.32, v3._route_retrace_ratio(out_and_back)
 print("Retrace detector: OK")
+
+
+# OSM walking-route evidence is not limited to route=hiking. Waymarked and OSM
+# both legitimately expose route=foot / route=walking relations; discovery must
+# not silently discard an otherwise strong named multi-day itinerary.
+assert gr._is_priority_relation({"route": "foot", "network": "nwn", "name": "Tour pédestre synthétique"})
+assert gr._is_priority_relation({"route": "walking", "network": "rwn", "name": "Boucle pédestre synthétique"})
