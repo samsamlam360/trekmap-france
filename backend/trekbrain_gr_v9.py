@@ -426,8 +426,8 @@ def _discover(v3, center: dict[str, Any], radius_km: float) -> list[dict[str, An
     radius_m = max(3000, min(int(max(radius_km, 12.0) * 1000), 45000))
     query = (
         "[out:json][timeout:20];("
-        f"relation(around:{radius_m},{center['lat']},{center['lon']})[\"route\"=\"hiking\"][\"network\"~\"^(iwn|nwn|rwn)$\"];"
-        f"relation(around:{radius_m},{center['lat']},{center['lon']})[\"route\"=\"hiking\"][\"ref\"~\"^(GR|GRP)\",i];"
+        f"relation(around:{radius_m},{center['lat']},{center['lon']})[\"route\"~\"^(hiking|foot|walking)$\"][\"network\"~\"^(iwn|nwn|rwn)$\"];"
+        f"relation(around:{radius_m},{center['lat']},{center['lon']})[\"route\"~\"^(hiking|foot|walking)$\"][\"ref\"~\"^(GR|GRP)\",i];"
         ");out geom tags 36;"
     )
     try:
@@ -473,9 +473,9 @@ def _discover_generic(v3, center: dict[str, Any], radius_km: float) -> list[dict
     radius_m = max(3000, min(int(max(radius_km, 12.0) * 1000), 45000))
     query = (
         "[out:json][timeout:20];("
-        f"relation(around:{radius_m},{center['lat']},{center['lon']})[\"route\"=\"hiking\"][\"network\"~\"^(iwn|nwn|rwn|lwn)$\"];"
-        f"relation(around:{radius_m},{center['lat']},{center['lon']})[\"route\"=\"hiking\"][\"ref\"];"
-        f"relation(around:{radius_m},{center['lat']},{center['lon']})[\"route\"=\"hiking\"][\"name\"];"
+        f"relation(around:{radius_m},{center['lat']},{center['lon']})[\"route\"~\"^(hiking|foot|walking)$\"][\"network\"~\"^(iwn|nwn|rwn|lwn)$\"];"
+        f"relation(around:{radius_m},{center['lat']},{center['lon']})[\"route\"~\"^(hiking|foot|walking)$\"][\"ref\"];"
+        f"relation(around:{radius_m},{center['lat']},{center['lon']})[\"route\"~\"^(hiking|foot|walking)$\"][\"name\"];"
         ");out geom tags 48;"
     )
     try:
