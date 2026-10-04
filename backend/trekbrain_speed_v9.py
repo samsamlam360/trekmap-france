@@ -14,6 +14,8 @@ from copy import deepcopy
 from threading import Lock
 from typing import Any
 
+from . import trekbrain_perf_profile_v9 as perf
+
 _INSTALLED = False
 _STAY_POOL_LOCK = Lock()
 _STAY_POOLS: list[dict[str, Any]] = []
@@ -146,15 +148,39 @@ def install_fast_planning(v3, v5, v9) -> None:
         elif label.startswith("Overpass"):
             timeout = min(float(timeout), overpass_attempt)
             retries = 1
-        return original_request_json(
-            url,
-            params=params,
-            data=data,
-            timeout=timeout,
-            ttl=ttl,
-            service=service,
-            retries=retries,
-        )
+
+        if label.startswith("Overpass"):
+            metric = "overpass.request"
+        elif label.startswith("Photon"):
+            metric = "photon.request"
+        elif label.startswith("Nominatim"):
+            metric = "nominatim.request"
+        else:
+            metric = "geo.request"
+
+        started = time.perf_counter()
+        outcome = "ok"
+        try:
+            return original_request_json(
+                url,
+                params=params,
+                data=data,
+                timeout=timeout,
+                ttl=ttl,
+                service=service,
+                retries=retries,
+            )
+        except Exception:
+            outcome = "error"
+            raise
+        finally:
+            perf.record(
+                metric,
+                (time.perf_counter() - started) * 1000,
+                service=label,
+                timeout_s=round(float(timeout), 2),
+                outcome=outcome,
+            )
 
     free._request_json = fast_request_json
 
@@ -287,6 +313,9 @@ def install_fast_planning(v3, v5, v9) -> None:
                     pool = list(item["rows"])
                     break
 
+        if pool is not None:
+            perf.mark("lodging.stay_pool", cache_hit=True, category=category)
+
         if pool is None:
             pool = list(original_nearby_stays(v3_module, anchor, category, broad_radius))
             with _STAY_POOL_LOCK:
@@ -328,6 +357,10 @@ def install_fast_planning(v3, v5, v9) -> None:
         }
         if snap_radius_m is not None:
             payload["radiuses"] = [int(snap_radius_m)] * len(coords)
+        attempt = perf.next_sequence("ors.directions")
+        started = time.perf_counter()
+        status = None
+        outcome = "ok"
         try:
             response = ors.requests.post(
                 ors.ORS_URL,
@@ -335,12 +368,27 @@ def install_fast_planning(v3, v5, v9) -> None:
                 headers={"Authorization": ors.ORS_API_KEY, "Content-Type": "application/json"},
                 timeout=ors_timeout,
             )
+            status = response.status_code
         except ors.requests.Timeout:
+            outcome = "timeout"
             return None, "OpenRouteService : délai interactif dépassé.", None
         except ors.requests.RequestException as exc:
+            outcome = exc.__class__.__name__
             return None, f"OpenRouteService inaccessible ({exc.__class__.__name__}).", None
-        except Exception:
+        except Exception as exc:
+            outcome = exc.__class__.__name__
             return None, "Erreur inattendue avec OpenRouteService.", None
+        finally:
+            perf.record(
+                "ors.directions",
+                (time.perf_counter() - started) * 1000,
+                attempt=attempt,
+                points=len(coords),
+                snapped=snap_radius_m is not None,
+                timeout_s=ors_timeout,
+                status=status,
+                outcome=outcome,
+            )
         return ors._parse_response(response, coords, distance_gps)
 
     def fast_distance_matrix(coords):
@@ -353,6 +401,7 @@ def install_fast_planning(v3, v5, v9) -> None:
         now = time.monotonic()
         cached = ors._MATRIX_CACHE.get(key)
         if cached and now - cached[0] < ors._MATRIX_TTL:
+            perf.mark("ors.matrix", cache_hit=True, outcome="cache", points=len(coords))
             return deepcopy(cached[1])
         payload = {
             "locations": [[float(p[1]), float(p[0])] for p in coords],
@@ -360,6 +409,10 @@ def install_fast_planning(v3, v5, v9) -> None:
             "units": "km",
             "resolve_locations": False,
         }
+        attempt = perf.next_sequence("ors.matrix")
+        started = time.perf_counter()
+        status = None
+        outcome = "ok"
         try:
             response = ors.requests.post(
                 ors.ORS_MATRIX_URL,
@@ -367,10 +420,23 @@ def install_fast_planning(v3, v5, v9) -> None:
                 headers={"Authorization": ors.ORS_API_KEY, "Content-Type": "application/json"},
                 timeout=matrix_timeout,
             )
+            status = response.status_code
         except ors.requests.Timeout:
+            outcome = "timeout"
             return {"distances": None, "fallback": True, "warning": "OpenRouteService Matrix : délai interactif dépassé."}
         except ors.requests.RequestException as exc:
+            outcome = exc.__class__.__name__
             return {"distances": None, "fallback": True, "warning": f"OpenRouteService Matrix inaccessible ({exc.__class__.__name__})."}
+        finally:
+            perf.record(
+                "ors.matrix",
+                (time.perf_counter() - started) * 1000,
+                attempt=attempt,
+                points=len(coords),
+                timeout_s=matrix_timeout,
+                status=status,
+                outcome=outcome,
+            )
         if response.status_code in {401, 403, 429} or response.status_code >= 500 or not response.ok:
             return {"distances": None, "fallback": True, "warning": f"OpenRouteService Matrix HTTP {response.status_code}."}
         try:
@@ -410,6 +476,10 @@ def install_fast_planning(v3, v5, v9) -> None:
             "instructions": False,
             "options": {"round_trip": {"length": int(round(target_km * 1000)), "points": 6, "seed": int(seed)}},
         }
+        attempt = perf.next_sequence("ors.roundtrip")
+        started = time.perf_counter()
+        status = None
+        outcome = "ok"
         try:
             response = ors.requests.post(
                 ors.ORS_URL,
@@ -417,10 +487,24 @@ def install_fast_planning(v3, v5, v9) -> None:
                 headers={"Authorization": ors.ORS_API_KEY, "Content-Type": "application/json"},
                 timeout=ors_timeout,
             )
+            status = response.status_code
         except ors.requests.Timeout:
+            outcome = "timeout"
             return None, "OpenRouteService round-trip : délai interactif dépassé."
         except ors.requests.RequestException as exc:
+            outcome = exc.__class__.__name__
             return None, f"OpenRouteService round-trip inaccessible ({exc.__class__.__name__})."
+        finally:
+            perf.record(
+                "ors.roundtrip",
+                (time.perf_counter() - started) * 1000,
+                attempt=attempt,
+                target_km=round(float(target_km), 1),
+                seed=int(seed),
+                timeout_s=ors_timeout,
+                status=status,
+                outcome=outcome,
+            )
         result, warning, _status = ors._parse_response(
             response,
             [[float(start["lat"]), float(start["lon"])]],
