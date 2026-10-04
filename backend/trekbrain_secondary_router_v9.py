@@ -18,6 +18,8 @@ from typing import Any
 
 import requests
 
+from . import trekbrain_perf_profile_v9 as perf
+
 _INSTALLED = False
 _URL = os.getenv("TREKBRAIN_VALHALLA_URL", "https://valhalla1.openstreetmap.de/route").strip()
 _TIMEOUT = max(3.0, min(float(os.getenv("TREKBRAIN_VALHALLA_TIMEOUT", "7") or 7), 12.0))
@@ -143,6 +145,7 @@ def _request(coords) -> tuple[dict[str, Any] | None, str | None]:
         return None, "Valhalla ignoré après un échec récent."
     key = _key(coords)
     if key and key in _CACHE and now - _CACHE[key][0] < _CACHE_TTL:
+        perf.mark("valhalla.request", cache_hit=True, outcome="cache", points=len(coords))
         result = deepcopy(_CACHE[key][1])
         result["route_cache"] = True
         return result, None
@@ -153,6 +156,10 @@ def _request(coords) -> tuple[dict[str, Any] | None, str | None]:
         "directions_type": "none",
         "shape_format": "geojson",
     }
+    attempt = perf.next_sequence("valhalla.request")
+    started = time.perf_counter()
+    status = None
+    outcome = "ok"
     try:
         response = requests.post(
             _URL,
@@ -165,12 +172,25 @@ def _request(coords) -> tuple[dict[str, Any] | None, str | None]:
             },
             timeout=_TIMEOUT,
         )
+        status = response.status_code
     except requests.Timeout:
+        outcome = "timeout"
         _COOLDOWN_UNTIL = time.monotonic() + 20.0
         return None, "Valhalla : délai dépassé."
     except requests.RequestException as exc:
+        outcome = exc.__class__.__name__
         _COOLDOWN_UNTIL = time.monotonic() + 20.0
         return None, f"Valhalla inaccessible ({exc.__class__.__name__})."
+    finally:
+        perf.record(
+            "valhalla.request",
+            (time.perf_counter() - started) * 1000,
+            attempt=attempt,
+            points=len(coords),
+            timeout_s=_TIMEOUT,
+            status=status,
+            outcome=outcome,
+        )
     result, warning = _parse_response(response)
     if result is None:
         if response.status_code >= 500 or response.status_code == 429:
@@ -208,7 +228,12 @@ def _route_secondary(coords) -> tuple[dict[str, Any] | None, str | None]:
         if end >= len(coords):
             break
         start = end - 1
+        sleep_started = time.perf_counter()
         time.sleep(1.02)  # public demo fair-use limit: at most about one request/s
+        perf.record(
+            "valhalla.fair_use_wait",
+            (time.perf_counter() - sleep_started) * 1000,
+        )
     if len(merged) < 2:
         return None, "Valhalla : géométrie segmentée vide."
     return {
