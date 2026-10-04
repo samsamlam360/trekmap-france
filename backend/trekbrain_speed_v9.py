@@ -438,6 +438,7 @@ def install_fast_planning(v3, v5, v9) -> None:
             raise HTTPException(status_code=422, detail="Le mode boucle automatique de secours est limité à environ 100 km au total.")
         rows = []
         warnings = []
+        attempt_rows = []
         requested_km = float(target_km)
         for attempt, seed in enumerate((3, 11)):
             route, warning = roundtrip._roundtrip_request(start, requested_km, seed)
@@ -454,6 +455,12 @@ def install_fast_planning(v3, v5, v9) -> None:
             candidate["round_trip_requested_km"] = round(requested_km, 2)
             candidate["round_trip_target_km"] = round(float(target_km), 2)
             candidate["round_trip_retrace_ratio"] = round(float(retrace), 4)
+            attempt_rows.append({
+                "seed": int(seed),
+                "requested_km": round(float(requested_km), 2),
+                "returned_km": round(float(distance), 2),
+                "retrace": round(float(retrace), 4),
+            })
             rows.append((score, candidate))
             # Stop after one ORS call only when the route is already close to
             # the requested target, not merely inside the broad +/-25% safety
@@ -463,9 +470,21 @@ def install_fast_planning(v3, v5, v9) -> None:
             # better loop.
             if (
                 daily_min <= per_day <= daily_max
-                and retrace <= 0.25
-                and abs(distance - target_km) <= max(4.0, target_km * 0.12)
+                and retrace <= 0.30
+                and abs(distance - target_km) <= max(4.0, target_km * 0.20)
             ):
+                candidate["round_trip_attempt_count"] = len(attempt_rows)
+                candidate["round_trip_attempts"] = list(attempt_rows)
+                candidate["candidate_pool_size"] = 1
+                candidate["candidate_modes"] = ["ors-round-trip"]
+                candidate["candidate_summary"] = [{
+                    "mode": "ors-round-trip",
+                    "km": round(float(distance), 1),
+                    "requested_km": candidate.get("round_trip_requested_km"),
+                    "retrace": candidate.get("round_trip_retrace_ratio"),
+                }]
+                candidate["fast_ranked"] = True
+                candidate["single_call_good_enough"] = True
                 return candidate
 
             # Keep the same two-call budget, but make the second call corrective.
@@ -592,6 +611,8 @@ def install_fast_planning(v3, v5, v9) -> None:
                 for _score, candidate in rows
             ]
             selected["fast_ranked"] = True
+        selected["round_trip_attempt_count"] = len(attempt_rows)
+        selected["round_trip_attempts"] = list(attempt_rows)
         return selected
 
     v3._beam_candidates = beam_candidates
