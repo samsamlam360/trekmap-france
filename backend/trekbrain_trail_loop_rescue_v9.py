@@ -712,15 +712,38 @@ def _relation_section_loop(
     bridge is accepted, and at most two closure candidates are routed.
     """
     trails = list(trails if trails is not None else (_LAST_DISCOVERED_TRAILS.get() or []))
+    # If the preceding closed-relation pass already loaded Waymarked geometry
+    # that can form distance-compatible sections, reuse it. A second bbox wave
+    # with a slightly different radius cannot improve safety and was adding
+    # several seconds to Crozon-style coastal loops.
+    preexisting_rows = _section_candidates(trails, start, target_km)
+    has_waymarked_section_evidence = bool(
+        preexisting_rows
+        and any(
+            "waymarked" in _fold(trail.get("discovery_provider") or "")
+            for trail in trails
+        )
+    )
+
     # Primary discovery may return several perfectly valid but irrelevant local
     # relations. Treating a non-empty list as "discovery succeeded" prevented the
     # secondary route index from ever contributing the long/named itinerary the
-    # request actually needed. Merge both evidence sources, then rank them.
+    # request actually needed. Merge both evidence sources only when the previous
+    # pass has not already supplied usable Waymarked sections.
     radius = min(45.0, max(16.0, float(target_km) * 0.42))
-    try:
-        secondary = list(gr._discover_waymarked(start, radius) or [])
-    except Exception:
-        secondary = []
+    secondary = []
+    if has_waymarked_section_evidence:
+        _coastal_section_log(
+            "secondary-reuse",
+            provider="waymarked",
+            trails=len(trails),
+            candidates=len(preexisting_rows),
+        )
+    else:
+        try:
+            secondary = list(gr._discover_waymarked(start, radius) or [])
+        except Exception:
+            secondary = []
     if secondary:
         known = {
             str(x.get("id") or x.get("source_url") or x.get("ref") or x.get("name") or "")
@@ -748,7 +771,11 @@ def _relation_section_loop(
         _coastal_section_log("no-trails", target=round(float(target_km), 1))
         return None, "aucune relation longue de randonnée trouvée"
 
-    rows = _section_candidates(trails, start, target_km)
+    rows = (
+        preexisting_rows
+        if has_waymarked_section_evidence and not secondary
+        else _section_candidates(trails, start, target_km)
+    )
     if not rows:
         _coastal_section_log(
             "no-candidates",
