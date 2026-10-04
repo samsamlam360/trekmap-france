@@ -233,6 +233,51 @@ assert len(roundtrip_calls) == 2, roundtrip_calls
 assert roundtrip_calls[1][0] < roundtrip_calls[0][0], roundtrip_calls
 assert float(corrected_loop.get("distance") or 0) == 45.3, corrected_loop
 
+# When two ORS variants are already available, a materially more precise
+# distance must beat a much longer loop even when the precise option retraces a
+# little more. No third network call is allowed.
+real_precision_request = roundtrip._roundtrip_request
+real_retrace = v3._route_retrace_ratio
+precision_calls = []
+def fake_precision_roundtrip(start, requested_km, seed):
+    precision_calls.append((float(requested_km), int(seed)))
+    if len(precision_calls) == 1:
+        return {
+            "coords": [[48.636, -1.511], [48.700, -1.430], [48.600, -1.350], [48.636, -1.511]],
+            "distance": 40.86,
+            "fallback": False,
+            "routing_mode": "ors-round-trip",
+        }, None
+    return {
+        "coords": [[48.637, -1.511], [48.690, -1.455], [48.610, -1.390], [48.637, -1.511]],
+        "distance": 34.0,
+        "fallback": False,
+        "routing_mode": "ors-round-trip",
+    }, None
+
+def fake_retrace(coords):
+    return 0.02 if coords and abs(float(coords[0][0]) - 48.636) < 1e-6 else 0.22
+
+roundtrip._roundtrip_request = fake_precision_roundtrip
+v3._route_retrace_ratio = fake_retrace
+try:
+    precise_loop = roundtrip._best_roundtrip(
+        {"lat": 48.636, "lon": -1.511},
+        32.0,
+        12.0,
+        20.0,
+        2,
+        v3,
+    )
+finally:
+    roundtrip._roundtrip_request = real_precision_request
+    v3._route_retrace_ratio = real_retrace
+
+assert len(precision_calls) == 2, precision_calls
+assert float(precise_loop.get("distance") or 0) == 34.0, precise_loop
+assert precise_loop.get("distance_precision_preferred") is True, precise_loop
+assert float(precise_loop.get("round_trip_retrace_ratio") or 0) <= 0.30, precise_loop
+
 # Route-first lodging must not start a third route-probe network path after
 # Photon and the single bounded bbox lookup fail.
 real_photon_split = logistics._photon_split_stays
