@@ -25,6 +25,33 @@ jobs:
           python-version: '3.11'
       - name: Dependencies
         run: pip install -r requirements.txt
+      - name: TEMP inspect live GR58 relation
+        run: |
+          python - <<'PY'
+          from backend import trekbrain_gr_v9 as gr
+          payload = gr._waymarked_request("/details/relation/9711201", {}, 8.0)
+          route = payload.get("route")
+          lines = gr._waymarked_route_lines(route)
+          coords = gr._join_ordered_waymarked_lines(lines)
+          length = gr._path_length(coords) if coords else 0.0
+          closure = gr._dist(coords[0], coords[-1]) if len(coords) >= 2 else None
+          gaps = [gr._dist(a,b) for a,b in zip(coords, coords[1:])]
+          print("GR58_META", {
+              "id": payload.get("id"), "ref": payload.get("ref"),
+              "name": payload.get("name"), "group": payload.get("group"),
+              "linear": payload.get("linear"), "official_length": payload.get("official_length"),
+              "bbox": payload.get("bbox"),
+          })
+          print("GR58_ROUTE", {
+              "root_type": (route or {}).get("route_type") if isinstance(route, dict) else type(route).__name__,
+              "root_linear": (route or {}).get("linear") if isinstance(route, dict) else None,
+              "root_length": (route or {}).get("length") if isinstance(route, dict) else None,
+              "lines": len(lines), "points": len(coords),
+              "km": round(length,2), "closure_km": round(closure,3) if closure is not None else None,
+              "max_gap_km": round(max(gaps or [0]),3),
+              "first": coords[0] if coords else None, "last": coords[-1] if coords else None,
+          })
+          PY
       - name: Python syntax
         run: python -m compileall -q backend scripts
       - name: Import active app
