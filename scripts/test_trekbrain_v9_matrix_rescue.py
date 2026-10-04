@@ -34,7 +34,7 @@ def original_recover(*args, **kwargs):
 
 def original_best(start, target_km, daily_min, daily_max, days, v3):
     if target_km > 99:
-        raise HTTPException(status_code=422, detail="old 100 km limit")
+        raise HTTPException(status_code=422, detail="Le mode boucle automatique de secours est limité à environ 100 km au total.")
     return {"marker": "original", "distance": target_km}
 
 
