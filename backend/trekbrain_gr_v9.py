@@ -356,13 +356,19 @@ def _waymarked_trails_from_payloads(
             continue
         ref = str(item.get("ref") or "").strip()
         name = str(item.get("name") or item.get("local_name") or ref or "Itinéraire de randonnée").strip()
+        reduced = (
+            _downsample_preserve_length(coords)
+            if length >= 90.0
+            else _downsample(coords)
+        )
         trails.append({
             "id": relation_id,
             "name": name[:160],
             "ref": ref[:60],
             "network": "",
-            "coords": _downsample(coords),
+            "coords": reduced,
             "length_km": round(length, 1),
+            "source_geometry_length_km": round(length, 2),
             "source_url": f"https://www.openstreetmap.org/relation/{relation_id}",
             "confidence": "high-route-evidence-secondary",
             "discovery_provider": "Waymarked Trails (OpenStreetMap-derived)",
