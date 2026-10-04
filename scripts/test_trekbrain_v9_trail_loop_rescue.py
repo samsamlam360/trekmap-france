@@ -258,6 +258,54 @@ assert not rescue._coastal_section_allowed({
     "raw": "boucle tranquille en forêt",
 }, 47.0)
 
+# Heavy relation discovery is reserved for requests where route evidence can
+# materially improve the answer. Generic short loops must go straight to the
+# bounded ORS path instead of paying Overpass + Waymarked cold latency.
+assert not rescue._relation_first_allowed({
+    "route_type": "Boucle",
+    "days": 2,
+    "total_target": 32.0,
+    "raw": "boucle de 2 jours autour du Hohneck, privilégier les sentiers",
+}, 32.0, 2)
+assert not rescue._relation_first_allowed({
+    "route_type": "Boucle",
+    "days": 2,
+    "total_target": 28.0,
+    "raw": "boucle sportive autour de Gavarnie sur de vrais chemins pédestres",
+}, 28.0, 2)
+
+# Evidence-first remains active for coastal, explicitly named and long loops.
+assert rescue._relation_first_allowed({
+    "route_type": "Boucle",
+    "days": 3,
+    "total_target": 54.0,
+    "raw": "boucle sur la presqu ile de Crozon en restant sur des sentiers cotiers",
+}, 54.0, 3)
+assert rescue._relation_first_allowed({
+    "route_type": "Boucle",
+    "days": 4,
+    "total_target": 64.0,
+    "raw": "je veux faire le Tour des Fiz en 4 jours sur l itineraire existant",
+}, 64.0, 4)
+assert rescue._relation_first_allowed({
+    "route_type": "Boucle",
+    "days": 7,
+    "total_target": 126.0,
+    "raw": "itinerance dans le Queyras, privilegier un itineraire de grande randonnee coherent",
+}, 126.0, 7)
+assert rescue._relation_first_allowed({
+    "route_type": "Boucle",
+    "days": 6,
+    "total_target": 108.0,
+    "raw": "trek de 6 jours dans le Beaufortain sur des itineraires existants",
+}, 108.0, 6)
+assert rescue._relation_first_allowed({
+    "route_type": "Boucle",
+    "days": 3,
+    "total_target": 54.0,
+    "raw": "boucle de 3 jours en suivant le GR 34",
+}, 54.0, 3)
+
 lat0, lon0, radius_km = 48.25, -4.50, 9.3
 open_coast = []
 for i in range(121):
