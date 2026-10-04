@@ -1261,6 +1261,18 @@ def _build_roundtrip(data, legacy_main, v3):
     route = _recover_unranked_oversized_roundtrip(
         route, start, target_km, daily_min, daily_max, days, v3
     )
+    roundtrip_diag = {
+        "attempt_count": route.get("round_trip_attempt_count"),
+        "attempts": list(route.get("round_trip_attempts") or []),
+        "candidate_pool_size": route.get("candidate_pool_size"),
+        "candidate_summary": list(route.get("candidate_summary") or []),
+        "selected_mode": route.get("routing_mode") or "ors-round-trip",
+        "selected_km": round(float(route.get("distance") or 0), 2),
+        "selected_retrace": route.get("round_trip_retrace_ratio"),
+        "single_call_good_enough": bool(route.get("single_call_good_enough")),
+        "distance_precision_preferred": bool(route.get("distance_precision_preferred")),
+        "compact_recovery": bool(route.get("compact_recovery")),
+    }
     coords = route.get("coords") or []
     anchors = _equal_anchors(coords, days)
     if len(anchors) != max(0, days - 1):
@@ -1386,6 +1398,9 @@ def _build_roundtrip(data, legacy_main, v3):
             "limitations": ["Boucle ORS de secours : moins optimisée pour les POI que le planificateur principal."],
         },
         "planner_fallback": "ors-round-trip",
+        "planner": {
+            "fast_roundtrip": roundtrip_diag,
+        },
     }
 
 
