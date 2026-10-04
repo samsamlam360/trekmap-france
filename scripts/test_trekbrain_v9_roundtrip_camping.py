@@ -8,6 +8,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from backend import free_planner_v2 as free
+from backend import trekbrain_place_guard_v9 as place_guard
 from backend import trekbrain_roundtrip_v9 as roundtrip
 
 
@@ -150,6 +151,34 @@ class LegacyGeoV3:
         return [{"name": query, "lat": 48.2, "lon": -4.5}]
 
 assert roundtrip._roundtrip_geocode(LegacyGeoV3, "Zone historique")
+
+# Production v9 installs the Belle-Île place guard around v3._geocode. The
+# wrapper must preserve the retry budget; otherwise the zero-budget secondary
+# spelling silently falls back to a normal Nominatim lookup.
+forwarded = []
+
+def guarded_original(query, **kwargs):
+    forwarded.append((query, dict(kwargs)))
+    return [{"name": query, "lat": 48.2, "lon": -4.5}]
+
+guarded = place_guard.guarded_geocode_factory(guarded_original)
+
+class GuardedGeoV3:
+    _geocode = staticmethod(guarded)
+
+assert roundtrip._roundtrip_geocode(
+    GuardedGeoV3, "Presqu'île de Crozon", nominatim_retries=0
+)
+assert forwarded == [
+    ("Presqu'île de Crozon", {"nominatim_retries": 0})
+], forwarded
+
+# The canonical Belle-Île guard still wins locally and never calls the external
+# geocoder, regardless of optional retry controls.
+forwarded.clear()
+rows = guarded("Belle-Île-en-Mer", nominatim_retries=0)
+assert rows and rows[0].get("geocode_guard") == "belle-ile-en-mer", rows
+assert forwarded == [], forwarded
 
 print("Fast round-trip geocoding retry budget: OK")
 
