@@ -1,0 +1,73 @@
+name: TrekBrain extended production benchmark
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/benchmark_trekbrain_v9_extended.py'
+      - '.github/workflows/trekbrain-extended-benchmark.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: trekbrain-extended-production-benchmark
+  cancel-in-progress: true
+
+jobs:
+  benchmark:
+    name: Six new production treks
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    steps:
+      - name: Checkout benchmark
+        uses: actions/checkout@v4
+
+      - name: Wait for this exact Render build
+        shell: python
+        env:
+          EXPECTED_SHA: ${{ github.sha }}
+          BASE_URL: https://trekmap-france.onrender.com
+        run: |
+          import json, os, time, urllib.request
+          expected=os.environ['EXPECTED_SHA'].lower()
+          base=os.environ['BASE_URL'].rstrip('/')
+          last=''
+          for attempt in range(1, 37):
+              try:
+                  req=urllib.request.Request(base+'/ai/status',headers={'User-Agent':'TrekBrain-extended-benchmark/1.0'})
+                  with urllib.request.urlopen(req,timeout=20) as r:
+                      data=json.load(r)
+                  build=str(data.get('build_commit') or '').lower()
+                  last=f"build={build[:10]} channel={data.get('release_channel')}"
+                  if build == expected:
+                      print('Exact production build ready:', build[:12])
+                      break
+              except Exception as exc:
+                  last=f'{type(exc).__name__}: {exc}'
+              print(f'wait {attempt}/36: {last}')
+              time.sleep(10)
+          else:
+              raise SystemExit('Render build did not converge to '+expected[:12]+'; last='+last)
+
+      - name: Run six exploratory production treks
+        env:
+          EXPECTED_SHA: ${{ github.sha }}
+          TREKBRAIN_BENCHMARK_URL: https://trekmap-france.onrender.com
+          TREKBRAIN_BENCHMARK_OUT: benchmark-results-extended
+        run: python scripts/benchmark_trekbrain_v9_extended.py
+
+      - name: Show extended benchmark report
+        if: always()
+        run: cat benchmark-results-extended/trekbrain-production-benchmark.md 2>/dev/null || true
+
+      - name: Upload extended benchmark report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: trekbrain-extended-production-benchmark
+          path: benchmark-results-extended/
+          if-no-files-found: ignore
+          retention-days: 14
