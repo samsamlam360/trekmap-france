@@ -7,6 +7,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from backend import trekbrain_pipeline_core_v9 as pipeline
+from fastapi import HTTPException
 
 
 class Data:
@@ -145,6 +146,59 @@ assert pipeline._fast_generic_loop_allowed({
     "max_dplus_day": None, "avoid": set(),
     "raw": "grande boucle cinq jours",
 }) is False
+
+# A transient provider failure on the eligible fast loop must not fall through
+# to the generic planner, which would repeat the same external routing work.
+provider_data = Data("boucle générique", region="Morvan", days=3, daily_km=16)
+provider_state = pipeline.PlanningState(
+    data=provider_data,
+    route_data=provider_data,
+    intent={
+        "route_type": "Boucle",
+        "days": 3,
+        "daily_target": 16.0,
+        "total_target": 48.0,
+        "start_query": "",
+        "end_query": "",
+        "via_query": "",
+        "max_dplus_day": None,
+        "avoid": set(),
+        "raw": "boucle générique",
+    },
+    category=None,
+    phases=["understand"],
+)
+
+class ProviderFailRoundtrip:
+    @staticmethod
+    def _build_roundtrip(data, legacy, v3_module):
+        raise HTTPException(status_code=503, detail="routeur pédestre temporairement indisponible")
+
+generic_provider_calls = {"count": 0}
+def forbidden_generic_provider(*args, **kwargs):
+    generic_provider_calls["count"] += 1
+    raise AssertionError("generic planner must not run after provider 503")
+
+try:
+    pipeline._build_backbone(
+        provider_state,
+        DUMMY,
+        base_build=forbidden_generic_provider,
+        v3=FakeV3(),
+        canonical=FakeCanonical,
+        gr=DUMMY,
+        rescue=DUMMY,
+        roundtrip=ProviderFailRoundtrip,
+        stitch=DUMMY,
+        ors=DUMMY,
+        belle=DUMMY,
+    )
+    raise AssertionError("provider 503 should propagate")
+except HTTPException as exc:
+    assert exc.status_code == 503, exc
+
+assert generic_provider_calls["count"] == 0, generic_provider_calls
+assert "route:generic-fast-provider-failure" in provider_state.phases, provider_state.phases
 
 # 1. Belle-Île without lodging: canonical route, no generic planner.
 v3 = FakeV3()
