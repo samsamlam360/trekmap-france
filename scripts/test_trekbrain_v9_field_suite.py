@@ -191,24 +191,35 @@ try:
         params = kwargs.get("params") or {}
         if "/api/" not in str(url):
             raise AssertionError(f"post-route Photon should use forward API, got {url!r}")
-        if not params.get("q"):
-            raise AssertionError(f"post-route Photon query missing: {params!r}")
+        if not params.get("q") and not params.get("include"):
+            raise AssertionError(f"post-route Photon selector missing: {params!r}")
         if "lat" not in params or "lon" not in params:
             raise AssertionError(f"post-route Photon bias missing: {params!r}")
         if "osm_tag" in params:
-            raise AssertionError(f"post-route Photon must filter OSM locally: {params!r}")
+            raise AssertionError(f"post-route Photon must not use legacy osm_tag: {params!r}")
+
         query = str(params.get("q") or "").casefold()
-        if "gare" in query:
+        include = str(params.get("include") or "").casefold()
+
+        # Structured route resources now use Photon's include=osm.* filter with
+        # a local exact-tag validation. Named lodging fallbacks may still use q.
+        if "osm.railway.station" in include or "gare" in query:
             name, key, value = ("Gare test", "railway", "station")
-        elif "fontaine" in query:
+        elif "osm.amenity.drinking_water" in include or "fontaine" in query:
             name, key, value = ("Fontaine test", "amenity", "drinking_water")
-        elif "boulanger" in query:
-            name, key, value = ("Boulangerie test", "shop", "bakery")
-        elif "supermarch" in query or "épicer" in query or "epicer" in query:
+        elif (
+            "osm.shop.supermarket" in include
+            or "osm.shop.convenience" in include
+            or "osm.shop.bakery" in include
+            or "boulanger" in query
+            or "supermarch" in query
+            or "épicer" in query
+            or "epicer" in query
+        ):
             name, key, value = ("Épicerie test", "shop", "convenience")
-        elif "camping" in query:
+        elif "osm.tourism.camp_site" in include or "camping" in query:
             name, key, value = ("Camping test", "tourism", "camp_site")
-        elif "hotel" in query:
+        elif "osm.tourism.hotel" in include or "hotel" in query or "gîte" in query or "gite" in query:
             name, key, value = ("Hébergement test", "tourism", "hotel")
         else:
             name, key, value = ("Refuge test", "tourism", "wilderness_hut")
