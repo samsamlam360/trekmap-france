@@ -51,6 +51,11 @@ jobs:
               "max_gap_km": round(max(gaps or [0]),3),
               "first": coords[0] if coords else None, "last": coords[-1] if coords else None,
           })
+          candidates = gr._discover_waymarked({"lat": 44.66845, "lon": 6.77816}, 45.0)
+          print("QUEYRAS_WAYMARKED", [
+              (x.get("id"), x.get("ref"), x.get("name"), x.get("length_km"))
+              for x in candidates
+          ])
           PY
       - name: Python syntax
         run: python -m compileall -q backend scripts
