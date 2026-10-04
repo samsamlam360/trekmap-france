@@ -194,15 +194,51 @@ full_start = {
     "category": "place",
 }
 full_target = rescue._length(full_ring)
-full_route, full_warning = rescue._relation_loop(
-    v3, fake_gr_full, full_start, full_target
-)
+intent_token = rescue._ACTIVE_INTENT.set({
+    "route_type": "Boucle",
+    "days": 7,
+    "total_target": full_target,
+    "raw": "grand tour de randonnée",
+})
+try:
+    full_route, full_warning = rescue._relation_loop(
+        v3, fake_gr_full, full_start, full_target
+    )
+finally:
+    rescue._ACTIVE_INTENT.reset(intent_token)
 assert full_warning is None, full_warning
 assert full_route is not None, full_route
 assert full_route["routing_mode"] == "osm-hiking-relation-loop", full_route
 assert full_route["relation_ref"] == "GR 58", full_route
 assert rescue._dist(full_route["coords"][0], full_route["coords"][-1]) < 0.05
 assert hydrate_calls == [580058], hydrate_calls
+
+# Short loops keep the established fast path: relation-detail hydration is a
+# long-trek rescue, not another provider call every time a local relation is
+# clipped.
+short_hydrate_calls = []
+fake_gr_short = SimpleNamespace(
+    _discover=lambda *_args: [],
+    _discover_generic=lambda *_args: [],
+    _discover_waymarked=lambda *_args: [clipped],
+    _hydrate_waymarked_relation=lambda candidate: (
+        short_hydrate_calls.append(candidate["id"]) or dict(hydrated)
+    ),
+)
+short_token = rescue._ACTIVE_INTENT.set({
+    "route_type": "Boucle",
+    "days": 2,
+    "total_target": 32.0,
+    "raw": "petite boucle",
+})
+try:
+    short_route, _short_warning = rescue._relation_loop(
+        v3, fake_gr_short, dict(full_start), 32.0
+    )
+finally:
+    rescue._ACTIVE_INTENT.reset(short_token)
+assert short_route is None, short_route
+assert short_hydrate_calls == [], short_hydrate_calls
 
 # A transient cold-provider timeout must get exactly one shorter retry. This
 # mirrors the production Crozon failure where the first Waymarked lookup missed
