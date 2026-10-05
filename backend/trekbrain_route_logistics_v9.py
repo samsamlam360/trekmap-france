@@ -339,6 +339,126 @@ def _bbox_route_stays(coords, category: str) -> list[dict[str, Any]]:
 def _bbox_route_bundle(coords, category: str) -> tuple[list[dict[str, Any]], list[dict[str, Any]], bool]:
     return _bbox_route_query(coords, category, include_terrain=True)
 
+
+def _nominatim_route_stays(coords, category: str) -> list[dict[str, Any]]:
+    """One bounded Nominatim fallback for the whole validated route corridor.
+
+    Public Overpass mirrors can fail transiently, while per-night Photon waves
+    are both slower and currently unreliable for POI discovery. One bounded
+    Nominatim search keeps the fallback cost fixed regardless of trip length.
+    """
+    from . import free_planner_v2 as free
+
+    valid = []
+    for point in coords or []:
+        if not isinstance(point, (list, tuple)) or len(point) < 2:
+            continue
+        try:
+            lat, lon = float(point[0]), float(point[1])
+        except (TypeError, ValueError):
+            continue
+        if math.isfinite(lat) and math.isfinite(lon):
+            valid.append((lat, lon))
+    if len(valid) < 2:
+        return []
+
+    min_lat = min(x[0] for x in valid)
+    max_lat = max(x[0] for x in valid)
+    min_lon = min(x[1] for x in valid)
+    max_lon = max(x[1] for x in valid)
+    mid_lat = (min_lat + max_lat) / 2.0
+    search_offroute_km = 12.5 if category == "lodging" else _MAX_OFFROUTE_KM
+    pad_lat = min(0.15, max(0.03, search_offroute_km / 111.0))
+    pad_lon = min(
+        0.18,
+        max(0.035, search_offroute_km / max(35.0, 111.0 * math.cos(math.radians(mid_lat)))),
+    )
+    south, north = min_lat - pad_lat, max_lat + pad_lat
+    west, east = min_lon - pad_lon, max_lon + pad_lon
+
+    term = (
+        "camping" if category == "camping"
+        else "refuge" if category == "refuge"
+        else "hotel"
+    )
+    try:
+        payload = free._request_json(
+            free.NOMINATIM_URL,
+            params={
+                "q": term,
+                "format": "jsonv2",
+                "limit": 40,
+                "countrycodes": "fr",
+                "bounded": 1,
+                "viewbox": f"{west:.6f},{north:.6f},{east:.6f},{south:.6f}",
+            },
+            timeout=2.2,
+            ttl=7200,
+            service="Nominatim route stays",
+            retries=1,
+        )
+    except Exception:
+        return []
+
+    rows = []
+    seen = set()
+    for row in payload if isinstance(payload, list) else []:
+        try:
+            lat, lon = float(row["lat"]), float(row["lon"])
+        except (KeyError, TypeError, ValueError):
+            continue
+        if not (math.isfinite(lat) and math.isfinite(lon)):
+            continue
+
+        typ = _fold(row.get("type") or "")
+        cls = _fold(row.get("class") or "")
+        display = str(row.get("display_name") or term)
+        semantic = _fold(f"{typ} {cls} {display}")
+        if category == "camping":
+            accepted = (
+                typ in {"camp site", "caravan site"}
+                or "camping" in semantic
+                or "camp site" in semantic
+            )
+        elif category == "refuge":
+            accepted = any(token in semantic for token in (
+                "refuge", "alpine hut", "wilderness hut", "shelter", "abri", "gite"
+            ))
+        else:
+            accepted = any(token in semantic for token in (
+                "hotel", "hostel", "guest house", "auberge", "gite",
+                "chalet", "apartment", "camping", "refuge"
+            ))
+        if not accepted:
+            continue
+
+        osm_type = str(row.get("osm_type") or "").casefold()
+        osm_type = {"n": "node", "w": "way", "r": "relation"}.get(osm_type, osm_type)
+        osm_id = row.get("osm_id")
+        source_url = (
+            f"https://www.openstreetmap.org/{osm_type}/{osm_id}"
+            if osm_type in {"node", "way", "relation"} and osm_id is not None
+            else ""
+        )
+        name = display.split(",")[0].strip() or (
+            "Camping" if category == "camping"
+            else "Refuge" if category == "refuge"
+            else "Hébergement"
+        )
+        key = (round(lat, 5), round(lon, 5), _fold(name))
+        if key in seen:
+            continue
+        seen.add(key)
+        rows.append({
+            "name": name[:180],
+            "lat": lat,
+            "lon": lon,
+            "category": category,
+            "source_url": source_url,
+            "osm_tags": dict(row),
+        })
+    return rows
+
 def _route_probe_stays(v3, roundtrip, coords, category: str) -> list[dict[str, Any]]:
     """Bounded fallback when a full-corridor bbox lookup is unavailable."""
     cum = roundtrip._cumulative(coords)
@@ -591,10 +711,9 @@ def _discover_stays(
     terrain_rows = []
     terrain_preloaded = False
 
-    # Campsites/refuges have strong OSM tags, so keep the proven OSM-first path.
-    # Generic lodging normally stays Photon-first. The only exception is when
-    # water/food are also requested: that OSM terrain call would happen later
-    # anyway, so overlap it with Photon now and reuse the same response.
+    # Campsites/refuges have strong OSM tags, so keep Overpass first. When
+    # public Overpass is unavailable, one bounded Nominatim corridor lookup is
+    # the fallback. Do not reopen the slow per-night Photon wave.
     structured = category in {"camping", "refuge"}
     if structured:
         if want_terrain:
@@ -607,28 +726,31 @@ def _discover_stays(
                 "logistics.overpass_stays", _bbox_route_stays, coords, category
             ))
     elif want_terrain:
+        # Generic lodging and the terrain bundle are independent. Run exactly
+        # one bounded call to each provider in parallel so lodging does not wait
+        # behind a failing public Overpass mirror.
         with ThreadPoolExecutor(max_workers=2) as pool:
             bbox_future = pool.submit(
                 provider_call, "logistics.overpass_bundle", _bbox_route_bundle, coords, category
             )
-            photon_future = pool.submit(
-                provider_call, "logistics.photon_wave",
-                _photon_split_stays, v3, roundtrip, coords, category, days
+            nominatim_future = pool.submit(
+                provider_call, "logistics.nominatim_corridor",
+                _nominatim_route_stays, coords, category
             )
             try:
                 bbox_stays, terrain_rows, terrain_preloaded = bbox_future.result()
             except Exception:
                 bbox_stays, terrain_rows, terrain_preloaded = [], [], False
             try:
-                photon_stays = photon_future.result()
+                nominatim_stays = nominatim_future.result()
             except Exception:
-                photon_stays = []
+                nominatim_stays = []
         rows.extend(list(bbox_stays or []))
-        rows.extend(list(photon_stays or []))
+        rows.extend(list(nominatim_stays or []))
     else:
         rows.extend(provider_call(
-            "logistics.photon_wave",
-            _photon_split_stays, v3, roundtrip, coords, category, days
+            "logistics.nominatim_corridor",
+            _nominatim_route_stays, coords, category
         ))
 
     projected = _project_stays(roundtrip, coords, rows, category, max_offroute)
@@ -658,18 +780,18 @@ def _discover_stays(
             )
         ]
 
-    if len(chosen) < needed and deadline - time.monotonic() >= 1.25:
+    if len(chosen) < needed and deadline - time.monotonic() >= 0.75:
         if structured:
             rows.extend(provider_call(
-                "logistics.photon_fallback",
-                _photon_split_stays, v3, roundtrip, coords, category, days
+                "logistics.nominatim_corridor",
+                _nominatim_route_stays, coords, category
             ))
         elif not want_terrain:
-            rows.extend(provider_call(
-                "logistics.overpass_fallback", _bbox_route_stays, coords, category
-            ))
-        # For generic lodging + terrain, both OSM and Photon already ran in the
-        # first wave. Do not repeat either provider.
+            # The single Nominatim corridor lookup already ran. Do not spend
+            # another network phase merely to rediscover the same lodging.
+            pass
+        # For generic lodging + terrain, Overpass and Nominatim already ran in
+        # the first bounded wave. Do not repeat either provider.
         projected = _project_stays(roundtrip, coords, rows, category, max_offroute)
         chosen = _choose_stays(roundtrip, coords, projected, days, daily_target)
 
