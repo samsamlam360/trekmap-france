@@ -232,9 +232,9 @@ finally:
 assert captured_missing_water.get("water") is True, captured_missing_water
 assert captured_missing_water.get("sleep") is False, captured_missing_water
 
-# Photon route resources must query exact OSM categories instead of relying on
-# names such as "fontaine". This improves water/food/transit coverage without
-# adding another network call.
+# Photon route resources use one text-biased query and validate the returned
+# nearby object locally. This avoids depending on deployment-specific category
+# indexes while preserving the same single network call.
 v3_module = resources_module.v7.v5.v3
 real_request_json = v3_module._request_json
 captured_photon = {}
@@ -267,9 +267,8 @@ finally:
     v3_module._request_json = real_request_json
 
 assert exact_water and exact_water["water_status"] == "potable_referenced", exact_water
-assert "q" not in captured_photon, captured_photon
-assert "osm.amenity.drinking_water" in captured_photon.get("include", ""), captured_photon
-assert "osm.natural.spring" in captured_photon.get("include", ""), captured_photon
+assert captured_photon.get("q") == "fontaine", captured_photon
+assert "include" not in captured_photon, captured_photon
 
 captured_lodging = {}
 def fake_lodging_request(url, *, params=None, **kwargs):

@@ -922,32 +922,19 @@ def _photon_anchor_resource(anchor, category: str, osm_tags, radius_km: float, q
     if query_override:
         query = str(query_override).strip()[:80] or query
 
-    allowed_categories = [
-        "osm." + str(tag).replace(":", ".", 1)
-        for tag in tags
-        if ":" in str(tag)
-    ]
     params = {
+        "q": query,
         "lat": round(lat, 6),
         "lon": round(lon, 6),
         "zoom": 13,
-        # With an exact OSM category filter, proximity matters more than global
-        # place prominence. Photon permits q-less searches when include/exclude
-        # filtering is present.
+        # Resource categories on the public Photon instance are deployment-
+        # dependent. Use the stable text endpoint with a strong local bias,
+        # then enforce distance/category semantics ourselves below.
         "location_bias_scale": 0.0,
         "countrycode": "FR",
         "limit": 20,
         "lang": "fr",
     }
-    if allowed_categories and not query_override:
-        # A comma-separated include condition is OR: any accepted OSM resource
-        # category may match in this single request.
-        params["include"] = ",".join(allowed_categories)
-    else:
-        # Named lodging discovery (gîte/hotel) works better as Photon text
-        # search, then the existing result parser still enforces accepted OSM
-        # tags before a candidate can be returned.
-        params["q"] = query
     try:
         payload = _request_json(
             PHOTON_URL,
@@ -985,13 +972,52 @@ def _photon_anchor_resource(anchor, category: str, osm_tags, radius_km: float, q
             for tag in tags
             if ":" in str(tag)
         }
-        if allowed and (osm_key, osm_value) not in allowed:
+        exact_tag_match = not allowed or (osm_key, osm_value) in allowed
+
+        # Photon text search can surface the right nearby OSM object even when
+        # the public index does not expose a principal osm_key/osm_value pair
+        # compatible with TrekBrain's exact tag list. Accept only strong local
+        # semantic matches in that case; proximity is still enforced above.
+        semantic = _fold(" ".join(
+            str(value or "")
+            for value in (
+                props.get("name"),
+                props.get("street"),
+                props.get("city"),
+                props.get("type"),
+                props.get("osm_value"),
+            )
+        ))
+        semantic_match = False
+        if category == "water":
+            semantic_match = any(token in semantic for token in (
+                "fontaine", "drinking water", "water tap", "source"
+            ))
+        elif category == "food":
+            semantic_match = any(token in semantic for token in (
+                "boulanger", "supermarch", "epicer", "convenience", "bakery"
+            ))
+        elif category == "transit":
+            semantic_match = any(token in semantic for token in (
+                "gare", "station", "halt", "bus", "ferry"
+            ))
+        elif category == "stay":
+            semantic_match = any(token in semantic for token in (
+                "camp", "refuge", "hut", "abri", "gite", "hotel",
+                "hostel", "auberge", "guest house", "guest_house", "chalet"
+            ))
+
+        if allowed and not exact_tag_match and not semantic_match:
             continue
+
         final_category = category
         if category == "stay":
-            if osm_value in {"camp_site", "caravan_site"}:
+            if osm_value in {"camp_site", "caravan_site"} or "camp" in semantic:
                 final_category = "camping"
-            elif osm_value in {"alpine_hut", "wilderness_hut", "shelter"}:
+            elif (
+                osm_value in {"alpine_hut", "wilderness_hut", "shelter"}
+                or any(token in semantic for token in ("refuge", "hut", "abri"))
+            ):
                 final_category = "refuge"
             else:
                 final_category = "lodging"
