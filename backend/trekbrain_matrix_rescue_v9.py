@@ -181,10 +181,17 @@ def _multi_lobe_roundtrip(roundtrip, start, target_km: float, daily_min: float, 
             status_code=422,
             detail="Le secours automatique peut construire jusqu'à environ 270 km. Pour un trek plus long, indique une zone ou des étapes intermédiaires.",
         )
-    piece_target = target_km / pieces
+    # Ask the first lobe to cover as much of the real target as safely
+    # possible, then size every following lobe from the *observed* remaining
+    # distance. ORS round-trip length is only an objective, so equal theoretical
+    # pieces can compound provider overshoot (e.g. 54 + 54 requested becoming
+    # ~166 km for a 108 km trek).
+    initial_target = min(90.0, target_km)
     merged = []
     total = 0.0
     warnings = []
+    requested_lobes = []
+    returned_lobes = []
     seeds = (3, 11, 29, 47, 61, 73)
 
     feasible_low = max(
@@ -200,9 +207,19 @@ def _multi_lobe_roundtrip(roundtrip, start, target_km: float, daily_min: float, 
     for index in range(pieces):
         route = None
         warning = None
+        if index == 0:
+            lobe_target = initial_target
+        else:
+            remaining = max(0.0, target_km - total)
+            # A tiny residual does not justify another route request. If total
+            # were already feasible we would have stopped below; otherwise ask
+            # for at least a small genuine loop rather than a degenerate trace.
+            lobe_target = max(6.0, min(90.0, remaining))
+        requested_lobes.append(round(float(lobe_target), 2))
+
         # One normal attempt plus one alternate seed only if necessary.
         for seed in (seeds[index * 2], seeds[index * 2 + 1]):
-            route, warning = roundtrip._roundtrip_request(start, piece_target, seed)
+            route, warning = roundtrip._roundtrip_request(start, lobe_target, seed)
             if route is not None:
                 break
             if warning:
@@ -217,7 +234,9 @@ def _multi_lobe_roundtrip(roundtrip, start, target_km: float, daily_min: float, 
         if merged and coords and merged[-1] == coords[0]:
             coords = coords[1:]
         merged.extend(coords)
-        total += float(route.get("distance") or 0)
+        returned_distance = float(route.get("distance") or 0)
+        total += returned_distance
+        returned_lobes.append(round(returned_distance, 2))
         used_lobes += 1
 
         # ORS round-trip length is an objective, not a hard output. In sparse
@@ -242,7 +261,10 @@ def _multi_lobe_roundtrip(roundtrip, start, target_km: float, daily_min: float, 
         "profile": getattr(roundtrip.ors, "ORS_PROFILE", "foot-hiking"),
         "round_trip_lobes": used_lobes,
         "requested_distance_km": round(target_km, 1),
+        "round_trip_lobe_requests_km": requested_lobes[:used_lobes],
+        "round_trip_lobe_distances_km": returned_lobes[:used_lobes],
         "long_roundtrip_early_accept": used_lobes < pieces,
+        "adaptive_long_roundtrip": True,
     }
 
 
