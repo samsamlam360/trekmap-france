@@ -439,9 +439,9 @@ def _join_ordered_waymarked_lines(
 def _hydrate_waymarked_relation(trail: dict[str, Any]) -> dict[str, Any] | None:
     """Fetch one full Waymarked relation after clipped bbox evidence proved weak.
 
-    This is a bounded rescue, not normal discovery. The caller limits it to the
-    best one or two candidates, so unseen long treks gain authoritative route
-    geometry without turning every request into another provider wave.
+    This is a bounded rescue, not normal discovery. The caller now reserves it
+    for one strongly named candidate, so unseen long treks can gain authoritative
+    route geometry without turning every regional request into another provider wave.
     """
     try:
         relation_id = int(trail.get("id"))
