@@ -3,6 +3,7 @@ from pathlib import Path
 from types import SimpleNamespace
 import math
 import sys
+import threading
 
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
@@ -203,6 +204,85 @@ assert full_route["routing_mode"] == "osm-hiking-relation-loop", full_route
 assert full_route["relation_ref"] == "GR 58", full_route
 assert rescue._dist(full_route["coords"][0], full_route["coords"][-1]) < 0.05
 assert hydrate_calls == [580058], hydrate_calls
+
+# Generic Overpass and Waymarked are independent second-tier evidence sources.
+# They must overlap rather than serialise their cold-provider latency. A barrier
+# makes the regression deterministic: sequential execution would break it.
+evidence_barrier = threading.Barrier(2)
+evidence_parallel = []
+
+def parallel_generic(*_args):
+    try:
+        evidence_barrier.wait(timeout=0.8)
+        evidence_parallel.append("generic")
+    except threading.BrokenBarrierError:
+        evidence_parallel.append("generic-broken")
+    return []
+
+def parallel_waymarked(*_args):
+    try:
+        evidence_barrier.wait(timeout=0.8)
+        evidence_parallel.append("waymarked")
+    except threading.BrokenBarrierError:
+        evidence_parallel.append("waymarked-broken")
+    return []
+
+parallel_gr = SimpleNamespace(
+    _discover=lambda *_args: [],
+    _discover_generic=parallel_generic,
+    _discover_waymarked=parallel_waymarked,
+)
+parallel_start = {"name": "Zone test", "lat": 45.0, "lon": 6.0, "category": "place"}
+parallel_route, _parallel_warning = rescue._relation_loop(
+    v3, parallel_gr, parallel_start, 80.0
+)
+assert parallel_route is None
+assert sorted(evidence_parallel) == ["generic", "waymarked"], evidence_parallel
+
+
+# The two bounded full-relation hydrations are likewise independent. Keep their
+# ranked consumption deterministic while executing the provider calls together.
+hydrate_barrier = threading.Barrier(2)
+hydrate_parallel = []
+clipped_two = {
+    **clipped,
+    "id": 580059,
+    "name": "Tour de test bis",
+    "ref": "GR 59",
+}
+
+def parallel_hydrate(candidate):
+    try:
+        hydrate_barrier.wait(timeout=0.8)
+        hydrate_parallel.append(int(candidate["id"]))
+    except threading.BrokenBarrierError:
+        hydrate_parallel.append(-int(candidate["id"]))
+    return {
+        **candidate,
+        "coords": full_ring,
+        "length_km": rescue._length(full_ring),
+        "confidence": "high-route-evidence-secondary-full",
+    }
+
+parallel_hydrate_gr = SimpleNamespace(
+    _discover=lambda *_args: [],
+    _discover_generic=lambda *_args: [],
+    _discover_waymarked=lambda *_args: [dict(clipped), dict(clipped_two)],
+    _hydrate_waymarked_relation=parallel_hydrate,
+)
+parallel_hydrate_start = {
+    "name": "Départ hydratation",
+    "lat": full_ring[0][0],
+    "lon": full_ring[0][1],
+    "category": "place",
+}
+parallel_hydrated_route, parallel_hydrated_warning = rescue._relation_loop(
+    v3, parallel_hydrate_gr, parallel_hydrate_start, full_target
+)
+assert parallel_hydrated_warning is None, parallel_hydrated_warning
+assert parallel_hydrated_route is not None, parallel_hydrated_route
+assert parallel_hydrated_route["routing_mode"] == "osm-hiking-relation-loop"
+assert sorted(hydrate_parallel) == [580058, 580059], hydrate_parallel
 
 # Long regional loops may start on a real long-distance trail a little more
 # than 12 km from the geocoded area centre, provided no explicit start/end/via
