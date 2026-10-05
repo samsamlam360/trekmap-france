@@ -279,25 +279,32 @@ assert parallel_calls == {"overpass": 1, "photon": 1}, parallel_calls
 assert len(chosen_parallel) == 4, chosen_parallel
 assert meta_parallel["terrain_preloaded"] is True
 
-# A public Overpass mirror may return a valid JSON object with no elements
-# while another mirror still has the corridor data. Treat the empty response as
-# inconclusive, try exactly one short fallback mirror, and mark terrain as
-# preloaded only when reusable evidence was actually found.
+# A public Overpass primary may be empty or unavailable while another mirror
+# still has the corridor data. Keep the normal single-primary path, then race at
+# most two short fallback mirrors only after that miss.
 real_overpass_request = free._request_json
 real_overpass_urls = list(free.OVERPASS_URLS)
 overpass_failover_calls = []
+fallback_barrier = threading.Barrier(2)
+fallback_parallel_errors = []
 try:
     free.OVERPASS_URLS = [
         "https://primary.test/api/interpreter",
         "https://secondary.test/api/interpreter",
-        "https://unused.test/api/interpreter",
+        "https://tertiary.test/api/interpreter",
     ]
 
     def fake_overpass_failover(url, **kwargs):
         overpass_failover_calls.append((url, float(kwargs.get("timeout") or 0)))
         if "primary.test" in url:
             return {"elements": []}
+        try:
+            fallback_barrier.wait(timeout=0.75)
+        except threading.BrokenBarrierError:
+            fallback_parallel_errors.append(url)
         if "secondary.test" in url:
+            return {"elements": []}
+        if "tertiary.test" in url:
             return {
                 "elements": [
                     {
@@ -323,15 +330,15 @@ try:
                     },
                 ]
             }
-        raise AssertionError(f"unexpected third Overpass mirror call: {url}")
+        raise AssertionError(f"unexpected Overpass mirror call: {url}")
 
     free._request_json = fake_overpass_failover
     mirror_stays, mirror_terrain, mirror_preloaded = logistics._bbox_route_bundle(
         coords, "camping"
     )
 
-    # Both mirrors returning a syntactically valid empty result must keep the
-    # outer resource fallbacks eligible instead of pretending terrain was loaded.
+    # All mirrors returning syntactically valid empty results must keep the outer
+    # resource fallbacks eligible instead of pretending terrain was loaded.
     free._request_json = lambda url, **kwargs: {"elements": []}
     empty_stays, empty_terrain, empty_preloaded = logistics._bbox_route_bundle(
         coords, "camping"
@@ -340,9 +347,15 @@ finally:
     free._request_json = real_overpass_request
     free.OVERPASS_URLS = real_overpass_urls
 
-assert len(overpass_failover_calls) == 2, overpass_failover_calls
+assert fallback_parallel_errors == [], fallback_parallel_errors
+assert len(overpass_failover_calls) == 3, overpass_failover_calls
+assert "primary.test" in overpass_failover_calls[0][0], overpass_failover_calls
 assert overpass_failover_calls[0][1] <= 1.81, overpass_failover_calls
-assert overpass_failover_calls[1][1] <= 0.86, overpass_failover_calls
+assert all(call[1] <= 0.86 for call in overpass_failover_calls[1:]), overpass_failover_calls
+assert {call[0] for call in overpass_failover_calls[1:]} == {
+    "https://secondary.test/api/interpreter",
+    "https://tertiary.test/api/interpreter",
+}, overpass_failover_calls
 assert [x["name"] for x in mirror_stays] == ["Camping miroir"], mirror_stays
 assert {x.get("category") for x in mirror_terrain} == {"water", "food"}, mirror_terrain
 assert mirror_preloaded is True
