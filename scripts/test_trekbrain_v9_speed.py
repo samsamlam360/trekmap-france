@@ -138,8 +138,67 @@ expected_categories = [
 assert [row.get("category") for row in photon_rows] == expected_categories, photon_rows
 assert [row.get("name") for row in photon_rows] == expected_queries, photon_rows
 
-# One Overpass operation may use at most two mirrors. Public OSM slowness must
-# not cascade through every known mirror and turn one click into minutes.
+# Empty resource responses must not poison the shared cache for hours. A
+# transient empty Photon/Overpass payload should be retried on the next call,
+# while a useful payload still benefits from the normal cache.
+class CacheResponse:
+    status_code = 200
+    def __init__(self, payload):
+        self.payload = payload
+    def raise_for_status(self):
+        return None
+    def json(self):
+        return self.payload
+
+real_get_cache = free.requests.get
+cache_calls = []
+free._CACHE.clear()
+
+def fake_empty_get(url, **kwargs):
+    cache_calls.append(url)
+    return CacheResponse({"features": []})
+
+free.requests.get = fake_empty_get
+try:
+    for _ in range(2):
+        free._request_json(
+            "https://cache-empty.test/api",
+            params={"q": "fontaine"},
+            timeout=0.1,
+            ttl=21600,
+            retries=1,
+            cache_empty=False,
+        )
+finally:
+    free.requests.get = real_get_cache
+
+assert len(cache_calls) == 2, cache_calls
+
+useful_calls = []
+free._CACHE.clear()
+def fake_useful_get(url, **kwargs):
+    useful_calls.append(url)
+    return CacheResponse({"features": [{"properties": {"name": "Fontaine"}}]})
+
+free.requests.get = fake_useful_get
+try:
+    for _ in range(2):
+        free._request_json(
+            "https://cache-useful.test/api",
+            params={"q": "fontaine"},
+            timeout=0.1,
+            ttl=21600,
+            retries=1,
+            cache_empty=False,
+        )
+finally:
+    free.requests.get = real_get_cache
+
+assert len(useful_calls) == 1, useful_calls
+free._CACHE.clear()
+
+# Legacy v3 Overpass discovery still uses a bounded mirror count. The dedicated
+# final-resource helper separately fans out its fallback mirrors in parallel.
 overpass_calls = []
 real_request_json = free._request_json
 

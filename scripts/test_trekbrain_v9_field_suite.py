@@ -317,6 +317,15 @@ try:
             raise AssertionError(f"Photon resource request must use q: {params!r}")
         if params.get("include"):
             raise AssertionError(f"Photon resource request must not depend on include: {params!r}")
+        if not params.get("bbox"):
+            raise AssertionError(f"Photon resource request must stay inside a local bbox: {params!r}")
+        west, south, east, north = map(float, str(params["bbox"]).split(","))
+        if not (west < 2.82 < east and south < 45.53 < north):
+            raise AssertionError(f"Photon bbox must contain the route anchor: {params!r}")
+        if params.get("dedupe") != 0:
+            raise AssertionError(f"Photon resource request must keep local duplicate POIs: {params!r}")
+        if kwargs.get("cache_empty") is not False:
+            raise AssertionError(f"Photon empty resource results must remain retryable: {kwargs!r}")
         name = "Camping des Pins" if "camp" in query else "Fontaine du Village"
         return {
             "features": [{

@@ -922,15 +922,20 @@ def _photon_anchor_resource(anchor, category: str, osm_tags, radius_km: float, q
     if query_override:
         query = str(query_override).strip()[:80] or query
 
+    radius = max(0.8, float(radius_km) + 0.5)
+    dlat = radius / 111.0
+    dlon = radius / max(35.0, 111.0 * math.cos(math.radians(lat)))
     params = {
         "q": query,
         "lat": round(lat, 6),
         "lon": round(lon, 6),
         "zoom": 13,
-        # Resource categories on the public Photon instance are deployment-
-        # dependent. Use the stable text endpoint with a strong local bias,
-        # then enforce distance/category semantics ourselves below.
+        # Keep Photon strictly local. Location bias only changes ranking, while
+        # bbox guarantees the generic text query cannot spend its result budget
+        # on distant French POIs that will be rejected immediately afterwards.
         "location_bias_scale": 0.0,
+        "bbox": f"{lon-dlon:.6f},{lat-dlat:.6f},{lon+dlon:.6f},{lat+dlat:.6f}",
+        "dedupe": 0,
         "countrycode": "FR",
         "limit": 20,
         "lang": "fr",
@@ -943,6 +948,7 @@ def _photon_anchor_resource(anchor, category: str, osm_tags, radius_km: float, q
             ttl=21600,
             service="Photon route resources",
             retries=1,
+            cache_empty=False,
         )
     except Exception:
         return None
