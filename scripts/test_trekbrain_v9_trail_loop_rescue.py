@@ -330,6 +330,18 @@ assert rescue._relation_first_allowed({
     "total_target": 64.0,
     "raw": "je veux faire le Tour des Fiz en 4 jours sur l itineraire existant",
 }, 64.0, 4)
+assert rescue._named_relation_section_allowed({
+    "route_type": "Boucle",
+    "days": 4,
+    "total_target": 64.0,
+    "raw": "je veux faire le Tour des Fiz en 4 jours sur l itineraire existant",
+}, 64.0, days_override=4, known_loop=True)
+assert not rescue._named_relation_section_allowed({
+    "route_type": "Boucle",
+    "days": 4,
+    "total_target": 64.0,
+    "raw": "boucle de quatre jours autour du mont Lozere sur de beaux sentiers",
+}, 64.0, days_override=4, known_loop=True)
 assert rescue._relation_first_allowed({
     "route_type": "Boucle",
     "days": 7,
@@ -549,5 +561,14 @@ gr_bad = SimpleNamespace(_discover=lambda _v3, _start, _radius: [bad])
 route, warning = rescue._relation_loop(v3, gr_bad, dict(start), 80.0)
 assert route is None
 assert warning
+
+# Dispatch contract: a named short tour may use already-discovered section
+# evidence below the generic 90 km threshold, but only through the preloaded
+# candidate gate (no unconditional extra provider wave).
+import inspect
+install_source = inspect.getsource(rescue.install_trail_loop_rescue)
+assert "named_preloaded" in install_source, install_source
+assert "_section_candidates(" in install_source, install_source
+assert "generic_allowed or named_preloaded" in install_source, install_source
 
 print("Closed GR loop rescue + compact campsite routing: OK")
