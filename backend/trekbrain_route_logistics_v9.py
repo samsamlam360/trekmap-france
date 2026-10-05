@@ -287,6 +287,7 @@ def _bbox_route_query(
                 ttl=3600,
                 service="Overpass route bundle" if include_terrain else "Overpass route stays",
                 retries=1,
+                cache_empty=False,
             )
         except Exception:
             primary = None
@@ -309,6 +310,7 @@ def _bbox_route_query(
                         + f" fallback {index}"
                     ),
                     retries=1,
+                    cache_empty=False,
                 )
             except Exception:
                 return index, None
