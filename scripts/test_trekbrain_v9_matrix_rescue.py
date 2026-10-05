@@ -148,6 +148,9 @@ assert long_route["routing_mode"] == "ors-round-trip-multilobe"
 assert long_route["round_trip_lobes"] == 2
 assert 130.0 <= long_route["distance"] <= 140.0, long_route
 assert len(roundtrip_calls) >= 2
+assert [round(x[0], 1) for x in roundtrip_calls[-2:]] == [90.0, 45.0], roundtrip_calls
+assert long_route.get("round_trip_lobe_requests_km") == [90.0, 45.0], long_route
+assert long_route.get("adaptive_long_roundtrip") is True, long_route
 assert long_route.get("long_roundtrip_early_accept") is False, long_route
 
 # Sparse mountain networks may overshoot one requested lobe dramatically. If
@@ -184,5 +187,44 @@ assert early["round_trip_lobes"] == 1, early
 assert early["long_roundtrip_early_accept"] is True, early
 assert abs(float(early["distance"]) - 110.6) < 0.01, early
 assert len(overshoot_calls) == 1, overshoot_calls
+assert round(float(overshoot_calls[0][0]), 1) == 90.0, overshoot_calls
+
+
+# Beaufortain-style regression: a safe first long lobe can be slightly below
+# the global window. The second request must target only the observed residual,
+# not repeat an equal theoretical half and overshoot the trek dramatically.
+adaptive_calls = []
+
+def adaptive_roundtrip_request(start, target_km, seed):
+    adaptive_calls.append((float(target_km), int(seed)))
+    returned = 83.0 if len(adaptive_calls) == 1 else 25.5
+    offset = 0.10 if len(adaptive_calls) == 1 else -0.07
+    return {
+        "coords": [
+            [float(start["lat"]), float(start["lon"])],
+            [float(start["lat"]) + offset, float(start["lon"]) + 0.08],
+            [float(start["lat"]) + offset * 0.4, float(start["lon"]) + 0.13],
+            [float(start["lat"]), float(start["lon"])],
+        ],
+        "distance": returned,
+        "fallback": False,
+        "profile": "foot-hiking",
+        "routing_mode": "ors-round-trip",
+    }, None
+
+roundtrip._roundtrip_request = adaptive_roundtrip_request
+try:
+    adaptive = roundtrip._best_roundtrip(START, 108.0, 13.5, 22.5, 6, V3)
+finally:
+    roundtrip._roundtrip_request = real_roundtrip_request
+
+assert adaptive["fallback"] is False, adaptive
+assert adaptive["routing_mode"] == "ors-round-trip-multilobe", adaptive
+assert adaptive["round_trip_lobes"] == 2, adaptive
+assert abs(float(adaptive["distance"]) - 108.5) < 0.01, adaptive
+assert [round(x[0], 1) for x in adaptive_calls] == [90.0, 25.0], adaptive_calls
+assert adaptive.get("round_trip_lobe_requests_km") == [90.0, 25.0], adaptive
+assert adaptive.get("round_trip_lobe_distances_km") == [83.0, 25.5], adaptive
+assert adaptive.get("adaptive_long_roundtrip") is True, adaptive
 
 print("Matrix HTTP 500 + long-loop resilience: OK")
