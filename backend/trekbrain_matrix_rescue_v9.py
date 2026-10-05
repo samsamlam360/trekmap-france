@@ -173,26 +173,20 @@ def _recover_without_matrix(data, legacy_main, v3, roundtrip, ors, campsite_loop
 
 
 def _multi_lobe_roundtrip(roundtrip, start, target_km: float, daily_min: float, daily_max: float, days: int, v3):
-    """Build >100 km fallback as several validated ORS round-trip lobes."""
+    """Build a long fallback from calibrated validated ORS round-trip lobes.
+
+    ORS treats round_trip.length as an objective, not a guarantee. A 90 km
+    request can therefore return a much longer circuit in sparse mountain
+    networks. Oversized results must be *replaced* by a calibrated request;
+    only an undersized validated loop may be complemented with another lobe.
+    """
     target_km = float(target_km)
-    pieces = max(2, int(math.ceil(target_km / 90.0)))
-    if pieces > 3:
+    max_lobes = max(2, int(math.ceil(target_km / 90.0)))
+    if max_lobes > 3:
         raise HTTPException(
             status_code=422,
             detail="Le secours automatique peut construire jusqu'à environ 270 km. Pour un trek plus long, indique une zone ou des étapes intermédiaires.",
         )
-    # Ask the first lobe to cover as much of the real target as safely
-    # possible, then size every following lobe from the *observed* remaining
-    # distance. ORS round-trip length is only an objective, so equal theoretical
-    # pieces can compound provider overshoot (e.g. 54 + 54 requested becoming
-    # ~166 km for a 108 km trek).
-    initial_target = min(90.0, target_km)
-    merged = []
-    total = 0.0
-    warnings = []
-    requested_lobes = []
-    returned_lobes = []
-    seeds = (3, 11, 29, 47, 61, 73)
 
     feasible_low = max(
         target_km * 0.82,
@@ -202,70 +196,194 @@ def _multi_lobe_roundtrip(roundtrip, start, target_km: float, daily_min: float, 
         target_km * 1.18,
         float(daily_max) * max(int(days), 1) + 0.75,
     )
-    used_lobes = 0
 
-    for index in range(pieces):
-        route = None
-        warning = None
-        if index == 0:
-            lobe_target = initial_target
-        else:
-            remaining = max(0.0, target_km - total)
-            # A tiny residual does not justify another route request. If total
-            # were already feasible we would have stopped below; otherwise ask
-            # for at least a small genuine loop rather than a degenerate trace.
-            lobe_target = max(6.0, min(90.0, remaining))
-        requested_lobes.append(round(float(lobe_target), 2))
+    seeds = iter((3, 11, 29, 47, 61, 73))
+    warnings = []
+    provider_attempts = []
 
-        # One normal attempt plus one alternate seed only if necessary.
-        for seed in (seeds[index * 2], seeds[index * 2 + 1]):
-            route, warning = roundtrip._roundtrip_request(start, lobe_target, seed)
-            if route is not None:
-                break
-            if warning:
-                warnings.append(warning)
-        if route is None:
-            detail = warning or (warnings[-1] if warnings else "OpenRouteService n'a pas généré la sous-boucle.")
-            raise HTTPException(status_code=503, detail=detail)
+    def request_lobe(requested_km: float, *, retry_on_failure: bool = True):
+        requested_km = max(6.0, min(90.0, float(requested_km)))
+        tries = 2 if retry_on_failure else 1
+        last_warning = None
+        for _ in range(tries):
+            try:
+                seed = next(seeds)
+            except StopIteration:
+                return None
+            route, warning = roundtrip._roundtrip_request(start, requested_km, seed)
+            last_warning = warning
+            if route is None:
+                if warning:
+                    warnings.append(warning)
+                continue
+            coords = list(route.get("coords") or [])
+            try:
+                distance = float(route.get("distance") or 0)
+            except (TypeError, ValueError):
+                distance = 0.0
+            if len(coords) < 2 or not math.isfinite(distance) or distance <= 0:
+                continue
+            provider_attempts.append({
+                "requested_km": round(requested_km, 2),
+                "returned_km": round(distance, 2),
+                "seed": int(seed),
+            })
+            return {
+                "route": dict(route),
+                "coords": coords,
+                "distance": distance,
+                "requested_km": requested_km,
+                "seed": int(seed),
+            }
+        if last_warning:
+            warnings.append(last_warning)
+        return None
 
-        coords = list(route.get("coords") or [])
-        if len(coords) < 2:
-            raise HTTPException(status_code=503, detail="Une sous-boucle ORS n'a pas fourni de géométrie exploitable.")
-        if merged and coords and merged[-1] == coords[0]:
-            coords = coords[1:]
-        merged.extend(coords)
-        returned_distance = float(route.get("distance") or 0)
-        total += returned_distance
-        returned_lobes.append(round(returned_distance, 2))
-        used_lobes += 1
+    def in_window(distance: float) -> bool:
+        return feasible_low <= float(distance) <= feasible_high
 
-        # ORS round-trip length is an objective, not a hard output. In sparse
-        # mountain networks a request for one 60–70 km lobe can legitimately
-        # return a validated 100+ km loop. If that first real loop already fits
-        # the user's global multi-day distance window, stop here instead of
-        # blindly concatenating another lobe and doubling the trek.
-        if feasible_low <= total <= feasible_high:
+    def single_result(entry, *, calibrated: bool = False):
+        route = dict(entry["route"])
+        route["coords"] = list(entry["coords"])
+        route["distance"] = round(float(entry["distance"]), 2)
+        route["fallback"] = False
+        route["routing_mode"] = "ors-round-trip"
+        route["profile"] = route.get("profile") or getattr(roundtrip.ors, "ORS_PROFILE", "foot-hiking")
+        route["round_trip_lobes"] = 1
+        route["requested_distance_km"] = round(target_km, 1)
+        route["round_trip_lobe_requests_km"] = [round(float(entry["requested_km"]), 2)]
+        route["round_trip_lobe_distances_km"] = [round(float(entry["distance"]), 2)]
+        route["round_trip_provider_attempts"] = list(provider_attempts)
+        route["long_roundtrip_early_accept"] = True
+        route["adaptive_long_roundtrip"] = True
+        route["long_roundtrip_calibrated"] = bool(calibrated)
+        return route
+
+    def merged_result(entries):
+        merged = []
+        total = 0.0
+        for entry in entries:
+            coords = list(entry["coords"])
+            if merged and coords and merged[-1] == coords[0]:
+                coords = coords[1:]
+            merged.extend(coords)
+            total += float(entry["distance"])
+        if len(merged) < 2:
+            raise HTTPException(status_code=503, detail="Le secours multi-boucles n'a produit aucune géométrie exploitable.")
+        return {
+            "coords": merged,
+            "distance": round(total, 2),
+            "fallback": False,
+            "routing_mode": "ors-round-trip" if len(entries) == 1 else "ors-round-trip-multilobe",
+            "profile": getattr(roundtrip.ors, "ORS_PROFILE", "foot-hiking"),
+            "round_trip_lobes": len(entries),
+            "requested_distance_km": round(target_km, 1),
+            "round_trip_lobe_requests_km": [
+                round(float(entry["requested_km"]), 2) for entry in entries
+            ],
+            "round_trip_lobe_distances_km": [
+                round(float(entry["distance"]), 2) for entry in entries
+            ],
+            "round_trip_provider_attempts": list(provider_attempts),
+            "long_roundtrip_early_accept": len(entries) < max_lobes,
+            "adaptive_long_roundtrip": True,
+            "long_roundtrip_calibrated": any(
+                bool(entry.get("calibrated")) for entry in entries
+            ),
+        }
+
+    # First try the largest request that stays below TrekBrain's <100 km
+    # round-trip budget. This often yields a complete long loop by itself.
+    first = request_lobe(min(90.0, target_km))
+    if first is None:
+        detail = warnings[-1] if warnings else "OpenRouteService n'a pas généré la première sous-boucle."
+        raise HTTPException(status_code=503, detail=detail)
+
+    if in_window(first["distance"]):
+        return single_result(first)
+
+    base = first
+
+    # Critical distinction: adding distance can fix an undersized loop, but can
+    # never fix an oversized one. Re-run a *replacement* loop calibrated from
+    # the provider's observed ratio before considering any concatenation.
+    if first["distance"] > feasible_high:
+        calibrated_target = (
+            float(first["requested_km"]) * target_km / float(first["distance"])
+        )
+        calibrated_target = max(6.0, min(90.0, calibrated_target))
+        corrected = None
+        if abs(calibrated_target - float(first["requested_km"])) >= 1.0:
+            corrected = request_lobe(calibrated_target, retry_on_failure=False)
+        if corrected is not None:
+            corrected["calibrated"] = True
+            if in_window(corrected["distance"]):
+                return single_result(corrected, calibrated=True)
+            # Prefer whichever standalone circuit is closer to the global target.
+            if abs(corrected["distance"] - target_km) < abs(first["distance"] - target_km):
+                base = corrected
+
+        # One second bounded calibration is allowed only while the best route is
+        # still too long. It replaces the previous route; it is never appended.
+        if base["distance"] > feasible_high:
+            second_target = (
+                float(base["requested_km"]) * target_km / float(base["distance"])
+            )
+            second_target = max(6.0, min(90.0, second_target))
+            if abs(second_target - float(base["requested_km"])) >= 1.0:
+                second = request_lobe(second_target, retry_on_failure=False)
+                if second is not None:
+                    second["calibrated"] = True
+                    if in_window(second["distance"]):
+                        return single_result(second, calibrated=True)
+                    if abs(second["distance"] - target_km) < abs(base["distance"] - target_km):
+                        base = second
+
+    # If all calibrated standalone loops remain oversized, do not make the
+    # route worse by concatenating another positive-distance circuit. Return
+    # the closest validated candidate and let the existing daily-distance gate
+    # reject it transparently if necessary.
+    if base["distance"] > feasible_high:
+        return single_result(base, calibrated=bool(base.get("calibrated")))
+
+    # A route just below the global target window can be safely completed with
+    # residual lobes. Each appended lobe is sized from the *observed* remaining
+    # distance, not from an equal theoretical split.
+    entries = [base]
+    total = float(base["distance"])
+    while total < feasible_low and len(entries) < max_lobes:
+        desired_remaining = max(6.0, target_km - total)
+        residual = request_lobe(desired_remaining, retry_on_failure=False)
+        if residual is None:
             break
 
-    if len(merged) < 2:
-        raise HTTPException(status_code=503, detail="Le secours multi-boucles n'a produit aucune géométrie exploitable.")
-    return {
-        "coords": merged,
-        "distance": round(total, 2),
-        "fallback": False,
-        "routing_mode": (
-            "ors-round-trip"
-            if used_lobes == 1
-            else "ors-round-trip-multilobe"
-        ),
-        "profile": getattr(roundtrip.ors, "ORS_PROFILE", "foot-hiking"),
-        "round_trip_lobes": used_lobes,
-        "requested_distance_km": round(target_km, 1),
-        "round_trip_lobe_requests_km": requested_lobes[:used_lobes],
-        "round_trip_lobe_distances_km": returned_lobes[:used_lobes],
-        "long_roundtrip_early_accept": used_lobes < pieces,
-        "adaptive_long_roundtrip": True,
-    }
+        candidate_total = total + float(residual["distance"])
+        # If the residual itself overshoots the global window, recalibrate that
+        # residual once and replace it rather than blindly appending the excess.
+        if candidate_total > feasible_high:
+            corrected_target = (
+                float(residual["requested_km"])
+                * max(6.0, target_km - total)
+                / float(residual["distance"])
+            )
+            corrected_target = max(6.0, min(90.0, corrected_target))
+            if abs(corrected_target - float(residual["requested_km"])) >= 1.0:
+                corrected_residual = request_lobe(
+                    corrected_target, retry_on_failure=False
+                )
+                if corrected_residual is not None:
+                    corrected_residual["calibrated"] = True
+                    corrected_total = total + float(corrected_residual["distance"])
+                    if abs(corrected_total - target_km) < abs(candidate_total - target_km):
+                        residual = corrected_residual
+                        candidate_total = corrected_total
+
+        entries.append(residual)
+        total = candidate_total
+        if in_window(total):
+            break
+
+    return merged_result(entries)
 
 
 def install_matrix_resilience(campsite_loop, roundtrip) -> None:
