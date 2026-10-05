@@ -219,8 +219,8 @@ assert meta_fast["elapsed_ms"] >= 0
 
 # A public Overpass mirror may return a valid JSON object with no elements
 # while another mirror still has the corridor data. Treat the empty response as
-# inconclusive, try exactly one short fallback mirror, and mark terrain as
-# preloaded only when reusable evidence was actually found.
+# inconclusive, try both independent fallback mirrors in parallel, and mark
+# terrain as preloaded only when reusable evidence was actually found.
 real_overpass_request = free._request_json
 real_overpass_urls = list(free.OVERPASS_URLS)
 overpass_failover_calls = []
@@ -261,7 +261,9 @@ try:
                     },
                 ]
             }
-        raise AssertionError(f"unexpected third Overpass mirror call: {url}")
+        if "unused.test" in url:
+            return {"elements": []}
+        raise AssertionError(f"unexpected Overpass mirror call: {url}")
 
     free._request_json = fake_overpass_failover
     mirror_stays, mirror_terrain, mirror_preloaded = logistics._bbox_route_bundle(
@@ -278,9 +280,13 @@ finally:
     free._request_json = real_overpass_request
     free.OVERPASS_URLS = real_overpass_urls
 
-assert len(overpass_failover_calls) == 2, overpass_failover_calls
+assert len(overpass_failover_calls) == 3, overpass_failover_calls
 assert overpass_failover_calls[0][1] <= 1.81, overpass_failover_calls
-assert overpass_failover_calls[1][1] <= 0.86, overpass_failover_calls
+assert all(timeout <= 0.96 for _url, timeout in overpass_failover_calls[1:]), overpass_failover_calls
+assert {url for url, _timeout in overpass_failover_calls[1:]} == {
+    "https://secondary.test/api/interpreter",
+    "https://unused.test/api/interpreter",
+}, overpass_failover_calls
 assert [x["name"] for x in mirror_stays] == ["Camping miroir"], mirror_stays
 assert {x.get("category") for x in mirror_terrain} == {"water", "food"}, mirror_terrain
 assert mirror_preloaded is True
