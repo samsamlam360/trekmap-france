@@ -199,7 +199,7 @@ full_intent_token = rescue._ACTIVE_INTENT.set({
     "route_type": "Boucle",
     "days": 4,
     "total_target": full_target,
-    "raw": "je veux faire le Tour de test en suivant son itineraire existant",
+    "raw": "je veux faire le Tour des Fiz en suivant son itineraire existant",
 })
 try:
     full_route, full_warning = rescue._relation_loop(
@@ -285,7 +285,7 @@ named_token = rescue._ACTIVE_INTENT.set({
     "route_type": "Boucle",
     "days": 4,
     "total_target": full_target,
-    "raw": "je veux faire le Tour de test en 4 jours",
+    "raw": "je veux faire le Tour des Fiz en 4 jours",
 })
 try:
     limited_route, limited_warning = rescue._relation_loop(
