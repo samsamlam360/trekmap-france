@@ -615,16 +615,35 @@ def _discover_stays(
     # water/food are also requested: that OSM terrain call would happen later
     # anyway, so overlap it with Photon now and reuse the same response.
     structured = category in {"camping", "refuge"}
-    if structured:
-        if want_terrain:
-            bbox_stays, terrain_rows, terrain_preloaded = provider_call(
-                "logistics.overpass_bundle", _bbox_route_bundle, coords, category
+    structured_parallel_wave = bool(structured and want_terrain)
+    if structured_parallel_wave:
+        # When water/food is requested, the OSM bundle is required regardless.
+        # Start the independent Photon stay lookup at the same time instead of
+        # waiting for a slow/empty Overpass response and paying both latencies
+        # serially. The same rows are still projected and ranked afterwards.
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            bbox_future = pool.submit(
+                provider_call, "logistics.overpass_bundle",
+                _bbox_route_bundle, coords, category
             )
-            rows.extend(bbox_stays)
-        else:
-            rows.extend(provider_call(
-                "logistics.overpass_stays", _bbox_route_stays, coords, category
-            ))
+            photon_future = pool.submit(
+                provider_call, "logistics.photon_wave",
+                _photon_split_stays, v3, roundtrip, coords, category, days
+            )
+            try:
+                bbox_stays, terrain_rows, terrain_preloaded = bbox_future.result()
+            except Exception:
+                bbox_stays, terrain_rows, terrain_preloaded = [], [], False
+            try:
+                photon_stays = photon_future.result()
+            except Exception:
+                photon_stays = []
+        rows.extend(list(bbox_stays or []))
+        rows.extend(list(photon_stays or []))
+    elif structured:
+        rows.extend(provider_call(
+            "logistics.overpass_stays", _bbox_route_stays, coords, category
+        ))
     elif want_terrain:
         with ThreadPoolExecutor(max_workers=2) as pool:
             bbox_future = pool.submit(
@@ -678,7 +697,7 @@ def _discover_stays(
         ]
 
     if len(chosen) < needed and deadline - time.monotonic() >= 1.25:
-        if structured:
+        if structured and not structured_parallel_wave:
             rows.extend(provider_call(
                 "logistics.photon_fallback",
                 _photon_split_stays, v3, roundtrip, coords, category, days
