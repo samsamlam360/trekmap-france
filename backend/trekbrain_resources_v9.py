@@ -457,17 +457,14 @@ def _bbox_route_water_food(result: dict[str, Any], intent: dict[str, Any]) -> li
         return []
 
     query = "[out:json][timeout:3];(" + "".join(clauses) + ");out center tags 120;"
-    try:
-        url = list(free.OVERPASS_URLS)[0]
-        payload = free._request_json(
-            url,
-            data={"data": query},
-            timeout=1.7,
-            ttl=3600,
-            service="Overpass route resources",
-            retries=1,
-        )
-    except Exception:
+    payload = free._request_overpass_nonempty(
+        query,
+        primary_timeout=1.7,
+        fallback_timeout=0.9,
+        ttl=3600,
+        service="Overpass route resources",
+    )
+    if not isinstance(payload, dict):
         return []
 
     rows = []
