@@ -943,7 +943,6 @@ def _photon_anchor_resource(anchor, category: str, osm_tags, radius_km: float, q
             ttl=21600,
             service="Photon route resources",
             retries=1,
-            cache_empty=False,
         )
     except Exception:
         return None
