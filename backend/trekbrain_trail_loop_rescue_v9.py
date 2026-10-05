@@ -13,6 +13,7 @@ secondary-provider recovery installed in v9.
 from __future__ import annotations
 
 from contextvars import ContextVar
+from concurrent.futures import ThreadPoolExecutor
 import math
 import re
 import unicodedata
@@ -357,10 +358,22 @@ def _relation_loop(v3, gr, start: dict[str, Any], target_km: float):
         # can still win by distance/name/continuity evidence.
         # Tier 2: broaden Overpass only after the fast GR/high-network query
         # produced no compatible closed candidate.
-        try:
-            generic = list(gr._discover_generic(v3, start, radius) or [])
-        except Exception:
-            generic = []
+        # Tier 2/3 are independent evidence sources. They used to run
+        # serially, making a cold long-loop request pay the full latency of
+        # generic Overpass *and then* Waymarked. Start both together and merge
+        # them in the same deterministic order as before.
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            generic_future = pool.submit(gr._discover_generic, v3, start, radius)
+            secondary_future = pool.submit(gr._discover_waymarked, start, radius)
+            try:
+                generic = list(generic_future.result() or [])
+            except Exception:
+                generic = []
+            try:
+                secondary = list(secondary_future.result() or [])
+            except Exception:
+                secondary = []
+
         known = {
             str(x.get("id") or x.get("source_url") or x.get("ref") or x.get("name") or "")
             for x in trails
@@ -372,12 +385,8 @@ def _relation_loop(v3, gr, start: dict[str, Any], target_km: float):
                 known.add(identity)
                 merged.append(trail)
 
-        # Tier 3: use the independent Waymarked OSM route index if Overpass still
-        # has not supplied enough evidence.
-        try:
-            secondary = list(gr._discover_waymarked(start, radius) or [])
-        except Exception:
-            secondary = []
+        # Tier 3: merge the independent Waymarked OSM route index after generic
+        # Overpass, exactly as before. Only the waiting is parallel.
         known = {
             str(x.get("id") or x.get("source_url") or x.get("ref") or x.get("name") or "")
             for x in merged
@@ -434,11 +443,26 @@ def _relation_loop(v3, gr, start: dict[str, Any], target_km: float):
             ranked_secondary.sort(key=lambda row: row[0])
 
         hydrated = []
-        for _score, candidate in ranked_secondary[:2]:
-            try:
-                full = hydrate(candidate)
-            except Exception:
-                full = None
+        hydrate_rows = ranked_secondary[:2]
+        # Full Waymarked relation hydration is also independent per relation.
+        # Execute at most two requests concurrently, but consume results in
+        # ranked order so route selection stays deterministic.
+        if hydrate_rows:
+            with ThreadPoolExecutor(max_workers=len(hydrate_rows)) as pool:
+                hydrate_futures = [
+                    pool.submit(hydrate, candidate)
+                    for _score, candidate in hydrate_rows
+                ]
+                hydrated_results = []
+                for future in hydrate_futures:
+                    try:
+                        hydrated_results.append(future.result())
+                    except Exception:
+                        hydrated_results.append(None)
+        else:
+            hydrated_results = []
+
+        for (_score, candidate), full in zip(hydrate_rows, hydrated_results):
             if not isinstance(full, dict):
                 continue
             hydrated.append(full)
