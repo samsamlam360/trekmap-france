@@ -195,9 +195,18 @@ full_start = {
     "category": "place",
 }
 full_target = rescue._length(full_ring)
-full_route, full_warning = rescue._relation_loop(
-    v3, fake_gr_full, full_start, full_target
-)
+full_intent_token = rescue._ACTIVE_INTENT.set({
+    "route_type": "Boucle",
+    "days": 4,
+    "total_target": full_target,
+    "raw": "je veux faire le Tour de test en suivant son itineraire existant",
+})
+try:
+    full_route, full_warning = rescue._relation_loop(
+        v3, fake_gr_full, full_start, full_target
+    )
+finally:
+    rescue._ACTIVE_INTENT.reset(full_intent_token)
 assert full_warning is None, full_warning
 assert full_route is not None, full_route
 assert full_route["routing_mode"] == "osm-hiking-relation-loop", full_route
@@ -240,23 +249,19 @@ assert parallel_route is None
 assert sorted(evidence_parallel) == ["generic", "waymarked"], evidence_parallel
 
 
-# The two bounded full-relation hydrations are likewise independent. Keep their
-# ranked consumption deterministic while executing the provider calls together.
-hydrate_barrier = threading.Barrier(2)
-hydrate_parallel = []
+# Full relation hydration is now reserved for clearly named routes and is
+# capped at one candidate. Generic long-area requests keep lightweight relation
+# evidence but must not open expensive relation-detail requests.
 clipped_two = {
     **clipped,
     "id": 580059,
     "name": "Tour de test bis",
     "ref": "GR 59",
 }
+named_hydrate_calls = []
 
-def parallel_hydrate(candidate):
-    try:
-        hydrate_barrier.wait(timeout=0.8)
-        hydrate_parallel.append(int(candidate["id"]))
-    except threading.BrokenBarrierError:
-        hydrate_parallel.append(-int(candidate["id"]))
+def named_hydrate(candidate):
+    named_hydrate_calls.append(int(candidate["id"]))
     return {
         **candidate,
         "coords": full_ring,
@@ -264,25 +269,70 @@ def parallel_hydrate(candidate):
         "confidence": "high-route-evidence-secondary-full",
     }
 
-parallel_hydrate_gr = SimpleNamespace(
+limited_hydrate_gr = SimpleNamespace(
     _discover=lambda *_args: [],
     _discover_generic=lambda *_args: [],
     _discover_waymarked=lambda *_args: [dict(clipped), dict(clipped_two)],
-    _hydrate_waymarked_relation=parallel_hydrate,
+    _hydrate_waymarked_relation=named_hydrate,
 )
-parallel_hydrate_start = {
+limited_start = {
     "name": "Départ hydratation",
     "lat": full_ring[0][0],
     "lon": full_ring[0][1],
     "category": "place",
 }
-parallel_hydrated_route, parallel_hydrated_warning = rescue._relation_loop(
-    v3, parallel_hydrate_gr, parallel_hydrate_start, full_target
+named_token = rescue._ACTIVE_INTENT.set({
+    "route_type": "Boucle",
+    "days": 4,
+    "total_target": full_target,
+    "raw": "je veux faire le Tour de test en 4 jours",
+})
+try:
+    limited_route, limited_warning = rescue._relation_loop(
+        v3, limited_hydrate_gr, limited_start, full_target
+    )
+finally:
+    rescue._ACTIVE_INTENT.reset(named_token)
+assert limited_warning is None, limited_warning
+assert limited_route is not None, limited_route
+assert named_hydrate_calls == [580058], named_hydrate_calls
+
+generic_hydrate_calls = []
+generic_gr = SimpleNamespace(
+    _discover=lambda *_args: [],
+    _discover_generic=lambda *_args: [],
+    _discover_waymarked=lambda *_args: [dict(clipped), dict(clipped_two)],
+    _hydrate_waymarked_relation=lambda candidate: (
+        generic_hydrate_calls.append(int(candidate["id"])) or dict(hydrated)
+    ),
 )
-assert parallel_hydrated_warning is None, parallel_hydrated_warning
-assert parallel_hydrated_route is not None, parallel_hydrated_route
-assert parallel_hydrated_route["routing_mode"] == "osm-hiking-relation-loop"
-assert sorted(hydrate_parallel) == [580058, 580059], hydrate_parallel
+generic_start = dict(limited_start)
+generic_token = rescue._ACTIVE_INTENT.set({
+    "route_type": "Boucle",
+    "days": 7,
+    "total_target": 126.0,
+    "raw": "itinerance dans le Queyras, privilegier une grande randonnee si elle existe",
+})
+try:
+    generic_route, _generic_warning = rescue._relation_loop(
+        v3, generic_gr, generic_start, 126.0
+    )
+finally:
+    rescue._ACTIVE_INTENT.reset(generic_token)
+assert generic_hydrate_calls == [], generic_hydrate_calls
+
+assert rescue._full_relation_hydration_limit({
+    "raw": "je veux faire le Tour des Fiz en quatre jours",
+}) == 1
+assert rescue._full_relation_hydration_limit({
+    "raw": "boucle en suivant le GR 34",
+}) == 1
+assert rescue._full_relation_hydration_limit({
+    "raw": "dans le Beaufortain sur des itineraires existants autant que possible",
+}) == 0
+assert rescue._full_relation_hydration_limit({
+    "raw": "dans le Queyras, une grande randonnee si elle existe",
+}) == 0
 
 # Long regional loops may start on a real long-distance trail a little more
 # than 12 km from the geocoded area centre, provided no explicit start/end/via
@@ -363,6 +413,31 @@ finally:
 assert retry_payload["results"][0]["ref"] == "GR 34", retry_payload
 assert len(waymarked_http_calls) == 2, waymarked_http_calls
 assert waymarked_http_calls[1][1] < waymarked_http_calls[0][1], waymarked_http_calls
+
+
+# Lightweight bbox discovery is best-effort and must not double its latency with
+# a retry. Full relation hydration keeps the default retry above.
+single_attempt_calls = []
+
+def always_timeout_waymarked_get(url, **kwargs):
+    single_attempt_calls.append((url, float(kwargs.get("timeout") or 0)))
+    raise gr_module.requests.Timeout("synthetic discovery timeout")
+
+gr_module.requests.get = always_timeout_waymarked_get
+try:
+    try:
+        gr_module._waymarked_request(
+            "/list/by_area",
+            {"bbox": "0,0,1,1", "limit": 20},
+            2.4,
+            retry=False,
+        )
+    except gr_module.requests.Timeout:
+        pass
+finally:
+    gr_module.requests.get = original_waymarked_get
+
+assert len(single_attempt_calls) == 1, single_attempt_calls
 
 # A long open coastal relation can be used as the real backbone of a loop:
 # follow the mapped trail, then close only the final return through a pedestrian
