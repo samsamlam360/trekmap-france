@@ -228,6 +228,52 @@ assert 51.0 <= float(oversized_calls[1][0]) <= 54.0, oversized_calls
 assert calibrated.get("round_trip_lobe_distances_km") == [109.0], calibrated
 assert calibrated.get("long_roundtrip_early_accept") is True, calibrated
 
+# Queyras production regression: after an oversized first lobe is replaced
+# by a better-but-short calibrated lobe, the residual request must account for
+# the provider's observed overshoot ratio instead of asking for the raw gap.
+queyras_calls = []
+
+def queyras_roundtrip_request(start, target_km, seed):
+    queyras_calls.append((float(target_km), int(seed)))
+    if len(queyras_calls) == 1:
+        returned = 180.0
+        offset = 0.22
+    elif len(queyras_calls) == 2:
+        returned = 95.0
+        offset = 0.11
+    else:
+        returned = 31.5
+        offset = -0.05
+    return {
+        "coords": [
+            [float(start["lat"]), float(start["lon"])],
+            [float(start["lat"]) + offset, float(start["lon"]) + 0.08],
+            [float(start["lat"]) + offset * 0.4, float(start["lon"]) + 0.14],
+            [float(start["lat"]), float(start["lon"])],
+        ],
+        "distance": returned,
+        "fallback": False,
+        "profile": "foot-hiking",
+        "routing_mode": "ors-round-trip",
+    }, None
+
+roundtrip._roundtrip_request = queyras_roundtrip_request
+try:
+    queyras = roundtrip._best_roundtrip(START, 126.0, 13.5, 22.5, 7, V3)
+finally:
+    roundtrip._roundtrip_request = real_roundtrip_request
+
+assert queyras["fallback"] is False, queyras
+assert queyras["routing_mode"] == "ors-round-trip-multilobe", queyras
+assert queyras["round_trip_lobes"] == 2, queyras
+assert abs(float(queyras["distance"]) - 126.5) < 0.01, queyras
+assert len(queyras_calls) == 3, queyras_calls
+assert round(float(queyras_calls[0][0]), 1) == 90.0, queyras_calls
+assert round(float(queyras_calls[1][0]), 1) == 63.0, queyras_calls
+assert 20.0 <= float(queyras_calls[2][0]) <= 21.0, queyras_calls
+assert queyras.get("round_trip_lobe_distances_km") == [95.0, 31.5], queyras
+assert len(queyras.get("round_trip_lobe_observed_ratios") or []) == 2, queyras
+
 # Beaufortain-style regression: a safe first long lobe can be slightly below
 # the global window. The second request must target only the observed residual,
 # not repeat an equal theoretical half and overshoot the trek dramatically.
