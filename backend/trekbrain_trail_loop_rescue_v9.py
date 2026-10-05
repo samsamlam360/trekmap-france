@@ -1200,6 +1200,7 @@ __all__ = [
     "_matrix_rank_section_candidates",
     "_coastal_section_allowed",
     "_relation_first_allowed",
+    "_full_relation_hydration_limit",
     "_trail_rejection_snapshot",
     "_compact_route_points",
 ]
