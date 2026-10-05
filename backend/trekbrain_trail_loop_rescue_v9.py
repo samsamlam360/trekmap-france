@@ -119,6 +119,33 @@ def _coastal_section_allowed(intent: dict[str, Any] | None, target_km: float) ->
 
 
 
+def _full_relation_hydration_limit(intent: dict[str, Any] | None) -> int:
+    """Allow expensive full-relation hydration only for clearly named trails.
+
+    Generic requests such as "dans le Queyras, privilégie une grande randonnée
+    si elle existe" should use lightweight relation evidence and then fall back
+    to ORS. Explicit route identities such as "Tour des Fiz" or "GR 34" may
+    justify one authoritative full-relation request.
+    """
+    raw = _fold((intent or {}).get("raw") or "")
+    if not raw:
+        return 0
+    if re.search(r"\b(?:gr|grp)\s*\d+\b", raw):
+        return 1
+    if re.search(
+        r"\b(?:tour|circuit)\s+(?:du|de\s+la|des|de\s+l[' ]|d[' ])\s*[a-z0-9]",
+        raw,
+    ):
+        return 1
+    if any(phrase in raw for phrase in (
+        "trace officiel",
+        "trace officielle",
+        "vrai trace",
+    )):
+        return 1
+    return 0
+
+
 def _relation_first_allowed(
     intent: dict[str, Any] | None,
     target_km: float,
@@ -451,10 +478,11 @@ def _relation_loop(v3, gr, start: dict[str, Any], target_km: float):
             ranked_secondary.sort(key=lambda row: row[0])
 
         hydrated = []
-        hydrate_rows = ranked_secondary[:2]
-        # Full Waymarked relation hydration is also independent per relation.
-        # Execute at most two requests concurrently, but consume results in
-        # ranked order so route selection stays deterministic.
+        hydration_limit = _full_relation_hydration_limit(_ACTIVE_INTENT.get())
+        hydrate_rows = ranked_secondary[:hydration_limit]
+        # Full relation hydration is deliberately reserved for one strongly
+        # named route candidate. Lightweight Waymarked geometry remains
+        # available for section planning even when hydration is skipped.
         if hydrate_rows:
             with ThreadPoolExecutor(max_workers=len(hydrate_rows)) as pool:
                 hydrate_futures = [
@@ -514,7 +542,7 @@ def _relation_loop(v3, gr, start: dict[str, Any], target_km: float):
             _LAST_DISCOVERED_TRAILS.set(refreshed)
             _coastal_section_log(
                 "full-relation-recovery",
-                attempted=min(2, len(ranked_secondary)),
+                attempted=len(hydrate_rows),
                 hydrated=len(hydrated),
                 accepted=len(rows),
                 target=round(float(target_km), 1),
