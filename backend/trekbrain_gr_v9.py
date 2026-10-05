@@ -163,7 +163,13 @@ def _waymarked_bbox(center: dict[str, Any], radius_km: float) -> str:
     return f"{minx:.1f},{miny:.1f},{maxx:.1f},{maxy:.1f}"
 
 
-def _waymarked_request(path: str, params: dict[str, Any], timeout_s: float) -> dict[str, Any]:
+def _waymarked_request(
+    path: str,
+    params: dict[str, Any],
+    timeout_s: float,
+    *,
+    retry: bool = True,
+) -> dict[str, Any]:
     """Fetch Waymarked once, with one short retry for transient network/5xx failures.
 
     Crozon production runs showed that a single cold Waymarked miss can collapse
@@ -178,7 +184,7 @@ def _waymarked_request(path: str, params: dict[str, Any], timeout_s: float) -> d
     }
     first_timeout = max(0.8, float(timeout_s))
     retry_timeout = max(0.9, min(1.6, first_timeout * 0.55))
-    timeouts = (first_timeout, retry_timeout)
+    timeouts = (first_timeout, retry_timeout) if retry else (first_timeout,)
     last_error = None
 
     for attempt, request_timeout in enumerate(timeouts, start=1):
@@ -513,6 +519,7 @@ def _discover_waymarked(center: dict[str, Any], radius_km: float) -> list[dict[s
             "/list/by_area",
             {"bbox": bbox, "limit": 20},
             _WAYMARKED_LIST_TIMEOUT_S,
+            retry=False,
         )
     except Exception:
         return []
@@ -546,6 +553,7 @@ def _discover_waymarked(center: dict[str, Any], radius_km: float) -> list[dict[s
             "/list/segments",
             {"bbox": bbox, "relations": ",".join(str(x) for x in relation_ids)},
             _WAYMARKED_SEGMENTS_TIMEOUT_S,
+            retry=False,
         )
     except Exception:
         return []
