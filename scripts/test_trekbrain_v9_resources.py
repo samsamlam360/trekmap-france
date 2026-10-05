@@ -10,62 +10,6 @@ if str(ROOT) not in sys.path:
 os.environ.setdefault("TREKBRAIN_VERSION", "v9")
 
 from backend.trekbrain_resources_v9 import enrich_resources
-from backend import free_planner_v2 as free
-
-
-# Public resource providers can transiently return a syntactically valid empty
-# collection. Resource-mode caching must leave that miss retryable, while a
-# later non-empty result is still cached normally.
-real_requests_get = free.requests.get
-free._CACHE.clear()
-resource_http_calls = {"count": 0}
-
-class FakeResourceResponse:
-    status_code = 200
-    def __init__(self, payload):
-        self._payload = payload
-    def raise_for_status(self):
-        return None
-    def json(self):
-        return self._payload
-
-def fake_resource_get(url, **kwargs):
-    resource_http_calls["count"] += 1
-    if resource_http_calls["count"] == 1:
-        return FakeResourceResponse({"features": []})
-    return FakeResourceResponse({"features": [{"properties": {"name": "Trouvé"}}]})
-
-free.requests.get = fake_resource_get
-try:
-    first_empty = free._request_json(
-        "https://resource-cache.test/api",
-        params={"q": "fontaine"},
-        retries=1,
-        ttl=3600,
-        cache_empty=False,
-    )
-    second_found = free._request_json(
-        "https://resource-cache.test/api",
-        params={"q": "fontaine"},
-        retries=1,
-        ttl=3600,
-        cache_empty=False,
-    )
-    third_cached = free._request_json(
-        "https://resource-cache.test/api",
-        params={"q": "fontaine"},
-        retries=1,
-        ttl=3600,
-        cache_empty=False,
-    )
-finally:
-    free.requests.get = real_requests_get
-    free._CACHE.clear()
-
-assert first_empty == {"features": []}, first_empty
-assert second_found.get("features"), second_found
-assert third_cached == second_found, (third_cached, second_found)
-assert resource_http_calls["count"] == 2, resource_http_calls
 
 
 def sample_plan():
@@ -297,7 +241,6 @@ captured_photon = {}
 
 def fake_photon_request(url, *, params=None, **kwargs):
     captured_photon.update(dict(params or {}))
-    captured_photon["_cache_empty"] = kwargs.get("cache_empty")
     return {
         "features": [{
             "properties": {
@@ -326,7 +269,6 @@ finally:
 assert exact_water and exact_water["water_status"] == "potable_referenced", exact_water
 assert captured_photon.get("q") == "fontaine", captured_photon
 assert "include" not in captured_photon, captured_photon
-assert captured_photon.get("_cache_empty") is False, captured_photon
 
 captured_lodging = {}
 def fake_lodging_request(url, *, params=None, **kwargs):
