@@ -273,31 +273,71 @@ def _bbox_route_query(
     query = f"[out:json][timeout:5];({clauses});out center tags {220 if include_terrain else 160};"
 
     data = None
-    mirrors = list(free.OVERPASS_URLS)[:2]
-    for mirror_index, url in enumerate(mirrors):
+    mirrors = list(free.OVERPASS_URLS)[:3]
+
+    # Keep normal provider load unchanged: the primary mirror gets the first
+    # chance on its own. Only when it fails or returns an empty corridor do we
+    # fan out to the two independent fallback mirrors in parallel.
+    if mirrors:
         try:
-            candidate = free._request_json(
-                url,
+            primary = free._request_json(
+                mirrors[0],
                 data={"data": query},
-                timeout=1.8 if mirror_index == 0 else 0.85,
+                timeout=1.8,
                 ttl=3600,
-                service=(
-                    ("Overpass route bundle" if include_terrain else "Overpass route stays")
-                    + ("" if mirror_index == 0 else " fallback")
-                ),
+                service="Overpass route bundle" if include_terrain else "Overpass route stays",
                 retries=1,
             )
         except Exception:
-            candidate = None
-        if not isinstance(candidate, dict):
-            continue
-        data = candidate
-        # A syntactically valid but empty Overpass response is not enough to
-        # suppress all resource fallbacks. Public mirrors occasionally serve
-        # incomplete/lagging indexes, so give one independent mirror a short
-        # chance before accepting an empty corridor.
-        if candidate.get("elements"):
-            break
+            primary = None
+        if isinstance(primary, dict):
+            data = primary
+
+    if not (isinstance(data, dict) and data.get("elements")) and len(mirrors) > 1:
+        fallback_urls = mirrors[1:3]
+
+        def fallback_request(index_url):
+            index, url = index_url
+            try:
+                return index, free._request_json(
+                    url,
+                    data={"data": query},
+                    timeout=0.85,
+                    ttl=3600,
+                    service=(
+                        ("Overpass route bundle" if include_terrain else "Overpass route stays")
+                        + f" fallback {index}"
+                    ),
+                    retries=1,
+                )
+            except Exception:
+                return index, None
+
+        fallback_results = {}
+        with ThreadPoolExecutor(max_workers=len(fallback_urls)) as pool:
+            futures = [
+                pool.submit(fallback_request, (index + 1, url))
+                for index, url in enumerate(fallback_urls)
+            ]
+            for future in as_completed(futures):
+                index, candidate = future.result()
+                fallback_results[index] = candidate
+                if isinstance(candidate, dict) and candidate.get("elements"):
+                    data = candidate
+                    for pending in futures:
+                        if pending is not future:
+                            pending.cancel()
+                    break
+
+        # If every fallback mirror was empty, retain one syntactically valid
+        # empty response only so the parser can return preloaded=False. The
+        # outer Photon/resource fallbacks then remain eligible.
+        if not (isinstance(data, dict) and data.get("elements")):
+            for index in sorted(fallback_results):
+                candidate = fallback_results[index]
+                if isinstance(candidate, dict):
+                    data = candidate
+                    break
 
     if not isinstance(data, dict):
         return [], [], False
