@@ -362,15 +362,23 @@ def _relation_loop(v3, gr, start: dict[str, Any], target_km: float):
         # serially, making a cold long-loop request pay the full latency of
         # generic Overpass *and then* Waymarked. Start both together and merge
         # them in the same deterministic order as before.
+        generic_discover = getattr(gr, "_discover_generic", None)
+        waymarked_discover = getattr(gr, "_discover_waymarked", None)
         with ThreadPoolExecutor(max_workers=2) as pool:
-            generic_future = pool.submit(gr._discover_generic, v3, start, radius)
-            secondary_future = pool.submit(gr._discover_waymarked, start, radius)
+            generic_future = (
+                pool.submit(generic_discover, v3, start, radius)
+                if callable(generic_discover) else None
+            )
+            secondary_future = (
+                pool.submit(waymarked_discover, start, radius)
+                if callable(waymarked_discover) else None
+            )
             try:
-                generic = list(generic_future.result() or [])
+                generic = list(generic_future.result() or []) if generic_future else []
             except Exception:
                 generic = []
             try:
-                secondary = list(secondary_future.result() or [])
+                secondary = list(secondary_future.result() or []) if secondary_future else []
             except Exception:
                 secondary = []
 
