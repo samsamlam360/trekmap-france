@@ -295,7 +295,11 @@ try:
     ]
 
     def fake_overpass_failover(url, **kwargs):
-        overpass_failover_calls.append((url, float(kwargs.get("timeout") or 0)))
+        overpass_failover_calls.append((
+            url,
+            float(kwargs.get("timeout") or 0),
+            kwargs.get("cache_empty"),
+        ))
         if "primary.test" in url:
             return {"elements": []}
         try:
@@ -352,6 +356,7 @@ assert len(overpass_failover_calls) == 3, overpass_failover_calls
 assert "primary.test" in overpass_failover_calls[0][0], overpass_failover_calls
 assert overpass_failover_calls[0][1] <= 1.81, overpass_failover_calls
 assert all(call[1] <= 0.86 for call in overpass_failover_calls[1:]), overpass_failover_calls
+assert all(call[2] is False for call in overpass_failover_calls), overpass_failover_calls
 assert {call[0] for call in overpass_failover_calls[1:]} == {
     "https://secondary.test/api/interpreter",
     "https://tertiary.test/api/interpreter",
