@@ -205,7 +205,7 @@ assert full_route["relation_ref"] == "GR 58", full_route
 assert rescue._dist(full_route["coords"][0], full_route["coords"][-1]) < 0.05
 assert hydrate_calls == [580058], hydrate_calls
 
-# Generic Overpass and Waymarked are independent second-tier evidence sources.
+# Generic Overpass and Waymarked are independent second-tier evidence sources; keep them concurrent.
 # They must overlap rather than serialise their cold-provider latency. A barrier
 # makes the regression deterministic: sequential execution would break it.
 evidence_barrier = threading.Barrier(2)
