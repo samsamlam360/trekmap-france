@@ -190,6 +190,44 @@ assert len(overshoot_calls) == 1, overshoot_calls
 assert round(float(overshoot_calls[0][0]), 1) == 90.0, overshoot_calls
 
 
+# Beaufortain production regression: ORS may turn a 90 km objective into a
+# ~185 km loop. Do not append a residual lobe to an already oversized route.
+# Calibrate one replacement request from the observed provider ratio instead.
+oversized_calls = []
+
+def badly_oversized_roundtrip_request(start, target_km, seed):
+    oversized_calls.append((float(target_km), int(seed)))
+    returned = 185.0 if len(oversized_calls) == 1 else 109.0
+    offset = 0.22 if len(oversized_calls) == 1 else 0.12
+    return {
+        "coords": [
+            [float(start["lat"]), float(start["lon"])],
+            [float(start["lat"]) + offset, float(start["lon"]) + 0.09],
+            [float(start["lat"]) + offset * 0.5, float(start["lon"]) + 0.16],
+            [float(start["lat"]), float(start["lon"])],
+        ],
+        "distance": returned,
+        "fallback": False,
+        "profile": "foot-hiking",
+        "routing_mode": "ors-round-trip",
+    }, None
+
+roundtrip._roundtrip_request = badly_oversized_roundtrip_request
+try:
+    calibrated = roundtrip._best_roundtrip(START, 108.0, 13.5, 22.5, 6, V3)
+finally:
+    roundtrip._roundtrip_request = real_roundtrip_request
+
+assert calibrated["fallback"] is False, calibrated
+assert calibrated["routing_mode"] == "ors-round-trip", calibrated
+assert calibrated["round_trip_lobes"] == 1, calibrated
+assert abs(float(calibrated["distance"]) - 109.0) < 0.01, calibrated
+assert len(oversized_calls) == 2, oversized_calls
+assert round(float(oversized_calls[0][0]), 1) == 90.0, oversized_calls
+assert 51.0 <= float(oversized_calls[1][0]) <= 54.0, oversized_calls
+assert calibrated.get("round_trip_lobe_distances_km") == [109.0], calibrated
+assert calibrated.get("long_roundtrip_early_accept") is True, calibrated
+
 # Beaufortain-style regression: a safe first long lobe can be slightly below
 # the global window. The second request must target only the observed residual,
 # not repeat an equal theoretical half and overshoot the trek dramatically.

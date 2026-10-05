@@ -231,10 +231,44 @@ def _multi_lobe_roundtrip(roundtrip, start, target_km: float, daily_min: float, 
         coords = list(route.get("coords") or [])
         if len(coords) < 2:
             raise HTTPException(status_code=503, detail="Une sous-boucle ORS n'a pas fourni de géométrie exploitable.")
+        returned_distance = float(route.get("distance") or 0)
+
+        # A provider can overshoot a long round-trip objective dramatically.
+        # If the very first 90 km request already exceeds the whole trek's
+        # feasible ceiling, adding another positive lobe can only make the plan
+        # worse. Use the observed provider ratio to make one bounded corrective
+        # request and replace the oversized first lobe when it is closer to the
+        # requested total.
+        if index == 0 and returned_distance > feasible_high and returned_distance > 0:
+            provider_ratio = returned_distance / max(float(lobe_target), 1.0)
+            corrective_target = float(target_km) / max(provider_ratio, 0.25)
+            corrective_target = max(12.0, min(85.0, corrective_target))
+            if abs(corrective_target - float(lobe_target)) >= 4.0:
+                corrective, corrective_warning = roundtrip._roundtrip_request(
+                    start, corrective_target, seeds[index * 2 + 1]
+                )
+                if corrective_warning:
+                    warnings.append(corrective_warning)
+                if isinstance(corrective, dict):
+                    corrective_coords = list(corrective.get("coords") or [])
+                    try:
+                        corrective_distance = float(corrective.get("distance") or 0)
+                    except (TypeError, ValueError):
+                        corrective_distance = 0.0
+                    if (
+                        len(corrective_coords) >= 2
+                        and corrective_distance > 0
+                        and abs(corrective_distance - target_km)
+                        < abs(returned_distance - target_km)
+                    ):
+                        route = corrective
+                        coords = corrective_coords
+                        returned_distance = corrective_distance
+                        requested_lobes[-1] = round(float(corrective_target), 2)
+
         if merged and coords and merged[-1] == coords[0]:
             coords = coords[1:]
         merged.extend(coords)
-        returned_distance = float(route.get("distance") or 0)
         total += returned_distance
         returned_lobes.append(round(returned_distance, 2))
         used_lobes += 1
@@ -245,6 +279,10 @@ def _multi_lobe_roundtrip(roundtrip, start, target_km: float, daily_min: float, 
         # the user's global multi-day distance window, stop here instead of
         # blindly concatenating another lobe and doubling the trek.
         if feasible_low <= total <= feasible_high:
+            break
+        # Once the accumulated distance is above the global ceiling, another
+        # positive loop cannot repair it. Stop instead of compounding overshoot.
+        if total > feasible_high:
             break
 
     if len(merged) < 2:
