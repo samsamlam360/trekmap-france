@@ -204,7 +204,7 @@ def _bbox_route_query(
     *,
     include_terrain: bool,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]], bool]:
-    """One compact Overpass query on the final route corridor."""
+    """One compact Overpass corridor query with one bounded empty-result failover."""
     from . import free_planner_v2 as free
 
     valid = []
