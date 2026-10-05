@@ -272,33 +272,13 @@ def _bbox_route_query(
     )
     query = f"[out:json][timeout:5];({clauses});out center tags {220 if include_terrain else 160};"
 
-    data = None
-    mirrors = list(free.OVERPASS_URLS)[:2]
-    for mirror_index, url in enumerate(mirrors):
-        try:
-            candidate = free._request_json(
-                url,
-                data={"data": query},
-                timeout=1.8 if mirror_index == 0 else 0.85,
-                ttl=3600,
-                service=(
-                    ("Overpass route bundle" if include_terrain else "Overpass route stays")
-                    + ("" if mirror_index == 0 else " fallback")
-                ),
-                retries=1,
-            )
-        except Exception:
-            candidate = None
-        if not isinstance(candidate, dict):
-            continue
-        data = candidate
-        # A syntactically valid but empty Overpass response is not enough to
-        # suppress all resource fallbacks. Public mirrors occasionally serve
-        # incomplete/lagging indexes, so give one independent mirror a short
-        # chance before accepting an empty corridor.
-        if candidate.get("elements"):
-            break
-
+    data = free._request_overpass_nonempty(
+        query,
+        primary_timeout=1.8,
+        fallback_timeout=0.95,
+        ttl=3600,
+        service="Overpass route bundle" if include_terrain else "Overpass route stays",
+    )
     if not isinstance(data, dict):
         return [], [], False
 
