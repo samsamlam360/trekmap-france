@@ -109,6 +109,23 @@ def _cache_put(key: str, value: Any):
             _CACHE.pop(old_key, None)
 
 
+def _empty_collection_payload(value: Any) -> bool:
+    """Detect successful-but-empty provider collection responses.
+
+    Resource discovery uses public mirrors whose indexes can be temporarily
+    empty or incomplete. Those misses must remain retryable instead of becoming
+    long-lived negative cache entries.
+    """
+    if isinstance(value, dict):
+        for key in ("elements", "features", "results"):
+            if key in value:
+                return not bool(value.get(key))
+        return not bool(value)
+    if isinstance(value, (list, tuple)):
+        return not bool(value)
+    return value is None
+
+
 def _request_json(
     url: str,
     *,
@@ -118,11 +135,16 @@ def _request_json(
     ttl=1800,
     service="service cartographique",
     retries=2,
+    cache_empty=True,
 ):
     key = _cache_key(url, params, data)
     cached = _cache_get(key, ttl)
     if cached is not None:
-        return cached
+        if cache_empty or not _empty_collection_payload(cached):
+            return cached
+        # Ignore and discard a previous negative cache entry when this caller
+        # explicitly needs an independently retryable resource lookup.
+        _CACHE.pop(key, None)
 
     headers = {
         "User-Agent": USER_AGENT,
@@ -158,7 +180,8 @@ def _request_json(
 
             response.raise_for_status()
             value = response.json()
-            _cache_put(key, value)
+            if cache_empty or not _empty_collection_payload(value):
+                _cache_put(key, value)
             return deepcopy(value)
 
         except requests.Timeout as exc:

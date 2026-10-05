@@ -466,6 +466,7 @@ def _bbox_route_water_food(result: dict[str, Any], intent: dict[str, Any]) -> li
             ttl=3600,
             service="Overpass route resources",
             retries=1,
+            cache_empty=False,
         )
     except Exception:
         return []
