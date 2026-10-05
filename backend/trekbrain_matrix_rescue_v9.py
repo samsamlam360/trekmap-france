@@ -192,6 +192,8 @@ def _multi_lobe_roundtrip(roundtrip, start, target_km: float, daily_min: float, 
     warnings = []
     requested_lobes = []
     returned_lobes = []
+    observed_ratios = []
+    residual_provider_ratio = 1.0
     seeds = (3, 11, 29, 47, 61, 73)
 
     feasible_low = max(
@@ -211,10 +213,18 @@ def _multi_lobe_roundtrip(roundtrip, start, target_km: float, daily_min: float, 
             lobe_target = initial_target
         else:
             remaining = max(0.0, target_km - total)
+            # Reuse a strong observed ORS overshoot ratio when sizing the
+            # residual lobe. Asking for the raw remaining distance after the
+            # provider just returned ~1.5x its objective compounds the same
+            # error (the Queyras regression). Do not amplify undershoot here;
+            # only correct a material overshoot.
+            adjusted_remaining = remaining
+            if residual_provider_ratio > 1.12:
+                adjusted_remaining = remaining / min(residual_provider_ratio, 2.5)
             # A tiny residual does not justify another route request. If total
             # were already feasible we would have stopped below; otherwise ask
             # for at least a small genuine loop rather than a degenerate trace.
-            lobe_target = max(6.0, min(90.0, remaining))
+            lobe_target = max(6.0, min(90.0, adjusted_remaining))
         requested_lobes.append(round(float(lobe_target), 2))
 
         # One normal attempt plus one alternate seed only if necessary.
@@ -266,11 +276,19 @@ def _multi_lobe_roundtrip(roundtrip, start, target_km: float, daily_min: float, 
                         returned_distance = corrective_distance
                         requested_lobes[-1] = round(float(corrective_target), 2)
 
+        accepted_request = max(float(requested_lobes[-1] or lobe_target), 1.0)
+        accepted_ratio = returned_distance / accepted_request if returned_distance > 0 else 1.0
+        if math.isfinite(accepted_ratio) and accepted_ratio > 0:
+            residual_provider_ratio = max(0.5, min(2.5, accepted_ratio))
+        else:
+            residual_provider_ratio = 1.0
+
         if merged and coords and merged[-1] == coords[0]:
             coords = coords[1:]
         merged.extend(coords)
         total += returned_distance
         returned_lobes.append(round(returned_distance, 2))
+        observed_ratios.append(round(residual_provider_ratio, 3))
         used_lobes += 1
 
         # ORS round-trip length is an objective, not a hard output. In sparse
@@ -301,6 +319,7 @@ def _multi_lobe_roundtrip(roundtrip, start, target_km: float, daily_min: float, 
         "requested_distance_km": round(target_km, 1),
         "round_trip_lobe_requests_km": requested_lobes[:used_lobes],
         "round_trip_lobe_distances_km": returned_lobes[:used_lobes],
+        "round_trip_lobe_observed_ratios": observed_ratios[:used_lobes],
         "long_roundtrip_early_accept": used_lobes < pieces,
         "adaptive_long_roundtrip": True,
     }
