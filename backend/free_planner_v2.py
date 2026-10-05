@@ -118,6 +118,7 @@ def _request_json(
     ttl=1800,
     service="service cartographique",
     retries=2,
+    cache_empty=True,
 ):
     key = _cache_key(url, params, data)
     cached = _cache_get(key, ttl)
@@ -158,7 +159,17 @@ def _request_json(
 
             response.raise_for_status()
             value = response.json()
-            _cache_put(key, value)
+            should_cache = True
+            if not cache_empty:
+                if isinstance(value, dict):
+                    if "elements" in value:
+                        should_cache = bool(value.get("elements"))
+                    elif "features" in value:
+                        should_cache = bool(value.get("features"))
+                elif isinstance(value, list):
+                    should_cache = bool(value)
+            if should_cache:
+                _cache_put(key, value)
             return deepcopy(value)
 
         except requests.Timeout as exc:
@@ -181,6 +192,73 @@ def _request_json(
     if last_error:
         raise last_error
     raise RuntimeError(f"{service} indisponible.")
+
+
+
+def _request_overpass_nonempty(
+    query: str,
+    *,
+    primary_timeout: float = 1.8,
+    fallback_timeout: float = 0.95,
+    ttl: int = 3600,
+    service: str = "Overpass",
+):
+    """Return the first non-empty Overpass response without sticky empty caches.
+
+    The primary mirror gets the full interactive budget. If it returns no
+    elements or fails, the two independent fallback mirrors are queried in
+    parallel so provider diversity does not add serial latency.
+    """
+    mirrors = list(OVERPASS_URLS)
+    if not mirrors:
+        return None
+
+    def fetch(url, timeout, label):
+        try:
+            value = _request_json(
+                url,
+                data={"data": query},
+                timeout=timeout,
+                ttl=ttl,
+                service=label,
+                retries=1,
+                cache_empty=False,
+            )
+        except Exception:
+            return None
+        return value if isinstance(value, dict) else None
+
+    primary = fetch(mirrors[0], primary_timeout, service)
+    if primary and primary.get("elements"):
+        return primary
+
+    fallbacks = mirrors[1:3]
+    if not fallbacks:
+        return primary
+
+    responses = []
+    with ThreadPoolExecutor(max_workers=len(fallbacks)) as pool:
+        futures = [
+            pool.submit(
+                fetch,
+                url,
+                fallback_timeout,
+                f"{service} fallback {index + 1}",
+            )
+            for index, url in enumerate(fallbacks)
+        ]
+        for future in as_completed(futures):
+            try:
+                candidate = future.result()
+            except Exception:
+                candidate = None
+            if isinstance(candidate, dict):
+                responses.append(candidate)
+
+    for candidate in responses:
+        if candidate.get("elements"):
+            return candidate
+    return responses[0] if responses else primary
 
 
 def _dist(a, b):
