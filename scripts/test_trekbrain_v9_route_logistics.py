@@ -1,6 +1,7 @@
 """Regression: lodging must not reshape the hiking route, with or without a GR."""
 from pathlib import Path
 import sys
+import threading
 
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
@@ -216,6 +217,67 @@ finally:
 assert len(chosen_fast) == 4, chosen_fast
 assert order_calls == {"bbox": 1, "photon": 0}, order_calls
 assert meta_fast["elapsed_ms"] >= 0
+
+# When structured lodging and terrain are both requested, Overpass and Photon
+# are independent provider calls and must start in the same wave. This preserves
+# the exact candidate merge while making latency approach max(provider times)
+# instead of their sum. Photon must run exactly once, not again as a fallback.
+real_bundle_parallel = logistics._bbox_route_bundle
+real_photon_parallel = logistics._photon_split_stays
+parallel_barrier = threading.Barrier(2)
+parallel_errors = []
+parallel_calls = {"overpass": 0, "photon": 0}
+
+def parallel_bundle(_coords, category):
+    parallel_calls["overpass"] += 1
+    try:
+        parallel_barrier.wait(timeout=0.75)
+    except threading.BrokenBarrierError:
+        parallel_errors.append("overpass-not-concurrent")
+    return (
+        [dict(x) for x in camps],
+        [{
+            "name": "Fontaine parallèle",
+            "lat": 0.0,
+            "lon": 0.25,
+            "category": "water",
+            "water_status": "potable_referenced",
+            "source_url": "osm://parallel-water",
+        }],
+        True,
+    )
+
+def parallel_photon(*args, **kwargs):
+    parallel_calls["photon"] += 1
+    try:
+        parallel_barrier.wait(timeout=0.75)
+    except threading.BrokenBarrierError:
+        parallel_errors.append("photon-not-concurrent")
+    return []
+
+try:
+    logistics._bbox_route_bundle = parallel_bundle
+    logistics._photon_split_stays = parallel_photon
+    chosen_parallel, _projected_parallel, meta_parallel = logistics._discover_stays(
+        FakeV3(),
+        FakeRoundtrip,
+        FakeStayRescue,
+        coords,
+        {"name": "Départ", "lat": 0.0, "lon": 0.0},
+        "camping",
+        5,
+        20.0,
+        False,
+        want_terrain=True,
+    )
+finally:
+    logistics._bbox_route_bundle = real_bundle_parallel
+    logistics._photon_split_stays = real_photon_parallel
+
+assert parallel_errors == [], parallel_errors
+assert parallel_calls == {"overpass": 1, "photon": 1}, parallel_calls
+assert len(chosen_parallel) == 4, chosen_parallel
+assert meta_parallel["terrain_preloaded"] is True
 
 # A public Overpass mirror may return a valid JSON object with no elements
 # while another mirror still has the corridor data. Treat the empty response as
