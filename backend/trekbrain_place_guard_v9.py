@@ -21,6 +21,16 @@ BELLE_ILE = {
     "geocode_guard": "belle-ile-en-mer",
 }
 
+BEAUFORT_SAVOIE = {
+    "name": "Beaufort, Savoie, Auvergne-Rhône-Alpes, France",
+    "short_name": "Beaufort",
+    "lat": 45.7189,
+    "lon": 6.5756,
+    "category": "place",
+    "source_url": "https://www.openstreetmap.org/?mlat=45.718900&mlon=6.575600#map=12/45.718900/6.575600",
+    "geocode_guard": "beaufort-savoie",
+}
+
 
 def _fold(value: str) -> str:
     text = unicodedata.normalize("NFKD", str(value or ""))
@@ -40,10 +50,26 @@ def _is_belle_ile_en_mer(value: str) -> bool:
     return True
 
 
+def _is_beaufort_savoie(value: str) -> bool:
+    """Recognise Beaufort in Savoie without hijacking French homonyms."""
+    text = _fold(value)
+    if "beaufortain" in text or "beaufort sur doron" in text:
+        return True
+    if not re.search(r"\bbeaufort\b", text):
+        return False
+    return bool(
+        re.search(r"\bsavoie\b", text)
+        or "73270" in text
+        or "auvergne rhone alpes" in text
+    )
+
+
 def guarded_geocode_factory(original):
     def geocode(query: str, **kwargs):
         if _is_belle_ile_en_mer(query):
             return [dict(BELLE_ILE)]
+        if _is_beaufort_savoie(query):
+            return [dict(BEAUFORT_SAVOIE)]
         # Preserve optional geocoder controls added by v9 (for example the
         # Nominatim retry budget). Dropping these kwargs silently re-enabled a
         # redundant Nominatim lookup on the round-trip fallback path.
@@ -68,16 +94,33 @@ def install_place_guard(v3, geo, request_module) -> None:
 
     def extract_prompt_places(prompt: str):
         rows = list(original_extract(prompt) or [])
-        if not _is_belle_ile_en_mer(prompt):
-            return rows
-        canonical = {"kind": "route_area", "place": "Belle-Île-en-Mer", "after_trip": False}
-        filtered = [
-            row for row in rows
-            if not _is_belle_ile_en_mer(str((row or {}).get("place") or ""))
-        ]
-        return [canonical] + filtered[:5]
+
+        if _is_beaufort_savoie(prompt):
+            canonical = {"kind": "route_area", "place": "Beaufort, Savoie", "after_trip": False}
+            rows = [
+                row for row in rows
+                if not _is_beaufort_savoie(str((row or {}).get("place") or ""))
+            ]
+            rows = [canonical] + rows[:5]
+
+        if _is_belle_ile_en_mer(prompt):
+            canonical = {"kind": "route_area", "place": "Belle-Île-en-Mer", "after_trip": False}
+            rows = [
+                row for row in rows
+                if not _is_belle_ile_en_mer(str((row or {}).get("place") or ""))
+            ]
+            rows = [canonical] + rows[:5]
+
+        return rows[:6]
 
     request_module._extract_prompt_places = extract_prompt_places
 
 
-__all__ = ["install_place_guard", "guarded_geocode_factory", "BELLE_ILE", "_is_belle_ile_en_mer"]
+__all__ = [
+    "install_place_guard",
+    "guarded_geocode_factory",
+    "BELLE_ILE",
+    "BEAUFORT_SAVOIE",
+    "_is_belle_ile_en_mer",
+    "_is_beaufort_savoie",
+]

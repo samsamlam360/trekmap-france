@@ -36,6 +36,36 @@ guarded("Paris, France")
 assert calls == ["Paris, France"]
 
 
+# Beaufort is highly ambiguous in France. The guard must pin only explicit
+# Savoie/Beaufortain wording and leave other homonyms to the normal geocoder.
+beaufort_calls = []
+
+def wrong_beaufort_geocoder(query):
+    beaufort_calls.append(query)
+    return [{
+        "name": "Beaufort-en-Anjou, Maine-et-Loire, France",
+        "short_name": "Beaufort-en-Anjou",
+        "lat": 47.440,
+        "lon": -0.215,
+    }]
+
+guarded_beaufort = guarded_geocode_factory(wrong_beaufort_geocoder)
+for query in (
+    "Beaufort, Savoie, France",
+    "Beaufortain, France",
+    "Beaufort-sur-Doron",
+):
+    row = guarded_beaufort(query)[0]
+    assert abs(float(row["lat"]) - 45.7189) < 0.001, row
+    assert abs(float(row["lon"]) - 6.5756) < 0.001, row
+    assert row["short_name"] == "Beaufort", row
+assert beaufort_calls == [], beaufort_calls
+
+guarded_beaufort("Beaufort, Jura, France")
+guarded_beaufort("Beaufort-en-Anjou, Maine-et-Loire, France")
+assert len(beaufort_calls) == 2, beaufort_calls
+
+
 # The request layer must recognise the island even with wording that the generic
 # parser used to miss ("trek de ..." or simply "tour de Belle-Île").
 class DummyGeo:
@@ -52,6 +82,15 @@ places = DummyRequest._extract_prompt_places("Je veux faire un trek de Belle-Îl
 assert places and places[0]["kind"] == "route_area"
 assert places[0]["place"] == "Belle-Île-en-Mer"
 assert DummyGeo._geocode("Belle-Ile France")[0]["lon"] < -3.0
+
+beaufort_places = DummyRequest._extract_prompt_places(
+    "Je veux faire un trek en boucle de 6 jours dans le Beaufortain"
+)
+assert beaufort_places and beaufort_places[0]["kind"] == "route_area", beaufort_places
+assert beaufort_places[0]["place"] == "Beaufort, Savoie", beaufort_places
+beaufort_row = DummyGeo._geocode("Beaufort, Savoie, France")[0]
+assert abs(float(beaufort_row["lat"]) - 45.7189) < 0.001, beaufort_row
+assert abs(float(beaufort_row["lon"]) - 6.5756) < 0.001, beaufort_row
 
 
 # Natural language wins over a stale form: "faire le tour" means a loop. For
