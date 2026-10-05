@@ -279,6 +279,85 @@ assert parallel_calls == {"overpass": 1, "photon": 1}, parallel_calls
 assert len(chosen_parallel) == 4, chosen_parallel
 assert meta_parallel["terrain_preloaded"] is True
 
+# If the structured corridor is empty, one bounded Nominatim route query may
+# run while Photon is already in flight. It must recover usable stays without
+# opening a new serial phase or touching the hiking geometry.
+real_bundle_nominatim = logistics._bbox_route_bundle
+real_photon_nominatim = logistics._photon_split_stays
+real_nom_route = logistics._nominatim_route_stays
+fallback_calls = {"bbox": 0, "photon": 0, "nominatim": 0}
+
+def empty_bundle_for_nom(_coords, category):
+    fallback_calls["bbox"] += 1
+    return [], [], False
+
+def empty_photon_for_nom(*args, **kwargs):
+    fallback_calls["photon"] += 1
+    return []
+
+def recovered_nom_stays(_coords, category):
+    fallback_calls["nominatim"] += 1
+    return [dict(x) for x in camps]
+
+try:
+    logistics._bbox_route_bundle = empty_bundle_for_nom
+    logistics._photon_split_stays = empty_photon_for_nom
+    logistics._nominatim_route_stays = recovered_nom_stays
+    chosen_nom, projected_nom, meta_nom = logistics._discover_stays(
+        FakeV3(),
+        FakeRoundtrip,
+        FakeStayRescue,
+        coords,
+        {"name": "Départ", "lat": 0.0, "lon": 0.0},
+        "camping",
+        5,
+        20.0,
+        False,
+        want_terrain=True,
+    )
+finally:
+    logistics._bbox_route_bundle = real_bundle_nominatim
+    logistics._photon_split_stays = real_photon_nominatim
+    logistics._nominatim_route_stays = real_nom_route
+
+assert fallback_calls == {"bbox": 1, "photon": 1, "nominatim": 1}, fallback_calls
+assert len(projected_nom) == 4, projected_nom
+assert len(chosen_nom) == 4, chosen_nom
+assert meta_nom["terrain_preloaded"] is False
+
+# The Nominatim fallback itself must be one bounded, retryable query. Empty
+# responses are deliberately not cached because public POI indexes can recover.
+real_nom_request = free._request_json
+nom_requests = []
+try:
+    def fake_nom_request(url, **kwargs):
+        nom_requests.append((url, kwargs))
+        return [{
+            "lat": "0.11",
+            "lon": "0.20",
+            "type": "hotel",
+            "class": "tourism",
+            "display_name": "Hôtel borné, Zone test, France",
+            "osm_type": "node",
+            "osm_id": 4242,
+        }]
+
+    free._request_json = fake_nom_request
+    nom_rows = logistics._nominatim_route_stays(coords, "lodging")
+finally:
+    free._request_json = real_nom_request
+
+assert len(nom_requests) == 1, nom_requests
+nom_url, nom_kwargs = nom_requests[0]
+assert nom_url == free.NOMINATIM_URL, nom_requests
+assert nom_kwargs.get("cache_empty") is False, nom_kwargs
+assert float(nom_kwargs.get("timeout") or 0) <= 1.51, nom_kwargs
+assert int((nom_kwargs.get("params") or {}).get("bounded") or 0) == 1, nom_kwargs
+assert (nom_kwargs.get("params") or {}).get("viewbox"), nom_kwargs
+assert len(nom_rows) == 1 and nom_rows[0]["name"] == "Hôtel borné", nom_rows
+assert nom_rows[0]["category"] == "lodging", nom_rows
+assert nom_rows[0]["source_url"].endswith("/node/4242"), nom_rows
+
 # A public Overpass primary may be empty or unavailable while another mirror
 # still has the corridor data. Keep the normal single-primary path, then race at
 # most two short fallback mirrors only after that miss.
