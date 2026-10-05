@@ -272,18 +272,33 @@ def _bbox_route_query(
     )
     query = f"[out:json][timeout:5];({clauses});out center tags {220 if include_terrain else 160};"
 
-    try:
-        url = list(free.OVERPASS_URLS)[0]
-        data = free._request_json(
-            url,
-            data={"data": query},
-            timeout=1.8,
-            ttl=3600,
-            service="Overpass route bundle" if include_terrain else "Overpass route stays",
-            retries=1,
-        )
-    except Exception:
-        data = None
+    data = None
+    mirrors = list(free.OVERPASS_URLS)[:2]
+    for mirror_index, url in enumerate(mirrors):
+        try:
+            candidate = free._request_json(
+                url,
+                data={"data": query},
+                timeout=1.8 if mirror_index == 0 else 0.85,
+                ttl=3600,
+                service=(
+                    ("Overpass route bundle" if include_terrain else "Overpass route stays")
+                    + ("" if mirror_index == 0 else " fallback")
+                ),
+                retries=1,
+            )
+        except Exception:
+            candidate = None
+        if not isinstance(candidate, dict):
+            continue
+        data = candidate
+        # A syntactically valid but empty Overpass response is not enough to
+        # suppress all resource fallbacks. Public mirrors occasionally serve
+        # incomplete/lagging indexes, so give one independent mirror a short
+        # chance before accepting an empty corridor.
+        if candidate.get("elements"):
+            break
+
     if not isinstance(data, dict):
         return [], [], False
 
@@ -326,7 +341,11 @@ def _bbox_route_query(
                     seen_terrain.add(key)
                     terrain.append(resource)
 
-    return stays, terrain, True
+    # "preloaded" means this query actually supplied reusable corridor
+    # evidence. An empty provider response must not make the outer resource
+    # overlay skip its independent terrain/Photon fallbacks.
+    preloaded = bool(stays or terrain)
+    return stays, terrain, preloaded
 
 
 def _bbox_route_stays(coords, category: str) -> list[dict[str, Any]]:
