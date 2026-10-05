@@ -6,6 +6,7 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+from backend import free_planner_v2 as free
 from backend import trekbrain_route_logistics_v9 as logistics
 from backend import trekbrain_route_logistics_guard_v9 as logistics_guard
 
@@ -215,6 +216,76 @@ finally:
 assert len(chosen_fast) == 4, chosen_fast
 assert order_calls == {"bbox": 1, "photon": 0}, order_calls
 assert meta_fast["elapsed_ms"] >= 0
+
+# A public Overpass mirror may return a valid JSON object with no elements
+# while another mirror still has the corridor data. Treat the empty response as
+# inconclusive, try exactly one short fallback mirror, and mark terrain as
+# preloaded only when reusable evidence was actually found.
+real_overpass_request = free._request_json
+real_overpass_urls = list(free.OVERPASS_URLS)
+overpass_failover_calls = []
+try:
+    free.OVERPASS_URLS = [
+        "https://primary.test/api/interpreter",
+        "https://secondary.test/api/interpreter",
+        "https://unused.test/api/interpreter",
+    ]
+
+    def fake_overpass_failover(url, **kwargs):
+        overpass_failover_calls.append((url, float(kwargs.get("timeout") or 0)))
+        if "primary.test" in url:
+            return {"elements": []}
+        if "secondary.test" in url:
+            return {
+                "elements": [
+                    {
+                        "type": "node",
+                        "id": 1,
+                        "lat": 0.0,
+                        "lon": 0.20,
+                        "tags": {"tourism": "camp_site", "name": "Camping miroir"},
+                    },
+                    {
+                        "type": "node",
+                        "id": 2,
+                        "lat": 0.0,
+                        "lon": 0.25,
+                        "tags": {"amenity": "drinking_water", "name": "Fontaine miroir"},
+                    },
+                    {
+                        "type": "node",
+                        "id": 3,
+                        "lat": 0.0,
+                        "lon": 0.30,
+                        "tags": {"shop": "bakery", "name": "Boulangerie miroir"},
+                    },
+                ]
+            }
+        raise AssertionError(f"unexpected third Overpass mirror call: {url}")
+
+    free._request_json = fake_overpass_failover
+    mirror_stays, mirror_terrain, mirror_preloaded = logistics._bbox_route_bundle(
+        coords, "camping"
+    )
+
+    # Both mirrors returning a syntactically valid empty result must keep the
+    # outer resource fallbacks eligible instead of pretending terrain was loaded.
+    free._request_json = lambda url, **kwargs: {"elements": []}
+    empty_stays, empty_terrain, empty_preloaded = logistics._bbox_route_bundle(
+        coords, "camping"
+    )
+finally:
+    free._request_json = real_overpass_request
+    free.OVERPASS_URLS = real_overpass_urls
+
+assert len(overpass_failover_calls) == 2, overpass_failover_calls
+assert overpass_failover_calls[0][1] <= 1.81, overpass_failover_calls
+assert overpass_failover_calls[1][1] <= 0.86, overpass_failover_calls
+assert [x["name"] for x in mirror_stays] == ["Camping miroir"], mirror_stays
+assert {x.get("category") for x in mirror_terrain} == {"water", "food"}, mirror_terrain
+assert mirror_preloaded is True
+assert empty_stays == [] and empty_terrain == [], (empty_stays, empty_terrain)
+assert empty_preloaded is False
 
 # When water/food are requested, the lodging corridor OSM response is reused
 # instead of paying for a second terrain query after planning.
