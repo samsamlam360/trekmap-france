@@ -262,14 +262,14 @@ def _geocode_nominatim(query: str, *, retries: int = 2):
     return out
 
 
-def _geocode_photon(query: str):
+def _geocode_photon(query: str, *, timeout: float = 12, retries: int = 2):
     data = _request_json(
         PHOTON_URL,
         params={"q": query, "limit": 6, "lang": "fr"},
-        timeout=12,
+        timeout=max(0.8, float(timeout)),
         ttl=43200,
         service="Photon",
-        retries=2,
+        retries=max(1, int(retries)),
     )
     out = []
     for feature in data.get("features", []) if isinstance(data, dict) else []:
@@ -554,6 +554,74 @@ def _photon_category_candidates(location: str, center, categories):
             place["opening_hours"] = ""
             items.append(place)
     return items
+
+
+def _photon_category_candidates_bounded(location: str, center, categories):
+    """Interactive Photon fallback for TrekBrain route shaping.
+
+    Preserve one representative query for every requested category, but keep the
+    public provider on a strict budget. Alternate terms run only when the first
+    wave did not produce enough real anchors for candidate generation.
+    """
+    primary_jobs = []
+    alternate_jobs = []
+    for cat in categories:
+        if cat == "water":
+            continue
+        terms = PHOTON_TERMS.get(cat, ())
+        if not terms:
+            continue
+        primary_jobs.append((cat, terms[0], f"{terms[0]} {location}"))
+        for term in terms[1:]:
+            alternate_jobs.append((cat, term, f"{term} {location}"))
+
+    def run_jobs(jobs, timeout_s):
+        if not jobs:
+            return []
+        rows_by_job = {}
+        with ThreadPoolExecutor(max_workers=min(5, len(jobs))) as pool:
+            futures = {
+                pool.submit(_geocode_photon, query, timeout=timeout_s, retries=1): (index, cat)
+                for index, (cat, _term, query) in enumerate(jobs)
+            }
+            for future in as_completed(futures):
+                index, cat = futures[future]
+                try:
+                    rows = future.result()
+                except Exception:
+                    rows = []
+                rows_by_job[index] = (cat, rows)
+
+        out = []
+        for index, (cat, _term, _query) in enumerate(jobs):
+            _resolved_cat, rows = rows_by_job.get(index, (cat, []))
+            for place in rows[:4]:
+                if _dist(center, place) > 35:
+                    continue
+                row = dict(place)
+                row["category"] = cat
+                row["source_url"] = _map_url(row["lat"], row["lon"])
+                row["water_status"] = "unverified"
+                row["opening_hours"] = ""
+                out.append(row)
+        return out
+
+    items = run_jobs(primary_jobs, 3.2)
+    if len(items) < 4 and alternate_jobs:
+        items.extend(run_jobs(alternate_jobs, 2.4))
+
+    deduped, seen = [], set()
+    for place in items:
+        key = (
+            round(float(place["lat"]), 5),
+            round(float(place["lon"]), 5),
+            place.get("category"),
+        )
+        if key in seen:
+            continue
+        seen.add(key)
+        deduped.append(place)
+    return deduped
 
 
 KNOWN = [

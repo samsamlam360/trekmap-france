@@ -30,6 +30,7 @@ from .free_planner_v2 import (
     _nearby,
     _overpass,
     _photon_category_candidates,
+    _photon_category_candidates_bounded,
     _request_json,
     FILTERS as BASE_FILTERS,
     PHOTON_URL,
@@ -1423,7 +1424,13 @@ def _build(data: AIPlanRequest, legacy_main):
             if corridor_centered and forced_start and forced_end:
                 base, extra = [], []
             else:
-                base = _photon_category_candidates(location, center, base_categories)
+                base = perf.call(
+                    "route.photon_regional_fallback",
+                    _photon_category_candidates_bounded,
+                    location,
+                    center,
+                    base_categories,
+                )
                 extra = []
 
     # If a traverse has too little context but the broad OSM query succeeded,
