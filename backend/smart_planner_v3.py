@@ -949,7 +949,7 @@ def _photon_anchor_resource(anchor, category: str, osm_tags, radius_km: float, q
         payload = _request_json(
             PHOTON_URL,
             params=params,
-            timeout=1.4,
+            timeout=0.95,
             ttl=21600,
             service="Photon route resources",
             retries=1,
