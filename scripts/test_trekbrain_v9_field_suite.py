@@ -312,13 +312,13 @@ try:
     def fake_structured_photon(url, **kwargs):
         params = kwargs.get("params") or {}
         structured_calls.append(dict(params))
-        osm_tag = request_v9._fold(str(params.get("osm_tag") or ""))
+        osm_tag = str(params.get("osm_tag") or "").casefold()
         query = request_v9._fold(str(params.get("q") or ""))
         if not params.get("bbox"):
             raise AssertionError(f"Photon resource request must stay bbox-bounded: {params!r}")
-        if osm_tag == "tourism camp site":
+        if osm_tag == "tourism:camp_site":
             name, key, value = "Camping structuré", "tourism", "camp_site"
-        elif osm_tag == "amenity drinking water":
+        elif osm_tag == "amenity:drinking_water":
             name, key, value = "Fontaine structurée", "amenity", "drinking_water"
         elif "hotel" in query:
             name, key, value = "Hôtel nommé", "tourism", "hotel"
