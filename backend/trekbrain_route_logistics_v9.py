@@ -390,6 +390,111 @@ def _bbox_route_query(
     return stays, terrain, preloaded
 
 
+def _nominatim_route_stays(
+    coords,
+    category: str,
+    timeout_s: float = 0.9,
+) -> list[dict[str, Any]]:
+    """One bounded independent stay fallback for transient OSM/Photon misses.
+
+    This is discovery-only. Returned rows still pass the normal projection,
+    stage-window and connector/transfer logic before becoming usable logistics.
+    """
+    from . import free_planner_v2 as free
+
+    valid = []
+    for point in coords or []:
+        if not isinstance(point, (list, tuple)) or len(point) < 2:
+            continue
+        try:
+            lat, lon = float(point[0]), float(point[1])
+        except (TypeError, ValueError):
+            continue
+        if math.isfinite(lat) and math.isfinite(lon):
+            valid.append((lat, lon))
+    if len(valid) < 2:
+        return []
+
+    min_lat = min(x[0] for x in valid)
+    max_lat = max(x[0] for x in valid)
+    min_lon = min(x[1] for x in valid)
+    max_lon = max(x[1] for x in valid)
+    mid_lat = (min_lat + max_lat) / 2.0
+    radius_km = 12.5 if category == "lodging" else 8.0
+    pad_lat = radius_km / 111.0
+    pad_lon = radius_km / max(35.0, 111.0 * math.cos(math.radians(mid_lat)))
+    south, north = min_lat - pad_lat, max_lat + pad_lat
+    west, east = min_lon - pad_lon, max_lon + pad_lon
+
+    term = "camping" if category == "camping" else "refuge" if category == "refuge" else "hotel"
+    try:
+        rows = free._request_json(
+            free.NOMINATIM_URL,
+            params={
+                "q": term,
+                "format": "jsonv2",
+                "limit": 24,
+                "countrycodes": "fr",
+                "bounded": 1,
+                "viewbox": f"{west:.6f},{north:.6f},{east:.6f},{south:.6f}",
+                "extratags": 1,
+            },
+            timeout=max(0.45, min(float(timeout_s), 1.1)),
+            ttl=3600,
+            service="Nominatim route stays",
+            retries=1,
+            cache_empty=False,
+        )
+    except Exception:
+        return []
+
+    out = []
+    for row in rows if isinstance(rows, list) else []:
+        try:
+            lat, lon = float(row["lat"]), float(row["lon"])
+        except (KeyError, TypeError, ValueError):
+            continue
+        if not (math.isfinite(lat) and math.isfinite(lon)):
+            continue
+
+        typ = _fold(row.get("type") or "")
+        cls = _fold(row.get("class") or "")
+        display = str(row.get("display_name") or row.get("name") or term)
+        semantic = _fold(display + " " + typ + " " + cls)
+        if category == "camping":
+            if typ not in {"camp site", "caravan site"} and "camp" not in semantic:
+                continue
+        elif category == "refuge":
+            if not any(token in semantic for token in ("refuge", "hut", "shelter", "abri")):
+                continue
+        else:
+            if not any(token in semantic for token in (
+                "hotel", "hostel", "gite", "auberge", "guest house",
+                "chalet", "camp", "refuge", "shelter", "apartment",
+            )):
+                continue
+
+        osm_type = str(row.get("osm_type") or "").casefold()
+        osm_kind = {"n": "node", "w": "way", "r": "relation"}.get(osm_type, osm_type)
+        osm_id = row.get("osm_id")
+        source_url = (
+            f"https://www.openstreetmap.org/{osm_kind}/{osm_id}"
+            if osm_kind in {"node", "way", "relation"} and osm_id is not None
+            else ""
+        )
+        out.append({
+            "name": display.split(",")[0].strip()[:180] or term.title(),
+            "lat": lat,
+            "lon": lon,
+            "category": category,
+            "source_url": source_url,
+            "osm_tags": dict(row.get("extratags") or {}),
+        })
+        if len(out) >= 40:
+            break
+    return out
+
+
 def _bbox_route_stays(coords, category: str) -> list[dict[str, Any]]:
     stays, _terrain, _preloaded = _bbox_route_query(
         coords, category, include_terrain=False
@@ -710,6 +815,20 @@ def _discover_stays(
             "logistics.photon_wave",
             _photon_split_stays, v3, roundtrip, coords, category, days
         ))
+
+    # Public Overpass/Photon instances can both be transiently empty. Spend
+    # only the remaining logistics budget on one independent, bounded
+    # Nominatim lookup rather than returning zero nights immediately.
+    if not rows:
+        remaining = deadline - time.monotonic()
+        if remaining >= 0.45:
+            rows.extend(provider_call(
+                "logistics.nominatim_fallback",
+                _nominatim_route_stays,
+                coords,
+                category,
+                min(1.05, max(0.45, remaining - 0.05)),
+            ))
 
     projected = _project_stays(roundtrip, coords, rows, category, max_offroute)
     chosen = _choose_stays(roundtrip, coords, projected, days, daily_target)
