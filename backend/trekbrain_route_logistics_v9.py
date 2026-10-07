@@ -736,6 +736,31 @@ def _choose_stays(roundtrip, coords, rows, days: int, daily_target: float) -> li
     return beam[0][1] if beam else []
 
 
+def _preloaded_result_stays(result: dict[str, Any], category: str) -> list[dict[str, Any]]:
+    """Reuse overnight evidence already paid for during route construction."""
+    rows = []
+    for item in result.get("accommodations") or []:
+        if not isinstance(item, dict):
+            continue
+        try:
+            lat, lon = float(item.get("lat")), float(item.get("lon"))
+        except (TypeError, ValueError):
+            continue
+        raw = _fold(
+            f"{item.get('category') or ''} {item.get('type') or ''} "
+            f"{item.get('name') or ''}"
+        )
+        if category == "camping" and not any(token in raw for token in ("camping", "camp site", "camp_site")):
+            continue
+        if category == "refuge" and not any(token in raw for token in ("refuge", "abri", "gite", "hut")):
+            continue
+        row = dict(item)
+        row["lat"], row["lon"] = lat, lon
+        row["category"] = category if category in {"camping", "refuge"} else str(item.get("category") or "lodging")
+        rows.append(row)
+    return rows
+
+
 def _logistics_budget_seconds() -> float:
     try:
         value = float(os.getenv("TREKBRAIN_LOGISTICS_BUDGET_SECONDS", "4.0") or 4.0)
@@ -748,6 +773,7 @@ def _discover_stays(
     v3, roundtrip, stay_rescue, coords, start, category: str,
     days: int, daily_target: float, strict_walk: bool,
     want_terrain: bool = False,
+    preloaded_rows: list[dict[str, Any]] | None = None,
 ):
     started = time.monotonic()
     budget = _logistics_budget_seconds()
@@ -772,7 +798,7 @@ def _discover_stays(
                 outcome=outcome,
             )
 
-    rows = []
+    rows = [dict(x) for x in (preloaded_rows or []) if isinstance(x, dict)]
     max_offroute = (
         3.2 if strict_walk
         else 12.5 if category == "lodging"
@@ -1122,9 +1148,11 @@ def _attach_logistics(result: dict[str, Any], data, legacy_main, v3, roundtrip, 
 
     logistics_started = time.monotonic()
     want_terrain = bool(intent.get("water") or intent.get("food"))
+    preloaded_stays = _preloaded_result_stays(result, category)
     chosen, discovered, discovery_meta = _discover_stays(
         v3, roundtrip, stay_rescue, coords, start, category, days,
         daily_target, strict_walk, want_terrain=want_terrain,
+        preloaded_rows=preloaded_stays,
     )
     _attach_preloaded_terrain(
         result,
