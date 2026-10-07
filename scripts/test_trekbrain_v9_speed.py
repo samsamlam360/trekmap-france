@@ -138,6 +138,12 @@ expected_categories = [
 assert [row.get("category") for row in photon_rows] == expected_categories, photon_rows
 assert [row.get("name") for row in photon_rows] == expected_queries, photon_rows
 
+# Form-encoded Overpass POSTs use direct FOSSGIS backends first. Avoid the
+# generic redirecting host on the hot path so POST bodies are sent straight to
+# the interpreter instance.
+assert free.OVERPASS_URLS[0] == "https://lz4.overpass-api.de/api/interpreter", free.OVERPASS_URLS
+assert free.OVERPASS_URLS[1] == "https://z.overpass-api.de/api/interpreter", free.OVERPASS_URLS
+
 # One Overpass operation may use at most two mirrors. Public OSM slowness must
 # not cascade through every known mirror and turn one click into minutes.
 overpass_calls = []
