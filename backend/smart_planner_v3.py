@@ -1430,6 +1430,7 @@ def _build(data: AIPlanRequest, legacy_main):
                     location,
                     center,
                     base_categories,
+                    preferred_category=str(intent.get("accommodation") or ""),
                 )
                 extra = []
 
