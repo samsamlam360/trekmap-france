@@ -138,9 +138,8 @@ expected_categories = [
 assert [row.get("category") for row in photon_rows] == expected_categories, photon_rows
 assert [row.get("name") for row in photon_rows] == expected_queries, photon_rows
 
-# TrekBrain's degraded regional fallback keeps all primary category families but
-# must enforce one short provider attempt per query. Alternate terms are only
-# allowed when the first wave produces too few usable anchors.
+# TrekBrain's degraded regional fallback keeps all primary category families
+# in one bounded wave and must enforce one short provider attempt per query.
 bounded_calls = []
 real_bounded_photon = free._geocode_photon
 
@@ -176,7 +175,8 @@ assert len(bounded_calls) == 6, bounded_calls
 assert all(timeout <= 3.21 and retries == 1 for _query, timeout, retries in bounded_calls), bounded_calls
 assert sorted(query for query, _timeout, _retries in bounded_calls) == sorted(expected_first_wave), bounded_calls
 
-# Sparse first-wave evidence must still unlock the remaining historical terms.
+# Sparse first-wave evidence must *not* trigger a second regional provider
+# wave anymore. The ORS-validated sparse-region fallback now owns that recovery.
 sparse_calls = []
 def fake_sparse_photon(query, *, timeout=12, retries=2):
     sparse_calls.append((query, float(timeout), int(retries)))
@@ -197,7 +197,8 @@ try:
     )
 finally:
     free._geocode_photon = real_bounded_photon
-assert sorted(query for query, _timeout, _retries in sparse_calls) == sorted(expected_queries), sparse_calls
+assert sorted(query for query, _timeout, _retries in sparse_calls) == sorted(expected_first_wave), sparse_calls
+assert len(sparse_calls) == 6, sparse_calls
 assert all(timeout <= 3.21 and retries == 1 for _query, timeout, retries in sparse_calls), sparse_calls
 
 # Sparse region-only itineraries must still reach ORS when public POI
