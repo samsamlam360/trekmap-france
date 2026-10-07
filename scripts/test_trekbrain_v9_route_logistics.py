@@ -406,6 +406,7 @@ assert empty_preloaded is False
 # When water/food are requested, the lodging corridor OSM response is reused
 # instead of paying for a second terrain query after planning.
 real_bundle_terrain = logistics._bbox_route_bundle
+real_nominatim_terrain = logistics._nominatim_route_stays
 real_photon_terrain = logistics._photon_split_stays
 try:
     logistics._bbox_route_bundle = lambda _coords, category: (
@@ -436,6 +437,7 @@ try:
         ],
         True,
     )
+    logistics._nominatim_route_stays = lambda *args, **kwargs: []
     logistics._photon_split_stays = lambda *args, **kwargs: []
     chosen_terrain, _projected_terrain, meta_terrain = logistics._discover_stays(
         FakeV3(),
@@ -451,6 +453,7 @@ try:
     )
 finally:
     logistics._bbox_route_bundle = real_bundle_terrain
+    logistics._nominatim_route_stays = real_nominatim_terrain
     logistics._photon_split_stays = real_photon_terrain
 
 assert len(chosen_terrain) == 4, chosen_terrain
@@ -487,10 +490,10 @@ generic_lodging = [
     {"name": "Gîte C", "lat": 0.110, "lon": 0.60, "category": "lodging", "source_url": "osm://gc"},
     {"name": "Gîte D", "lat": 0.110, "lon": 0.80, "category": "lodging", "source_url": "osm://gd"},
 ]
-real_photon_generic = logistics._photon_split_stays
+real_nominatim_generic = logistics._nominatim_route_stays
 real_bbox_generic = logistics._bbox_route_stays
 try:
-    logistics._photon_split_stays = lambda *args, **kwargs: [dict(x) for x in generic_lodging]
+    logistics._nominatim_route_stays = lambda *args, **kwargs: [dict(x) for x in generic_lodging]
     logistics._bbox_route_stays = lambda *args, **kwargs: []
     chosen_generic, projected_generic, _meta_generic = logistics._discover_stays(
         FakeV3(),
@@ -504,7 +507,7 @@ try:
         False,
     )
 finally:
-    logistics._photon_split_stays = real_photon_generic
+    logistics._nominatim_route_stays = real_nominatim_generic
     logistics._bbox_route_stays = real_bbox_generic
 
 assert len(chosen_generic) == 4, chosen_generic
@@ -517,10 +520,10 @@ assert all(10.0 < float(x.get("_offroute_km") or 0) <= 12.5 for x in chosen_gene
 two_day_lodging = [
     {"name": "Hôtel transfert", "lat": 0.110, "lon": 0.10, "category": "lodging", "source_url": "osm://transfer"}
 ]
-real_photon_two_day = logistics._photon_split_stays
+real_nominatim_two_day = logistics._nominatim_route_stays
 real_bbox_two_day = logistics._bbox_route_stays
 try:
-    logistics._photon_split_stays = lambda *args, **kwargs: [dict(x) for x in two_day_lodging]
+    logistics._nominatim_route_stays = lambda *args, **kwargs: [dict(x) for x in two_day_lodging]
     logistics._bbox_route_stays = lambda *args, **kwargs: []
     chosen_two_day, projected_two_day, _meta_two_day = logistics._discover_stays(
         FakeV3(),
@@ -534,7 +537,7 @@ try:
         False,
     )
 finally:
-    logistics._photon_split_stays = real_photon_two_day
+    logistics._nominatim_route_stays = real_nominatim_two_day
     logistics._bbox_route_stays = real_bbox_two_day
 
 assert len(projected_two_day) == 1, projected_two_day
