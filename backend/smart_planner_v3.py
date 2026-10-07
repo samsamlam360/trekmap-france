@@ -1148,7 +1148,10 @@ def _postroute_corridor_resources(boundaries, intent, existing_items):
 
     # Prioritise access and overnight logistics when the six-call cap is tight,
     # then food and water. All calls still run in one bounded parallel wave.
-    groups = [transit_jobs, stay_jobs, food_jobs, water_jobs]
+    # Mountain itineraries need water at least as urgently as shops. Keep
+    # access first, then alternate overnight and water lookups before food so a
+    # six-call cap cannot starve water merely because lodging was sparse.
+    groups = [transit_jobs, stay_jobs, water_jobs, food_jobs]
     jobs = []
     while groups and len(jobs) < 6:
         remaining = []
