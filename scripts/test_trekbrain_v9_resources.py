@@ -327,6 +327,13 @@ assert exact_water and exact_water["water_status"] == "potable_referenced", exac
 assert captured_photon.get("q") == "fontaine", captured_photon
 assert "include" not in captured_photon, captured_photon
 assert captured_photon.get("_cache_empty") is False, captured_photon
+assert captured_photon.get("bbox"), captured_photon
+try:
+    west, south, east, north = map(float, str(captured_photon["bbox"]).split(","))
+except Exception as exc:
+    raise AssertionError(f"invalid Photon bbox: {captured_photon!r}") from exc
+assert west < 5.0 < east and south < 45.0 < north, captured_photon
+assert (east - west) < 0.20 and (north - south) < 0.20, captured_photon
 
 captured_lodging = {}
 def fake_lodging_request(url, *, params=None, **kwargs):
@@ -360,6 +367,7 @@ finally:
 assert text_lodging and text_lodging["category"] == "lodging", text_lodging
 assert captured_lodging.get("q") == "gîte", captured_lodging
 assert "include" not in captured_lodging, captured_lodging
+assert captured_lodging.get("bbox"), captured_lodging
 
 
 # Production regression: /ai/plan must accept the planner model as JSON body,
