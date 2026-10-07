@@ -562,11 +562,12 @@ def _photon_category_candidates_bounded(
     categories,
     preferred_category: str = "",
 ):
-    """Interactive Photon fallback with intent-aware first-wave coverage.
+    """One bounded Photon wave for interactive TrekBrain route shaping.
 
-    Keep the historical query vocabulary, but put the user's overnight
-    preference in the first concurrent wave. Remaining synonym queries are only
-    needed when the first wave is too sparse or misses the preferred category.
+    The first wave covers every primary route-relevant category and, when
+    available, one high-value alternate. If it is sparse, TrekBrain now falls
+    through to ORS-validated internal route hypotheses instead of opening a
+    second regional provider wave.
     """
     all_jobs = []
     for cat in categories:
@@ -589,57 +590,49 @@ def _photon_category_candidates_bounded(
             alternates.append(job)
 
     first_wave = list(primary_by_category.values())
+
+    # Fill at most one spare slot with the most useful alternate. Explicit
+    # accommodation wording wins; otherwise scenic diversity is the best route
+    # shaping evidence. This keeps the wave <= 6 requests for the standard set.
     preferred_alt = next(
         (job for job in alternates if job[0].casefold() == preferred),
         None,
     )
-    if preferred_alt is not None and preferred_alt not in first_wave:
-        first_wave.append(preferred_alt)
-    elif preferred not in {"camping", "refuge"}:
-        scenic_alt = next((job for job in alternates if job[0] == "viewpoint"), None)
-        if scenic_alt is not None and scenic_alt not in first_wave:
-            first_wave.append(scenic_alt)
+    scenic_alt = next((job for job in alternates if job[0] == "viewpoint"), None)
+    food_alt = next((job for job in alternates if job[0] == "food"), None)
+    for extra in (preferred_alt, scenic_alt, food_alt):
+        if extra is not None and extra not in first_wave:
+            first_wave.append(extra)
+        if len(first_wave) >= 6:
+            break
 
-    # Never exceed six simultaneous public-Photon requests.
     first_wave = first_wave[:6]
-    remaining = [job for job in all_jobs if job not in first_wave]
+    rows_by_job = {}
+    with ThreadPoolExecutor(max_workers=min(6, len(first_wave))) as pool:
+        futures = {
+            pool.submit(_geocode_photon, query, timeout=3.2, retries=1): (index, cat)
+            for index, (cat, _term, query) in enumerate(first_wave)
+        }
+        for future in as_completed(futures):
+            index, cat = futures[future]
+            try:
+                rows = future.result()
+            except Exception:
+                rows = []
+            rows_by_job[index] = (cat, rows)
 
-    def run_jobs(jobs, timeout_s=3.2):
-        if not jobs:
-            return []
-        rows_by_job = {}
-        with ThreadPoolExecutor(max_workers=min(6, len(jobs))) as pool:
-            futures = {
-                pool.submit(_geocode_photon, query, timeout=timeout_s, retries=1): (index, cat)
-                for index, (cat, _term, query) in enumerate(jobs)
-            }
-            for future in as_completed(futures):
-                index, cat = futures[future]
-                try:
-                    rows = future.result()
-                except Exception:
-                    rows = []
-                rows_by_job[index] = (cat, rows)
-
-        out = []
-        for index, (cat, _term, _query) in enumerate(jobs):
-            _resolved_cat, rows = rows_by_job.get(index, (cat, []))
-            for place in rows[:4]:
-                if _dist(center, place) > 35:
-                    continue
-                row = dict(place)
-                row["category"] = cat
-                row["source_url"] = _map_url(row["lat"], row["lon"])
-                row["water_status"] = "unverified"
-                row["opening_hours"] = ""
-                out.append(row)
-        return out
-
-    items = run_jobs(first_wave)
-    categories_found = {str(row.get("category") or "") for row in items}
-    preferred_missing = preferred in {"camping", "refuge"} and preferred not in categories_found
-    if remaining and (len(items) < 5 or len(categories_found) < 3 or preferred_missing):
-        items.extend(run_jobs(remaining, 2.6))
+    items = []
+    for index, (cat, _term, _query) in enumerate(first_wave):
+        _resolved_cat, rows = rows_by_job.get(index, (cat, []))
+        for place in rows[:4]:
+            if _dist(center, place) > 35:
+                continue
+            row = dict(place)
+            row["category"] = cat
+            row["source_url"] = _map_url(row["lat"], row["lon"])
+            row["water_status"] = "unverified"
+            row["opening_hours"] = ""
+            items.append(row)
 
     deduped, seen = [], set()
     for place in items:
