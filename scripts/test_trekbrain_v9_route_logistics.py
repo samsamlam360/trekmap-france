@@ -286,6 +286,51 @@ assert parallel_calls == {"overpass": 1, "nominatim": 1, "photon": 0}, parallel_
 assert len(chosen_parallel) == 4, chosen_parallel
 assert meta_parallel["terrain_preloaded"] is True
 
+# Overnight evidence already discovered while shaping the route must survive
+# into route-first logistics. A provider fluctuation after routing must not make
+# TrekBrain forget camps/refuges it has already paid to discover.
+real_bundle_preloaded = logistics._bbox_route_bundle
+real_nominatim_preloaded = logistics._nominatim_route_stays
+real_photon_preloaded = logistics._photon_split_stays
+preloaded_calls = {"overpass": 0, "nominatim": 0, "photon": 0}
+try:
+    def empty_preloaded_bundle(_coords, category):
+        preloaded_calls["overpass"] += 1
+        return [], [], False
+
+    def empty_preloaded_nominatim(*args, **kwargs):
+        preloaded_calls["nominatim"] += 1
+        return []
+
+    def forbidden_preloaded_photon(*args, **kwargs):
+        preloaded_calls["photon"] += 1
+        raise AssertionError("already-discovered stays must prevent Photon re-discovery")
+
+    logistics._bbox_route_bundle = empty_preloaded_bundle
+    logistics._nominatim_route_stays = empty_preloaded_nominatim
+    logistics._photon_split_stays = forbidden_preloaded_photon
+    chosen_preloaded, projected_preloaded, _meta_preloaded = logistics._discover_stays(
+        FakeV3(),
+        FakeRoundtrip,
+        FakeStayRescue,
+        coords,
+        {"name": "Départ", "lat": 0.0, "lon": 0.0},
+        "camping",
+        5,
+        20.0,
+        False,
+        want_terrain=True,
+        preloaded_rows=[dict(x) for x in camps],
+    )
+finally:
+    logistics._bbox_route_bundle = real_bundle_preloaded
+    logistics._nominatim_route_stays = real_nominatim_preloaded
+    logistics._photon_split_stays = real_photon_preloaded
+
+assert len(projected_preloaded) == 4, projected_preloaded
+assert len(chosen_preloaded) == 4, chosen_preloaded
+assert preloaded_calls == {"overpass": 1, "nominatim": 1, "photon": 0}, preloaded_calls
+
 # If both cheap route-wide primaries are empty, exactly one bounded Photon
 # rescue wave may recover real overnight candidates. This restores the proven
 # resource coverage without putting Photon back on the normal hot path.
