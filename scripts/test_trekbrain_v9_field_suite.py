@@ -311,7 +311,10 @@ old_semantic_request = v7.v5.v3._request_json
 try:
     def fake_semantic_photon(url, **kwargs):
         params = kwargs.get("params") or {}
-        semantic_calls.append(dict(params))
+        semantic_calls.append({
+            **dict(params),
+            "_timeout": float(kwargs.get("timeout") or 0),
+        })
         query = request_v9._fold(str(params.get("q") or ""))
         if not query:
             raise AssertionError(f"Photon resource request must use q: {params!r}")
@@ -350,6 +353,8 @@ if not semantic_water or semantic_water.get("category") != "water":
     failures.append(f"Photon semantic water regression: {semantic_water!r}")
 if len(semantic_calls) != 2 or any("q" not in call for call in semantic_calls):
     failures.append(f"Photon text-query regression: {semantic_calls!r}")
+if any(float(call.get("_timeout") or 0) > 0.96 for call in semantic_calls):
+    failures.append(f"Photon resource timeout regression: {semantic_calls!r}")
 
 # Explicit traverses may recover a validated route by splitting its existing
 # geometry into equal-progress days. No new path geometry may be invented.
