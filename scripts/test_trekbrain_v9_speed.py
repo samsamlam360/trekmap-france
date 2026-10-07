@@ -138,6 +138,42 @@ expected_categories = [
 assert [row.get("category") for row in photon_rows] == expected_categories, photon_rows
 assert [row.get("name") for row in photon_rows] == expected_queries, photon_rows
 
+# TrekBrain's degraded regional fallback keeps all primary category families but
+# must enforce one short provider attempt per query. Alternate terms are only
+# allowed when the first wave produces too few usable anchors.
+bounded_calls = []
+real_bounded_photon = free._geocode_photon
+
+def fake_bounded_photon(query, *, timeout=12, retries=2):
+    bounded_calls.append((query, float(timeout), int(retries)))
+    index = len(bounded_calls)
+    return [{
+        "name": query,
+        "short_name": query,
+        "lat": 48.0 + index * 0.001,
+        "lon": 2.0 + index * 0.001,
+        "category": "place",
+        "source_url": "placeholder",
+    }]
+
+free._geocode_photon = fake_bounded_photon
+try:
+    bounded_rows = free._photon_category_candidates_bounded(
+        "TestZone",
+        {"lat": 48.0, "lon": 2.0},
+        ["camping", "refuge", "food", "transit", "viewpoint", "water"],
+    )
+finally:
+    free._geocode_photon = real_bounded_photon
+
+assert len(bounded_rows) >= 4, bounded_rows
+assert len(bounded_calls) == 5, bounded_calls
+assert all(timeout <= 3.21 and retries == 1 for _query, timeout, retries in bounded_calls), bounded_calls
+assert sorted(query for query, _timeout, _retries in bounded_calls) == sorted([
+    "camping TestZone", "refuge TestZone", "boulangerie TestZone",
+    "gare TestZone", "sommet TestZone",
+]), bounded_calls
+
 # Form-encoded Overpass POSTs use direct FOSSGIS backends first. Avoid the
 # generic redirecting host on the hot path so POST bodies are sent straight to
 # the interpreter instance.
