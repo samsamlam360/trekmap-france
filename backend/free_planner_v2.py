@@ -25,7 +25,11 @@ PLANNER_VERSION = "trekmap-free-planner-v2"
 NOMINATIM_URL = "https://nominatim.openstreetmap.org/search"
 PHOTON_URL = "https://photon.komoot.io/api/"
 OVERPASS_URLS = [
-    "https://overpass-api.de/api/interpreter",
+    # Use the direct FOSSGIS backends first. The generic overpass-api.de host
+    # may redirect between them; direct POST targets avoid an unnecessary
+    # redirect hop for form-encoded Overpass QL requests.
+    "https://lz4.overpass-api.de/api/interpreter",
+    "https://z.overpass-api.de/api/interpreter",
     "https://overpass.private.coffee/api/interpreter",
     "https://maps.mail.ru/osm/tools/overpass/api/interpreter",
 ]
