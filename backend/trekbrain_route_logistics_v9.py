@@ -606,6 +606,13 @@ def _photon_split_stays(v3, roundtrip, coords, category: str, days: int) -> list
             # hotel that the previous query found.
             jobs.append((anchor, "gîte"))
             jobs.append((anchor, "hotel"))
+        elif category == "camping":
+            # Photon text ranking is more tolerant than a single principal OSM
+            # tag on public indexes. The shared lookup still enforces the local
+            # bbox, distance and camping semantics before accepting anything.
+            jobs.append((anchor, "camping"))
+        elif category == "refuge":
+            jobs.append((anchor, "refuge"))
         else:
             jobs.append((anchor, None))
 
