@@ -1478,11 +1478,29 @@ def _build(data: AIPlanRequest, legacy_main):
             raise HTTPException(status_code=422, detail="Je n'ai pas trouvé de combinaison d'étapes cohérente. Essaie une zone plus précise ou assouplis la distance quotidienne.")
 
     evaluated = []
-    for candidate in candidates[:6]:
+    # Routing is by far the most expensive part of generic planning. Rank
+    # heuristic candidates first, but stop as soon as a real pedestrian route
+    # already satisfies the user's hard distance/day constraints. Previously we
+    # rendered up to six near-duplicate ORS candidates even after finding a
+    # perfectly usable itinerary, which multiplied latency on unseen regions.
+    max_route_evaluations = 3
+    for candidate in candidates[:max_route_evaluations]:
         route_points, stage_highlights = _route_points_for_candidate(candidate, items, intent, forced_via)
         route = _route_cached(route_points, legacy_main)
         score, distance, stage_dist, elevation, route_coords = _candidate_score(candidate, route_points, route, intent, items, legacy_main, compute_elevation=False)
-        evaluated.append((score, candidate, route_points, stage_highlights, route, distance, stage_dist, route_coords))
+        row = (score, candidate, route_points, stage_highlights, route, distance, stage_dist, route_coords)
+        evaluated.append(row)
+        non_loop = _fold(intent.get("route_type") or "") != "boucle"
+        if (
+            non_loop
+            and route.get("fallback") is False
+            and stage_dist
+            and len(stage_dist) == int(intent.get("days") or 1)
+            and max(stage_dist) <= float(intent["daily_max"]) + 0.25
+            and float(distance) >= max(3.0, float(intent["total_target"]) * 0.68)
+            and score < 1000
+        ):
+            break
     evaluated.sort(key=lambda x: x[0])
 
     # Do not knowingly return a trek that violates the requested daily mileage.
