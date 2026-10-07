@@ -288,9 +288,8 @@ finally:
 assert captured_missing_water.get("water") is True, captured_missing_water
 assert captured_missing_water.get("sleep") is False, captured_missing_water
 
-# Photon route resources use one text-biased query and validate the returned
-# nearby object locally. This avoids depending on deployment-specific category
-# indexes while preserving the same single network call.
+# Photon route resources use one structured OSM-category selector for known
+# resource tags, while preserving the same bounded single network call.
 v3_module = resources_module.v7.v5.v3
 real_request_json = v3_module._request_json
 captured_photon = {}
@@ -324,8 +323,9 @@ finally:
     v3_module._request_json = real_request_json
 
 assert exact_water and exact_water["water_status"] == "potable_referenced", exact_water
-assert captured_photon.get("q") == "fontaine", captured_photon
-assert "include" not in captured_photon, captured_photon
+assert "osm.amenity.drinking_water" in str(captured_photon.get("include") or ""), captured_photon
+assert "osm.man_made.water_tap" in str(captured_photon.get("include") or ""), captured_photon
+assert "q" not in captured_photon, captured_photon
 assert captured_photon.get("_cache_empty") is False, captured_photon
 assert captured_photon.get("bbox"), captured_photon
 try:
