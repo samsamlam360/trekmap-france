@@ -433,6 +433,124 @@ def _route_probe_stays(v3, roundtrip, coords, category: str) -> list[dict[str, A
 
 
 
+def _nominatim_route_stays(coords, category: str) -> list[dict[str, Any]]:
+    """One route-bounded Nominatim query for overnight candidates.
+
+    Overpass remains the exact OSM-tag source. This fallback is intentionally
+    one request for the whole route, not one request per stage.
+    """
+    from . import free_planner_v2 as free
+
+    valid = []
+    for point in coords or []:
+        if not isinstance(point, (list, tuple)) or len(point) < 2:
+            continue
+        try:
+            valid.append((float(point[0]), float(point[1])))
+        except (TypeError, ValueError):
+            continue
+    if len(valid) < 2:
+        return []
+
+    min_lat = min(x[0] for x in valid)
+    max_lat = max(x[0] for x in valid)
+    min_lon = min(x[1] for x in valid)
+    max_lon = max(x[1] for x in valid)
+    mid_lat = (min_lat + max_lat) / 2.0
+    radius_km = 12.5 if category == "lodging" else 8.0
+    pad_lat = min(0.14, max(0.025, radius_km / 111.0))
+    pad_lon = min(
+        0.18,
+        max(0.03, radius_km / max(35.0, 111.0 * math.cos(math.radians(mid_lat)))),
+    )
+    south, north = min_lat - pad_lat, max_lat + pad_lat
+    west, east = min_lon - pad_lon, max_lon + pad_lon
+
+    query = "camping" if category == "camping" else "refuge" if category == "refuge" else "hotel"
+    try:
+        payload = free._request_json(
+            free.NOMINATIM_URL,
+            params={
+                "q": query,
+                "format": "jsonv2",
+                "limit": 30,
+                "countrycodes": "fr",
+                "bounded": 1,
+                "viewbox": f"{west:.6f},{north:.6f},{east:.6f},{south:.6f}",
+            },
+            timeout=1.6,
+            ttl=3600,
+            service="Nominatim route stays",
+            retries=1,
+            cache_empty=False,
+        )
+    except Exception:
+        return []
+
+    out = []
+    for row in payload if isinstance(payload, list) else []:
+        try:
+            lat, lon = float(row["lat"]), float(row["lon"])
+        except (KeyError, TypeError, ValueError):
+            continue
+        typ = _fold(row.get("type") or "")
+        cls = _fold(row.get("class") or "")
+        display = str(row.get("display_name") or row.get("name") or query)
+        semantic = _fold(display)
+        accepted = False
+        actual = category
+        if category == "camping":
+            accepted = typ in {"camp site", "caravan site"} or "camp" in semantic
+        elif category == "refuge":
+            accepted = (
+                typ in {"alpine hut", "wilderness hut", "shelter"}
+                or any(token in semantic for token in ("refuge", "gite", "abri", "hut"))
+            )
+        else:
+            accepted = (
+                cls == "tourism"
+                and typ in {
+                    "hotel", "hostel", "guest house", "chalet", "apartment",
+                    "camp site", "alpine hut", "wilderness hut",
+                }
+            ) or any(token in semantic for token in (
+                "hotel", "gite", "auberge", "hostel", "chalet", "camping", "refuge"
+            ))
+            if "camp" in semantic or typ in {"camp site", "caravan site"}:
+                actual = "camping"
+            elif "refuge" in semantic or typ in {"alpine hut", "wilderness hut", "shelter"}:
+                actual = "refuge"
+            else:
+                actual = "lodging"
+        if not accepted:
+            continue
+        source = _osm_url({
+            "osm_type": row.get("osm_type"),
+            "osm_id": row.get("osm_id"),
+        })
+        out.append({
+            "name": display.split(",")[0].strip()[:180] or (
+                "Camping" if actual == "camping" else "Refuge" if actual == "refuge" else "Hébergement"
+            ),
+            "lat": lat,
+            "lon": lon,
+            "category": actual,
+            "source_url": source,
+            "osm_tags": {
+                "class": row.get("class"),
+                "type": row.get("type"),
+            },
+        })
+
+    deduped, seen = [], set()
+    for item in out:
+        key = _stay_key(item)
+        if key and key not in seen:
+            seen.add(key)
+            deduped.append(item)
+    return deduped[:_MAX_DISCOVERED]
+
+
 def _photon_split_stays(v3, roundtrip, coords, category: str, days: int) -> list[dict[str, Any]]:
     """Fast first pass: one bounded Photon lookup around each ideal night split."""
     if days <= 1 or len(coords or []) < 3:
@@ -652,63 +770,43 @@ def _discover_stays(
     terrain_rows = []
     terrain_preloaded = False
 
-    # Campsites/refuges have strong OSM tags, so keep the proven OSM-first path.
-    # Generic lodging normally stays Photon-first. The only exception is when
-    # water/food are also requested: that OSM terrain call would happen later
-    # anyway, so overlap it with Photon now and reuse the same response.
+    # Route-first lodging has two independent route-wide discovery sources:
+    # exact-tag Overpass and one bounded Nominatim query. Production profiling
+    # showed the public Photon wave repeatedly spending ~2-3 seconds and
+    # returning no stays, so keep Photon out of the hot path rather than paying
+    # for several per-stage text searches.
     structured = category in {"camping", "refuge"}
-    structured_parallel_wave = bool(structured and want_terrain)
-    if structured_parallel_wave:
-        # When water/food is requested, the OSM bundle is required regardless.
-        # Start the independent Photon stay lookup at the same time instead of
-        # waiting for a slow/empty Overpass response and paying both latencies
-        # serially. The same rows are still projected and ranked afterwards.
+    if want_terrain:
         with ThreadPoolExecutor(max_workers=2) as pool:
             bbox_future = pool.submit(
                 provider_call, "logistics.overpass_bundle",
                 _bbox_route_bundle, coords, category
             )
-            photon_future = pool.submit(
-                provider_call, "logistics.photon_wave",
-                _photon_split_stays, v3, roundtrip, coords, category, days
+            nominatim_future = pool.submit(
+                provider_call, "logistics.nominatim_wave",
+                _nominatim_route_stays, coords, category
             )
             try:
                 bbox_stays, terrain_rows, terrain_preloaded = bbox_future.result()
             except Exception:
                 bbox_stays, terrain_rows, terrain_preloaded = [], [], False
             try:
-                photon_stays = photon_future.result()
+                nominatim_stays = nominatim_future.result()
             except Exception:
-                photon_stays = []
+                nominatim_stays = []
         rows.extend(list(bbox_stays or []))
-        rows.extend(list(photon_stays or []))
+        rows.extend(list(nominatim_stays or []))
     elif structured:
         rows.extend(provider_call(
             "logistics.overpass_stays", _bbox_route_stays, coords, category
         ))
-    elif want_terrain:
-        with ThreadPoolExecutor(max_workers=2) as pool:
-            bbox_future = pool.submit(
-                provider_call, "logistics.overpass_bundle", _bbox_route_bundle, coords, category
-            )
-            photon_future = pool.submit(
-                provider_call, "logistics.photon_wave",
-                _photon_split_stays, v3, roundtrip, coords, category, days
-            )
-            try:
-                bbox_stays, terrain_rows, terrain_preloaded = bbox_future.result()
-            except Exception:
-                bbox_stays, terrain_rows, terrain_preloaded = [], [], False
-            try:
-                photon_stays = photon_future.result()
-            except Exception:
-                photon_stays = []
-        rows.extend(list(bbox_stays or []))
-        rows.extend(list(photon_stays or []))
+        if not rows and deadline - time.monotonic() >= 0.7:
+            rows.extend(provider_call(
+                "logistics.nominatim_fallback", _nominatim_route_stays, coords, category
+            ))
     else:
         rows.extend(provider_call(
-            "logistics.photon_wave",
-            _photon_split_stays, v3, roundtrip, coords, category, days
+            "logistics.nominatim_wave", _nominatim_route_stays, coords, category
         ))
 
     projected = _project_stays(roundtrip, coords, rows, category, max_offroute)
@@ -738,20 +836,15 @@ def _discover_stays(
             )
         ]
 
-    if len(chosen) < needed and deadline - time.monotonic() >= 1.25:
-        if structured and not structured_parallel_wave:
-            rows.extend(provider_call(
-                "logistics.photon_fallback",
-                _photon_split_stays, v3, roundtrip, coords, category, days
-            ))
-        elif not want_terrain:
+    if len(chosen) < needed and deadline - time.monotonic() >= 0.7:
+        # Keep the fallback bounded to one additional route-wide source. Do not
+        # reopen the expensive per-stage Photon wave after Nominatim/Overpass.
+        if not want_terrain and not structured:
             rows.extend(provider_call(
                 "logistics.overpass_fallback", _bbox_route_stays, coords, category
             ))
-        # For generic lodging + terrain, both OSM and Photon already ran in the
-        # first wave. Do not repeat either provider.
-        projected = _project_stays(roundtrip, coords, rows, category, max_offroute)
-        chosen = _choose_stays(roundtrip, coords, projected, days, daily_target)
+            projected = _project_stays(roundtrip, coords, rows, category, max_offroute)
+            chosen = _choose_stays(roundtrip, coords, projected, days, daily_target)
 
     elapsed_ms = round((time.monotonic() - started) * 1000)
     perf.record(
