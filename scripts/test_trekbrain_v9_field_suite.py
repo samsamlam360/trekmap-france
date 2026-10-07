@@ -303,53 +303,81 @@ try:
 finally:
     v7.v5.v3._request_json = old_request_json
 
-# Photon categories are installation-dependent. Resource discovery must use one
-# text-biased request and keep a nearby semantically unambiguous result even
-# when the public index omits a usable osm_key/osm_value pair.
-semantic_calls = []
-old_semantic_request = v7.v5.v3._request_json
+# Structured Photon categories are the reliable primary selector for known OSM
+# resource tags. Keep the new local bbox, while named lodging overrides remain
+# text searches.
+structured_calls = []
+old_structured_request = v7.v5.v3._request_json
 try:
-    def fake_semantic_photon(url, **kwargs):
+    def fake_structured_photon(url, **kwargs):
         params = kwargs.get("params") or {}
-        semantic_calls.append(dict(params))
+        structured_calls.append(dict(params))
+        include = request_v9._fold(str(params.get("include") or ""))
         query = request_v9._fold(str(params.get("q") or ""))
-        if not query:
-            raise AssertionError(f"Photon resource request must use q: {params!r}")
-        if params.get("include"):
-            raise AssertionError(f"Photon resource request must not depend on include: {params!r}")
-        name = "Camping des Pins" if "camp" in query else "Fontaine du Village"
+        if not params.get("bbox"):
+            raise AssertionError(f"Photon resource request must stay bbox-bounded: {params!r}")
+        if "osm tourism camp site" in include:
+            name, key, value = "Camping structuré", "tourism", "camp_site"
+        elif "osm amenity drinking water" in include:
+            name, key, value = "Fontaine structurée", "amenity", "drinking_water"
+        elif "hotel" in query:
+            name, key, value = "Hôtel nommé", "tourism", "hotel"
+        else:
+            raise AssertionError(f"unexpected Photon selector: {params!r}")
         return {
             "features": [{
                 "properties": {
                     "name": name,
                     "countrycode": "FR",
+                    "osm_type": "N",
+                    "osm_id": 12345 + len(structured_calls),
+                    "osm_key": key,
+                    "osm_value": value,
                 },
                 "geometry": {"coordinates": [2.82, 45.53]},
             }]
         }
 
-    v7.v5.v3._request_json = fake_semantic_photon
-    semantic_camp = v7.v5.v3._photon_anchor_resource(
+    v7.v5.v3._request_json = fake_structured_photon
+    structured_camp = v7.v5.v3._photon_anchor_resource(
         {"name": "Repère", "lat": 45.53, "lon": 2.82, "category": "route_anchor"},
         "stay",
         ("tourism:camp_site", "tourism:caravan_site"),
         8.0,
     )
-    semantic_water = v7.v5.v3._photon_anchor_resource(
+    structured_water = v7.v5.v3._photon_anchor_resource(
         {"name": "Repère", "lat": 45.53, "lon": 2.82, "category": "route_anchor"},
         "water",
         ("amenity:drinking_water", "man_made:water_tap", "natural:spring"),
         4.0,
     )
+    named_lodging = v7.v5.v3._photon_anchor_resource(
+        {"name": "Repère", "lat": 45.53, "lon": 2.82, "category": "route_anchor"},
+        "stay",
+        ("tourism:hotel", "tourism:hostel", "tourism:guest_house"),
+        12.5,
+        query_override="hotel",
+    )
 finally:
-    v7.v5.v3._request_json = old_semantic_request
+    v7.v5.v3._request_json = old_structured_request
 
-if not semantic_camp or semantic_camp.get("category") != "camping":
-    failures.append(f"Photon semantic camping regression: {semantic_camp!r}")
-if not semantic_water or semantic_water.get("category") != "water":
-    failures.append(f"Photon semantic water regression: {semantic_water!r}")
-if len(semantic_calls) != 2 or any("q" not in call for call in semantic_calls):
-    failures.append(f"Photon text-query regression: {semantic_calls!r}")
+if not structured_camp or structured_camp.get("category") != "camping":
+    failures.append(f"Photon structured camping regression: {structured_camp!r}")
+if not structured_water or structured_water.get("category") != "water":
+    failures.append(f"Photon structured water regression: {structured_water!r}")
+if not named_lodging or named_lodging.get("category") != "lodging":
+    failures.append(f"Photon named lodging regression: {named_lodging!r}")
+if len(structured_calls) != 3:
+    failures.append(f"Photon structured call count regression: {structured_calls!r}")
+elif (
+    not structured_calls[0].get("include")
+    or structured_calls[0].get("q")
+    or not structured_calls[1].get("include")
+    or structured_calls[1].get("q")
+    or structured_calls[2].get("include")
+    or request_v9._fold(str(structured_calls[2].get("q") or "")) != "hotel"
+):
+    failures.append(f"Photon structured/text selector regression: {structured_calls!r}")
 
 # Explicit traverses may recover a validated route by splitting its existing
 # geometry into equal-progress days. No new path geometry may be invented.
