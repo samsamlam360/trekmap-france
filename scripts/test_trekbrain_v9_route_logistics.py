@@ -186,7 +186,7 @@ assert all(
 # Structured outdoor lodging should prefer one exact OSM corridor query and stop
 # before Photon when that query already resolves every night.
 real_bbox_order = logistics._bbox_route_stays
-real_photon_order = logistics._photon_split_stays
+real_photon_order = logistics._photon_route_stays
 order_calls = {"bbox": 0, "photon": 0}
 try:
     def counted_bbox(_coords, category):
@@ -198,7 +198,7 @@ try:
         return []
 
     logistics._bbox_route_stays = counted_bbox
-    logistics._photon_split_stays = counted_photon
+    logistics._photon_route_stays = counted_photon
     chosen_fast, projected_fast, meta_fast = logistics._discover_stays(
         FakeV3(),
         FakeRoundtrip,
@@ -212,7 +212,7 @@ try:
     )
 finally:
     logistics._bbox_route_stays = real_bbox_order
-    logistics._photon_split_stays = real_photon_order
+    logistics._photon_route_stays = real_photon_order
 
 assert len(chosen_fast) == 4, chosen_fast
 assert order_calls == {"bbox": 1, "photon": 0}, order_calls
@@ -220,11 +220,10 @@ assert meta_fast["elapsed_ms"] >= 0
 
 # When structured lodging and terrain are both requested, exact-tag Overpass
 # and one route-bounded Nominatim stay query are independent and must start in
-# the same wave. The expensive per-stage Photon wave is no longer on this hot
-# path.
+# the same wave. The route-wide Photon rescue is no longer on this hot path.
 real_bundle_parallel = logistics._bbox_route_bundle
 real_nominatim_parallel = logistics._nominatim_route_stays
-real_photon_parallel = logistics._photon_split_stays
+real_photon_parallel = logistics._photon_route_stays
 parallel_barrier = threading.Barrier(2)
 parallel_errors = []
 parallel_calls = {"overpass": 0, "nominatim": 0, "photon": 0}
@@ -263,7 +262,7 @@ def forbidden_parallel_photon(*args, **kwargs):
 try:
     logistics._bbox_route_bundle = parallel_bundle
     logistics._nominatim_route_stays = parallel_nominatim
-    logistics._photon_split_stays = forbidden_parallel_photon
+    logistics._photon_route_stays = forbidden_parallel_photon
     chosen_parallel, _projected_parallel, meta_parallel = logistics._discover_stays(
         FakeV3(),
         FakeRoundtrip,
@@ -279,19 +278,19 @@ try:
 finally:
     logistics._bbox_route_bundle = real_bundle_parallel
     logistics._nominatim_route_stays = real_nominatim_parallel
-    logistics._photon_split_stays = real_photon_parallel
+    logistics._photon_route_stays = real_photon_parallel
 
 assert parallel_errors == [], parallel_errors
 assert parallel_calls == {"overpass": 1, "nominatim": 1, "photon": 0}, parallel_calls
 assert len(chosen_parallel) == 4, chosen_parallel
 assert meta_parallel["terrain_preloaded"] is True
 
-# If both cheap route-wide primaries are empty, exactly one bounded Photon
-# rescue wave may recover real overnight candidates. This restores the proven
+# If both cheap route-wide primaries are empty, exactly one bounded route-wide Photon
+# rescue may recover real overnight candidates. This restores the proven
 # resource coverage without putting Photon back on the normal hot path.
 real_bundle_rescue = logistics._bbox_route_bundle
 real_nominatim_rescue = logistics._nominatim_route_stays
-real_photon_rescue = logistics._photon_split_stays
+real_photon_rescue = logistics._photon_route_stays
 rescue_calls = {"overpass": 0, "nominatim": 0, "photon": 0}
 try:
     def empty_rescue_bundle(_coords, category):
@@ -308,7 +307,7 @@ try:
 
     logistics._bbox_route_bundle = empty_rescue_bundle
     logistics._nominatim_route_stays = empty_rescue_nominatim
-    logistics._photon_split_stays = successful_rescue_photon
+    logistics._photon_route_stays = successful_rescue_photon
     chosen_rescue, projected_rescue, meta_rescue = logistics._discover_stays(
         FakeV3(),
         FakeRoundtrip,
@@ -324,7 +323,7 @@ try:
 finally:
     logistics._bbox_route_bundle = real_bundle_rescue
     logistics._nominatim_route_stays = real_nominatim_rescue
-    logistics._photon_split_stays = real_photon_rescue
+    logistics._photon_route_stays = real_photon_rescue
 
 assert rescue_calls == {"overpass": 1, "nominatim": 1, "photon": 1}, rescue_calls
 assert len(projected_rescue) == 4, projected_rescue
@@ -361,6 +360,61 @@ assert captured_nominatim.get("countrycodes") == "fr", captured_nominatim
 assert captured_nominatim.get("viewbox"), captured_nominatim
 assert captured_nominatim.get("q") == "[camping]", captured_nominatim
 assert "osm.tourism.camp_site" in str(captured_nominatim.get("include") or ""), captured_nominatim
+
+# Photon stay rescue is route-wide and uses the public forward-search contract.
+# Structured primary providers already ran before this fallback, so the rescue
+# uses local text queries plus a hard bbox and then exact/semantic validation.
+class RouteWidePhotonV3:
+    PHOTON_URL = "https://photon.test/api/"
+    calls = []
+
+    @staticmethod
+    def _request_json(url, **kwargs):
+        params = dict(kwargs.get("params") or {})
+        RouteWidePhotonV3.calls.append(params)
+        query = str(params.get("q") or "").casefold()
+        if query == "refuge":
+            key, value, name, lon = "tourism", "wilderness_hut", "Refuge route-wide", 0.20
+        elif query == "gîte":
+            key, value, name, lon = "tourism", "guest_house", "Gîte route-wide", 0.40
+        elif query == "hotel":
+            key, value, name, lon = "tourism", "hotel", "Hôtel route-wide", 0.60
+        else:
+            key, value, name, lon = "tourism", "camp_site", "Camping route-wide", 0.20
+        return {
+            "features": [{
+                "properties": {
+                    "name": name,
+                    "countrycode": "FR",
+                    "osm_type": "N",
+                    "osm_id": 7000 + len(RouteWidePhotonV3.calls),
+                    "osm_key": key,
+                    "osm_value": value,
+                },
+                "geometry": {"coordinates": [lon, 0.01]},
+            }]
+        }
+
+RouteWidePhotonV3.calls.clear()
+routewide_refuges = logistics._photon_route_stays(
+    RouteWidePhotonV3, coords, "refuge"
+)
+assert len(RouteWidePhotonV3.calls) == 1, RouteWidePhotonV3.calls
+assert len(routewide_refuges) == 1, routewide_refuges
+assert routewide_refuges[0]["category"] == "refuge", routewide_refuges
+assert RouteWidePhotonV3.calls[0].get("q") == "refuge", RouteWidePhotonV3.calls
+assert RouteWidePhotonV3.calls[0].get("bbox"), RouteWidePhotonV3.calls
+assert "include" not in RouteWidePhotonV3.calls[0], RouteWidePhotonV3.calls
+assert "osm_tag" not in RouteWidePhotonV3.calls[0], RouteWidePhotonV3.calls
+
+RouteWidePhotonV3.calls.clear()
+routewide_lodging = logistics._photon_route_stays(
+    RouteWidePhotonV3, coords, "lodging"
+)
+assert len(RouteWidePhotonV3.calls) == 2, RouteWidePhotonV3.calls
+assert {row.get("q") for row in RouteWidePhotonV3.calls} == {"gîte", "hotel"}, RouteWidePhotonV3.calls
+assert len(routewide_lodging) == 2, routewide_lodging
+assert all(row.get("category") == "lodging" for row in routewide_lodging), routewide_lodging
 
 # A public Overpass primary may be empty or unavailable while another mirror
 # still has the corridor data. Keep the normal single-primary path, then race at
@@ -454,7 +508,7 @@ assert empty_preloaded is False
 # instead of paying for a second terrain query after planning.
 real_bundle_terrain = logistics._bbox_route_bundle
 real_nominatim_terrain = logistics._nominatim_route_stays
-real_photon_terrain = logistics._photon_split_stays
+real_photon_terrain = logistics._photon_route_stays
 try:
     logistics._bbox_route_bundle = lambda _coords, category: (
         [dict(x) for x in camps],
@@ -485,7 +539,7 @@ try:
         True,
     )
     logistics._nominatim_route_stays = lambda *args, **kwargs: []
-    logistics._photon_split_stays = lambda *args, **kwargs: []
+    logistics._photon_route_stays = lambda *args, **kwargs: []
     chosen_terrain, _projected_terrain, meta_terrain = logistics._discover_stays(
         FakeV3(),
         FakeRoundtrip,
@@ -501,7 +555,7 @@ try:
 finally:
     logistics._bbox_route_bundle = real_bundle_terrain
     logistics._nominatim_route_stays = real_nominatim_terrain
-    logistics._photon_split_stays = real_photon_terrain
+    logistics._photon_route_stays = real_photon_terrain
 
 assert len(chosen_terrain) == 4, chosen_terrain
 assert meta_terrain["terrain_preloaded"] is True

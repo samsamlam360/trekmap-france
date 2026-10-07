@@ -563,6 +563,210 @@ def _nominatim_route_stays(coords, category: str) -> list[dict[str, Any]]:
     return deduped[:_MAX_DISCOVERED]
 
 
+def _photon_route_stays(v3, coords, category: str) -> list[dict[str, Any]]:
+    """One bounded Photon rescue for the whole route corridor.
+
+    Exact-tag Overpass and bounded Nominatim are the primary stay sources. If
+    both are insufficient, query Photon once for camping/refuge or twice in
+    parallel for generic lodging (gîte + hotel), then project every returned
+    candidate back onto the already validated hiking line. This replaces the
+    former one-request-per-night wave without changing route geometry.
+    """
+    valid = []
+    for point in coords or []:
+        if not isinstance(point, (list, tuple)) or len(point) < 2:
+            continue
+        try:
+            lat, lon = float(point[0]), float(point[1])
+        except (TypeError, ValueError):
+            continue
+        if math.isfinite(lat) and math.isfinite(lon):
+            valid.append((lat, lon))
+    if len(valid) < 2:
+        return []
+
+    request_json = getattr(v3, "_request_json", None)
+    photon_url = getattr(v3, "PHOTON_URL", None)
+    if not callable(request_json) or not photon_url:
+        return []
+
+    if category == "camping":
+        searches = ("camping",)
+        radius_km = 8.0
+        allowed = {
+            ("tourism", "camp_site"),
+            ("tourism", "caravan_site"),
+        }
+    elif category == "refuge":
+        searches = ("refuge",)
+        radius_km = 8.0
+        allowed = {
+            ("tourism", "alpine_hut"),
+            ("tourism", "wilderness_hut"),
+            ("amenity", "shelter"),
+        }
+    else:
+        searches = ("gîte", "hotel")
+        radius_km = 12.5
+        allowed = {
+            ("tourism", "hotel"),
+            ("tourism", "hostel"),
+            ("tourism", "guest_house"),
+            ("tourism", "chalet"),
+            ("tourism", "apartment"),
+            ("tourism", "camp_site"),
+            ("tourism", "caravan_site"),
+            ("tourism", "alpine_hut"),
+            ("tourism", "wilderness_hut"),
+            ("amenity", "shelter"),
+        }
+
+    min_lat = min(x[0] for x in valid)
+    max_lat = max(x[0] for x in valid)
+    min_lon = min(x[1] for x in valid)
+    max_lon = max(x[1] for x in valid)
+    mid_lat = (min_lat + max_lat) / 2.0
+    mid_lon = (min_lon + max_lon) / 2.0
+    pad_lat = min(0.14, max(0.025, radius_km / 111.0))
+    pad_lon = min(
+        0.18,
+        max(0.03, radius_km / max(35.0, 111.0 * math.cos(math.radians(mid_lat)))),
+    )
+    west, east = min_lon - pad_lon, max_lon + pad_lon
+    south, north = min_lat - pad_lat, max_lat + pad_lat
+    profile = perf.current()
+
+    def run_query(query):
+        started = time.perf_counter()
+        outcome = "ok"
+        try:
+            return request_json(
+                photon_url,
+                params={
+                    "q": query,
+                    "lat": round(mid_lat, 6),
+                    "lon": round(mid_lon, 6),
+                    "zoom": 11,
+                    "location_bias_scale": 0.0,
+                    "bbox": f"{west:.6f},{south:.6f},{east:.6f},{north:.6f}",
+                    "countrycode": "FR",
+                    "limit": 50,
+                    "lang": "fr",
+                },
+                timeout=1.4,
+                ttl=21600,
+                service="Photon route stays",
+                retries=1,
+                cache_empty=False,
+            )
+        except Exception:
+            outcome = "error"
+            return {}
+        finally:
+            perf.record(
+                "photon.route_lookup",
+                (time.perf_counter() - started) * 1000,
+                profile=profile,
+                category=category,
+                query=query,
+                outcome=outcome,
+            )
+
+    payloads = []
+    with ThreadPoolExecutor(max_workers=len(searches)) as pool:
+        futures = [pool.submit(run_query, query) for query in searches]
+        for future in as_completed(futures):
+            try:
+                payloads.append(future.result())
+            except Exception:
+                payloads.append({})
+
+    out = []
+    for payload in payloads:
+        for feature in (payload.get("features") or []) if isinstance(payload, dict) else []:
+            props = feature.get("properties") or {}
+            country = str(props.get("countrycode") or props.get("country_code") or "").upper()
+            if country and country != "FR":
+                continue
+            geometry = (feature.get("geometry") or {}).get("coordinates") or []
+            if len(geometry) < 2:
+                continue
+            try:
+                lon, lat = float(geometry[0]), float(geometry[1])
+            except (TypeError, ValueError):
+                continue
+            if not (math.isfinite(lat) and math.isfinite(lon)):
+                continue
+
+            osm_key = str(props.get("osm_key") or "")
+            osm_value = str(props.get("osm_value") or "")
+            exact = (osm_key, osm_value) in allowed
+            semantic = _fold(" ".join(
+                str(value or "")
+                for value in (
+                    props.get("name"),
+                    props.get("street"),
+                    props.get("city"),
+                    props.get("type"),
+                    props.get("osm_value"),
+                )
+            ))
+
+            if category == "camping":
+                semantic_ok = "camp" in semantic or "caravan" in semantic
+            elif category == "refuge":
+                semantic_ok = any(token in semantic for token in (
+                    "refuge", "hut", "abri", "cabane"
+                ))
+            else:
+                semantic_ok = any(token in semantic for token in (
+                    "hotel", "gite", "auberge", "hostel", "guest house",
+                    "chalet", "camp", "refuge", "hut", "abri", "cabane"
+                ))
+            if not exact and not semantic_ok:
+                continue
+
+            actual = category
+            if category == "lodging":
+                if osm_value in {"camp_site", "caravan_site"} or "camp" in semantic:
+                    actual = "camping"
+                elif (
+                    osm_value in {"alpine_hut", "wilderness_hut", "shelter"}
+                    or any(token in semantic for token in ("refuge", "hut", "abri", "cabane"))
+                ):
+                    actual = "refuge"
+                else:
+                    actual = "lodging"
+
+            fallback_name = (
+                "Camping" if actual == "camping"
+                else "Refuge" if actual == "refuge"
+                else "Hébergement"
+            )
+            name = str(
+                props.get("name")
+                or props.get("street")
+                or props.get("city")
+                or fallback_name
+            )[:180]
+            out.append({
+                "name": name,
+                "lat": lat,
+                "lon": lon,
+                "category": actual,
+                "source_url": _osm_url(props),
+                "osm_tags": {"class": osm_key, "type": osm_value},
+            })
+
+    deduped, seen = [], set()
+    for item in out:
+        key = _stay_key(item)
+        if key and key not in seen:
+            seen.add(key)
+            deduped.append(item)
+    return deduped[:_MAX_DISCOVERED]
+
+
 def _photon_split_stays(v3, roundtrip, coords, category: str, days: int) -> list[dict[str, Any]]:
     """Fast first pass: one bounded Photon lookup around each ideal night split."""
     if days <= 1 or len(coords or []) < 3:
@@ -825,13 +1029,13 @@ def _discover_stays(
     chosen = _choose_stays(roundtrip, coords, projected, days, daily_target)
 
     # Overpass and route-wide Nominatim are the cheap primary sources. If they
-    # are both empty/incomplete, allow exactly one bounded Photon stage-anchor
-    # wave as a rescue. The jobs inside that wave run concurrently and every
-    # candidate is still projected back onto the validated route before use.
+    # are both empty/incomplete, allow exactly one route-wide Photon rescue.
+    # Every candidate is still projected back onto the validated route before
+    # use, but long treks no longer open one public request per night.
     if len(chosen) < needed and deadline - time.monotonic() >= 0.9:
         rows.extend(provider_call(
             "logistics.photon_fallback",
-            _photon_split_stays, v3, roundtrip, coords, category, days
+            _photon_route_stays, v3, coords, category
         ))
         projected = _project_stays(roundtrip, coords, rows, category, max_offroute)
         chosen = _choose_stays(roundtrip, coords, projected, days, daily_target)
