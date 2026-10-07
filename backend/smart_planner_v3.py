@@ -952,11 +952,8 @@ def _photon_anchor_resource(anchor, category: str, osm_tags, radius_km: float, q
         "limit": 20,
         "lang": "fr",
     }
-    if allowed_categories and not query_override:
-        params["include"] = ",".join(allowed_categories)
-    else:
-        # Named lodging fallbacks deliberately remain text searches.
-        params["q"] = query
+    if primary_osm_tag and not query_override:
+        params["osm_tag"] = primary_osm_tag
     try:
         payload = _request_json(
             PHOTON_URL,
