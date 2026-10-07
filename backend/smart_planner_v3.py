@@ -1423,25 +1423,8 @@ def _build(data: AIPlanRequest, legacy_main):
             if corridor_centered and forced_start and forced_end:
                 base, extra = [], []
             else:
-                # Overpass failure must not trigger a second broad regional
-                # resource sweep before the walking backbone exists. Route shape
-                # needs only a few real anchors; overnight, water and food are
-                # attached later against validated route/stage anchors.
-                fallback_categories = ["viewpoint"]
-                if intent.get("transit"):
-                    fallback_categories.append("transit")
-                base = perf.call(
-                    "route.photon_shape_fallback",
-                    _photon_category_candidates,
-                    location,
-                    center,
-                    fallback_categories,
-                )
+                base = _photon_category_candidates(location, center, base_categories)
                 extra = []
-                notes.append(
-                    "Overpass indisponible : tracé construit avec un jeu réduit "
-                    "d'ancrages Photon, ressources détaillées reportées après routage."
-                )
 
     # If a traverse has too little context but the broad OSM query succeeded,
     # one bounded endpoint fallback may add useful POIs. After an OSM timeout,
