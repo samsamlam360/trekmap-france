@@ -183,6 +183,46 @@ assert all(
 )
 
 
+# Photon rescue for structured stays uses local text ranking, while the shared
+# lookup remains responsible for bbox/distance/semantic validation.
+class FakePhotonRoundtrip(FakeRoundtrip):
+    @staticmethod
+    def _equal_anchors(_coords, days):
+        return [
+            {"name": f"Repère jour {day}", "lat": 0.0, "lon": day * 0.20}
+            for day in range(1, days)
+        ]
+
+class FakePhotonV3:
+    calls = []
+
+    @staticmethod
+    def _photon_anchor_resource(anchor, category, tags, radius, query_override=None):
+        FakePhotonV3.calls.append((category, tuple(tags), float(radius), query_override))
+        return {
+            "name": f"{query_override or 'stay'} test",
+            "lat": anchor["lat"],
+            "lon": anchor["lon"],
+            "category": "camping" if query_override == "camping" else "refuge",
+            "source_url": f"osm://{query_override}/{anchor['lon']}",
+        }
+
+FakePhotonV3.calls = []
+text_camps = logistics._photon_split_stays(
+    FakePhotonV3, FakePhotonRoundtrip, coords, "camping", 3
+)
+assert len(text_camps) == 2, text_camps
+assert all(call[3] == "camping" for call in FakePhotonV3.calls), FakePhotonV3.calls
+assert all("tourism:camp_site" in call[1] for call in FakePhotonV3.calls), FakePhotonV3.calls
+
+FakePhotonV3.calls = []
+text_refuges = logistics._photon_split_stays(
+    FakePhotonV3, FakePhotonRoundtrip, coords, "refuge", 3
+)
+assert len(text_refuges) == 2, text_refuges
+assert all(call[3] == "refuge" for call in FakePhotonV3.calls), FakePhotonV3.calls
+assert all("tourism:alpine_hut" in call[1] for call in FakePhotonV3.calls), FakePhotonV3.calls
+
 # Structured outdoor lodging should prefer one exact OSM corridor query and stop
 # before Photon when that query already resolves every night.
 real_bbox_order = logistics._bbox_route_stays
