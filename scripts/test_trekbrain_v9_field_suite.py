@@ -312,13 +312,13 @@ try:
     def fake_structured_photon(url, **kwargs):
         params = kwargs.get("params") or {}
         structured_calls.append(dict(params))
-        include = request_v9._fold(str(params.get("include") or ""))
+        osm_tag = request_v9._fold(str(params.get("osm_tag") or ""))
         query = request_v9._fold(str(params.get("q") or ""))
         if not params.get("bbox"):
             raise AssertionError(f"Photon resource request must stay bbox-bounded: {params!r}")
-        if "osm.tourism.camp_site" in include:
+        if osm_tag == "tourism camp site":
             name, key, value = "Camping structuré", "tourism", "camp_site"
-        elif "osm.amenity.drinking_water" in include:
+        elif osm_tag == "amenity drinking water":
             name, key, value = "Fontaine structurée", "amenity", "drinking_water"
         elif "hotel" in query:
             name, key, value = "Hôtel nommé", "tourism", "hotel"
@@ -370,11 +370,11 @@ if not named_lodging or named_lodging.get("category") != "lodging":
 if len(structured_calls) != 3:
     failures.append(f"Photon structured call count regression: {structured_calls!r}")
 elif (
-    not structured_calls[0].get("include")
-    or structured_calls[0].get("q")
-    or not structured_calls[1].get("include")
-    or structured_calls[1].get("q")
-    or structured_calls[2].get("include")
+    structured_calls[0].get("osm_tag") != "tourism:camp_site"
+    or request_v9._fold(str(structured_calls[0].get("q") or "")) != "camping"
+    or structured_calls[1].get("osm_tag") != "amenity:drinking_water"
+    or request_v9._fold(str(structured_calls[1].get("q") or "")) != "fontaine"
+    or structured_calls[2].get("osm_tag")
     or request_v9._fold(str(structured_calls[2].get("q") or "")) != "hotel"
 ):
     failures.append(f"Photon structured/text selector regression: {structured_calls!r}")
