@@ -218,15 +218,16 @@ assert len(chosen_fast) == 4, chosen_fast
 assert order_calls == {"bbox": 1, "photon": 0}, order_calls
 assert meta_fast["elapsed_ms"] >= 0
 
-# When structured lodging and terrain are both requested, Overpass and Photon
-# are independent provider calls and must start in the same wave. This preserves
-# the exact candidate merge while making latency approach max(provider times)
-# instead of their sum. Photon must run exactly once, not again as a fallback.
+# When structured lodging and terrain are both requested, exact-tag Overpass
+# and one route-bounded Nominatim stay query are independent and must start in
+# the same wave. The expensive per-stage Photon wave is no longer on this hot
+# path.
 real_bundle_parallel = logistics._bbox_route_bundle
+real_nominatim_parallel = logistics._nominatim_route_stays
 real_photon_parallel = logistics._photon_split_stays
 parallel_barrier = threading.Barrier(2)
 parallel_errors = []
-parallel_calls = {"overpass": 0, "photon": 0}
+parallel_calls = {"overpass": 0, "nominatim": 0, "photon": 0}
 
 def parallel_bundle(_coords, category):
     parallel_calls["overpass"] += 1
@@ -247,17 +248,22 @@ def parallel_bundle(_coords, category):
         True,
     )
 
-def parallel_photon(*args, **kwargs):
-    parallel_calls["photon"] += 1
+def parallel_nominatim(*args, **kwargs):
+    parallel_calls["nominatim"] += 1
     try:
         parallel_barrier.wait(timeout=0.75)
     except threading.BrokenBarrierError:
-        parallel_errors.append("photon-not-concurrent")
+        parallel_errors.append("nominatim-not-concurrent")
     return []
+
+def forbidden_parallel_photon(*args, **kwargs):
+    parallel_calls["photon"] += 1
+    raise AssertionError("Photon must stay out of the route-first hot path")
 
 try:
     logistics._bbox_route_bundle = parallel_bundle
-    logistics._photon_split_stays = parallel_photon
+    logistics._nominatim_route_stays = parallel_nominatim
+    logistics._photon_split_stays = forbidden_parallel_photon
     chosen_parallel, _projected_parallel, meta_parallel = logistics._discover_stays(
         FakeV3(),
         FakeRoundtrip,
@@ -272,12 +278,42 @@ try:
     )
 finally:
     logistics._bbox_route_bundle = real_bundle_parallel
+    logistics._nominatim_route_stays = real_nominatim_parallel
     logistics._photon_split_stays = real_photon_parallel
 
 assert parallel_errors == [], parallel_errors
-assert parallel_calls == {"overpass": 1, "photon": 1}, parallel_calls
+assert parallel_calls == {"overpass": 1, "nominatim": 1, "photon": 0}, parallel_calls
 assert len(chosen_parallel) == 4, chosen_parallel
 assert meta_parallel["terrain_preloaded"] is True
+
+# Nominatim route-stay discovery is one bounded route-wide request and keeps
+# real OSM provenance. This is the resilient stay source when public Overpass is
+# empty from Render.
+real_nominatim_request = free._request_json
+captured_nominatim = {}
+try:
+    def fake_nominatim_request(url, **kwargs):
+        captured_nominatim.update(dict(kwargs.get("params") or {}))
+        return [{
+            "lat": "0.01",
+            "lon": "0.20",
+            "class": "tourism",
+            "type": "camp_site",
+            "display_name": "Camping Nominatim, Zone test, France",
+            "osm_type": "node",
+            "osm_id": 4242,
+        }]
+    free._request_json = fake_nominatim_request
+    nominatim_camps = logistics._nominatim_route_stays(coords, "camping")
+finally:
+    free._request_json = real_nominatim_request
+
+assert len(nominatim_camps) == 1, nominatim_camps
+assert nominatim_camps[0]["name"] == "Camping Nominatim", nominatim_camps
+assert nominatim_camps[0]["source_url"].endswith("/node/4242"), nominatim_camps
+assert captured_nominatim.get("bounded") == 1, captured_nominatim
+assert captured_nominatim.get("countrycodes") == "fr", captured_nominatim
+assert captured_nominatim.get("viewbox"), captured_nominatim
 
 # A public Overpass primary may be empty or unavailable while another mirror
 # still has the corridor data. Keep the normal single-primary path, then race at
@@ -370,6 +406,7 @@ assert empty_preloaded is False
 # When water/food are requested, the lodging corridor OSM response is reused
 # instead of paying for a second terrain query after planning.
 real_bundle_terrain = logistics._bbox_route_bundle
+real_nominatim_terrain = logistics._nominatim_route_stays
 real_photon_terrain = logistics._photon_split_stays
 try:
     logistics._bbox_route_bundle = lambda _coords, category: (
@@ -400,6 +437,7 @@ try:
         ],
         True,
     )
+    logistics._nominatim_route_stays = lambda *args, **kwargs: []
     logistics._photon_split_stays = lambda *args, **kwargs: []
     chosen_terrain, _projected_terrain, meta_terrain = logistics._discover_stays(
         FakeV3(),
@@ -415,6 +453,7 @@ try:
     )
 finally:
     logistics._bbox_route_bundle = real_bundle_terrain
+    logistics._nominatim_route_stays = real_nominatim_terrain
     logistics._photon_split_stays = real_photon_terrain
 
 assert len(chosen_terrain) == 4, chosen_terrain
@@ -451,10 +490,10 @@ generic_lodging = [
     {"name": "Gîte C", "lat": 0.110, "lon": 0.60, "category": "lodging", "source_url": "osm://gc"},
     {"name": "Gîte D", "lat": 0.110, "lon": 0.80, "category": "lodging", "source_url": "osm://gd"},
 ]
-real_photon_generic = logistics._photon_split_stays
+real_nominatim_generic = logistics._nominatim_route_stays
 real_bbox_generic = logistics._bbox_route_stays
 try:
-    logistics._photon_split_stays = lambda *args, **kwargs: [dict(x) for x in generic_lodging]
+    logistics._nominatim_route_stays = lambda *args, **kwargs: [dict(x) for x in generic_lodging]
     logistics._bbox_route_stays = lambda *args, **kwargs: []
     chosen_generic, projected_generic, _meta_generic = logistics._discover_stays(
         FakeV3(),
@@ -468,7 +507,7 @@ try:
         False,
     )
 finally:
-    logistics._photon_split_stays = real_photon_generic
+    logistics._nominatim_route_stays = real_nominatim_generic
     logistics._bbox_route_stays = real_bbox_generic
 
 assert len(chosen_generic) == 4, chosen_generic
@@ -481,10 +520,10 @@ assert all(10.0 < float(x.get("_offroute_km") or 0) <= 12.5 for x in chosen_gene
 two_day_lodging = [
     {"name": "Hôtel transfert", "lat": 0.110, "lon": 0.10, "category": "lodging", "source_url": "osm://transfer"}
 ]
-real_photon_two_day = logistics._photon_split_stays
+real_nominatim_two_day = logistics._nominatim_route_stays
 real_bbox_two_day = logistics._bbox_route_stays
 try:
-    logistics._photon_split_stays = lambda *args, **kwargs: [dict(x) for x in two_day_lodging]
+    logistics._nominatim_route_stays = lambda *args, **kwargs: [dict(x) for x in two_day_lodging]
     logistics._bbox_route_stays = lambda *args, **kwargs: []
     chosen_two_day, projected_two_day, _meta_two_day = logistics._discover_stays(
         FakeV3(),
@@ -498,7 +537,7 @@ try:
         False,
     )
 finally:
-    logistics._photon_split_stays = real_photon_two_day
+    logistics._nominatim_route_stays = real_nominatim_two_day
     logistics._bbox_route_stays = real_bbox_two_day
 
 assert len(projected_two_day) == 1, projected_two_day
