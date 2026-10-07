@@ -929,12 +929,13 @@ def _photon_anchor_resource(anchor, category: str, osm_tags, radius_km: float, q
     bbox_radius = max(1.0, min(40.0, float(radius_km) + 0.75))
     dlat = bbox_radius / 111.0
     dlon = bbox_radius / max(35.0, 111.0 * math.cos(math.radians(lat)))
-    allowed_categories = [
-        "osm." + str(tag).replace(":", ".", 1)
-        for tag in tags
-        if ":" in str(tag)
-    ]
+    # Photon category names depend on the server's import configuration.
+    # Use the documented forward-search contract instead: a local text query
+    # plus one principal OSM tag. This keeps the bbox hard bound while avoiding
+    # installation-specific category filters that can legitimately return zero.
+    primary_osm_tag = next((str(tag) for tag in tags if ":" in str(tag)), "")
     params = {
+        "q": query,
         "lat": round(lat, 6),
         "lon": round(lon, 6),
         "zoom": 13,
