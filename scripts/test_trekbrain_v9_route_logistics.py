@@ -315,7 +315,7 @@ assert captured_nominatim.get("bounded") == 1, captured_nominatim
 assert captured_nominatim.get("countrycodes") == "fr", captured_nominatim
 assert captured_nominatim.get("viewbox"), captured_nominatim
 assert captured_nominatim.get("q") == "[camping]", captured_nominatim
-assert "osm.tourism.camp_site" in str(captured_nominatim.get("include") or ""), captured_nominatim
+assert "include" not in captured_nominatim, captured_nominatim
 
 # A public Overpass primary may be empty or unavailable while another mirror
 # still has the corridor data. Keep the normal single-primary path, then race at
