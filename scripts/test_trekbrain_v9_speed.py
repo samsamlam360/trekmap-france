@@ -162,14 +162,43 @@ try:
         "TestZone",
         {"lat": 48.0, "lon": 2.0},
         ["camping", "refuge", "food", "transit", "viewpoint", "water"],
+        preferred_category="refuge",
     )
 finally:
     free._geocode_photon = real_bounded_photon
 
-assert len(bounded_rows) >= 4, bounded_rows
-assert len(bounded_calls) == 8, bounded_calls
+assert len(bounded_rows) >= 5, bounded_rows
+expected_first_wave = [
+    "camping TestZone", "refuge TestZone", "gîte TestZone",
+    "boulangerie TestZone", "gare TestZone", "sommet TestZone",
+]
+assert len(bounded_calls) == 6, bounded_calls
 assert all(timeout <= 3.21 and retries == 1 for _query, timeout, retries in bounded_calls), bounded_calls
-assert sorted(query for query, _timeout, _retries in bounded_calls) == sorted(expected_queries), bounded_calls
+assert sorted(query for query, _timeout, _retries in bounded_calls) == sorted(expected_first_wave), bounded_calls
+
+# Sparse first-wave evidence must still unlock the remaining historical terms.
+sparse_calls = []
+def fake_sparse_photon(query, *, timeout=12, retries=2):
+    sparse_calls.append((query, float(timeout), int(retries)))
+    if "camping" not in query:
+        return []
+    return [{
+        "name": query, "short_name": query, "lat": 48.001, "lon": 2.001,
+        "category": "place", "source_url": "placeholder",
+    }]
+
+free._geocode_photon = fake_sparse_photon
+try:
+    free._photon_category_candidates_bounded(
+        "TestZone",
+        {"lat": 48.0, "lon": 2.0},
+        ["camping", "refuge", "food", "transit", "viewpoint", "water"],
+        preferred_category="refuge",
+    )
+finally:
+    free._geocode_photon = real_bounded_photon
+assert sorted(query for query, _timeout, _retries in sparse_calls) == sorted(expected_queries), sparse_calls
+assert all(timeout <= 3.21 and retries == 1 for _query, timeout, retries in sparse_calls), sparse_calls
 
 # Form-encoded Overpass POSTs use direct FOSSGIS backends first. Avoid the
 # generic redirecting host on the hot path so POST bodies are sent straight to
