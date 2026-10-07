@@ -308,7 +308,7 @@ try:
 
     logistics._bbox_route_bundle = empty_rescue_bundle
     logistics._nominatim_route_stays = empty_rescue_nominatim
-    logistics._photon_split_stays = successful_rescue_photon
+    logistics._photon_route_stays = successful_rescue_photon
     chosen_rescue, projected_rescue, meta_rescue = logistics._discover_stays(
         FakeV3(),
         FakeRoundtrip,
@@ -324,7 +324,7 @@ try:
 finally:
     logistics._bbox_route_bundle = real_bundle_rescue
     logistics._nominatim_route_stays = real_nominatim_rescue
-    logistics._photon_split_stays = real_photon_rescue
+    logistics._photon_route_stays = real_photon_rescue
 
 assert rescue_calls == {"overpass": 1, "nominatim": 1, "photon": 1}, rescue_calls
 assert len(projected_rescue) == 4, projected_rescue
@@ -547,7 +547,7 @@ try:
         True,
     )
     logistics._nominatim_route_stays = lambda *args, **kwargs: []
-    logistics._photon_split_stays = lambda *args, **kwargs: []
+    logistics._photon_route_stays = lambda *args, **kwargs: []
     chosen_terrain, _projected_terrain, meta_terrain = logistics._discover_stays(
         FakeV3(),
         FakeRoundtrip,
@@ -563,7 +563,7 @@ try:
 finally:
     logistics._bbox_route_bundle = real_bundle_terrain
     logistics._nominatim_route_stays = real_nominatim_terrain
-    logistics._photon_split_stays = real_photon_terrain
+    logistics._photon_route_stays = real_photon_terrain
 
 assert len(chosen_terrain) == 4, chosen_terrain
 assert meta_terrain["terrain_preloaded"] is True
