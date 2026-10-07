@@ -25,13 +25,14 @@ PLANNER_VERSION = "trekmap-free-planner-v2"
 NOMINATIM_URL = "https://nominatim.openstreetmap.org/search"
 PHOTON_URL = "https://photon.komoot.io/api/"
 OVERPASS_URLS = [
-    # Use the direct FOSSGIS backends first. The generic overpass-api.de host
-    # may redirect between them; direct POST targets avoid an unnecessary
-    # redirect hop for form-encoded Overpass QL requests.
+    # Keep one direct FOSSGIS backend first, then use an independent global
+    # mirror before retrying the sibling FOSSGIS backend. Render has repeatedly
+    # seen lz4/z fail together, while the VK Maps instance had never been tried
+    # by the production fallback despite being configured.
     "https://lz4.overpass-api.de/api/interpreter",
+    "https://maps.mail.ru/osm/tools/overpass/api/interpreter",
     "https://z.overpass-api.de/api/interpreter",
     "https://overpass.private.coffee/api/interpreter",
-    "https://maps.mail.ru/osm/tools/overpass/api/interpreter",
 ]
 USER_AGENT = os.getenv(
     "TREKMAP_USER_AGENT",
