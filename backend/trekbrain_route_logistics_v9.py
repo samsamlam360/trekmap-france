@@ -468,22 +468,15 @@ def _nominatim_route_stays(coords, category: str) -> list[dict[str, Any]]:
 
     if category == "camping":
         query = "[camping]"
-        include = "osm.tourism.camp_site,osm.tourism.caravan_site"
     elif category == "refuge":
         query = "[refuge]"
-        include = "osm.tourism.alpine_hut,osm.tourism.wilderness_hut,osm.amenity.shelter"
     else:
         query = "[hotel]"
-        include = (
-            "osm.tourism.hotel,osm.tourism.hostel,osm.tourism.guest_house,"
-            "osm.tourism.chalet,osm.tourism.apartment"
-        )
     try:
         payload = free._request_json(
             free.NOMINATIM_URL,
             params={
                 "q": query,
-                "include": include,
                 "format": "jsonv2",
                 "limit": 30,
                 "countrycodes": "fr",
