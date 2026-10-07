@@ -17,6 +17,7 @@ from typing import Any
 from fastapi import Depends, HTTPException
 
 from . import ors
+from . import trekbrain_perf_profile_v9 as perf
 from .free_planner_v2 import (
     AIPlanRequest,
     _closest,
