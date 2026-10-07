@@ -223,35 +223,35 @@ try:
         params = kwargs.get("params") or {}
         if "/api/" not in str(url):
             raise AssertionError(f"post-route Photon should use forward API, got {url!r}")
-        if not params.get("q") and not params.get("include"):
-            raise AssertionError(f"post-route Photon selector missing: {params!r}")
+        if not params.get("q"):
+            raise AssertionError(f"post-route Photon q selector missing: {params!r}")
         if "lat" not in params or "lon" not in params:
             raise AssertionError(f"post-route Photon bias missing: {params!r}")
-        if "osm_tag" in params:
-            raise AssertionError(f"post-route Photon must not use legacy osm_tag: {params!r}")
+        if params.get("include"):
+            raise AssertionError(f"post-route Photon must not use installation-specific include filters: {params!r}")
 
         query = str(params.get("q") or "").casefold()
-        include = str(params.get("include") or "").casefold()
+        osm_tag = str(params.get("osm_tag") or "").casefold()
 
-        # Structured route resources now use Photon's include=osm.* filter with
-        # a local exact-tag validation. Named lodging fallbacks may still use q.
-        if "osm.railway.station" in include or "gare" in query:
+        # Production uses Photon's public forward-search contract: q plus one
+        # principal osm_tag, with a hard local bbox and local exact-tag checks.
+        # Named lodging overrides intentionally omit osm_tag and remain text
+        # searches.
+        if osm_tag == "railway:station" or "gare" in query:
             name, key, value = ("Gare test", "railway", "station")
-        elif "osm.amenity.drinking_water" in include or "fontaine" in query:
+        elif osm_tag == "amenity:drinking_water" or "fontaine" in query:
             name, key, value = ("Fontaine test", "amenity", "drinking_water")
         elif (
-            "osm.shop.supermarket" in include
-            or "osm.shop.convenience" in include
-            or "osm.shop.bakery" in include
+            osm_tag in {"shop:supermarket", "shop:convenience", "shop:bakery"}
             or "boulanger" in query
             or "supermarch" in query
             or "épicer" in query
             or "epicer" in query
         ):
             name, key, value = ("Épicerie test", "shop", "convenience")
-        elif "osm.tourism.camp_site" in include or "camping" in query:
+        elif osm_tag in {"tourism:camp_site", "tourism:caravan_site"} or "camping" in query:
             name, key, value = ("Camping test", "tourism", "camp_site")
-        elif "osm.tourism.hotel" in include or "hotel" in query or "gîte" in query or "gite" in query:
+        elif osm_tag in {"tourism:hotel", "tourism:hostel", "tourism:guest_house"} or "hotel" in query or "gîte" in query or "gite" in query:
             name, key, value = ("Hébergement test", "tourism", "hotel")
         else:
             name, key, value = ("Refuge test", "tourism", "wilderness_hut")
@@ -312,13 +312,13 @@ try:
     def fake_structured_photon(url, **kwargs):
         params = kwargs.get("params") or {}
         structured_calls.append(dict(params))
-        osm_tag = request_v9._fold(str(params.get("osm_tag") or ""))
+        osm_tag = str(params.get("osm_tag") or "").casefold()
         query = request_v9._fold(str(params.get("q") or ""))
         if not params.get("bbox"):
             raise AssertionError(f"Photon resource request must stay bbox-bounded: {params!r}")
-        if osm_tag == "tourism camp site":
+        if osm_tag == "tourism:camp_site":
             name, key, value = "Camping structuré", "tourism", "camp_site"
-        elif osm_tag == "amenity drinking water":
+        elif osm_tag == "amenity:drinking_water":
             name, key, value = "Fontaine structurée", "amenity", "drinking_water"
         elif "hotel" in query:
             name, key, value = "Hôtel nommé", "tourism", "hotel"
