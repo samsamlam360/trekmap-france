@@ -286,6 +286,51 @@ assert parallel_calls == {"overpass": 1, "nominatim": 1, "photon": 0}, parallel_
 assert len(chosen_parallel) == 4, chosen_parallel
 assert meta_parallel["terrain_preloaded"] is True
 
+# If both cheap route-wide primaries are empty, exactly one bounded Photon
+# rescue wave may recover real overnight candidates. This restores the proven
+# resource coverage without putting Photon back on the normal hot path.
+real_bundle_rescue = logistics._bbox_route_bundle
+real_nominatim_rescue = logistics._nominatim_route_stays
+real_photon_rescue = logistics._photon_split_stays
+rescue_calls = {"overpass": 0, "nominatim": 0, "photon": 0}
+try:
+    def empty_rescue_bundle(_coords, category):
+        rescue_calls["overpass"] += 1
+        return [], [], False
+
+    def empty_rescue_nominatim(*args, **kwargs):
+        rescue_calls["nominatim"] += 1
+        return []
+
+    def successful_rescue_photon(*args, **kwargs):
+        rescue_calls["photon"] += 1
+        return [dict(x) for x in camps]
+
+    logistics._bbox_route_bundle = empty_rescue_bundle
+    logistics._nominatim_route_stays = empty_rescue_nominatim
+    logistics._photon_split_stays = successful_rescue_photon
+    chosen_rescue, projected_rescue, meta_rescue = logistics._discover_stays(
+        FakeV3(),
+        FakeRoundtrip,
+        FakeStayRescue,
+        coords,
+        {"name": "Départ", "lat": 0.0, "lon": 0.0},
+        "camping",
+        5,
+        20.0,
+        False,
+        want_terrain=True,
+    )
+finally:
+    logistics._bbox_route_bundle = real_bundle_rescue
+    logistics._nominatim_route_stays = real_nominatim_rescue
+    logistics._photon_split_stays = real_photon_rescue
+
+assert rescue_calls == {"overpass": 1, "nominatim": 1, "photon": 1}, rescue_calls
+assert len(projected_rescue) == 4, projected_rescue
+assert len(chosen_rescue) == 4, chosen_rescue
+assert meta_rescue["terrain_preloaded"] is False
+
 # Nominatim route-stay discovery is one bounded route-wide request and keeps
 # real OSM provenance. This is the resilient stay source when public Overpass is
 # empty from Render.

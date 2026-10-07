@@ -824,6 +824,18 @@ def _discover_stays(
     projected = _project_stays(roundtrip, coords, rows, category, max_offroute)
     chosen = _choose_stays(roundtrip, coords, projected, days, daily_target)
 
+    # Overpass and route-wide Nominatim are the cheap primary sources. If they
+    # are both empty/incomplete, allow exactly one bounded Photon stage-anchor
+    # wave as a rescue. The jobs inside that wave run concurrently and every
+    # candidate is still projected back onto the validated route before use.
+    if len(chosen) < needed and deadline - time.monotonic() >= 0.9:
+        rows.extend(provider_call(
+            "logistics.photon_fallback",
+            _photon_split_stays, v3, roundtrip, coords, category, days
+        ))
+        projected = _project_stays(roundtrip, coords, rows, category, max_offroute)
+        chosen = _choose_stays(roundtrip, coords, projected, days, daily_target)
+
     # For a single generic night, a valid lodging already discovered inside the
     # transfer radius is more useful than reporting "no lodging" merely because
     # it does not sit near the exact geometric midpoint of the loop. Keep the
@@ -849,8 +861,8 @@ def _discover_stays(
         ]
 
     if len(chosen) < needed and deadline - time.monotonic() >= 0.7:
-        # Keep the fallback bounded to one additional route-wide source. Do not
-        # reopen the expensive per-stage Photon wave after Nominatim/Overpass.
+        # Generic lodging without terrain may still use one exact-tag Overpass
+        # route-wide fallback after the Photon rescue. No provider is repeated.
         if not want_terrain and not structured:
             rows.extend(provider_call(
                 "logistics.overpass_fallback", _bbox_route_stays, coords, category
