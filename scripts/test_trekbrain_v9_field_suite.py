@@ -316,9 +316,9 @@ try:
         query = request_v9._fold(str(params.get("q") or ""))
         if not params.get("bbox"):
             raise AssertionError(f"Photon resource request must stay bbox-bounded: {params!r}")
-        if "osm tourism camp site" in include:
+        if "osm.tourism.camp_site" in include:
             name, key, value = "Camping structuré", "tourism", "camp_site"
-        elif "osm amenity drinking water" in include:
+        elif "osm.amenity.drinking_water" in include:
             name, key, value = "Fontaine structurée", "amenity", "drinking_water"
         elif "hotel" in query:
             name, key, value = "Hôtel nommé", "tourism", "hotel"
