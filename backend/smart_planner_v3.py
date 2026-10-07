@@ -1376,7 +1376,7 @@ def _build(data: AIPlanRequest, legacy_main):
                 corridor_centered = False
 
     if center is None:
-        geo = _geocode(f"{location}, France") or _geocode(location)
+        geo = perf.call("route.geocode_region", lambda: _geocode(f"{location}, France") or _geocode(location))
         if not geo:
             raise HTTPException(status_code=422, detail=f"Impossible de localiser « {location} ».")
         center = geo[0]
@@ -1409,7 +1409,9 @@ def _build(data: AIPlanRequest, legacy_main):
         base, extra = [], []
     else:
         try:
-            base, extra, extra_notes = _combined_nearby(center, radius, base_categories)
+            base, extra, extra_notes = perf.call(
+                "route.discovery", _combined_nearby, center, radius, base_categories
+            )
             notes += extra_notes
         except RuntimeError as exc:
             notes.append(str(exc))
@@ -1489,7 +1491,7 @@ def _build(data: AIPlanRequest, legacy_main):
     max_route_evaluations = 3
     for candidate in candidates[:max_route_evaluations]:
         route_points, stage_highlights = _route_points_for_candidate(candidate, items, intent, forced_via)
-        route = _route_cached(route_points, legacy_main)
+        route = perf.call("route.render_candidate", _route_cached, route_points, legacy_main)
         score, distance, stage_dist, elevation, route_coords = _candidate_score(candidate, route_points, route, intent, items, legacy_main, compute_elevation=False)
         row = (score, candidate, route_points, stage_highlights, route, distance, stage_dist, route_coords)
         evaluated.append(row)
