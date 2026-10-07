@@ -64,6 +64,16 @@ def close_enough(actual, expected):
 real_geocode = request_v9.geo._geocode
 request_v9.geo._geocode = fake_geocode
 failures = []
+
+# Generic v3 routing is instrumented in production. Exercise the profiler symbol
+# here so a missing import cannot survive CI and fail only on real traverses.
+try:
+    profiler_probe = v7.v5.v3.perf.call("test.profiler_import", lambda: 7)
+    if profiler_probe != 7:
+        failures.append(f"planner profiler regression: probe={profiler_probe!r}")
+except Exception as exc:
+    failures.append(f"planner profiler import regression: {type(exc).__name__}: {exc}")
+
 try:
     for case in FIELD_SCENARIOS:
         base = {
