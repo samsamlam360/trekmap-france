@@ -167,12 +167,9 @@ finally:
     free._geocode_photon = real_bounded_photon
 
 assert len(bounded_rows) >= 4, bounded_rows
-assert len(bounded_calls) == 5, bounded_calls
+assert len(bounded_calls) == 8, bounded_calls
 assert all(timeout <= 3.21 and retries == 1 for _query, timeout, retries in bounded_calls), bounded_calls
-assert sorted(query for query, _timeout, _retries in bounded_calls) == sorted([
-    "camping TestZone", "refuge TestZone", "boulangerie TestZone",
-    "gare TestZone", "sommet TestZone",
-]), bounded_calls
+assert sorted(query for query, _timeout, _retries in bounded_calls) == sorted(expected_queries), bounded_calls
 
 # Form-encoded Overpass POSTs use direct FOSSGIS backends first. Avoid the
 # generic redirecting host on the hot path so POST bodies are sent straight to
