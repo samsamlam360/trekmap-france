@@ -121,6 +121,7 @@ def _photon_stays(start: dict[str, Any], category: str, radius_km: float) -> lis
     from . import free_planner_v2 as free
 
     term = "camping" if category == "camping" else "refuge"
+    south, west, north, east = _bbox(start, min(float(radius_km) + 1.0, 38.0))
     try:
         data = free._request_json(
             free.PHOTON_URL,
@@ -128,6 +129,8 @@ def _photon_stays(start: dict[str, Any], category: str, radius_km: float) -> lis
                 "q": term,
                 "lat": float(start["lat"]),
                 "lon": float(start["lon"]),
+                "bbox": f"{west:.6f},{south:.6f},{east:.6f},{north:.6f}",
+                "location_bias_scale": 0.0,
                 "limit": 20,
                 "lang": "fr",
             },
@@ -135,6 +138,7 @@ def _photon_stays(start: dict[str, Any], category: str, radius_km: float) -> lis
             ttl=3600,
             service="Photon nuitées",
             retries=1,
+            cache_empty=False,
         )
     except Exception:
         return []

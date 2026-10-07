@@ -922,15 +922,25 @@ def _photon_anchor_resource(anchor, category: str, osm_tags, radius_km: float, q
     if query_override:
         query = str(query_override).strip()[:80] or query
 
+    # Photon supports a hard bbox filter in addition to location bias. Resource
+    # searches are inherently local, so constrain the index to the same corridor
+    # radius we will validate below instead of asking the public instance to rank
+    # every French "camping"/"fontaine"/"gîte" candidate first.
+    bbox_radius = max(1.0, min(40.0, float(radius_km) + 0.75))
+    dlat = bbox_radius / 111.0
+    dlon = bbox_radius / max(35.0, 111.0 * math.cos(math.radians(lat)))
     params = {
         "q": query,
         "lat": round(lat, 6),
         "lon": round(lon, 6),
         "zoom": 13,
-        # Resource categories on the public Photon instance are deployment-
-        # dependent. Use the stable text endpoint with a strong local bias,
-        # then enforce distance/category semantics ourselves below.
+        # 0.0 nearly ignores global prominence, keeping the coordinate bias
+        # dominant. bbox then makes that locality constraint explicit.
         "location_bias_scale": 0.0,
+        "bbox": (
+            f"{lon - dlon:.6f},{lat - dlat:.6f},"
+            f"{lon + dlon:.6f},{lat + dlat:.6f}"
+        ),
         "countrycode": "FR",
         "limit": 20,
         "lang": "fr",
