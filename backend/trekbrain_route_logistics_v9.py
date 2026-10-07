@@ -563,6 +563,149 @@ def _nominatim_route_stays(coords, category: str) -> list[dict[str, Any]]:
     return deduped[:_MAX_DISCOVERED]
 
 
+def _photon_route_stays(v3, coords, category: str) -> list[dict[str, Any]]:
+    """One structured Photon request for all overnight options along a route.
+
+    The old stage-anchor rescue could open 2-8 concurrent public requests for a
+    single trek. A route-wide bbox plus exact OSM include filters returns a pool
+    that can be projected onto every night locally, cutting provider pressure
+    without relaxing provenance or distance checks.
+    """
+    valid = []
+    for point in coords or []:
+        if not isinstance(point, (list, tuple)) or len(point) < 2:
+            continue
+        try:
+            lat, lon = float(point[0]), float(point[1])
+        except (TypeError, ValueError):
+            continue
+        if math.isfinite(lat) and math.isfinite(lon):
+            valid.append((lat, lon))
+    if len(valid) < 2:
+        return []
+
+    request_json = getattr(v3, "_request_json", None)
+    photon_url = getattr(v3, "PHOTON_URL", None)
+    if not callable(request_json) or not photon_url:
+        return []
+
+    if category == "camping":
+        allowed = {
+            ("tourism", "camp_site"),
+            ("tourism", "caravan_site"),
+        }
+        radius_km = 8.0
+    elif category == "refuge":
+        allowed = {
+            ("tourism", "alpine_hut"),
+            ("tourism", "wilderness_hut"),
+            ("amenity", "shelter"),
+        }
+        radius_km = 8.0
+    else:
+        allowed = {
+            ("tourism", "hotel"),
+            ("tourism", "hostel"),
+            ("tourism", "guest_house"),
+            ("tourism", "chalet"),
+            ("tourism", "apartment"),
+            ("tourism", "camp_site"),
+            ("tourism", "caravan_site"),
+            ("tourism", "alpine_hut"),
+            ("tourism", "wilderness_hut"),
+            ("amenity", "shelter"),
+        }
+        radius_km = 12.5
+
+    min_lat = min(x[0] for x in valid)
+    max_lat = max(x[0] for x in valid)
+    min_lon = min(x[1] for x in valid)
+    max_lon = max(x[1] for x in valid)
+    mid_lat = (min_lat + max_lat) / 2.0
+    mid_lon = (min_lon + max_lon) / 2.0
+    pad_lat = min(0.14, max(0.025, radius_km / 111.0))
+    pad_lon = min(
+        0.18,
+        max(0.03, radius_km / max(35.0, 111.0 * math.cos(math.radians(mid_lat)))),
+    )
+    west, east = min_lon - pad_lon, max_lon + pad_lon
+    south, north = min_lat - pad_lat, max_lat + pad_lat
+    include = ",".join(
+        "osm." + key + "." + value
+        for key, value in sorted(allowed)
+    )
+
+    try:
+        payload = request_json(
+            photon_url,
+            params={
+                "lat": round(mid_lat, 6),
+                "lon": round(mid_lon, 6),
+                "bbox": f"{west:.6f},{south:.6f},{east:.6f},{north:.6f}",
+                "include": include,
+                "location_bias_scale": 0.0,
+                "countrycode": "FR",
+                "limit": 50,
+                "lang": "fr",
+            },
+            timeout=1.6,
+            ttl=3600,
+            service="Photon route stays",
+            retries=1,
+            cache_empty=False,
+        )
+    except Exception:
+        return []
+
+    out = []
+    for feature in (payload.get("features") or []) if isinstance(payload, dict) else []:
+        props = feature.get("properties") or {}
+        country = str(props.get("countrycode") or props.get("country_code") or "").upper()
+        if country and country != "FR":
+            continue
+        geometry = (feature.get("geometry") or {}).get("coordinates") or []
+        if len(geometry) < 2:
+            continue
+        try:
+            lon, lat = float(geometry[0]), float(geometry[1])
+        except (TypeError, ValueError):
+            continue
+        key = str(props.get("osm_key") or "")
+        value = str(props.get("osm_value") or "")
+        if (key, value) not in allowed:
+            continue
+
+        actual = category
+        if value in {"camp_site", "caravan_site"}:
+            actual = "camping"
+        elif value in {"alpine_hut", "wilderness_hut", "shelter"}:
+            actual = "refuge"
+        elif category == "lodging":
+            actual = "lodging"
+
+        name = str(
+            props.get("name")
+            or props.get("street")
+            or ("Camping" if actual == "camping" else "Refuge" if actual == "refuge" else "Hébergement")
+        )[:180]
+        out.append({
+            "name": name,
+            "lat": lat,
+            "lon": lon,
+            "category": actual,
+            "source_url": _osm_url(props),
+            "osm_tags": {"class": key, "type": value},
+        })
+
+    deduped, seen = [], set()
+    for item in out:
+        key = _stay_key(item)
+        if key and key not in seen:
+            seen.add(key)
+            deduped.append(item)
+    return deduped[:_MAX_DISCOVERED]
+
+
 def _photon_split_stays(v3, roundtrip, coords, category: str, days: int) -> list[dict[str, Any]]:
     """Fast first pass: one bounded Photon lookup around each ideal night split."""
     if days <= 1 or len(coords or []) < 3:
@@ -831,7 +974,7 @@ def _discover_stays(
     if len(chosen) < needed and deadline - time.monotonic() >= 0.9:
         rows.extend(provider_call(
             "logistics.photon_fallback",
-            _photon_split_stays, v3, roundtrip, coords, category, days
+            _photon_route_stays, v3, coords, category
         ))
         projected = _project_stays(roundtrip, coords, rows, category, max_offroute)
         chosen = _choose_stays(roundtrip, coords, projected, days, daily_target)
