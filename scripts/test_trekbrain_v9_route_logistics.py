@@ -367,6 +367,93 @@ assert mirror_preloaded is True
 assert empty_stays == [] and empty_terrain == [], (empty_stays, empty_terrain)
 assert empty_preloaded is False
 
+# When both primary stay providers are empty, one bounded Nominatim fallback
+# may rescue candidates inside the remaining logistics budget. It remains
+# discovery-only: projection, nightly selection and connector semantics still
+# decide whether a stay is usable.
+real_bundle_rescue = logistics._bbox_route_bundle
+real_photon_rescue = logistics._photon_split_stays
+real_nominatim_rescue = logistics._nominatim_route_stays
+rescue_calls = {"nominatim": 0, "timeout": None}
+try:
+    logistics._bbox_route_bundle = lambda *_args, **_kwargs: ([], [], False)
+    logistics._photon_split_stays = lambda *_args, **_kwargs: []
+
+    def fake_nominatim_rescue(_coords, category, timeout_s=0.9):
+        rescue_calls["nominatim"] += 1
+        rescue_calls["timeout"] = float(timeout_s)
+        return [dict(x) for x in camps]
+
+    logistics._nominatim_route_stays = fake_nominatim_rescue
+    chosen_rescue, projected_rescue, meta_rescue = logistics._discover_stays(
+        FakeV3(),
+        FakeRoundtrip,
+        FakeStayRescue,
+        coords,
+        {"name": "Départ", "lat": 0.0, "lon": 0.0},
+        "camping",
+        5,
+        20.0,
+        False,
+        want_terrain=True,
+    )
+finally:
+    logistics._bbox_route_bundle = real_bundle_rescue
+    logistics._photon_split_stays = real_photon_rescue
+    logistics._nominatim_route_stays = real_nominatim_rescue
+
+assert rescue_calls["nominatim"] == 1, rescue_calls
+assert 0.45 <= float(rescue_calls["timeout"] or 0) <= 1.05, rescue_calls
+assert len(projected_rescue) == 4, projected_rescue
+assert len(chosen_rescue) == 4, chosen_rescue
+assert meta_rescue["elapsed_ms"] >= 0, meta_rescue
+
+# The Nominatim helper itself must use one bounded France-only request and
+# normalise only semantically valid lodging rows.
+real_nom_request = free._request_json
+captured_nom = {}
+try:
+    def fake_nom_request(url, **kwargs):
+        captured_nom.update({
+            "url": url,
+            "params": dict(kwargs.get("params") or {}),
+            "timeout": float(kwargs.get("timeout") or 0),
+            "cache_empty": kwargs.get("cache_empty"),
+        })
+        return [
+            {
+                "lat": "0.010",
+                "lon": "0.200",
+                "display_name": "Camping secours, Zone test, France",
+                "type": "camp_site",
+                "class": "tourism",
+                "osm_type": "node",
+                "osm_id": 123,
+            },
+            {
+                "lat": "0.015",
+                "lon": "0.400",
+                "display_name": "École test, Zone test, France",
+                "type": "school",
+                "class": "amenity",
+                "osm_type": "node",
+                "osm_id": 124,
+            },
+        ]
+
+    free._request_json = fake_nom_request
+    nom_rows = logistics._nominatim_route_stays(coords, "camping", 0.8)
+finally:
+    free._request_json = real_nom_request
+
+assert len(nom_rows) == 1 and nom_rows[0]["name"] == "Camping secours", nom_rows
+assert captured_nom["url"] == free.NOMINATIM_URL, captured_nom
+assert captured_nom["params"].get("bounded") == 1, captured_nom
+assert captured_nom["params"].get("countrycodes") == "fr", captured_nom
+assert captured_nom["params"].get("q") == "camping", captured_nom
+assert captured_nom["timeout"] <= 0.81, captured_nom
+assert captured_nom["cache_empty"] is False, captured_nom
+
 # When water/food are requested, the lodging corridor OSM response is reused
 # instead of paying for a second terrain query after planning.
 real_bundle_terrain = logistics._bbox_route_bundle
