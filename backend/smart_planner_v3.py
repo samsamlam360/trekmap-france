@@ -609,6 +609,72 @@ def _dedupe(items: list[dict[str, Any]], center: dict[str, Any], max_km: float =
     return out
 
 
+def _destination_anchor(origin: dict[str, Any], distance_km: float, bearing_deg: float, index: int) -> dict[str, Any]:
+    """Create an internal routing target, never a claimed POI."""
+    lat1 = math.radians(float(origin["lat"]))
+    lon1 = math.radians(float(origin["lon"]))
+    bearing = math.radians(float(bearing_deg))
+    angular = max(0.1, float(distance_km)) / 6371.0088
+    lat2 = math.asin(
+        math.sin(lat1) * math.cos(angular)
+        + math.cos(lat1) * math.sin(angular) * math.cos(bearing)
+    )
+    lon2 = lon1 + math.atan2(
+        math.sin(bearing) * math.sin(angular) * math.cos(lat1),
+        math.cos(angular) - math.sin(lat1) * math.sin(lat2),
+    )
+    lon2 = (lon2 + 3 * math.pi) % (2 * math.pi) - math.pi
+    return {
+        "name": f"Repère de routage {index}",
+        "category": "route_anchor",
+        "lat": math.degrees(lat2),
+        "lon": math.degrees(lon2),
+        "source_url": "",
+        "_internal_route_anchor": True,
+    }
+
+
+def _sparse_region_route_candidates(start: dict[str, Any], intent: dict[str, Any]) -> list[Candidate]:
+    """Generate ORS-only hypotheses when public POI providers return too little.
+
+    The coordinates are not POIs and are never exposed as evidence. They only
+    give the pedestrian router several deterministic shapes to validate. Every
+    accepted metre still comes from ORS and the normal hard distance gates.
+    """
+    route_type = _fold(intent.get("route_type") or "")
+    if route_type in {"boucle", "aller-retour", "aller retour"}:
+        return []
+    if any(str(intent.get(key) or "").strip() for key in ("start_query", "end_query", "via_query")):
+        return []
+
+    days = max(1, int(intent.get("days") or 1))
+    daily_target = max(3.0, float(intent.get("daily_target") or 18.0))
+    # The normal candidate engine uses ~62% of routed distance as its straight
+    # line proxy. A slightly wider 68% step leaves ORS room for network detours
+    # while still producing enough total distance on sparse regional requests.
+    step_km = max(4.0, min(18.0, daily_target * 0.68))
+    turn_deg = 32.0 if days <= 5 else 24.0 if days <= 10 else 18.0
+
+    candidates = []
+    for rank, orientation in enumerate((20.0, 110.0, 200.0, 290.0)):
+        boundaries = [dict(start)]
+        current = dict(start)
+        for day in range(1, days + 1):
+            current = _destination_anchor(
+                current,
+                step_km,
+                orientation + (day - 1) * turn_deg,
+                day,
+            )
+            boundaries.append(current)
+        candidates.append(Candidate(
+            boundaries,
+            "sparse-region-ors-shape",
+            24.0 + rank * 0.5,
+        ))
+    return candidates
+
+
 def _bearing(center, point) -> float:
     return math.atan2(float(point["lat"]) - float(center["lat"]), float(point["lon"]) - float(center["lon"]))
 
@@ -1462,8 +1528,27 @@ def _build(data: AIPlanRequest, legacy_main):
             notes.append("POI du corridor complétés près du départ et de l'arrivée.")
 
     items = _dedupe(base + extra + [x for x in (forced_start, forced_end, forced_via) if x], center, max_km=max(40, radius * 1.45))
-    if len(items) < 4 and not (corridor_centered and forced_start and forced_end and len(items) >= 2):
-        raise HTTPException(status_code=503, detail="Pas assez de données géographiques réelles ont pu être récupérées pour construire un trek pertinent dans cette zone.")
+    non_loop_region_only = (
+        _fold(intent.get("route_type") or "") not in {"boucle", "aller-retour", "aller retour"}
+        and not any(
+            str(intent.get(key) or "").strip()
+            for key in ("start_query", "end_query", "via_query")
+        )
+    )
+    if (
+        len(items) < 4
+        and not (corridor_centered and forced_start and forced_end and len(items) >= 2)
+        and not non_loop_region_only
+    ):
+        raise HTTPException(
+            status_code=503,
+            detail="Pas assez de données géographiques réelles ont pu être récupérées pour construire un trek pertinent dans cette zone.",
+        )
+    if len(items) < 4 and non_loop_region_only:
+        notes.append(
+            "Données POI régionales insuffisantes : TrekBrain a utilisé des repères "
+            "internes uniquement pour proposer des formes de tracé à ORS."
+        )
 
     start = _choose_start(center, items, intent, forced_start)
     end = _choose_end(start, center, items, intent, forced_end)
@@ -1488,7 +1573,9 @@ def _build(data: AIPlanRequest, legacy_main):
             # validates it, the recovery below can split that geometry into the
             # requested hiking days and final resources are attached afterwards.
             candidates = [Candidate([start, end], "corridor-direct", 0.0)]
-        else:
+        elif non_loop_region_only:
+            candidates = _sparse_region_route_candidates(start, intent)
+        if not candidates:
             raise HTTPException(status_code=422, detail="Je n'ai pas trouvé de combinaison d'étapes cohérente. Essaie une zone plus précise ou assouplis la distance quotidienne.")
 
     evaluated = []
@@ -1541,7 +1628,11 @@ def _build(data: AIPlanRequest, legacy_main):
         # into equal-progress hiking days, without changing the route.
         recovered = []
         non_loop = _fold(intent.get("route_type") or "") not in {"boucle", "aller-retour", "aller retour"}
-        if non_loop and forced_start and forced_end:
+        sparse_route_recovery = any(
+            str(row[1].strategy).startswith("sparse-region-ors-shape")
+            for row in evaluated
+        )
+        if non_loop and ((forced_start and forced_end) or sparse_route_recovery):
             maximum_total = max(
                 float(intent["total_target"]) * 1.30,
                 float(intent["daily_max"]) * max(1, int(intent["days"])),
@@ -1552,8 +1643,13 @@ def _build(data: AIPlanRequest, legacy_main):
                     continue
                 if not (minimum_total <= float(distance) <= maximum_total):
                     continue
+                recovery_end = (
+                    candidate.boundaries[-1]
+                    if str(candidate.strategy).startswith("sparse-region-ors-shape")
+                    else end
+                )
                 boundaries = _equal_progress_boundaries(
-                    route_coords, start, end, int(intent["days"])
+                    route_coords, start, recovery_end, int(intent["days"])
                 )
                 if len(boundaries) != int(intent["days"]) + 1:
                     continue
@@ -1608,6 +1704,9 @@ def _build(data: AIPlanRequest, legacy_main):
         final_rows.append((score, candidate, route_points, stage_highlights, route, distance, stage_dist, elevation or 0, route_coords))
     final_rows.sort(key=lambda x: x[0])
     score, candidate, route_points, stage_highlights, route, distance, stage_dist, elevation, route_coords = final_rows[0]
+
+    if str(candidate.strategy).startswith("sparse-region-ors-shape"):
+        end = dict(candidate.boundaries[-1])
 
     boundaries = candidate.boundaries
     stage_rebalanced = False

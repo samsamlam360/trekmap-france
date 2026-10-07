@@ -200,6 +200,47 @@ finally:
 assert sorted(query for query, _timeout, _retries in sparse_calls) == sorted(expected_queries), sparse_calls
 assert all(timeout <= 3.21 and retries == 1 for _query, timeout, retries in sparse_calls), sparse_calls
 
+# Sparse region-only itineraries must still reach ORS when public POI
+# providers are empty. These generated points are routing hypotheses only:
+# no source URL, no scenic/resource category, and exactly one boundary per day.
+sparse_intent = {
+    "route_type": "Itinérance",
+    "days": 3,
+    "daily_target": 20.0,
+    "daily_min": 17.0,
+    "daily_max": 23.0,
+    "total_target": 60.0,
+    "start_query": "",
+    "end_query": "",
+    "via_query": "",
+}
+sparse_start = {
+    "name": "Zone test",
+    "short_name": "Zone test",
+    "lat": 44.97,
+    "lon": 5.55,
+    "category": "place",
+    "source_url": "https://www.openstreetmap.org/?mlat=44.97&mlon=5.55",
+}
+sparse_candidates = v3._sparse_region_route_candidates(sparse_start, sparse_intent)
+assert len(sparse_candidates) == 4, sparse_candidates
+assert all(len(candidate.boundaries) == 4 for candidate in sparse_candidates), sparse_candidates
+for candidate in sparse_candidates:
+    assert candidate.strategy == "sparse-region-ors-shape", candidate.strategy
+    assert candidate.boundaries[0]["lat"] == sparse_start["lat"], candidate.boundaries
+    for anchor in candidate.boundaries[1:]:
+        assert anchor.get("category") == "route_anchor", anchor
+        assert anchor.get("_internal_route_anchor") is True, anchor
+        assert not anchor.get("source_url"), anchor
+        step = v3._dist(candidate.boundaries[candidate.boundaries.index(anchor)-1], anchor)
+        assert 12.5 <= step <= 14.8, (step, anchor)
+
+# Explicit endpoints/via constraints must never be replaced by synthetic routing
+# hypotheses.
+blocked_sparse = dict(sparse_intent)
+blocked_sparse["via_query"] = "Point demandé"
+assert v3._sparse_region_route_candidates(sparse_start, blocked_sparse) == []
+
 # Form-encoded Overpass POSTs use direct FOSSGIS backends first. Avoid the
 # generic redirecting host on the hot path so POST bodies are sent straight to
 # the interpreter instance.
