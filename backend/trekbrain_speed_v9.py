@@ -343,7 +343,12 @@ def install_fast_planning(v3, v5, v9) -> None:
     # mode used to overwrite the v9 guarded function for the geographic planner,
     # so Beaufort/Savoie was sent back to the throttled public providers.
     from . import trekbrain_place_guard_v9 as place_guard
-    v3._geocode = place_guard.guarded_geocode_factory(fast_geocode)
+    guarded_fast_geocode = place_guard.guarded_geocode_factory(fast_geocode)
+    v3._geocode = guarded_fast_geocode
+    # Request reconciliation imports the same v2 geocoder dynamically. Keep it
+    # on the identical guarded, rate-limit-aware path rather than allowing a
+    # second slower serial Nominatim/Photon stack before route computation.
+    free._geocode = guarded_fast_geocode
 
     def fast_overpass(query: str, *, max_mirrors: int | None = None):
         deadline = time.monotonic() + overpass_budget
