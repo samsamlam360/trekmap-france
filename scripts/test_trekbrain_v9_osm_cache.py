@@ -42,6 +42,7 @@ assert {x["category"] for x in legacy_rows} == {
 assert all(cache._candidate(x) for x in legacy_rows), legacy_rows
 assert next(x for x in legacy_rows if x["category"] == "water")["status"] == "potable_referenced"
 
+assert cache._candidate({**row(900011), "osm_tags": {"description": "X" * 12000}})["tags"] == "{}"
 assert cache._candidate(row(900001))
 assert cache._candidate(row(900001, "water"))
 assert cache._candidate(row(900001, "camping"))
