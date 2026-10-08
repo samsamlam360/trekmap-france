@@ -16,6 +16,7 @@ from backend import trekbrain_roundtrip_v9 as roundtrip
 from backend import trekbrain_route_logistics_v9 as logistics
 from backend import trekbrain_speed_v9 as speed
 from backend import trekbrain_ors_resilience_v9 as resilience
+from backend import trekbrain_circuit_breaker_v9 as circuit
 
 # This test validates the default interactive profile, not an operator override.
 os.environ.pop("TREKBRAIN_RETRY_BUDGET_SECONDS", None)
@@ -765,5 +766,44 @@ finally:
 
 assert recovered_ranked is ranked, (recovered_ranked, ranked)
 assert recovery_calls == [], recovery_calls
+
+# The Overpass circuit breaker must remain transparent to optional planner
+# controls such as max_mirrors. Otherwise the sparse-region one-mirror budget
+# crashes with TypeError after all earlier wrappers installed correctly.
+circuit_forwarded = []
+
+class FakeCircuitV3:
+    pass
+
+class FakeCircuitORS:
+    pass
+
+class FakeCircuitRoundtrip:
+    pass
+
+fake_circuit_v3 = FakeCircuitV3()
+fake_circuit_v3._overpass = lambda query, **kwargs: (
+    circuit_forwarded.append(dict(kwargs)) or {"elements": []}
+)
+fake_circuit_ors = FakeCircuitORS()
+fake_circuit_ors._request_route = lambda coords, distance_gps, snap_radius_m=None: (None, "", 400)
+fake_circuit_ors.get_distance_matrix = lambda coords: {"distances": [], "fallback": False}
+fake_circuit_roundtrip = FakeCircuitRoundtrip()
+fake_circuit_roundtrip._roundtrip_request = lambda start, target_km, seed: (None, "")
+
+real_circuit_installed = circuit._INSTALLED
+try:
+    circuit._INSTALLED = False
+    circuit.reset_circuit_breakers()
+    circuit.install_circuit_breakers(
+        fake_circuit_v3,
+        fake_circuit_ors,
+        fake_circuit_roundtrip,
+    )
+    fake_circuit_v3._overpass("test-query", max_mirrors=1)
+finally:
+    circuit._INSTALLED = real_circuit_installed
+
+assert circuit_forwarded == [{"max_mirrors": 1}], circuit_forwarded
 
 print("TrekBrain v9 interactive latency controls: OK")
