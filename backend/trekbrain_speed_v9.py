@@ -22,6 +22,28 @@ _STAY_POOL_LOCK = Lock()
 _STAY_POOLS: list[dict[str, Any]] = []
 _MATRIX_AUTH_LOCK = Lock()
 _MATRIX_AUTH_STATE: dict[str, Any] = {"until": 0.0, "status": None}
+_GEOCODE_LOCK = Lock()
+_NOMINATIM_COOLDOWN_UNTIL = 0.0
+
+
+def _nominatim_limited() -> bool:
+    with _GEOCODE_LOCK:
+        return time.monotonic() < _NOMINATIM_COOLDOWN_UNTIL
+
+
+def _record_nominatim_failure(error: Exception) -> None:
+    """Avoid hammering a public provider during a rate-limit incident."""
+    global _NOMINATIM_COOLDOWN_UNTIL
+    if "HTTP 429" not in str(error):
+        return
+    with _GEOCODE_LOCK:
+        _NOMINATIM_COOLDOWN_UNTIL = max(
+            _NOMINATIM_COOLDOWN_UNTIL,
+            time.monotonic() + _env_seconds(
+                "TREKBRAIN_NOMINATIM_COOLDOWN_SECONDS", 90.0, 20.0, 300.0
+            ),
+        )
+
 
 FAST_PLANNING_WRAPPER_VERSION = 3
 EXPLICIT_TRAVERSE_PRUNING_VERSION = 1
@@ -231,57 +253,85 @@ def install_fast_planning(v3, v5, v9) -> None:
     free._request_json = fast_request_json
 
     def fast_geocode(query: str, *, nominatim_retries: int = 2):
-        """Stagger Nominatim and Photon instead of paying their latency serially."""
+        """Hedge independent providers and stop retrying Nominatim after HTTP 429."""
+        from . import trekbrain_geo_fallback_v9 as ign
+
         try:
             retry_budget = int(nominatim_retries)
         except (TypeError, ValueError):
             retry_budget = 2
-        if retry_budget <= 0:
-            return original_geocode(query, nominatim_retries=0)
-
         errors = []
         nom_rows = []
         photon_rows = []
-        with ThreadPoolExecutor(max_workers=2) as pool:
-            nom_future = pool.submit(free._geocode_nominatim, query, retries=1)
+
+        # The parent planner already owns the second spelling variant. Respect
+        # its Nominatim=0 control as well as our shared rate-limit cooldown.
+        if retry_budget <= 0 or _nominatim_limited():
             try:
-                nom_rows = list(nom_future.result(timeout=0.45) or [])
-            except FutureTimeoutError:
-                photon_future = pool.submit(
-                    free._geocode_photon,
-                    query,
-                    timeout=geocode_timeout,
-                    retries=1,
+                photon_rows = list(
+                    free._geocode_photon(query, timeout=geocode_timeout, retries=1) or []
                 )
-                try:
-                    nom_rows = list(nom_future.result() or [])
-                except Exception as exc:
-                    errors.append(str(exc))
-                try:
-                    photon_rows = list(photon_future.result() or [])
-                except Exception as exc:
-                    errors.append(str(exc))
             except Exception as exc:
                 errors.append(str(exc))
+        else:
+            with ThreadPoolExecutor(max_workers=2) as pool:
+                nom_future = pool.submit(free._geocode_nominatim, query, retries=1)
                 try:
-                    photon_rows = list(
-                        free._geocode_photon(
-                            query,
-                            timeout=geocode_timeout,
-                            retries=1,
-                        )
-                        or []
+                    nom_rows = list(nom_future.result(timeout=0.45) or [])
+                except FutureTimeoutError:
+                    photon_future = pool.submit(
+                        free._geocode_photon,
+                        query,
+                        timeout=geocode_timeout,
+                        retries=1,
                     )
-                except Exception as photon_exc:
-                    errors.append(str(photon_exc))
+                    try:
+                        nom_rows = list(nom_future.result() or [])
+                    except Exception as exc:
+                        _record_nominatim_failure(exc)
+                        errors.append(str(exc))
+                    try:
+                        photon_rows = list(photon_future.result() or [])
+                    except Exception as exc:
+                        errors.append(str(exc))
+                except Exception as exc:
+                    _record_nominatim_failure(exc)
+                    errors.append(str(exc))
+                    try:
+                        photon_rows = list(
+                            free._geocode_photon(
+                                query, timeout=geocode_timeout, retries=1
+                            ) or []
+                        )
+                    except Exception as photon_exc:
+                        errors.append(str(photon_exc))
 
         if nom_rows:
             return nom_rows
         if photon_rows:
             return photon_rows
+        # Existing recorded regional centres remain a fast emergency fallback.
         local = free._local_geocode(query)
         if local:
             return local
+
+        # IGN is a genuinely independent public France-wide geocoder, not a
+        # fabricated route or a hardcoded benchmark-specific place.
+        ign_started = time.perf_counter()
+        outcome = "ok"
+        try:
+            ign_rows = ign.geocode_ign(query, timeout=2.5)
+            if ign_rows:
+                return ign_rows
+        except Exception as exc:
+            outcome = "error"
+            errors.append(str(exc))
+        finally:
+            perf.record(
+                "ign.geocode",
+                (time.perf_counter() - ign_started) * 1000,
+                outcome=outcome,
+            )
         if errors:
             raise RuntimeError(
                 "Impossible de localiser la zone. "
@@ -289,9 +339,11 @@ def install_fast_planning(v3, v5, v9) -> None:
             )
         return []
 
-    # v3 imported _geocode by value; replace that module-global reference only
-    # for TrekBrain v9's installed fast profile.
-    v3._geocode = fast_geocode
+    # Place-name protection must be OUTSIDE the fast geocoder. Installing fast
+    # mode used to overwrite the v9 guarded function for the geographic planner,
+    # so Beaufort/Savoie was sent back to the throttled public providers.
+    from . import trekbrain_place_guard_v9 as place_guard
+    v3._geocode = place_guard.guarded_geocode_factory(fast_geocode)
 
     def fast_overpass(query: str, *, max_mirrors: int | None = None):
         deadline = time.monotonic() + overpass_budget
