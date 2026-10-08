@@ -106,4 +106,35 @@ assert len(mirrors) == 2, mirrors
 assert mirrors[0] == free.OVERPASS_URLS[0], mirrors
 assert mirrors[1] == free.OVERPASS_URLS[-1], mirrors
 assert rows and rows[0]["category"] == "food", rows
+# Long closed loops must sample distinct overnight stages instead of
+# wasting two of three reverse probes on the identical start/finish point.
+loop = {
+    "duration_days": 4,
+    "route_preview": {
+        "coords": [
+            [45.0, 5.0], [45.015, 5.015], [45.03, 5.03],
+            [45.04, 5.015], [45.03, 5.0], [45.015, 4.99], [45.0, 5.0],
+        ],
+        "fallback": False,
+    },
+    "start": {"lat": 45.0, "lon": 5.0},
+    "end": {"lat": 45.0, "lon": 5.0},
+    "stages": [{"day": i} for i in range(1, 5)],
+}
+probes = []
+def empty_reverse(url, **kwargs):
+    assert url == shops.PHOTON_REVERSE_URL
+    assert (kwargs.get("params") or {}).get("osm_tag") == "shop"
+    probes.append(kwargs["params"])
+    return {"features": []}
+
+free._request_json = empty_reverse
+try:
+    assert shops.discover_near_route_shops(loop) == []
+finally:
+    free._request_json = original
+positions = {(round(c["lat"], 4), round(c["lon"], 4)) for c in probes}
+assert len(probes) == 3 and len(positions) == 3, probes
+assert all(resources._distance_km((45.0, 5.0), position) > 0.25 for position in positions), probes
+
 print("TrekBrain reverse food providers and independent OSM fallback: PASS")
