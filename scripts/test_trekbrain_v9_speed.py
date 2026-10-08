@@ -89,6 +89,57 @@ assert len(refuge_rows) == 1, [x.strategy for x in refuge_rows]
 # path. The lower layers already compare route candidates.
 assert v9.seconds("TREKBRAIN_RETRY_BUDGET_SECONDS", 10) == 0.0
 
+# Geocoding keeps Nominatim as the cheap fast path. Photon must not be opened
+# when Nominatim answers before the stagger threshold.
+real_nom_geocoder = free._geocode_nominatim
+real_photon_geocoder = free._geocode_photon
+geocode_calls = []
+
+def quick_nom_geocoder(query, *, retries=2):
+    geocode_calls.append(("nominatim", query, retries))
+    return [{"name": "Nominatim result", "lat": 48.0, "lon": 2.0}]
+
+def forbidden_photon_geocoder(query, *, timeout=12, retries=2):
+    geocode_calls.append(("photon", query, retries))
+    raise AssertionError("Photon should not start after a fast Nominatim hit")
+
+free._geocode_nominatim = quick_nom_geocoder
+free._geocode_photon = forbidden_photon_geocoder
+try:
+    quick_rows = v3._geocode("Fast Test")
+finally:
+    free._geocode_nominatim = real_nom_geocoder
+    free._geocode_photon = real_photon_geocoder
+
+assert quick_rows and quick_rows[0]["name"] == "Nominatim result", quick_rows
+assert [row[0] for row in geocode_calls] == ["nominatim"], geocode_calls
+
+# Once Nominatim is still pending after the short head start, Photon should run
+# concurrently. Nominatim remains preferred if it eventually succeeds, keeping
+# deterministic historical geocoding semantics.
+geocode_calls = []
+
+def slow_nom_geocoder(query, *, retries=2):
+    import time as _time
+    geocode_calls.append(("nominatim", query, retries))
+    _time.sleep(0.52)
+    return [{"name": "Slow Nominatim", "lat": 48.1, "lon": 2.1}]
+
+def parallel_photon_geocoder(query, *, timeout=12, retries=2):
+    geocode_calls.append(("photon", query, retries))
+    return [{"name": "Photon result", "lat": 48.2, "lon": 2.2}]
+
+free._geocode_nominatim = slow_nom_geocoder
+free._geocode_photon = parallel_photon_geocoder
+try:
+    staggered_rows = v3._geocode("Slow Test")
+finally:
+    free._geocode_nominatim = real_nom_geocoder
+    free._geocode_photon = real_photon_geocoder
+
+assert staggered_rows and staggered_rows[0]["name"] == "Slow Nominatim", staggered_rows
+assert sorted(row[0] for row in geocode_calls) == ["nominatim", "photon"], geocode_calls
+
 # Photon fallback must preserve the exact serial query set and deterministic
 # result order even though independent requests are now executed concurrently.
 real_photon = free._geocode_photon
