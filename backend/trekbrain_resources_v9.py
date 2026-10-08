@@ -777,6 +777,16 @@ def _annotate_stage_resources(result: dict[str, Any]) -> dict[str, Any]:
                 str(item.get("name") or "Ravitaillement")
                 for item in food[:3]
             )
+        elif ((result.get("map_resources") or {}).get("coverage") or {}).get("food") == "providers_unavailable":
+            stage["food_notes"] = (
+                "Ravitaillement non vérifié : services cartographiques indisponibles. "
+                "Prévoir ses provisions avant le départ."
+            )
+        elif ((result.get("map_resources") or {}).get("coverage") or {}).get("food") == "not_verified":
+            stage["food_notes"] = (
+                "Aucun commerce vérifié pour cette étape sur le tracé ; "
+                "vérifier les possibilités de ravitaillement avant de partir."
+            )
     return result
 
 
