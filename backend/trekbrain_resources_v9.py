@@ -648,6 +648,7 @@ def _bbox_route_water_food(
     found: list[dict[str, Any]] = []
     seen: set[str] = set()
     any_elements = False
+    provider_responded = False
     route_profile = _route_distance_profile(coords)
 
     for index, url in enumerate(mirrors):
@@ -673,6 +674,7 @@ def _bbox_route_water_food(
             continue
         if not isinstance(payload, dict):
             continue
+        provider_responded = True
         if diagnostics is not None:
             diagnostics["responses"] += 1
         elements = payload.get("elements") or []
@@ -740,7 +742,7 @@ def _bbox_route_water_food(
         if any(row["category"] == "food" for row in found) if intent.get("food") else bool(found):
             break
 
-    _overpass_circuit_report(bool(any_elements or (diagnostics or {}).get("responses")))
+    _overpass_circuit_report(provider_responded)
     if diagnostics is not None:
         diagnostics["status"] = (
             "found" if found
