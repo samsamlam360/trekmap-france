@@ -36,13 +36,13 @@ from_poi = resources.enrich_resources({
 assert from_poi["map_resources"]["counts"]["food"] == 1, from_poi["map_resources"]
 
 # One HTTP request but separate Overpass output quotas: water cannot consume
-# the entire grocery result budget in a water-rich geographic rectangle.
+# rural shops, each trail segment receives its own quota.
 old_json = geo._request_json
 calls = []
 def fake_route_query(url, **kwargs):
     query = kwargs["data"]["data"]
     calls.append((url, query))
-    assert "out center tags 90;" in query and "out center tags 100;" in query, query
+    assert "out center tags 90;" in query and "out center tags 22;" in query and "(around:4500," in query, query
     assert '["shop"~' in query and "greengrocer" in query, query
     elements = [
         {"type": "node", "id": index, "lat": 44.008, "lon": 3.008,

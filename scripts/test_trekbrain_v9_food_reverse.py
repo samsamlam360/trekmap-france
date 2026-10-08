@@ -71,7 +71,7 @@ try:
     discovered = shops.discover_near_route_shops(route, successful_photon)
 finally:
     free._request_json = original
-assert 1 <= len(calls) <= 3, calls
+assert 1 <= len(calls) <= 5, calls
 assert len(discovered) == 1, discovered
 assert successful_photon["status"] == "found" and successful_photon["responses"] >= 1
 assert discovered[0]["name"] == "Épicerie référencée", discovered
@@ -158,11 +158,11 @@ try:
 finally:
     free._request_json = original
 positions = {(round(c["lat"], 4), round(c["lon"], 4)) for c in probes}
-assert len(probes) == 3 and len(positions) == 3, probes
+assert len(probes) == 4 and len(positions) == 4, probes
 assert sum(resources._distance_km((45.0, 5.0), p) < 0.05 for p in positions) == 1, (
     "Loop trailhead shop search was silently dropped", probes
 )
-assert sum(resources._distance_km((45.0, 5.0), p) > 0.25 for p in positions) == 2, probes
+assert sum(resources._distance_km((45.0, 5.0), p) > 0.25 for p in positions) == 3, probes
 
 # Likewise, a point-to-point route must retain the departure-town AND
 # arrival-town grocery probes, not only overnight stages.
@@ -183,8 +183,101 @@ try:
 finally:
     free._request_json = original
 locations = [(c["lat"], c["lon"]) for c in probes]
-assert len(locations) == 3 and len(set(locations)) == 3, locations
+assert len(locations) == 4 and len(set(locations)) == 4, locations
 assert any(resources._distance_km((45.00, 5.00), p) < 0.05 for p in locations), locations
 assert any(resources._distance_km((45.03, 5.03), p) < 0.05 for p in locations), locations
 
 print("TrekBrain reverse food providers, unique loop probes and both traverse endpoints: PASS")
+
+
+# A single shop on day 1 must not turn off discovery of supplies for
+# days 2 and 3. Conversely, verified shops on every day avoid new HTTP calls.
+partial_route = {
+    **route,
+    "food": [{
+        "lat": 45.0, "lon": 5.0, "name": "Épicerie du départ",
+        "source_url": "https://www.openstreetmap.org/node/910001",
+        "category": "food",
+    }],
+}
+assert resources._missing_terrain_intent(
+    partial_route, {"food": True, "water": False}
+)["food"] is True
+full_route = {
+    **route,
+    "food": [
+        {
+            "lat": 45.0 + 0.01 * day, "lon": 5.0 + 0.01 * day,
+            "name": f"Commerce vérifié {day}",
+            "source_url": f"https://www.openstreetmap.org/node/{910010 + day}",
+            "category": "food",
+        } for day in range(3)
+    ],
+}
+assert resources._missing_terrain_intent(
+    full_route, {"food": True, "water": False}
+)["food"] is False
+
+# A returned water tap is not grounds for skipping the independent Overpass
+# mirror when the user also asked for food. Every segment keeps an independent
+# quota and out-of-corridor supermarkets are rejected.
+requests = []
+def fragmented_provider(url, **kwargs):
+    query = (kwargs.get("data") or {}).get("data") or ""
+    requests.append((url, query))
+    assert "[out:json][timeout:8];" in query, query
+    assert query.count("(around:4500,") >= 2, query
+    assert query.count("out center tags 22;") >= 2, query
+    if len(requests) == 1:
+        return {"elements": [{
+            "type": "node", "id": 920001, "lat": 45.0, "lon": 5.0,
+            "tags": {"amenity": "drinking_water"},
+        }]}
+    return {"elements": [
+        {
+            "type": "node", "id": 920002, "lat": 45.02, "lon": 5.02,
+            "tags": {"name": "Supérette d'étape", "shop": "convenience"},
+        },
+        {
+            "type": "node", "id": 920003, "lat": 46.0, "lon": 6.0,
+            "tags": {"name": "Hors itinéraire", "shop": "supermarket"},
+        },
+    ]}
+
+stats = {}
+free._request_json = fragmented_provider
+try:
+    discovered = resources._bbox_route_water_food(
+        route, {"food": True, "water": True}, stats,
+    )
+finally:
+    free._request_json = original
+assert len(requests) == 2, requests
+assert requests[0][0] == free.OVERPASS_URLS[0], requests
+assert requests[1][0] == free.OVERPASS_URLS[-1], requests
+assert stats["food_segments"] >= 2 and stats["food_accepted"] == 1, stats
+assert stats["status"] == "found" and stats["responses"] == 2, stats
+assert sum(p["category"] == "food" for p in discovered) == 1, discovered
+assert len(discovered) == 2, discovered
+
+# Five overnight anchors remain the maximum even for a many-day itinerary.
+long_route = {
+    "duration_days": 9,
+    "route_preview": {
+        "coords": [[45.0 + 0.01 * i, 5.0] for i in range(21)],
+        "fallback": False,
+    },
+    "start": {"lat": 45.0, "lon": 5.0},
+    "end": {"lat": 45.2, "lon": 5.0},
+    "stages": [{"day": i} for i in range(1, 10)],
+}
+probes.clear()
+free._request_json = empty_reverse
+try:
+    assert shops.discover_near_route_shops(long_route) == []
+finally:
+    free._request_json = original
+assert len(probes) == 5, probes
+assert len({(p["lat"], p["lon"]) for p in probes}) == 5, probes
+
+print("TrekBrain segmented OSM food searches and per-day resupply coverage: PASS")

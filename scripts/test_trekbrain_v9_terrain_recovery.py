@@ -54,7 +54,9 @@ finally:
     free._request_json = original_json
 assert len(attempts) == 2, attempts
 assert attempts[0][0] != attempts[1][0], attempts
-assert attempts[1][1]["timeout"] <= 0.9, attempts
+# Leave a bounded, realistic timeout for a real Overpass corridor response.
+assert attempts[0][1]["timeout"] <= 3.0, attempts
+assert attempts[1][1]["timeout"] <= 2.3, attempts
 assert all(a["cache_empty"] is False for _, a in attempts), attempts
 assert len(rows) == 1 and rows[0]["category"] == "water", rows
 assert rows[0]["water_status"] == "potable_referenced", rows
