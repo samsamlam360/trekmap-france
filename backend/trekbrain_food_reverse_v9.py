@@ -30,12 +30,24 @@ def discover_near_route_shops(result: dict[str, Any]) -> list[dict[str, Any]]:
     day_points = resources._route_day_boundaries(result, days)
     if len(day_points) < 2:
         return []
-    count = min(3, len(day_points))
-    indices = sorted({round(i * (len(day_points) - 1) / max(1, count - 1)) for i in range(count)})
+    # On a closed loop the first and last day boundaries coincide. Sampling
+    # both silently wastes a reverse request and misses the overnight points,
+    # often the most useful places for food shops. Keep a maximum of three
+    # geographically distinct probes and never change the validated route.
+    first = resources._point(day_points[0])
+    last = resources._point(day_points[-1])
+    closed = bool(first and last and resources._distance_km(first, last) <= 0.25)
+    candidates = day_points[1:-1] if closed else day_points[1:]
+    if len(candidates) < 3:
+        candidates = [*candidates, day_points[0]]
+    if not candidates:
+        candidates = day_points
+    count = min(3, len(candidates))
+    indices = sorted({round(i * (len(candidates) - 1) / max(1, count - 1)) for i in range(count)})
     anchors = []
     seen_anchors = set()
     for index in indices:
-        anchor = resources._point(day_points[index])
+        anchor = resources._point(candidates[index])
         if not anchor:
             continue
         lat, lon = anchor
