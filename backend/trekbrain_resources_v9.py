@@ -902,6 +902,11 @@ def _annotate_stage_resources(result: dict[str, Any]) -> dict[str, Any]:
                 )
                 for item in water[:3]
             )
+        elif ((result.get("map_resources") or {}).get("coverage") or {}).get("water") in ("not_verified", "partial"):
+            stage["water_notes"] = (
+                "Aucun point d'eau OSM confirmé pour cette étape ; "
+                "prévoir une réserve et vérifier les sources avant le départ."
+            )
         if food:
             stage["food_notes"] = " · ".join(
                 str(item.get("name") or "Ravitaillement")
@@ -1159,6 +1164,23 @@ def _install_plan_overlay(app, legacy_main):
                 if isinstance(point, dict) and point.get("kind") == "food"
                 and point.get("source_url")
             )
+            water_requested = bool(intent.get("water"))
+            water_days = sorted({
+                int(point.get("route_day"))
+                for point in points
+                if isinstance(point, dict) and point.get("kind") == "water"
+                and str(point.get("source_url") or "").startswith(
+                    "https://www.openstreetmap.org/"
+                )
+                and isinstance(point.get("route_day"), int)
+            })
+            water_markers = sum(
+                1 for point in points
+                if isinstance(point, dict) and point.get("kind") == "water"
+                and str(point.get("source_url") or "").startswith(
+                    "https://www.openstreetmap.org/"
+                )
+            )
             food_requested = bool(intent.get("food"))
             stage_count = max(1, len(result.get("stages") or [])
                               or int(result.get("duration_days") or 1))
@@ -1186,8 +1208,21 @@ def _install_plan_overlay(app, legacy_main):
                 else "providers_unavailable" if unavailable
                 else "not_verified"
             )
+            missing_water_days = [
+                day for day in range(1, stage_count + 1) if day not in water_days
+            ]
+            water_status = (
+                "not_requested" if not water_requested
+                else "verified" if water_markers and not missing_water_days
+                else "partial" if water_markers
+                else "not_verified"
+            )
             result.setdefault("map_resources", {})["coverage"] = {
                 "food": food_status,
+                "water": water_status,
+                "verified_water_points": water_markers,
+                "days_with_water": water_days,
+                "days_without_water": missing_water_days if water_requested else [],
                 "verified_food_points": food_markers,
                 "days_with_food": food_days,
                 "days_without_food": missing_food_days if food_requested else [],
@@ -1227,6 +1262,9 @@ def _install_plan_overlay(app, legacy_main):
                     "terrain_provider": dict(terrain_diagnostics),
                     "reverse_provider": dict(reverse_diagnostics),
                     "food_coverage": food_status,
+                    "water_coverage": water_status,
+                    "water_days_covered": len(water_days),
+                    "water_days_missing": missing_water_days if water_requested else [],
                     "food_days_covered": len(food_days),
                     "food_days_missing": missing_food_days if food_requested else [],
                     "osm_cache": dict(cache_diagnostics),
