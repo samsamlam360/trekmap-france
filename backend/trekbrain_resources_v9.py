@@ -139,6 +139,9 @@ def _route_match(
 
 
 def _resource_kind(item: dict[str, Any], fallback: str = "") -> str:
+    explicit = str(item.get("category") or item.get("kind") or "").casefold()
+    if explicit in {"food", "water"}:
+        return explicit
     raw = f"{item.get('type') or ''} {item.get('category') or ''} {item.get('name') or ''} {fallback}".casefold()
     if fallback == "water" or any(x in raw for x in ("eau", "fontaine", "source")):
         return "water"
@@ -438,25 +441,29 @@ def _bbox_route_water_food(result: dict[str, Any], intent: dict[str, Any]) -> li
     south, north = min_lat - pad_lat, max_lat + pad_lat
     west, east = min_lon - pad_lon, max_lon + pad_lon
 
-    clauses = []
+    # Overpass global out-limit used to starve rural shops when abundant taps
+    # consumed all 120 slots. Give food and water independent quotas *in the
+    # same HTTP request* so this does not add another network round trip.
+    statements = []
     if intent.get("water"):
-        for flt in (
+        filters = (
             '["amenity"="drinking_water"]',
             '["man_made"="water_tap"]',
             '["natural"="spring"]',
-        ):
-            clauses.append(f"nwr{flt}({south:.6f},{west:.6f},{north:.6f},{east:.6f});")
+        )
+        clauses = "".join(f"nwr{flt}({south:.6f},{west:.6f},{north:.6f},{east:.6f});" for flt in filters)
+        statements.append(f"({clauses});out center tags 90;")
     if intent.get("food"):
-        for flt in (
-            '["shop"="supermarket"]',
-            '["shop"="convenience"]',
-            '["shop"="bakery"]',
-        ):
-            clauses.append(f"nwr{flt}({south:.6f},{west:.6f},{north:.6f},{east:.6f});")
-    if not clauses:
+        # Shops which can realistically provide supplies. Never equate a
+        # restaurant or seasonal café with a grocery shop without evidence.
+        filters = (
+            '["shop"~"^(supermarket|convenience|bakery|general|grocery|deli|greengrocer|food)$"]',
+        )
+        clauses = "".join(f"nwr{flt}({south:.6f},{west:.6f},{north:.6f},{east:.6f});" for flt in filters)
+        statements.append(f"({clauses});out center tags 100;")
+    if not statements:
         return []
-
-    query = "[out:json][timeout:3];(" + "".join(clauses) + ");out center tags 120;"
+    query = "[out:json][timeout:3];" + "".join(statements)
     # A single public Overpass mirror can be temporarily throttled or empty.
     # Try a second independent mirror only on that miss, with a smaller budget.
     # Never cache an empty result: a later user's water/food lookup must remain
@@ -482,7 +489,7 @@ def _bbox_route_water_food(result: dict[str, Any], intent: dict[str, Any]) -> li
         return []
 
     rows = []
-    for element in (payload.get("elements") or [])[:120] if isinstance(payload, dict) else []:
+    for element in (payload.get("elements") or [])[:190] if isinstance(payload, dict) else []:
         tags = element.get("tags") or {}
         lat, lon = element.get("lat"), element.get("lon")
         if lat is None or lon is None:
@@ -506,7 +513,10 @@ def _bbox_route_water_food(result: dict[str, Any], intent: dict[str, Any]) -> li
                 else "not_potable" if tags.get("drinking_water") == "no"
                 else "unverified"
             )
-        elif tags.get("shop") in {"supermarket", "convenience", "bakery"}:
+        elif tags.get("shop") in {
+            "supermarket", "convenience", "bakery", "general",
+            "grocery", "deli", "greengrocer", "food",
+        } and tags.get("access") != "private" and tags.get("disused") != "yes":
             category = "food"
         if category is None:
             continue
@@ -526,6 +536,7 @@ def _bbox_route_water_food(result: dict[str, Any], intent: dict[str, Any]) -> li
                 f"https://www.openstreetmap.org/{osm_type}/{osm_id}"
                 if osm_id is not None else ""
             ),
+            "osm_tags": dict(tags),
         }
         match = _route_match(coords, row)
         if not match:
@@ -537,19 +548,39 @@ def _bbox_route_water_food(result: dict[str, Any], intent: dict[str, Any]) -> li
 
 
 def _missing_terrain_intent(result: dict[str, Any], intent: dict[str, Any]) -> dict[str, Any]:
-    """Return only terrain categories that are still missing from the plan."""
+    """Look for *usable* supplies on the walked line, not any remote POI.
+
+    A geocoded shop several kilometres outside the itinerary previously
+    short-circuited every independent food lookup even though map_resources
+    filtered the same shop out. Only route-relative evidence may satisfy the
+    terrain requirement.
+    """
     adjusted = dict(intent or {})
-    has_water = any(
-        isinstance(item, dict) and _point(item) is not None
-        for item in (result.get("water") or [])
+    coords = ((result.get("route_preview") or {}).get("coords") or [])
+    profile = _route_distance_profile(coords) if len(coords) >= 2 else None
+
+    def located_near_route(items, kind: str) -> bool:
+        limit = RESOURCE_LIMITS.get(kind, 4.5)
+        for item in items or []:
+            if not isinstance(item, dict) or _point(item) is None:
+                continue
+            if profile:
+                matched = _route_match(coords, item, profile)
+                if matched is None or matched[0] > limit:
+                    continue
+            return True
+        return False
+
+    water_rows = result.get("water") or []
+    food_rows = list(result.get("resources") or result.get("food") or [])
+    # V3 sometimes supplies a correctly tagged shop only in POIs. These
+    # objects are real OSM points and must not silently disappear on the map.
+    food_rows.extend(
+        item for item in (result.get("points_of_interest") or [])
+        if isinstance(item, dict) and _resource_kind(item) == "food"
     )
-    food_rows = result.get("resources") or result.get("food") or []
-    has_food = any(
-        isinstance(item, dict) and _point(item) is not None
-        for item in food_rows
-    )
-    adjusted["water"] = bool((intent or {}).get("water") and not has_water)
-    adjusted["food"] = bool((intent or {}).get("food") and not has_food)
+    adjusted["water"] = bool((intent or {}).get("water") and not located_near_route(water_rows, "water"))
+    adjusted["food"] = bool((intent or {}).get("food") and not located_near_route(food_rows, "food"))
     return adjusted
 
 
