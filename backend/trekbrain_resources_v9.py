@@ -451,9 +451,18 @@ def _bbox_route_water_food(
     intent: dict[str, Any],
     diagnostics: dict[str, Any] | None = None,
 ) -> list[dict[str, Any]]:
-    """Bounded OSM lookup; distinguish empty responses from provider outages."""
+    """Find real OSM supplies beside the walked line, with bounded provider calls.
+
+    A global bounding box and a single 100-row quota are unsuitable for long
+    or winding treks: a town at one corner consumes the quota before rural
+    shops near other stages can be emitted. Search small, distance-balanced
+    pieces of the validated route instead. All pieces share one HTTP request.
+    """
     if diagnostics is not None:
-        diagnostics.update(status="not_attempted", attempts=0, responses=0, errors=[])
+        diagnostics.update(
+            status="not_attempted", attempts=0, responses=0, errors=[],
+            food_segments=0, accepted=0,
+        )
     if not (intent.get("water") or intent.get("food")):
         return []
     route = result.get("route_preview") or {}
@@ -463,8 +472,9 @@ def _bbox_route_water_food(
         if not isinstance(point, (list, tuple)) or len(point) < 2:
             continue
         lat, lon = _number(point[0]), _number(point[1])
-        if lat is not None and lon is not None:
-            valid.append((lat, lon))
+        if lat is not None and lon is not None and -90 <= lat <= 90 and -180 <= lon <= 180:
+            if not valid or (lat, lon) != valid[-1]:
+                valid.append((lat, lon))
     if len(valid) < 2:
         return []
 
@@ -478,57 +488,85 @@ def _bbox_route_water_food(
     south, north = min_lat - pad_lat, max_lat + pad_lat
     west, east = min_lon - pad_lon, max_lon + pad_lon
 
-    # Overpass global out-limit used to starve rural shops when abundant taps
-    # consumed all 120 slots. Give food and water independent quotas *in the
-    # same HTTP request* so this does not add another network round trip.
     statements = []
     if intent.get("water"):
+        # Keep the established water lookup unchanged. The independent quotas
+        # ensure that fountains cannot displace grocery shops in the response.
         filters = (
             '["amenity"="drinking_water"]',
             '["man_made"="water_tap"]',
             '["natural"="spring"]',
         )
-        clauses = "".join(f"nwr{flt}({south:.6f},{west:.6f},{north:.6f},{east:.6f});" for flt in filters)
-        statements.append(f"({clauses});out center tags 90;")
-    if intent.get("food"):
-        # Shops which can realistically provide supplies. Never equate a
-        # restaurant or seasonal café with a grocery shop without evidence.
-        filters = (
-            '["shop"~"^(supermarket|convenience|bakery|general|grocery|deli|greengrocer|food)$"]',
+        clauses = "".join(
+            f"nwr{flt}({south:.6f},{west:.6f},{north:.6f},{east:.6f});"
+            for flt in filters
         )
-        clauses = "".join(f"nwr{flt}({south:.6f},{west:.6f},{north:.6f},{east:.6f});" for flt in filters)
-        statements.append(f"({clauses});out center tags 100;")
+        statements.append(f"({clauses});out center tags 90;")
+
+    if intent.get("food"):
+        cumulative = [0.0]
+        for a, b in zip(valid, valid[1:]):
+            cumulative.append(cumulative[-1] + _distance_km(a, b))
+        length = cumulative[-1]
+        if length > 0:
+            days = max(1, int(result.get("duration_days") or len(result.get("stages") or []) or 1))
+            # At most eight searches and 22 rows per piece, even for a very
+            # long trek. Sample by walked distance, never router point index.
+            pieces = min(8, max(2, days, int(math.ceil(length / 24.0))))
+            shop_filter = '["shop"~"^(supermarket|convenience|bakery|general|grocery|deli|greengrocer|food)$"]'
+
+            def at_fraction(fraction: float) -> tuple[float, float]:
+                target = length * max(0.0, min(1.0, fraction))
+                for j in range(1, len(cumulative)):
+                    if cumulative[j] >= target:
+                        delta = cumulative[j] - cumulative[j - 1]
+                        fraction_in_edge = (target - cumulative[j - 1]) / delta if delta > 0 else 0.0
+                        return (
+                            valid[j - 1][0] + (valid[j][0] - valid[j - 1][0]) * fraction_in_edge,
+                            valid[j - 1][1] + (valid[j][1] - valid[j - 1][1]) * fraction_in_edge,
+                        )
+                return valid[-1]
+
+            for piece in range(pieces):
+                vertices = []
+                for subdivision in range(6):
+                    point = at_fraction((piece + subdivision / 5) / pieces)
+                    if not vertices or _distance_km(vertices[-1], point) >= 0.03:
+                        vertices.append(point)
+                if len(vertices) < 2:
+                    continue
+                line = ",".join(f"{lat:.6f},{lon:.6f}" for lat, lon in vertices)
+                # Overpass 'around' accepts a polyline, not just one location.
+                # Each segment has its own output quota to protect rural days.
+                statements.append(
+                    f"nwr{shop_filter}(around:4500,{line});out center tags 22;"
+                )
+                if diagnostics is not None:
+                    diagnostics["food_segments"] += 1
+
     if not statements:
         return []
-    query = "[out:json][timeout:3];" + "".join(statements)
-    # A single public Overpass mirror can be temporarily throttled or empty.
-    # Try a second independent mirror only on that miss, with a smaller budget.
-    # Never cache an empty result: a later user's water/food lookup must remain
-    # retryable rather than inheriting the previous provider's outage.
-    payload = None
+    query = "[out:json][timeout:8];" + "".join(statements)
     urls = list(free.OVERPASS_URLS)
-    # Prefer an independent instance to a sibling mirror on the fallback
-    # attempt, particularly while public FOSSGIS backends are throttled.
     mirrors = [urls[0], urls[-1]] if len(urls) >= 4 else urls[:2]
+    found: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    any_elements = False
+    route_profile = _route_distance_profile(coords)
+
     for index, url in enumerate(mirrors):
         if diagnostics is not None:
             diagnostics["attempts"] += 1
         try:
-            candidate = free._request_json(
+            payload = free._request_json(
                 url,
                 data={"data": query},
-                timeout=1.7 if index == 0 else 0.9,
+                timeout=3.0 if index == 0 else 2.3,
                 ttl=3600,
                 service="Overpass route resources",
                 retries=1,
                 cache_empty=False,
             )
-            if isinstance(candidate, dict):
-                if diagnostics is not None:
-                    diagnostics["responses"] += 1
-                if candidate.get("elements"):
-                    payload = candidate
-                    break
         except Exception as exc:
             if diagnostics is not None:
                 message = str(exc).casefold()
@@ -536,73 +574,86 @@ def _bbox_route_water_food(
                         else "timeout" if "délai" in message or "timeout" in message
                         else "provider_error")
                 diagnostics["errors"].append(kind)
-    if not isinstance(payload, dict):
+            continue
+        if not isinstance(payload, dict):
+            continue
         if diagnostics is not None:
-            diagnostics["status"] = (
-                "unavailable" if not diagnostics["responses"] else "empty"
-            )
-        return []
+            diagnostics["responses"] += 1
+        elements = payload.get("elements") or []
+        any_elements = any_elements or bool(elements)
+        for element in elements:
+            if not isinstance(element, dict):
+                continue
+            tags = element.get("tags") or {}
+            lat, lon = element.get("lat"), element.get("lon")
+            if lat is None or lon is None:
+                center = element.get("center") or {}
+                lat, lon = center.get("lat"), center.get("lon")
+            lat, lon = _number(lat), _number(lon)
+            if lat is None or lon is None:
+                continue
+            category, water_status = None, "unverified"
+            if (
+                tags.get("amenity") == "drinking_water"
+                or tags.get("man_made") == "water_tap"
+                or tags.get("natural") == "spring"
+            ):
+                category = "water"
+                water_status = (
+                    "not_potable" if tags.get("drinking_water") == "no"
+                    else "potable_referenced"
+                    if tags.get("amenity") == "drinking_water" or tags.get("drinking_water") == "yes"
+                    else "unverified"
+                )
+            elif (
+                tags.get("shop") in {
+                    "supermarket", "convenience", "bakery", "general",
+                    "grocery", "deli", "greengrocer", "food",
+                }
+                and tags.get("access") != "private"
+                and tags.get("disused") != "yes"
+                and tags.get("shop") != "vacant"
+            ):
+                category = "food"
+            if category is None:
+                continue
+            osm_type, osm_id = str(element.get("type") or ""), element.get("id")
+            if osm_type not in {"node", "way", "relation"} or osm_id is None:
+                continue
+            source = f"https://www.openstreetmap.org/{osm_type}/{osm_id}"
+            if source in seen:
+                continue
+            row = {
+                "name": str(
+                    tags.get("name")
+                    or ("Point d'eau" if category == "water" else "Ravitaillement")
+                )[:180],
+                "lat": lat, "lon": lon, "category": category,
+                "water_status": water_status,
+                "source_url": source,
+                "osm_tags": dict(tags),
+            }
+            matched = _route_match(coords, row, route_profile)
+            if not matched:
+                continue
+            if matched[0] <= RESOURCE_LIMITS["water" if category == "water" else "food"]:
+                seen.add(source)
+                found.append(row)
+        # A water-only response is not a successful food lookup. An
+        # independent mirror should still get a chance at grocery coverage.
+        if any(row["category"] == "food" for row in found) if intent.get("food") else bool(found):
+            break
 
-    rows = []
-    for element in (payload.get("elements") or [])[:190] if isinstance(payload, dict) else []:
-        tags = element.get("tags") or {}
-        lat, lon = element.get("lat"), element.get("lon")
-        if lat is None or lon is None:
-            center = element.get("center") or {}
-            lat, lon = center.get("lat"), center.get("lon")
-        lat, lon = _number(lat), _number(lon)
-        if lat is None or lon is None:
-            continue
-
-        category = None
-        status = ""
-        if (
-            tags.get("amenity") == "drinking_water"
-            or tags.get("man_made") == "water_tap"
-            or tags.get("natural") == "spring"
-        ):
-            category = "water"
-            status = (
-                "potable_referenced"
-                if tags.get("amenity") == "drinking_water" or tags.get("drinking_water") == "yes"
-                else "not_potable" if tags.get("drinking_water") == "no"
-                else "unverified"
-            )
-        elif tags.get("shop") in {
-            "supermarket", "convenience", "bakery", "general",
-            "grocery", "deli", "greengrocer", "food",
-        } and tags.get("access") != "private" and tags.get("disused") != "yes":
-            category = "food"
-        if category is None:
-            continue
-
-        osm_type = str(element.get("type") or "node")
-        osm_id = element.get("id")
-        row = {
-            "name": str(
-                tags.get("name")
-                or ("Point d'eau" if category == "water" else "Ravitaillement")
-            )[:180],
-            "lat": lat,
-            "lon": lon,
-            "category": category,
-            "water_status": status or "unverified",
-            "source_url": (
-                f"https://www.openstreetmap.org/{osm_type}/{osm_id}"
-                if osm_id is not None else ""
-            ),
-            "osm_tags": dict(tags),
-        }
-        match = _route_match(coords, row)
-        if not match:
-            continue
-        max_distance = 5.0 if category == "water" else 7.0
-        if match[0] <= max_distance:
-            rows.append(row)
     if diagnostics is not None:
-        diagnostics["status"] = "found" if rows else "no_route_match"
-        diagnostics["accepted"] = len(rows)
-    return rows
+        diagnostics["status"] = (
+            "found" if found
+            else "no_route_match" if any_elements
+            else "empty" if diagnostics["responses"]
+            else "unavailable"
+        )
+        diagnostics["accepted"] = len(found)
+        diagnostics["food_accepted"] = sum(row["category"] == "food" for row in found)
+    return found
 
 
 def _missing_terrain_intent(result: dict[str, Any], intent: dict[str, Any]) -> dict[str, Any]:
@@ -645,7 +696,24 @@ def _missing_terrain_intent(result: dict[str, Any], intent: dict[str, Any]) -> d
         if isinstance(item, dict) and _resource_kind(item) == "food"
     )
     adjusted["water"] = bool((intent or {}).get("water") and not located_near_route(water_rows, "water"))
-    adjusted["food"] = bool((intent or {}).get("food") and not located_near_route(food_rows, "food"))
+    # One supermarket at the trailhead does not cover every day of a long
+    # trek. Check evidence day by day before deciding to skip OSM discovery.
+    days = max(1, int(result.get("duration_days") or len(result.get("stages") or []) or 1))
+    covered_food_days: set[int] = set()
+    for item in food_rows:
+        if not isinstance(item, dict) or _point(item) is None:
+            continue
+        source = str(item.get("source_url") or "")
+        if not source.startswith(("https://", "http://")) or not profile:
+            continue
+        match = _route_match(coords, item, profile)
+        if match and match[0] <= RESOURCE_LIMITS["food"]:
+            route_day = min(days, int(math.floor(match[1] * days)) + 1)
+            covered_food_days.add(route_day)
+    adjusted["food"] = bool(
+        (intent or {}).get("food")
+        and (not located_near_route(food_rows, "food") or len(covered_food_days) < days)
+    )
     return adjusted
 
 
