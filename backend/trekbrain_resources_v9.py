@@ -162,6 +162,37 @@ def _resource_kind(item: dict[str, Any], fallback: str = "") -> str:
     return fallback or "poi"
 
 
+def _food_candidates(result: dict[str, Any]) -> list[dict[str, Any]]:
+    """Combine both legacy food fields instead of silently dropping one.
+
+    Some route planners write `food`, others `resources`. Both can be
+    populated independently during route-first and terrain enrichment. An
+    `or` expression silently loses the second list and can hide genuine,
+    route-close, source-linked shops from the map and daily stage cards.
+    """
+    seen: set[tuple[Any, ...]] = set()
+    merged: list[dict[str, Any]] = []
+    for field in ("resources", "food"):
+        for item in result.get(field) or []:
+            if not isinstance(item, dict):
+                continue
+            source = str(item.get("source_url") or "").strip()
+            point = _point(item)
+            if source:
+                key = ("source", source)
+            elif point is not None:
+                key = ("location", round(point[0], 5), round(point[1], 5),
+                       str(item.get("name") or "").casefold())
+            else:
+                key = ("label", str(item.get("name") or "").casefold(),
+                       str(item.get("type") or "").casefold())
+            if key in seen:
+                continue
+            seen.add(key)
+            merged.append(item)
+    return merged
+
+
 def _candidate_resources(result: dict[str, Any]) -> list[dict[str, Any]]:
     items: list[dict[str, Any]] = []
     for w in result.get("water") or []:
@@ -171,7 +202,7 @@ def _candidate_resources(result: dict[str, Any]) -> list[dict[str, Any]]:
         if isinstance(a, dict):
             kind = _resource_kind(a, "lodging")
             items.append({**a, "kind": kind, "notes": a.get("notes") or "Ouverture et disponibilité à vérifier."})
-    food_rows = result.get("resources") or result.get("food") or []
+    food_rows = _food_candidates(result)
     for resource in food_rows:
         if isinstance(resource, dict):
             items.append({
@@ -323,7 +354,7 @@ def _merge_supplemented_resources(result: dict[str, Any], rows: list[dict[str, A
         return result
 
     water = list(result.get("water") or [])
-    food = list(result.get("resources") or result.get("food") or [])
+    food = _food_candidates(result)
     accommodations = list(result.get("accommodations") or [])
     pois = list(result.get("points_of_interest") or [])
     transit_rows = []
@@ -576,7 +607,7 @@ def _missing_terrain_intent(result: dict[str, Any], intent: dict[str, Any]) -> d
         return False
 
     water_rows = result.get("water") or []
-    food_rows = list(result.get("resources") or result.get("food") or [])
+    food_rows = _food_candidates(result)
     # V3 sometimes supplies a correctly tagged shop only in POIs. These
     # objects are real OSM points and must not silently disappear on the map.
     food_rows.extend(
@@ -602,7 +633,7 @@ def _supplement_route_resources(result: dict[str, Any], data) -> dict[str, Any]:
         for item in result.get("water") or []:
             if isinstance(item, dict):
                 existing.append({**item, "category": "water"})
-        for item in result.get("resources") or result.get("food") or []:
+        for item in _food_candidates(result):
             if isinstance(item, dict):
                 existing.append({**item, "category": "food"})
         for item in result.get("accommodations") or []:
@@ -920,7 +951,7 @@ def _install_plan_overlay(app, legacy_main):
 
             planner = result.setdefault("planner", {})
             if isinstance(planner, dict):
-                food_rows = result.get("resources") or result.get("food") or []
+                food_rows = _food_candidates(result)
                 planner["resource_overlay"] = {
                     "total_ms": round((time.monotonic() - overlay_started) * 1000),
                     "safety_ms": safety_ms,
