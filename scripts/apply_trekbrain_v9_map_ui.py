@@ -92,6 +92,8 @@ block = r'''<!-- TREKMAP_TREKBRAIN_V91_MAP_START -->
     const pts=pointsFor(current),coverage=current?.map_resources?.coverage||{};
     const foodNotice=coverage.food==='providers_unavailable'
       ?'⚠️ Ravitaillement non vérifié : services de données cartographiques indisponibles.'
+      :coverage.food==='partial'
+      ?'⚠️ Ravitaillement partiel : aucune boutique confirmée pour les jours '+(coverage.days_without_food||[]).join(', ')+'. Prévoir les provisions nécessaires.'
       :coverage.food==='not_verified'
       ?'⚠️ Aucun commerce confirmé sur le tracé. Prévoir les provisions ou vérifier les villages proches.'
       :'';

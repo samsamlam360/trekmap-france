@@ -888,7 +888,7 @@ def _annotate_stage_resources(result: dict[str, Any]) -> dict[str, Any]:
                 "Ravitaillement non vérifié : services cartographiques indisponibles. "
                 "Prévoir ses provisions avant le départ."
             )
-        elif ((result.get("map_resources") or {}).get("coverage") or {}).get("food") == "not_verified":
+        elif ((result.get("map_resources") or {}).get("coverage") or {}).get("food") in ("not_verified", "partial"):
             stage["food_notes"] = (
                 "Aucun commerce vérifié pour cette étape sur le tracé ; "
                 "vérifier les possibilités de ravitaillement avant de partir."
@@ -976,6 +976,30 @@ def _install_plan_overlay(app, legacy_main):
                 intent = v7.v5.v3._parse_intent(data)
             except Exception:
                 intent = {}
+            from . import trekbrain_osm_cache_v9 as osm_cache
+
+            # The initial planner's OSM references count as freshly observed;
+            # previously cached records must NOT renew their own expiration.
+            initial_sources = [
+                item for key in (
+                    "water", "food", "resources", "accommodations", "points_of_interest"
+                )
+                for item in (result.get(key) or [])
+                if isinstance(item, dict)
+            ]
+            cache_diagnostics: dict[str, Any] = {}
+            cache_write_diagnostics: dict[str, Any] = {}
+            cached_rows = osm_cache.read_near_route(result, intent, cache_diagnostics)
+            cached_sources = {
+                str(row.get("source_url") or "") for row in cached_rows
+            }
+            if cached_rows:
+                # Geographic region filters remain authoritative (islands,
+                # mainland etc.) even for references loaded from our database.
+                result = _merge_supplemented_resources(
+                    result, _filter_active(cached_rows)
+                )
+
             snapshot = deepcopy(result)
             terrain_preloaded = bool(result.get("_terrain_osm_preloaded"))
             terrain_intent = _missing_terrain_intent(snapshot, intent)
@@ -1091,6 +1115,24 @@ def _install_plan_overlay(app, legacy_main):
             enrich_ms = round((time.monotonic() - enrich_started) * 1000)
             result.pop("_terrain_osm_preloaded", None)
 
+            # Store positively identified OSM objects from fresh providers,
+            # never empty results or records that were merely read from cache.
+            source_linked = [
+                item for key in (
+                    "water", "food", "resources", "accommodations", "points_of_interest"
+                )
+                for item in (result.get(key) or [])
+                if isinstance(item, dict)
+                and (
+                    str(item.get("source_url") or "") not in cached_sources
+                    or item in initial_sources
+                )
+            ]
+            osm_cache.store_sourced(
+                initial_sources + source_linked + terrain_rows + reverse_food_rows,
+                cache_write_diagnostics,
+            )
+
             # A provider outage is not evidence that a region has no shops.
             # Return the evidence status with the itinerary and show it on
             # individual stage cards. No POIs are invented to hide outages.
@@ -1101,6 +1143,20 @@ def _install_plan_overlay(app, legacy_main):
                 and point.get("source_url")
             )
             food_requested = bool(intent.get("food"))
+            stage_count = max(1, len(result.get("stages") or [])
+                              or int(result.get("duration_days") or 1))
+            food_days = sorted({
+                int(point.get("route_day"))
+                for point in points
+                if isinstance(point, dict) and point.get("kind") == "food"
+                and str(point.get("source_url") or "").startswith(
+                    "https://www.openstreetmap.org/"
+                )
+                and isinstance(point.get("route_day"), int)
+            })
+            missing_food_days = [
+                day for day in range(1, stage_count + 1) if day not in food_days
+            ]
             unavailable = (
                 terrain_lookup_needed
                 and terrain_diagnostics.get("status") == "unavailable"
@@ -1108,13 +1164,20 @@ def _install_plan_overlay(app, legacy_main):
             )
             food_status = (
                 "not_requested" if not food_requested
-                else "verified" if food_markers
+                else "verified" if food_markers and not missing_food_days
+                else "partial" if food_markers
                 else "providers_unavailable" if unavailable
                 else "not_verified"
             )
             result.setdefault("map_resources", {})["coverage"] = {
                 "food": food_status,
                 "verified_food_points": food_markers,
+                "days_with_food": food_days,
+                "days_without_food": missing_food_days if food_requested else [],
+                "cache": {
+                    "status": cache_diagnostics.get("status"),
+                    "hits": cache_diagnostics.get("count", 0),
+                },
                 "terrain_provider": terrain_diagnostics.get("status"),
                 "reverse_provider": reverse_diagnostics.get("status"),
             }
@@ -1147,6 +1210,10 @@ def _install_plan_overlay(app, legacy_main):
                     "terrain_provider": dict(terrain_diagnostics),
                     "reverse_provider": dict(reverse_diagnostics),
                     "food_coverage": food_status,
+                    "food_days_covered": len(food_days),
+                    "food_days_missing": missing_food_days if food_requested else [],
+                    "osm_cache": dict(cache_diagnostics),
+                    "osm_cache_write": dict(cache_write_diagnostics),
                     "water_count": len(result.get("water") or []),
                     "food_count": len(food_rows),
                     "accommodation_count": len(result.get("accommodations") or []),
