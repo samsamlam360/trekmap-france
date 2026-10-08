@@ -262,6 +262,21 @@ sparse_start = {
     "category": "place",
     "source_url": "https://www.openstreetmap.org/?mlat=44.97&mlon=5.55",
 }
+# A real sparse-region ORS geometry with a plausible total distance is enough
+# to stop comparing compass variants; day boundaries are rebalanced afterwards.
+assert v3._sparse_route_total_usable(
+    sparse_intent, {"fallback": False}, 59.7
+) is True
+assert v3._sparse_route_total_usable(
+    sparse_intent, {"fallback": False}, 25.0
+) is False
+assert v3._sparse_route_total_usable(
+    sparse_intent, {"fallback": False}, 90.0
+) is False
+assert v3._sparse_route_total_usable(
+    sparse_intent, {"fallback": True}, 59.7
+) is False
+
 sparse_candidates = v3._sparse_region_route_candidates(sparse_start, sparse_intent)
 assert len(sparse_candidates) == 4, sparse_candidates
 assert all(len(candidate.boundaries) == 4 for candidate in sparse_candidates), sparse_candidates
