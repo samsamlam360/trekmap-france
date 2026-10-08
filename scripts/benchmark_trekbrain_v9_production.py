@@ -251,6 +251,12 @@ def evaluate(case, result, elapsed_s, clarify):
     )
     food_coverage = ((result.get("map_resources") or {}).get("coverage") or {}).get("food")
     missing_food_days = ((result.get("map_resources") or {}).get("coverage") or {}).get("days_without_food") or []
+    missing_water_days = ((result.get("map_resources") or {}).get("coverage") or {}).get("days_without_water") or []
+    if case.get("require_water") and missing_water_days:
+        warnings.append(
+            "eau non vérifiée sur les jours "
+            + ", ".join(str(x) for x in missing_water_days)
+        )
     cache_metrics = ((result.get("planner") or {}).get("resource_overlay") or {}).get("osm_cache") or {}
     if case.get("require_food") and food_markers and missing_food_days:
         warnings.append(
@@ -325,6 +331,7 @@ def evaluate(case, result, elapsed_s, clarify):
         "food_markers": food_markers,
         "food_coverage": food_coverage,
         "food_days_missing": missing_food_days,
+        "water_days_missing": missing_water_days,
         "osm_cache_hits": int(cache_metrics.get("count") or 0),
         "osm_cache_status": cache_metrics.get("status"),
         "accommodations": len(result.get("accommodations") or []),
