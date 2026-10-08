@@ -17,8 +17,8 @@ def anchor(i):
     return {
         "name": "Départ" if i == 0 else f"Repère jour {i}",
         "category": "route_anchor",
-        "lat": 45.0 + i * .01,
-        "lon": 5.0 + i * .01,
+        "lat": 45.0 + i * .10,
+        "lon": 5.0 + i * .10,
     }
 
 
@@ -81,7 +81,7 @@ try:
     }
     assert len(calls) <= 6 and len(sourced) <= 6, calls
     assert 45.0 not in food_locations, food_locations
-    assert food_locations == {45.01, 45.03}, food_locations
+    assert food_locations == {45.1, 45.3}, food_locations
 
     # If no food is requested, existing water, transit, and overnight
     # categories remain eligible, still within the same request budget.
