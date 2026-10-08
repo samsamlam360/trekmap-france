@@ -1021,14 +1021,17 @@ def _photon_anchor_resource(anchor, category: str, osm_tags, radius_km: float, q
         "",
     )
     if category == "stay" and not query_override:
-        # Camping/refuge requests usually carry several tourism subtypes. Photon
-        # supports filtering by OSM key alone; use that broader principal class
-        # and keep q + bbox + TrekBrain's post-response semantic validation.
-        # This preserves one request per anchor while avoiding an accidental
-        # alpine_hut-only search for all refuge requests.
+        # Camping/refuge requests usually carry several tourism subtypes.
         tourism_values = [value for key, value in parsed_tags if key == "tourism"]
         if len(tourism_values) >= 2:
             primary_osm_tag = "tourism"
+    if category == "food" and not query_override:
+        # The old query combined q=boulangerie with osm_tag=shop:supermarket.
+        # This excluded the very bakeries we were trying to find! Widen the
+        # indexed key, then enforce concrete shop subtypes on returned objects.
+        shop_values = [value for key, value in parsed_tags if key == "shop"]
+        if len(shop_values) >= 2:
+            primary_osm_tag = "shop"
     params = {
         "q": query,
         "lat": round(lat, 6),
@@ -1110,7 +1113,8 @@ def _photon_anchor_resource(anchor, category: str, osm_tags, radius_km: float, q
             ))
         elif category == "food":
             semantic_match = any(token in semantic for token in (
-                "boulanger", "supermarch", "epicer", "convenience", "bakery"
+                "boulanger", "supermarch", "epicer", "convenience", "bakery",
+                "grocery", "greengrocer", "alimentation", "food shop"
             ))
         elif category == "transit":
             semantic_match = any(token in semantic for token in (
@@ -1238,7 +1242,8 @@ def _postroute_corridor_resources(boundaries, intent, existing_items):
     for boundary in food_anchors:
         if intent.get("food") and _closest(foods, boundary, 5.0) is None:
             food_jobs.append((boundary, "food", (
-                "shop:supermarket", "shop:convenience", "shop:bakery"
+                "shop:supermarket", "shop:convenience", "shop:bakery",
+                "shop:general", "shop:grocery", "shop:greengrocer",
             ), 6.5))
 
     # Prioritise access and overnight logistics when the six-call cap is tight,
