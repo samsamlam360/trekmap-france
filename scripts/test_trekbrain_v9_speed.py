@@ -312,6 +312,24 @@ if len(overpass_calls) > 1:
     # and returning no data repeatedly. Keep the fallback, but hard-cap it.
     assert overpass_calls[1][1] <= 0.86, overpass_calls
 
+# Region-only itineraries with the sparse ORS recovery deliberately try only
+# one broad Overpass mirror before routing. Other callers retain two mirrors.
+single_mirror_calls = []
+def failing_single_mirror(url, **kwargs):
+    single_mirror_calls.append(url)
+    raise RuntimeError("simulated first mirror failure")
+
+free._request_json = failing_single_mirror
+try:
+    try:
+        v3._overpass("[out:json];node(0,0,1,1);out;", max_mirrors=1)
+    except RuntimeError:
+        pass
+finally:
+    free._request_json = real_request_json
+assert len(single_mirror_calls) == 1, single_mirror_calls
+assert single_mirror_calls[0] == free.OVERPASS_URLS[0], single_mirror_calls
+
 # Campsite lookup used to execute roughly three OSM searches per night. Fast
 # mode must fetch one broad pool and filter it locally for nearby stage probes.
 lat = 48.60

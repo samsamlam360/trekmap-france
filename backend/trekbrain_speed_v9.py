@@ -227,12 +227,17 @@ def install_fast_planning(v3, v5, v9) -> None:
 
     free._request_json = fast_request_json
 
-    def fast_overpass(query: str):
+    def fast_overpass(query: str, *, max_mirrors: int | None = None):
         deadline = time.monotonic() + overpass_budget
         errors = []
-        # Two independent public mirrors are enough for an interactive request.
-        # A third 18-second wait used to add reliability on paper and misery in UI.
-        for mirror_index, url in enumerate(list(free.OVERPASS_URLS)[:2]):
+        # Two independent public mirrors are enough for a normal interactive
+        # request. Some callers have a safe route fallback and may explicitly
+        # cap discovery to the first mirror.
+        try:
+            mirror_limit = 2 if max_mirrors is None else max(1, min(2, int(max_mirrors)))
+        except (TypeError, ValueError):
+            mirror_limit = 2
+        for mirror_index, url in enumerate(list(free.OVERPASS_URLS)[:mirror_limit]):
             remaining = deadline - time.monotonic()
             if remaining < 0.65:
                 break
