@@ -446,8 +446,14 @@ def _merge_supplemented_resources(result: dict[str, Any], rows: list[dict[str, A
 
 
 
-def _bbox_route_water_food(result: dict[str, Any], intent: dict[str, Any]) -> list[dict[str, Any]]:
-    """One short OSM lookup for water/food close to the final validated route."""
+def _bbox_route_water_food(
+    result: dict[str, Any],
+    intent: dict[str, Any],
+    diagnostics: dict[str, Any] | None = None,
+) -> list[dict[str, Any]]:
+    """Bounded OSM lookup; distinguish empty responses from provider outages."""
+    if diagnostics is not None:
+        diagnostics.update(status="not_attempted", attempts=0, responses=0, errors=[])
     if not (intent.get("water") or intent.get("food")):
         return []
     route = result.get("route_preview") or {}
@@ -505,6 +511,8 @@ def _bbox_route_water_food(result: dict[str, Any], intent: dict[str, Any]) -> li
     # attempt, particularly while public FOSSGIS backends are throttled.
     mirrors = [urls[0], urls[-1]] if len(urls) >= 4 else urls[:2]
     for index, url in enumerate(mirrors):
+        if diagnostics is not None:
+            diagnostics["attempts"] += 1
         try:
             candidate = free._request_json(
                 url,
@@ -515,12 +523,24 @@ def _bbox_route_water_food(result: dict[str, Any], intent: dict[str, Any]) -> li
                 retries=1,
                 cache_empty=False,
             )
-            if isinstance(candidate, dict) and candidate.get("elements"):
-                payload = candidate
-                break
-        except Exception:
-            pass
+            if isinstance(candidate, dict):
+                if diagnostics is not None:
+                    diagnostics["responses"] += 1
+                if candidate.get("elements"):
+                    payload = candidate
+                    break
+        except Exception as exc:
+            if diagnostics is not None:
+                message = str(exc).casefold()
+                kind = ("rate_limited" if "429" in message
+                        else "timeout" if "délai" in message or "timeout" in message
+                        else "provider_error")
+                diagnostics["errors"].append(kind)
     if not isinstance(payload, dict):
+        if diagnostics is not None:
+            diagnostics["status"] = (
+                "unavailable" if not diagnostics["responses"] else "empty"
+            )
         return []
 
     rows = []
@@ -579,6 +599,9 @@ def _bbox_route_water_food(result: dict[str, Any], intent: dict[str, Any]) -> li
         max_distance = 5.0 if category == "water" else 7.0
         if match[0] <= max_distance:
             rows.append(row)
+    if diagnostics is not None:
+        diagnostics["status"] = "found" if rows else "no_route_match"
+        diagnostics["accepted"] = len(rows)
     return rows
 
 
@@ -754,6 +777,16 @@ def _annotate_stage_resources(result: dict[str, Any]) -> dict[str, Any]:
                 str(item.get("name") or "Ravitaillement")
                 for item in food[:3]
             )
+        elif ((result.get("map_resources") or {}).get("coverage") or {}).get("food") == "providers_unavailable":
+            stage["food_notes"] = (
+                "Ravitaillement non vérifié : services cartographiques indisponibles. "
+                "Prévoir ses provisions avant le départ."
+            )
+        elif ((result.get("map_resources") or {}).get("coverage") or {}).get("food") == "not_verified":
+            stage["food_notes"] = (
+                "Aucun commerce vérifié pour cette étape sur le tracé ; "
+                "vérifier les possibilités de ravitaillement avant de partir."
+            )
     return result
 
 
@@ -845,6 +878,8 @@ def _install_plan_overlay(app, legacy_main):
             )
             terrain_rows = []
             reverse_food_rows = []
+            terrain_diagnostics: dict[str, Any] = {"status": "not_attempted"}
+            reverse_diagnostics: dict[str, Any] = {"status": "not_attempted"}
             supplement_ms = 0
             terrain_ms = 0
             reverse_food_ms = 0
@@ -900,6 +935,7 @@ def _install_plan_overlay(app, legacy_main):
                         _bbox_route_water_food,
                         snapshot,
                         terrain_intent,
+                        terrain_diagnostics,
                     )
                     reverse_future = (
                         pool.submit(
@@ -907,6 +943,7 @@ def _install_plan_overlay(app, legacy_main):
                             "reverse_food",
                             reverse_shops.discover_near_route_shops,
                             snapshot,
+                            reverse_diagnostics,
                         )
                         if terrain_intent.get("food") else None
                     )
@@ -948,6 +985,34 @@ def _install_plan_overlay(app, legacy_main):
             enrich_ms = round((time.monotonic() - enrich_started) * 1000)
             result.pop("_terrain_osm_preloaded", None)
 
+            # A provider outage is not evidence that a region has no shops.
+            # Return the evidence status with the itinerary and show it on
+            # individual stage cards. No POIs are invented to hide outages.
+            points = ((result.get("map_resources") or {}).get("points") or [])
+            food_markers = sum(
+                1 for point in points
+                if isinstance(point, dict) and point.get("kind") == "food"
+                and point.get("source_url")
+            )
+            food_requested = bool(intent.get("food"))
+            unavailable = (
+                terrain_lookup_needed
+                and terrain_diagnostics.get("status") == "unavailable"
+                and reverse_diagnostics.get("status") == "unavailable"
+            )
+            food_status = (
+                "not_requested" if not food_requested
+                else "verified" if food_markers
+                else "providers_unavailable" if unavailable
+                else "not_verified"
+            )
+            result.setdefault("map_resources", {})["coverage"] = {
+                "food": food_status,
+                "verified_food_points": food_markers,
+                "terrain_provider": terrain_diagnostics.get("status"),
+                "reverse_provider": reverse_diagnostics.get("status"),
+            }
+
             annotate_started = time.monotonic()
             result = _annotate_stage_resources(result)
             annotate_ms = round((time.monotonic() - annotate_started) * 1000)
@@ -973,6 +1038,9 @@ def _install_plan_overlay(app, legacy_main):
                     "terrain_preloaded": terrain_preloaded,
                     "terrain_lookup_needed": terrain_lookup_needed,
                     "terrain_rows": len(terrain_rows),
+                    "terrain_provider": dict(terrain_diagnostics),
+                    "reverse_provider": dict(reverse_diagnostics),
+                    "food_coverage": food_status,
                     "water_count": len(result.get("water") or []),
                     "food_count": len(food_rows),
                     "accommodation_count": len(result.get("accommodations") or []),

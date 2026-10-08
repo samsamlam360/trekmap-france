@@ -66,12 +66,14 @@ def reverse_response(url, **kwargs):
     ]}
 
 free._request_json = reverse_response
+successful_photon = {}
 try:
-    discovered = shops.discover_near_route_shops(route)
+    discovered = shops.discover_near_route_shops(route, successful_photon)
 finally:
     free._request_json = original
 assert 1 <= len(calls) <= 3, calls
 assert len(discovered) == 1, discovered
+assert successful_photon["status"] == "found" and successful_photon["responses"] >= 1
 assert discovered[0]["name"] == "Épicerie référencée", discovered
 assert discovered[0]["source_url"] == "https://www.openstreetmap.org/node/345678"
 assert discovered[0]["osm_tags"] == {"shop": "convenience"}
@@ -81,10 +83,13 @@ assert resources._route_match(route["route_preview"]["coords"], discovered[0])[0
 def blocked_provider(url, **kwargs):
     raise RuntimeError("Photon HTTP 429")
 free._request_json = blocked_provider
+failed_photon = {}
 try:
-    assert shops.discover_near_route_shops(route) == []
+    assert shops.discover_near_route_shops(route, failed_photon) == []
 finally:
     free._request_json = original
+
+assert failed_photon["status"] == "unavailable" and failed_photon["responses"] == 0
 
 # If primary Overpass is unavailable, use the configured independent instance,
 # not the sibling FOSSGIS endpoint that typically shares the same outage.
@@ -98,14 +103,33 @@ def mock_overpass(url, **kwargs):
         "tags": {"name": "Commerce", "shop": "convenience"},
     }]}
 free._request_json = mock_overpass
+overpass_stats = {}
 try:
-    rows = resources._bbox_route_water_food(route, {"food": True, "water": False})
+    rows = resources._bbox_route_water_food(
+        route, {"food": True, "water": False}, overpass_stats
+    )
 finally:
     free._request_json = original
 assert len(mirrors) == 2, mirrors
 assert mirrors[0] == free.OVERPASS_URLS[0], mirrors
 assert mirrors[1] == free.OVERPASS_URLS[-1], mirrors
 assert rows and rows[0]["category"] == "food", rows
+assert overpass_stats["status"] == "found", overpass_stats
+assert overpass_stats["attempts"] == 2 and overpass_stats["responses"] == 1
+
+# Two failed mirrors must be reported as an unavailable search, not as proof
+# that the hiking corridor contains no grocery or water points.
+free._request_json = blocked_provider
+no_overpass = {}
+try:
+    assert resources._bbox_route_water_food(
+        route, {"food": True, "water": False}, no_overpass
+    ) == []
+finally:
+    free._request_json = original
+assert no_overpass["status"] == "unavailable" and no_overpass["responses"] == 0, no_overpass
+assert no_overpass["attempts"] == 2, no_overpass
+
 # Long closed loops must sample distinct overnight stages instead of
 # wasting two of three reverse probes on the identical start/finish point.
 loop = {

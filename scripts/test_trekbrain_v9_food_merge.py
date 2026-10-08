@@ -57,4 +57,18 @@ names = {x["name"] for x in terrain._food_candidates(new)}
 assert {"Boutique A", "Boutique B", "Boutique C"} <= names, names
 assert len([x for x in terrain.enrich_resources(new)["map_resources"]["points"] if x["kind"] == "food"]) == 3
 
+# A failed public POI lookup must never look like a guaranteed absence
+# of supplies. The same evidence label must be visible on daily stage cards.
+missing_food = {"map_resources": {"points": [], "coverage": {
+    "food": "providers_unavailable",
+}}, "stages": [{"day": 1}, {"day": 2}]}
+terrain._annotate_stage_resources(missing_food)
+assert all("indisponibles" in stage["food_notes"] for stage in missing_food["stages"])
+
+not_verified = {"map_resources": {"points": [], "coverage": {
+    "food": "not_verified",
+}}, "stages": [{"day": 1}]}
+terrain._annotate_stage_resources(not_verified)
+assert "Aucun commerce vérifié" in not_verified["stages"][0]["food_notes"]
+
 print("Both food resource fields preserved, sourced and rendered per day: PASS")

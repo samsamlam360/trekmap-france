@@ -59,8 +59,14 @@ const window = {
     clone: () => ({json: async () => plan}),
   }),
 };
+const notices = [];
+const panel = {
+  querySelector: () => null,
+  appendChild: node => notices.push(node.innerHTML),
+};
 const document = {
-  getElementById: () => null,
+  getElementById: id => id === 'tm-v9-panel' ? panel : null,
+  createElement: () => ({}),
   addEventListener() {},
 };
 vm.runInNewContext(match[1], {
@@ -82,4 +88,11 @@ assert.ok(legends.some(x => x.includes('Ravitaillement (1)') &&
   x.includes('Hébergements (1)') && x.includes('Eau (1)')),
   JSON.stringify(legends));
 
-console.log('TrekBrain v9 food/lodging/water visible on map, popup, and legend: PASS');
+// A failed provider with no marker must still produce a visible warning.
+plan.map_resources = {points: [], coverage: {food: 'providers_unavailable'}};
+await window.fetch('/ai/plan', {method: 'POST'});
+await new Promise(resolve => setImmediate(resolve));
+assert.ok(notices.some(x => x.includes('Ravitaillement non confirmé') &&
+  x.includes('cartographiques indisponibles')), JSON.stringify(notices));
+
+console.log('TrekBrain v9 sourced resources and unavailable-resupply warning: PASS');

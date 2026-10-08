@@ -1,15 +1,9 @@
 name: TrekBrain production benchmark
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - 'backend/main.py'
-      - 'backend/free_planner*.py'
-      - 'backend/smart_planner_v*.py'
-      - 'backend/trekbrain*.py'
-      - 'scripts/benchmark_trekbrain_v9_production.py'
-      - '.github/workflows/trekbrain-production-benchmark.yml'
+  # The full push suite is now run by trekbrain-production-suite.yml.
+  # Manual runs remain available for an isolated 6-trek investigation.
+  workflow_dispatch:
 
 permissions:
   contents: read

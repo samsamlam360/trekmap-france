@@ -1,14 +1,8 @@
 name: TrekBrain extended production benchmark
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - 'backend/free_planner*.py'
-      - 'backend/smart_planner_v*.py'
-      - 'backend/trekbrain*.py'
-      - 'scripts/benchmark_trekbrain_v9_extended.py'
-      - '.github/workflows/trekbrain-extended-benchmark.yml'
+  # Avoid simultaneous production load from three independent push workflows.
+  # The new production suite runs the same scenarios sequentially.
   workflow_dispatch:
 
 permissions:

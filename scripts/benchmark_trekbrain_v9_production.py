@@ -249,8 +249,13 @@ def evaluate(case, result, elapsed_s, clarify):
         if isinstance(item, dict) and item.get("kind") == "food"
         and item.get("source_url") and item.get("lat") is not None and item.get("lon") is not None
     )
+    food_coverage = ((result.get("map_resources") or {}).get("coverage") or {}).get("food")
     if case.get("require_food") and food_markers == 0:
-        warnings.append("aucun commerce OSM géolocalisé à proximité du tracé")
+        warnings.append(
+            "recherche des commerces indisponible chez les fournisseurs"
+            if food_coverage == "providers_unavailable"
+            else "aucun commerce OSM confirmé à proximité du tracé"
+        )
 
     if case.get("require_transit"):
         transport = result.get("transport") or {}
@@ -311,6 +316,7 @@ def evaluate(case, result, elapsed_s, clarify):
         "coords": len(coords),
         "water_markers": len(result.get("water") or []),
         "food_markers": food_markers,
+        "food_coverage": food_coverage,
         "accommodations": len(result.get("accommodations") or []),
         "web_sources": len(result.get("web_sources") or []),
         "clarification_needed": bool((clarify or {}).get("needs_clarification")),
@@ -360,8 +366,8 @@ def write_reports(meta, rows):
         f"- Latence max: **{max(elapsed):.1f} s**",
         f"- Avertissements terrain: **{warnings}**",
         "",
-        "| Scénario | Statut | Qualité | Temps | Commerces proches | Moteur | Distance | Écart/jour | Alertes |",
-        "|---|---:|---:|---:|---:|---|---:|---:|---|",
+        "| Scénario | Statut | Qualité | Temps | Commerces sourcés | Recherche | Moteur | Distance | Écart/jour | Alertes |",
+        "|---|---:|---:|---:|---:|---|---|---:|---:|---|",
     ]
     for row in rows:
         alerts = "; ".join(row["hard_failures"] + row["warnings"]) or "aucune"
@@ -373,7 +379,7 @@ def write_reports(meta, rows):
             routing += " · fast"
         lines.append(
             f"| {row['id']} | {'✅' if row['ok'] else '❌'} | {quality} | {row['elapsed_s']:.1f}s | "
-            f"{row.get('food_markers', 0)} | {routing.replace('|','/')} | {distance} | {row['mean_daily_deviation_pct']:.1f}% | "
+            f"{row.get('food_markers', 0)} | {row.get('food_coverage') or 'inconnue'} | {routing.replace('|','/')} | {distance} | {row['mean_daily_deviation_pct']:.1f}% | "
             f"{alerts.replace('|','/')} |"
         )
     (OUT_DIR / "trekbrain-production-benchmark.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
@@ -429,7 +435,8 @@ def main():
                     "route_type": None, "route_distance_km": None, "stage_distances_km": [],
                     "mean_daily_deviation_pct": 100.0, "worst_daily_deviation_pct": 100.0,
                     "closing_gap_km": None, "coords": 0, "water_markers": 0,
-                    "food_markers": 0, "accommodations": 0, "web_sources": 0,
+                    "food_markers": 0, "food_coverage": "request_failed",
+                    "accommodations": 0, "web_sources": 0,
                     "clarification_needed": clarify.get("needs_clarification"),
                     "clarification_questions": clarify.get("questions") or [],
                     "strategy": None, "blockers": [],
