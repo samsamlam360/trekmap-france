@@ -173,14 +173,16 @@ def _request_json(
                 last_error = RuntimeError(
                     f"{service} temporairement limité (HTTP 429)."
                 )
-                time.sleep(min(0.4 * (attempt + 1), 1.2))
+                if attempt + 1 < max(1, retries):
+                    time.sleep(min(0.4 * (attempt + 1), 1.2))
                 continue
 
             if response.status_code >= 500:
                 last_error = RuntimeError(
                     f"{service} temporairement indisponible (HTTP {response.status_code})."
                 )
-                time.sleep(min(0.4 * (attempt + 1), 1.2))
+                if attempt + 1 < max(1, retries):
+                    time.sleep(min(0.4 * (attempt + 1), 1.2))
                 continue
 
             response.raise_for_status()
