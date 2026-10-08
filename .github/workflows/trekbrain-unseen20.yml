@@ -1,0 +1,79 @@
+name: TrekBrain 20 unseen regions audit
+
+on:
+  pull_request:
+    paths:
+      - 'scripts/benchmark_trekbrain_v9_unseen20.py'
+      - 'scripts/benchmark_trekbrain_v9_production.py'
+      - '.github/workflows/trekbrain-unseen20.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'backend/trekbrain*.py'
+      - 'scripts/benchmark_trekbrain_v9_unseen20.py'
+      - '.github/workflows/trekbrain-unseen20.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: trekbrain-unseen20-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  unseen-regions:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - name: Checkout scenarios
+        uses: actions/checkout@v4
+      - name: Verify twenty unseen prompts
+        run: |
+          python - <<'PY'
+          import sys
+          sys.path.insert(0, 'scripts')
+          import benchmark_trekbrain_v9_unseen20 as unseen
+          assert len(unseen.SCENARIOS) == 20
+          assert len({x['region'] for x in unseen.SCENARIOS}) == 20
+          print('20 novel, distinct-region test prompts: OK')
+          PY
+      - name: Wait for exact deployed commit after main update
+        if: github.event_name == 'push'
+        shell: python
+        env:
+          EXPECTED_SHA: ${{ github.sha }}
+          BASE_URL: https://trekmap-france.onrender.com
+        run: |
+          import json, os, time, urllib.request
+          expected = os.environ['EXPECTED_SHA'].lower()
+          for attempt in range(36):
+              try:
+                  req = urllib.request.Request(os.environ['BASE_URL']+'/ai/status',headers={'User-Agent':'TrekBrain-unseen20/1.0'})
+                  with urllib.request.urlopen(req,timeout=20) as response:
+                      data = json.load(response)
+                  if str(data.get('build_commit') or '').lower() == expected:
+                      print('Deployed commit verified',expected[:12])
+                      break
+              except Exception as exc:
+                  print('Pending deployed build',type(exc).__name__,str(exc)[:120])
+              time.sleep(10)
+          else:
+              raise SystemExit('Render did not deploy the expected commit')
+      - name: Benchmark twenty independent real production requests
+        env:
+          EXPECTED_SHA: ${{ github.event_name == 'push' && github.sha || '' }}
+          TREKBRAIN_BENCHMARK_URL: https://trekmap-france.onrender.com
+          TREKBRAIN_BENCHMARK_OUT: benchmark-results-20
+        run: python scripts/benchmark_trekbrain_v9_unseen20.py
+      - name: Publish all successes and failures
+        if: always()
+        run: cat benchmark-results-20/trekbrain-production-benchmark.md 2>/dev/null || true
+      - name: Preserve full audit report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: trekbrain-unseen20-audit
+          path: benchmark-results-20/
+          if-no-files-found: ignore
+          retention-days: 14
