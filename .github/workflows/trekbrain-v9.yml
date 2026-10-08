@@ -111,6 +111,8 @@ jobs:
         run: python scripts/test_trekbrain_v9_food_corridor.py
       - name: Reverse shop resources and independent Overpass recovery
         run: python scripts/test_trekbrain_v9_food_reverse.py
+      - name: Reject misleading resource names and missing OSM evidence
+        run: python scripts/test_trekbrain_v9_resource_evidence.py
       - name: Unseen route cold-cache resupply fairness
         run: python scripts/test_trekbrain_v9_cold_resupply.py
       - name: Merge shop lists into the map and daily stage cards

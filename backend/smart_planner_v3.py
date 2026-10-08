@@ -957,7 +957,7 @@ def _photon_anchor_resource(anchor, category: str, osm_tags, radius_km: float, q
         lat, lon = float(anchor["lat"]), float(anchor["lon"])
     except (KeyError, TypeError, ValueError):
         return None
-    if not (math.isfinite(lat) and math.isfinite(lon)):
+    if not (math.isfinite(lat) and math.isfinite(lon) and -90 <= lat <= 90 and -180 <= lon <= 180):
         return None
 
     # Forward Photon search is more reliable for POI classes than reverse
@@ -1078,6 +1078,8 @@ def _photon_anchor_resource(anchor, category: str, osm_tags, radius_km: float, q
             flon, flat = float(coords[0]), float(coords[1])
         except (TypeError, ValueError):
             continue
+        if not (math.isfinite(flat) and math.isfinite(flon) and -90 <= flat <= 90 and -180 <= flon <= 180):
+            continue
         item = {"lat": flat, "lon": flon}
         distance = _dist(anchor, item)
         if distance > float(radius_km) + 0.35:
@@ -1092,51 +1094,16 @@ def _photon_anchor_resource(anchor, category: str, osm_tags, radius_km: float, q
         }
         exact_tag_match = not allowed or (osm_key, osm_value) in allowed
 
-        # Photon text search can surface the right nearby OSM object even when
-        # the public index does not expose a principal osm_key/osm_value pair
-        # compatible with TrekBrain's exact tag list. Accept only strong local
-        # semantic matches in that case; proximity is still enforced above.
-        semantic = _fold(" ".join(
-            str(value or "")
-            for value in (
-                props.get("name"),
-                props.get("street"),
-                props.get("city"),
-                props.get("type"),
-                props.get("osm_value"),
-            )
-        ))
-        semantic_match = False
-        if category == "water":
-            semantic_match = any(token in semantic for token in (
-                "fontaine", "drinking water", "water tap", "source"
-            ))
-        elif category == "food":
-            semantic_match = any(token in semantic for token in (
-                "boulanger", "supermarch", "epicer", "convenience", "bakery",
-                "grocery", "greengrocer", "alimentation", "food shop"
-            ))
-        elif category == "transit":
-            semantic_match = any(token in semantic for token in (
-                "gare", "station", "halt", "bus", "ferry"
-            ))
-        elif category == "stay":
-            semantic_match = any(token in semantic for token in (
-                "camp", "refuge", "hut", "abri", "gite", "hotel",
-                "hostel", "auberge", "guest house", "guest_house", "chalet"
-            ))
-
-        if allowed and not exact_tag_match and not semantic_match:
+        # Names and addresses are not evidence of resource categories.
+        # A road called Rue de la Fontaine must never become drinking water.
+        if not exact_tag_match:
             continue
 
         final_category = category
         if category == "stay":
-            if osm_value in {"camp_site", "caravan_site"} or "camp" in semantic:
+            if osm_value in {"camp_site", "caravan_site"}:
                 final_category = "camping"
-            elif (
-                osm_value in {"alpine_hut", "wilderness_hut", "shelter"}
-                or any(token in semantic for token in ("refuge", "hut", "abri"))
-            ):
+            elif osm_value in {"alpine_hut", "wilderness_hut", "shelter"}:
                 final_category = "refuge"
             else:
                 final_category = "lodging"
@@ -1144,11 +1111,9 @@ def _photon_anchor_resource(anchor, category: str, osm_tags, radius_km: float, q
         osm_type = str(props.get("osm_type") or "").upper()
         osm_id = props.get("osm_id")
         osm_kind = {"N": "node", "W": "way", "R": "relation"}.get(osm_type, "")
-        source_url = (
-            f"https://www.openstreetmap.org/{osm_kind}/{osm_id}"
-            if osm_kind and osm_id is not None
-            else _map_url(flat, flon)
-        )
+        if not osm_kind or not str(osm_id or "").isdigit() or int(osm_id) <= 0:
+            continue
+        source_url = f"https://www.openstreetmap.org/{osm_kind}/{osm_id}"
 
         name_parts = [props.get("name"), props.get("city"), props.get("county")]
         name = ", ".join(dict.fromkeys(str(x).strip() for x in name_parts if x))
@@ -1173,6 +1138,7 @@ def _photon_anchor_resource(anchor, category: str, osm_tags, radius_km: float, q
                 if category == "water" and osm_key == "amenity" and osm_value == "drinking_water"
                 else "unverified"
             ),
+            "osm_tags": {osm_key: osm_value},
             "_postroute_resource": True,
             "_distance_to_anchor_km": round(distance, 2),
         }
