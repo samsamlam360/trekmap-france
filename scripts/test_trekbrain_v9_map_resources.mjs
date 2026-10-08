@@ -95,4 +95,16 @@ await new Promise(resolve => setImmediate(resolve));
 assert.ok(notices.some(x => x.includes('Ravitaillement non confirmé') &&
   x.includes('cartographiques indisponibles')), JSON.stringify(notices));
 
-console.log('TrekBrain v9 sourced resources and unavailable-resupply warning: PASS');
+// A real shop on one stage must not suppress warnings for unserved days.
+plan.map_resources = {
+  points: [{kind: 'food', name: 'Épicerie au départ', lat: 45.01,
+    lon: 5.01, route_day: 1,
+    source_url: 'https://www.openstreetmap.org/node/123'}],
+  coverage: {food: 'partial', days_without_food: [2, 3]},
+};
+await window.fetch('/ai/plan', {method: 'POST'});
+await new Promise(resolve => setImmediate(resolve));
+assert.ok(notices.some(x => x.includes('Ravitaillement partiel') &&
+  x.includes('2, 3')), JSON.stringify(notices));
+
+console.log('TrekBrain v9 sourced resources, unavailable and partially covered resupply: PASS');
