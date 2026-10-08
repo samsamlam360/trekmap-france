@@ -326,7 +326,7 @@ try:
         query = request_v9._fold(str(params.get("q") or ""))
         if not params.get("bbox"):
             raise AssertionError(f"Photon resource request must stay bbox-bounded: {params!r}")
-        if osm_tag == "tourism:camp_site":
+        if osm_tag == "tourism" and "camping" in query:
             name, key, value = "Camping structuré", "tourism", "camp_site"
         elif osm_tag == "amenity:drinking_water":
             name, key, value = "Fontaine structurée", "amenity", "drinking_water"
@@ -380,7 +380,7 @@ if not named_lodging or named_lodging.get("category") != "lodging":
 if len(structured_calls) != 3:
     failures.append(f"Photon structured call count regression: {structured_calls!r}")
 elif (
-    structured_calls[0].get("osm_tag") != "tourism:camp_site"
+    structured_calls[0].get("osm_tag") != "tourism"
     or request_v9._fold(str(structured_calls[0].get("q") or "")) != "camping"
     or structured_calls[1].get("osm_tag") != "amenity:drinking_water"
     or request_v9._fold(str(structured_calls[1].get("q") or "")) != "fontaine"
