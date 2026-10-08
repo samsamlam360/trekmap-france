@@ -286,9 +286,7 @@ def ensure_schema(force=False):
     finally:
         db.close()
 
-    # Always commit core schema first. A failure of the optional OSM cache
-    # must not roll it back or prevent registered users from signing in.
-    ensure_osm_cache_schema()
+
 
 # OSM context is an OPTIONAL feature. A permissions, storage, or PostGIS
 # index error in its migration must never make authentication, existing treks
@@ -351,6 +349,9 @@ def ensure_osm_cache_schema():
 def startup():
     try:
         ensure_schema()
+        # Run the optional cache migration at startup only: a failed PostGIS
+        # index or database permission must not stall regular user logins.
+        ensure_osm_cache_schema()
         print("[TrekMap] Base de données prête")
     except Exception as exc:
         print("[TrekMap] ATTENTION: base indisponible au démarrage:", repr(exc))
