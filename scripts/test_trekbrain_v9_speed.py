@@ -30,6 +30,48 @@ speed._INSTALLED = False
 speed._STAY_POOLS.clear()
 speed.install_fast_planning(v3, v5, v9)
 
+# The request wrapper must preserve the base planner's cache_empty contract.
+# Route-wide lodging/terrain queries rely on cache_empty=False so an empty
+# provider response is not cached and allowed to erase later recovery attempts.
+class EmptyJsonResponse:
+    status_code = 200
+    ok = True
+    def raise_for_status(self):
+        return None
+    def json(self):
+        return []
+
+request_json_calls = []
+real_requests_get = free.requests.get
+
+def fake_empty_get(url, **kwargs):
+    request_json_calls.append(url)
+    return EmptyJsonResponse()
+
+free.requests.get = fake_empty_get
+try:
+    regression_url = "https://trekbrain.invalid/cache-empty-regression"
+    free._request_json(
+        regression_url,
+        timeout=0.8,
+        ttl=3600,
+        service="Nominatim request-json regression",
+        retries=1,
+        cache_empty=False,
+    )
+    free._request_json(
+        regression_url,
+        timeout=0.8,
+        ttl=3600,
+        service="Nominatim request-json regression",
+        retries=1,
+        cache_empty=False,
+    )
+finally:
+    free.requests.get = real_requests_get
+
+assert request_json_calls == [regression_url, regression_url], request_json_calls
+
 # The fast wrapper must stay signature-compatible with v5 candidate prompt
 # generation, including TrekBrain's isolated internal strategy hint.
 assert speed.FAST_PLANNING_WRAPPER_VERSION == 3
@@ -598,9 +640,11 @@ assert float(precise_loop.get("round_trip_retrace_ratio") or 0) <= 0.30, precise
 # Photon and the single bounded bbox lookup fail.
 real_photon_split = logistics._photon_split_stays
 real_bbox_stays = logistics._bbox_route_stays
+real_nominatim_stays = logistics._nominatim_route_stays
 real_route_probe = logistics._route_probe_stays
 logistics._photon_split_stays = lambda *args, **kwargs: []
 logistics._bbox_route_stays = lambda *args, **kwargs: []
+logistics._nominatim_route_stays = lambda *args, **kwargs: []
 def forbidden_route_probe(*args, **kwargs):
     raise AssertionError("route probe must not be called from _discover_stays")
 logistics._route_probe_stays = forbidden_route_probe
@@ -619,6 +663,7 @@ try:
 finally:
     logistics._photon_split_stays = real_photon_split
     logistics._bbox_route_stays = real_bbox_stays
+    logistics._nominatim_route_stays = real_nominatim_stays
     logistics._route_probe_stays = real_route_probe
 assert chosen == [] and projected == [], (chosen, projected)
 assert float(meta.get("elapsed_ms") or 0) < 500, meta
