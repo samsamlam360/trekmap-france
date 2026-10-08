@@ -825,6 +825,41 @@ def _discover_stays(
     terrain_rows = []
     terrain_preloaded = False
 
+    # A route engine can already have verified every overnight candidate.
+    # Project and order those stays against the fixed backbone before opening
+    # any redundant lodging provider requests. Terrain remains independent:
+    # a requested water/food pass still queries the shared Overpass bundle,
+    # but does not re-query Nominatim or Photon for nights we already have.
+    if rows:
+        preloaded_projected = _project_stays(
+            roundtrip, coords, rows, category, max_offroute
+        )
+        preloaded_chosen = _choose_stays(
+            roundtrip, coords, preloaded_projected, days, daily_target
+        )
+        if len(preloaded_chosen) >= needed:
+            if want_terrain:
+                try:
+                    _extra_stays, terrain_rows, terrain_preloaded = provider_call(
+                        "logistics.overpass_bundle", _bbox_route_bundle, coords, category
+                    )
+                except Exception:
+                    terrain_rows, terrain_preloaded = [], False
+            elapsed_ms = round((time.monotonic() - started) * 1000)
+            perf.record(
+                "logistics.discovery", elapsed_ms, profile=profile,
+                category=category, resolved=len(preloaded_chosen),
+                discovered=len(preloaded_projected), budget_seconds=budget,
+                preloaded_complete=True,
+            )
+            return preloaded_chosen, preloaded_projected, {
+                "budget_seconds": budget,
+                "elapsed_ms": elapsed_ms,
+                "budget_exhausted": time.monotonic() >= deadline,
+                "terrain_rows": list(terrain_rows or []),
+                "terrain_preloaded": bool(terrain_preloaded),
+            }
+
     # Route-first lodging has two independent route-wide discovery sources:
     # exact-tag Overpass and one bounded Nominatim query. Production profiling
     # showed the public Photon wave repeatedly spending ~2-3 seconds and
