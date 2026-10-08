@@ -606,13 +606,14 @@ def _photon_split_stays(v3, roundtrip, coords, category: str, days: int) -> list
             # hotel that the previous query found.
             jobs.append((anchor, "gîte"))
             jobs.append((anchor, "hotel"))
-        elif category == "camping":
-            # Photon text ranking is more tolerant than a single principal OSM
-            # tag on public indexes. The shared lookup still enforces the local
-            # bbox, distance and camping semantics before accepting anything.
-            jobs.append((anchor, "camping"))
-        elif category == "refuge":
-            jobs.append((anchor, "refuge"))
+        elif category in {"camping", "refuge"}:
+            # Keep the natural text query selected by _photon_anchor_resource,
+            # but do not override it here: an override intentionally disables
+            # Photon's structured osm_tag filter. Public text ranking for generic
+            # words such as "camping" and "refuge" proved highly variable on
+            # Render, while q + osm_tag + bbox is deterministic and costs the
+            # same single request per night anchor.
+            jobs.append((anchor, None))
         else:
             jobs.append((anchor, None))
 
