@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import os
 import time
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeoutError
 from copy import deepcopy
 from threading import Lock
 from typing import Any
@@ -167,6 +168,7 @@ def install_fast_planning(v3, v5, v9) -> None:
     original_seconds = v9.seconds
     original_request_json = free._request_json
     original_nearby_stays = roundtrip._nearby_stays
+    original_geocode = v3._geocode
 
     # ------------------------------------------------------------------
     # 1) Bound OSM latency. Previously one Overpass query could walk through
@@ -226,6 +228,69 @@ def install_fast_planning(v3, v5, v9) -> None:
             )
 
     free._request_json = fast_request_json
+
+    def fast_geocode(query: str, *, nominatim_retries: int = 2):
+        """Stagger Nominatim and Photon instead of paying their latency serially."""
+        try:
+            retry_budget = int(nominatim_retries)
+        except (TypeError, ValueError):
+            retry_budget = 2
+        if retry_budget <= 0:
+            return original_geocode(query, nominatim_retries=0)
+
+        errors = []
+        nom_rows = []
+        photon_rows = []
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            nom_future = pool.submit(free._geocode_nominatim, query, retries=1)
+            try:
+                nom_rows = list(nom_future.result(timeout=0.45) or [])
+            except FutureTimeoutError:
+                photon_future = pool.submit(
+                    free._geocode_photon,
+                    query,
+                    timeout=geocode_timeout,
+                    retries=1,
+                )
+                try:
+                    nom_rows = list(nom_future.result() or [])
+                except Exception as exc:
+                    errors.append(str(exc))
+                try:
+                    photon_rows = list(photon_future.result() or [])
+                except Exception as exc:
+                    errors.append(str(exc))
+            except Exception as exc:
+                errors.append(str(exc))
+                try:
+                    photon_rows = list(
+                        free._geocode_photon(
+                            query,
+                            timeout=geocode_timeout,
+                            retries=1,
+                        )
+                        or []
+                    )
+                except Exception as photon_exc:
+                    errors.append(str(photon_exc))
+
+        if nom_rows:
+            return nom_rows
+        if photon_rows:
+            return photon_rows
+        local = free._local_geocode(query)
+        if local:
+            return local
+        if errors:
+            raise RuntimeError(
+                "Impossible de localiser la zone. "
+                + " | ".join(dict.fromkeys(x for x in errors if x))
+            )
+        return []
+
+    # v3 imported _geocode by value; replace that module-global reference only
+    # for TrekBrain v9's installed fast profile.
+    v3._geocode = fast_geocode
 
     def fast_overpass(query: str, *, max_mirrors: int | None = None):
         deadline = time.monotonic() + overpass_budget
