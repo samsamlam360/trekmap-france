@@ -30,7 +30,7 @@ def discover_near_route_shops(result: dict[str, Any]) -> list[dict[str, Any]]:
     day_points = resources._route_day_boundaries(result, days)
     if len(day_points) < 2:
         return []
-    count = min(4, len(day_points))
+    count = min(3, len(day_points))
     indices = sorted({round(i * (len(day_points) - 1) / max(1, count - 1)) for i in range(count)})
     anchors = []
     seen_anchors = set()
@@ -111,7 +111,7 @@ def discover_near_route_shops(result: dict[str, Any]) -> list[dict[str, Any]]:
         return result_rows
 
     found = []
-    with ThreadPoolExecutor(max_workers=min(4, len(anchors))) as pool:
+    with ThreadPoolExecutor(max_workers=min(3, len(anchors))) as pool:
         futures = [pool.submit(probe, anchor) for anchor in anchors]
         for future in as_completed(futures):
             try:
