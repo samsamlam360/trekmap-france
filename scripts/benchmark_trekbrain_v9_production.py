@@ -249,6 +249,8 @@ def evaluate(case, result, elapsed_s, clarify):
         if isinstance(item, dict) and item.get("kind") == "food"
         and item.get("source_url") and item.get("lat") is not None and item.get("lon") is not None
     )
+    cache_context = ((result.get("planner") or {}).get("resource_overlay") or {}).get("osm_cache") or {}
+    cold_cache = cache_context.get("status") == "miss" and int(cache_context.get("count") or 0) == 0
     food_coverage = ((result.get("map_resources") or {}).get("coverage") or {}).get("food")
     missing_food_days = ((result.get("map_resources") or {}).get("coverage") or {}).get("days_without_food") or []
     missing_water_days = ((result.get("map_resources") or {}).get("coverage") or {}).get("days_without_water") or []
@@ -333,6 +335,7 @@ def evaluate(case, result, elapsed_s, clarify):
         "food_days_missing": missing_food_days,
         "water_days_missing": missing_water_days,
         "osm_cache_hits": int(cache_metrics.get("count") or 0),
+        "cold_cache": cold_cache,
         "osm_cache_status": cache_metrics.get("status"),
         "accommodations": len(result.get("accommodations") or []),
         "web_sources": len(result.get("web_sources") or []),
@@ -373,11 +376,18 @@ def write_reports(meta, rows):
     qualities = [float(x["quality"]) for x in rows if isinstance(x.get("quality"), (int, float))]
     ok = sum(1 for x in rows if x["ok"])
     warnings = sum(len(x["warnings"]) for x in rows)
+    # Cold-cache means a confirmed zero-hit DB lookup, not a cache provider
+    # outage or a failed HTTP request with no telemetry.
+    cold_rows = [x for x in rows if x.get("cold_cache") is True]
+    cold_food = [x for x in cold_rows if x.get("food_coverage") != "not_requested"]
     lines = [
         "# TrekBrain v9 — benchmark production",
         "",
         f"- Build: `{meta.get('build_commit','')[:12]}`",
         f"- Scénarios structurellement valides: **{ok}/{len(rows)}**",
+        f"- Routes réellement sans cache OSM: **{len(cold_rows)}/{len(rows)}**",
+        f"- Ravitaillements sourcés sans cache OSM: **{sum(int(x.get('food_markers') or 0) for x in cold_food)}**",
+        f"- Journées sans ravitaillement sur routes sans cache: **{sum(len(x.get('food_days_missing') or []) for x in cold_food)}**",
         f"- Qualité moyenne TrekBrain: **{statistics.fmean(qualities):.1f}/100**" if qualities else "- Qualité moyenne: n/a",
         f"- Latence moyenne: **{statistics.fmean(elapsed):.1f} s**",
         f"- Latence max: **{max(elapsed):.1f} s**",
@@ -413,6 +423,27 @@ def main():
     status_payload = {}
 
     try:
+        # A successful deployment of /ai/status does not imply PostgreSQL is
+        # ready for authentication. Never benchmark a dead database, and do
+        # not count a transient 503 as an itinerary failure. Retry readiness
+        # briefly, then report a distinct infrastructure failure.
+        readiness_history = []
+        for attempt, delay in enumerate((0, 5, 10, 15)):
+            if delay:
+                time.sleep(delay)
+            try:
+                rcode, readiness, _ = client.json("GET", "/health/ready", timeout=20)
+            except Exception as exc:
+                rcode, readiness = 0, {"error": type(exc).__name__}
+            readiness_history.append({"status": rcode, "details": readiness})
+            if rcode == 200 and isinstance(readiness, dict) and readiness.get("status") == "ok":
+                break
+        else:
+            raise RuntimeError(
+                "POSTGRES_UNAVAILABLE: readiness did not recover after bounded "
+                f"retries: {readiness_history}"
+            )
+
         code, reg, _ = client.json("POST", "/auth/register", {
             "username": username, "email": email, "password": password,
         })
