@@ -107,4 +107,25 @@ await new Promise(resolve => setImmediate(resolve));
 assert.ok(notices.some(x => x.includes('Ravitaillement partiel') &&
   x.includes('2, 3')), JSON.stringify(notices));
 
-console.log('TrekBrain v9 sourced resources, unavailable and partially covered resupply: PASS');
+// Water source gaps are independent of grocery availability.
+plan.map_resources = {
+  points: [{kind: 'water', name: 'Fontaine au départ', lat: 45.01,
+    lon: 5.01, route_day: 1,
+    source_url: 'https://www.openstreetmap.org/node/789'}],
+  coverage: {food: 'not_requested', water: 'partial', days_without_water: [2]},
+};
+await window.fetch('/ai/plan', {method: 'POST'});
+await new Promise(resolve => setImmediate(resolve));
+assert.ok(notices.some(x => x.includes('Eau non vérifiée') &&
+  x.includes('2')), JSON.stringify(notices));
+
+plan.map_resources = {
+  points: [],
+  coverage: {food: 'not_requested', water: 'not_verified', days_without_water: [1]},
+};
+await window.fetch('/ai/plan', {method: 'POST'});
+await new Promise(resolve => setImmediate(resolve));
+assert.ok(notices.some(x => x.includes('Eau non confirmée') &&
+  x.includes('Aucun point d’eau OSM confirmé')), JSON.stringify(notices));
+
+console.log('TrekBrain v9 sourced food/water, source failures and per-stage coverage warnings: PASS');

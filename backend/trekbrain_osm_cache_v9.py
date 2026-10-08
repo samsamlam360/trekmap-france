@@ -43,13 +43,21 @@ def _candidate(point: dict[str, Any]) -> dict[str, Any] | None:
         return None
     if not (math.isfinite(lat) and math.isfinite(lon) and 41 <= lat <= 52 and -6 <= lon <= 11):
         return None
+    try:
+        encoded_tags = json.dumps(
+            tags if isinstance(tags, dict) else {}, ensure_ascii=False
+        )
+    except (TypeError, ValueError):
+        encoded_tags = "{}"
+    if len(encoded_tags) > 10000:
+        encoded_tags = "{}"  # Never persist truncated, invalid JSONB.
     return {
         "source_url": source,
         "category": category,
         "name": str(point.get("name") or "Ressource OSM")[:160],
         "lat": lat, "lon": lon,
         "water_status": str(point.get("water_status") or point.get("status") or "unverified")[:40],
-        "tags": json.dumps(tags if isinstance(tags, dict) else {}, ensure_ascii=False)[:10000],
+        "tags": encoded_tags,
     }
 
 

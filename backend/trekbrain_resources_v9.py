@@ -9,6 +9,7 @@ from __future__ import annotations
 import json
 import math
 import time
+import threading
 from concurrent.futures import ThreadPoolExecutor
 from copy import deepcopy
 from typing import Any
@@ -26,6 +27,34 @@ from .trekbrain_geo_safety_v9 import (
     route_safety_report,
     safety_error_message,
 )
+
+
+# Stop repeatedly hammering public Overpass mirrors after two complete
+# outages. No negative results are cached: one live request retries after the
+# cooldown, and any successful provider response resets the breaker.
+_OSM_OVERPASS_LOCK = threading.Lock()
+_OSM_OVERPASS_FAILURES = 0
+_OSM_OVERPASS_COOLDOWN_UNTIL = 0.0
+_OSM_OVERPASS_COOLDOWN_SECONDS = 60.0
+
+
+def _overpass_circuit_open() -> bool:
+    with _OSM_OVERPASS_LOCK:
+        return time.monotonic() < _OSM_OVERPASS_COOLDOWN_UNTIL
+
+
+def _overpass_circuit_report(provider_responded: bool) -> None:
+    global _OSM_OVERPASS_FAILURES, _OSM_OVERPASS_COOLDOWN_UNTIL
+    with _OSM_OVERPASS_LOCK:
+        if provider_responded:
+            _OSM_OVERPASS_FAILURES = 0
+            _OSM_OVERPASS_COOLDOWN_UNTIL = 0.0
+        else:
+            _OSM_OVERPASS_FAILURES += 1
+            if _OSM_OVERPASS_FAILURES >= 2:
+                _OSM_OVERPASS_COOLDOWN_UNTIL = (
+                    time.monotonic() + _OSM_OVERPASS_COOLDOWN_SECONDS
+                )
 
 
 RESOURCE_LIMITS = {
@@ -229,6 +258,30 @@ def _food_candidates(result: dict[str, Any]) -> list[dict[str, Any]]:
             seen.add(key)
             merged.append(item)
     return merged
+
+
+def _cache_source_candidates(result: dict[str, Any]) -> list[dict[str, Any]]:
+    """Tag legacy resource lists for persistent OSM storage.
+
+    Existing planners put water, food, and accommodation items in dedicated
+    lists without necessarily setting `category`. The cache may store only
+    explicitly classified, source-linked types, so normalize the field's
+    meaning here before attempting persistence.
+    """
+    out = []
+    for field, default in (
+        ("water", "water"), ("food", "food"),
+        ("resources", "food"), ("accommodations", "lodging"),
+        ("points_of_interest", ""),
+    ):
+        for item in result.get(field) or []:
+            if not isinstance(item, dict):
+                continue
+            kind = _resource_kind(item, default)
+            if kind not in {"water", "food", "camping", "refuge", "lodging"}:
+                continue
+            out.append({**item, "category": kind})
+    return out
 
 
 def _candidate_resources(result: dict[str, Any]) -> list[dict[str, Any]]:
@@ -584,12 +637,18 @@ def _bbox_route_water_food(
 
     if not statements:
         return []
+    if _overpass_circuit_open():
+        if diagnostics is not None:
+            diagnostics["status"] = "unavailable"
+            diagnostics["errors"].append("circuit_open")
+        return []
     query = "[out:json][timeout:8];" + "".join(statements)
     urls = list(free.OVERPASS_URLS)
     mirrors = [urls[0], urls[-1]] if len(urls) >= 4 else urls[:2]
     found: list[dict[str, Any]] = []
     seen: set[str] = set()
     any_elements = False
+    provider_responded = False
     route_profile = _route_distance_profile(coords)
 
     for index, url in enumerate(mirrors):
@@ -615,6 +674,7 @@ def _bbox_route_water_food(
             continue
         if not isinstance(payload, dict):
             continue
+        provider_responded = True
         if diagnostics is not None:
             diagnostics["responses"] += 1
         elements = payload.get("elements") or []
@@ -682,6 +742,7 @@ def _bbox_route_water_food(
         if any(row["category"] == "food" for row in found) if intent.get("food") else bool(found):
             break
 
+    _overpass_circuit_report(provider_responded)
     if diagnostics is not None:
         diagnostics["status"] = (
             "found" if found
@@ -878,6 +939,11 @@ def _annotate_stage_resources(result: dict[str, Any]) -> dict[str, Any]:
                 )
                 for item in water[:3]
             )
+        elif ((result.get("map_resources") or {}).get("coverage") or {}).get("water") in ("not_verified", "partial"):
+            stage["water_notes"] = (
+                "Aucun point d'eau OSM confirmé pour cette étape ; "
+                "prévoir une réserve et vérifier les sources avant le départ."
+            )
         if food:
             stage["food_notes"] = " · ".join(
                 str(item.get("name") or "Ravitaillement")
@@ -980,13 +1046,10 @@ def _install_plan_overlay(app, legacy_main):
 
             # The initial planner's OSM references count as freshly observed;
             # previously cached records must NOT renew their own expiration.
-            initial_sources = [
-                item for key in (
-                    "water", "food", "resources", "accommodations", "points_of_interest"
-                )
-                for item in (result.get(key) or [])
-                if isinstance(item, dict)
-            ]
+            initial_sources = _cache_source_candidates(result)
+            initial_source_urls = {
+                str(item.get("source_url") or "") for item in initial_sources
+            }
             cache_diagnostics: dict[str, Any] = {}
             cache_write_diagnostics: dict[str, Any] = {}
             cached_rows = osm_cache.read_near_route(result, intent, cache_diagnostics)
@@ -1118,14 +1181,10 @@ def _install_plan_overlay(app, legacy_main):
             # Store positively identified OSM objects from fresh providers,
             # never empty results or records that were merely read from cache.
             source_linked = [
-                item for key in (
-                    "water", "food", "resources", "accommodations", "points_of_interest"
-                )
-                for item in (result.get(key) or [])
-                if isinstance(item, dict)
-                and (
+                item for item in _cache_source_candidates(result)
+                if (
                     str(item.get("source_url") or "") not in cached_sources
-                    or item in initial_sources
+                    or str(item.get("source_url") or "") in initial_source_urls
                 )
             ]
             osm_cache.store_sourced(
@@ -1141,6 +1200,23 @@ def _install_plan_overlay(app, legacy_main):
                 1 for point in points
                 if isinstance(point, dict) and point.get("kind") == "food"
                 and point.get("source_url")
+            )
+            water_requested = bool(intent.get("water"))
+            water_days = sorted({
+                int(point.get("route_day"))
+                for point in points
+                if isinstance(point, dict) and point.get("kind") == "water"
+                and str(point.get("source_url") or "").startswith(
+                    "https://www.openstreetmap.org/"
+                )
+                and isinstance(point.get("route_day"), int)
+            })
+            water_markers = sum(
+                1 for point in points
+                if isinstance(point, dict) and point.get("kind") == "water"
+                and str(point.get("source_url") or "").startswith(
+                    "https://www.openstreetmap.org/"
+                )
             )
             food_requested = bool(intent.get("food"))
             stage_count = max(1, len(result.get("stages") or [])
@@ -1169,8 +1245,21 @@ def _install_plan_overlay(app, legacy_main):
                 else "providers_unavailable" if unavailable
                 else "not_verified"
             )
+            missing_water_days = [
+                day for day in range(1, stage_count + 1) if day not in water_days
+            ]
+            water_status = (
+                "not_requested" if not water_requested
+                else "verified" if water_markers and not missing_water_days
+                else "partial" if water_markers
+                else "not_verified"
+            )
             result.setdefault("map_resources", {})["coverage"] = {
                 "food": food_status,
+                "water": water_status,
+                "verified_water_points": water_markers,
+                "days_with_water": water_days,
+                "days_without_water": missing_water_days if water_requested else [],
                 "verified_food_points": food_markers,
                 "days_with_food": food_days,
                 "days_without_food": missing_food_days if food_requested else [],
@@ -1210,6 +1299,9 @@ def _install_plan_overlay(app, legacy_main):
                     "terrain_provider": dict(terrain_diagnostics),
                     "reverse_provider": dict(reverse_diagnostics),
                     "food_coverage": food_status,
+                    "water_coverage": water_status,
+                    "water_days_covered": len(water_days),
+                    "water_days_missing": missing_water_days if water_requested else [],
                     "food_days_covered": len(food_days),
                     "food_days_missing": missing_food_days if food_requested else [],
                     "osm_cache": dict(cache_diagnostics),

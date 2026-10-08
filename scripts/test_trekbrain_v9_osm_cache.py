@@ -20,6 +20,29 @@ def row(osm_id, category="food"):
     }
 
 
+# Legacy planners omit category in per-family lists. All supported resource
+# kinds must reach the PostGIS cache without assuming new response contracts.
+legacy_rows = resources._cache_source_candidates({
+    "water": [{"name": "Source au bord du sentier", "lat": 45.01, "lon": 5.01,
+               "status": "potable_referenced",
+               "source_url": "https://www.openstreetmap.org/node/900100"}],
+    "food": [{"name": "Épicerie", "lat": 45.01, "lon": 5.01,
+              "source_url": "https://www.openstreetmap.org/node/900101"}],
+    "accommodations": [
+        {"name": "Camping du lac", "type": "Camping", "lat": 45.01, "lon": 5.01,
+         "source_url": "https://www.openstreetmap.org/node/900102"},
+        {"name": "Refuge du col", "type": "Refuge / abri",
+         "lat": 45.01, "lon": 5.01,
+         "source_url": "https://www.openstreetmap.org/node/900103"},
+    ],
+})
+assert {x["category"] for x in legacy_rows} == {
+    "food", "water", "camping", "refuge"
+}, legacy_rows
+assert all(cache._candidate(x) for x in legacy_rows), legacy_rows
+assert next(x for x in legacy_rows if x["category"] == "water")["status"] == "potable_referenced"
+
+assert cache._candidate({**row(900011), "osm_tags": {"description": "X" * 12000}})["tags"] == "{}"
 assert cache._candidate(row(900001))
 assert cache._candidate(row(900001, "water"))
 assert cache._candidate(row(900001, "camping"))
@@ -166,4 +189,14 @@ partial_map = {
 resources._annotate_stage_resources(partial_map)
 assert partial_map["stages"][0]["food_notes"] == "Épicerie du départ"
 assert "Aucun commerce vérifié" in partial_map["stages"][1]["food_notes"]
-print("TrekBrain v9 positive-only OSM cache, expiry, failure fallback and food stage gaps: PASS")
+water_gap = {
+    "stages": [{"day": 1}, {"day": 2}],
+    "map_resources": {"points": [{
+        "kind": "water", "route_day": 1, "name": "Fontaine du départ",
+        "status": "potable_referenced",
+    }], "coverage": {"water": "partial", "days_without_water": [2]}}
+}
+resources._annotate_stage_resources(water_gap)
+assert "Fontaine du départ" in water_gap["stages"][0]["water_notes"]
+assert "Aucun point d'eau OSM confirmé" in water_gap["stages"][1]["water_notes"]
+print("TrekBrain v9 positive-only OSM cache, source-linked water/stays and daily food/water gaps: PASS")
