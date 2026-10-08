@@ -39,7 +39,7 @@ def discover_near_route_shops(
     # best places to buy provisions. For a closed loop, exclude only the
     # duplicate finish. For a traverse, retain both start and finish.
     # Search up to five geographically distributed daily anchors. They run
-    # in one concurrent wave: adding trekking days should not leave all
+    # in a bounded parallel wave: adding trekking days should not leave all
     # intermediary villages unchecked.
     first = resources._point(day_points[0])
     last = resources._point(day_points[-1])
@@ -130,7 +130,7 @@ def discover_near_route_shops(
 
     found = []
     responses = 0
-    with ThreadPoolExecutor(max_workers=min(5, len(anchors))) as pool:
+    with ThreadPoolExecutor(max_workers=min(3, len(anchors))) as pool:
         futures = [pool.submit(probe, anchor) for anchor in anchors]
         for future in as_completed(futures):
             try:
