@@ -135,6 +135,32 @@ finally:
     free._request_json = original
 positions = {(round(c["lat"], 4), round(c["lon"], 4)) for c in probes}
 assert len(probes) == 3 and len(positions) == 3, probes
-assert all(resources._distance_km((45.0, 5.0), position) > 0.25 for position in positions), probes
+assert sum(resources._distance_km((45.0, 5.0), p) < 0.05 for p in positions) == 1, (
+    "Loop trailhead shop search was silently dropped", probes
+)
+assert sum(resources._distance_km((45.0, 5.0), p) > 0.25 for p in positions) == 2, probes
 
-print("TrekBrain reverse food providers and independent OSM fallback: PASS")
+# Likewise, a point-to-point route must retain the departure-town AND
+# arrival-town grocery probes, not only overnight stages.
+traverse = {
+    "duration_days": 3,
+    "route_preview": {
+        "coords": [[45.00, 5.00], [45.01, 5.01], [45.02, 5.02], [45.03, 5.03]],
+        "fallback": False,
+    },
+    "start": {"lat": 45.00, "lon": 5.00},
+    "end": {"lat": 45.03, "lon": 5.03},
+    "stages": [{"day": i} for i in range(1, 4)],
+}
+probes.clear()
+free._request_json = empty_reverse
+try:
+    assert shops.discover_near_route_shops(traverse) == []
+finally:
+    free._request_json = original
+locations = [(c["lat"], c["lon"]) for c in probes]
+assert len(locations) == 3 and len(set(locations)) == 3, locations
+assert any(resources._distance_km((45.00, 5.00), p) < 0.05 for p in locations), locations
+assert any(resources._distance_km((45.03, 5.03), p) < 0.05 for p in locations), locations
+
+print("TrekBrain reverse food providers, unique loop probes and both traverse endpoints: PASS")
