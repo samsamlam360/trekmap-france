@@ -173,7 +173,10 @@ def _terrain_resource(element: dict[str, Any]) -> dict[str, Any] | None:
             status = "potable_referenced"
         elif tags.get("drinking_water") == "no":
             status = "not_potable"
-    elif tags.get("shop") in {"supermarket", "convenience", "bakery"}:
+    elif tags.get("shop") in {
+        "supermarket", "convenience", "bakery", "general",
+        "grocery", "deli", "greengrocer", "food",
+    } and tags.get("access") != "private" and tags.get("disused") != "yes":
         category = "food"
     elif (
         tags.get("railway") in {"station", "halt"}
@@ -257,20 +260,27 @@ def _bbox_route_query(
         '["amenity"="drinking_water"]',
         '["man_made"="water_tap"]',
         '["natural"="spring"]',
-        '["shop"="supermarket"]',
-        '["shop"="convenience"]',
-        '["shop"="bakery"]',
         '["railway"="station"]',
         '["railway"="halt"]',
         '["amenity"="bus_station"]',
         '["amenity"="ferry_terminal"]',
     ) if include_terrain else ()
 
+    # Keep the existing lodging+water query, but give shops a separate
+    # Overpass output quota. The previous shared cap of 220 could return only
+    # water/stays in dense coastal or mountain bboxes, hiding every grocery
+    # even when OSM knew about it. Both queries are in one HTTP request.
     clauses = "".join(
         f"nwr{flt}({south:.6f},{west:.6f},{north:.6f},{east:.6f});"
         for flt in (*stay_filters, *terrain_filters)
     )
-    query = f"[out:json][timeout:5];({clauses});out center tags {220 if include_terrain else 160};"
+    query = f"[out:json][timeout:5];({clauses});out center tags {200 if include_terrain else 160};"
+    if include_terrain:
+        food_clause = (
+            f'nwr["shop"~"^(supermarket|convenience|bakery|general|grocery|deli|greengrocer|food)$"]'
+            f'({south:.6f},{west:.6f},{north:.6f},{east:.6f});'
+        )
+        query += f"({food_clause});out center tags 90;"
 
     data = None
     mirrors = list(free.OVERPASS_URLS)[:3]
@@ -347,7 +357,7 @@ def _bbox_route_query(
     stays = []
     terrain = []
     seen_terrain = set()
-    for element in (data.get("elements") or [])[: (220 if include_terrain else 160)]:
+    for element in (data.get("elements") or [])[: (290 if include_terrain else 160)]:
         tags = element.get("tags") or {}
 
         stay_match = False
