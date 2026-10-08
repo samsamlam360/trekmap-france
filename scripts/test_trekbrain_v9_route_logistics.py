@@ -1,7 +1,9 @@
 """Regression: lodging must not reshape the hiking route, with or without a GR."""
 from pathlib import Path
+import os
 import sys
 import threading
+import time
 
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
@@ -328,6 +330,59 @@ assert parallel_errors == [], parallel_errors
 assert parallel_calls == {"overpass": 1, "nominatim": 1, "photon": 0}, parallel_calls
 assert len(chosen_parallel) == 4, chosen_parallel
 assert meta_parallel["terrain_preloaded"] is True
+
+# Slow structured route-wide discovery should trigger exactly one delayed
+# Photon hedge, overlapping the slow tail instead of waiting for it serially.
+real_bundle_hedge = logistics._bbox_route_bundle
+real_nominatim_hedge = logistics._nominatim_route_stays
+real_photon_hedge = logistics._photon_split_stays
+old_hedge_env = os.environ.get("TREKBRAIN_STAY_HEDGE_SECONDS")
+hedge_times = {}
+hedge_calls = {"photon": 0}
+try:
+    os.environ["TREKBRAIN_STAY_HEDGE_SECONDS"] = "0.05"
+
+    def slow_hedge_bundle(_coords, category):
+        hedge_times["bundle_start"] = time.monotonic()
+        time.sleep(0.12)
+        hedge_times["bundle_end"] = time.monotonic()
+        return [], [], False
+
+    def empty_hedge_nominatim(*args, **kwargs):
+        return []
+
+    def successful_hedge_photon(*args, **kwargs):
+        hedge_calls["photon"] += 1
+        hedge_times["photon_start"] = time.monotonic()
+        return [dict(x) for x in camps]
+
+    logistics._bbox_route_bundle = slow_hedge_bundle
+    logistics._nominatim_route_stays = empty_hedge_nominatim
+    logistics._photon_split_stays = successful_hedge_photon
+    chosen_hedge, _projected_hedge, _meta_hedge = logistics._discover_stays(
+        FakeV3(),
+        FakeRoundtrip,
+        FakeStayRescue,
+        coords,
+        {"name": "Départ", "lat": 0.0, "lon": 0.0},
+        "camping",
+        5,
+        20.0,
+        False,
+        want_terrain=True,
+    )
+finally:
+    logistics._bbox_route_bundle = real_bundle_hedge
+    logistics._nominatim_route_stays = real_nominatim_hedge
+    logistics._photon_split_stays = real_photon_hedge
+    if old_hedge_env is None:
+        os.environ.pop("TREKBRAIN_STAY_HEDGE_SECONDS", None)
+    else:
+        os.environ["TREKBRAIN_STAY_HEDGE_SECONDS"] = old_hedge_env
+
+assert hedge_calls["photon"] == 1, hedge_calls
+assert len(chosen_hedge) == 4, chosen_hedge
+assert hedge_times["bundle_start"] < hedge_times["photon_start"] < hedge_times["bundle_end"], hedge_times
 
 # Overnight evidence already discovered while shaping the route must survive
 # into route-first logistics. A provider fluctuation after routing must not make
