@@ -89,10 +89,17 @@ block = r'''<!-- TREKMAP_TREKBRAIN_V91_MAP_START -->
   function resourceSummary(){
     const panel=$('tm-v9-panel');if(!panel||!current)return;
     panel.querySelector('.tm-v91-map-summary')?.remove();
-    const pts=pointsFor(current);if(!pts.length)return;
+    const pts=pointsFor(current),coverage=current?.map_resources?.coverage||{};
+    const foodNotice=coverage.food==='providers_unavailable'
+      ?'⚠️ Ravitaillement non vérifié : services de données cartographiques indisponibles.'
+      :coverage.food==='not_verified'
+      ?'⚠️ Aucun commerce confirmé sur le tracé. Prévoir les provisions ou vérifier les villages proches.'
+      :'';
+    if(!pts.length&&!foodNotice)return;
     const counts={};pts.forEach(p=>counts[p.kind]=(counts[p.kind]||0)+1);
     const parts=Object.keys(meta).filter(k=>counts[k]).map(k=>`${meta[k].emoji} ${meta[k].label}: ${counts[k]}`);
-    const box=document.createElement('div');box.className='tm-v91-map-summary';box.innerHTML=`<b>Repères ajoutés sur la carte</b><br>${parts.map(esc).join(' · ')}<br><small>Chaque point est filtré selon sa proximité avec le tracé et, quand possible, associé à un jour.</small>`;
+    const box=document.createElement('div');box.className='tm-v91-map-summary';
+    box.innerHTML=`<b>${pts.length?'Repères ajoutés sur la carte':'Ravitaillement non confirmé'}</b><br>${parts.map(esc).join(' · ')}${foodNotice?`<p>${esc(foodNotice)}</p>`:''}<small>Seuls les points géolocalisés près du tracé sont affichés. Vérifie les conditions actuelles avant de partir.</small>`;
     const ask=panel.querySelector('.tm-v9-ask');ask?panel.insertBefore(box,ask):panel.appendChild(box);
   }
 
