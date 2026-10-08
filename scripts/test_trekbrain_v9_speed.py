@@ -584,9 +584,11 @@ assert float(precise_loop.get("round_trip_retrace_ratio") or 0) <= 0.30, precise
 # Photon and the single bounded bbox lookup fail.
 real_photon_split = logistics._photon_split_stays
 real_bbox_stays = logistics._bbox_route_stays
+real_nominatim_stays = logistics._nominatim_route_stays
 real_route_probe = logistics._route_probe_stays
 logistics._photon_split_stays = lambda *args, **kwargs: []
 logistics._bbox_route_stays = lambda *args, **kwargs: []
+logistics._nominatim_route_stays = lambda *args, **kwargs: []
 def forbidden_route_probe(*args, **kwargs):
     raise AssertionError("route probe must not be called from _discover_stays")
 logistics._route_probe_stays = forbidden_route_probe
@@ -605,6 +607,7 @@ try:
 finally:
     logistics._photon_split_stays = real_photon_split
     logistics._bbox_route_stays = real_bbox_stays
+    logistics._nominatim_route_stays = real_nominatim_stays
     logistics._route_probe_stays = real_route_probe
 assert chosen == [] and projected == [], (chosen, projected)
 assert float(meta.get("elapsed_ms") or 0) < 500, meta
