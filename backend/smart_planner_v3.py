@@ -456,7 +456,11 @@ def _combined_nearby(
         return [], [], []
 
     query = "[out:json][timeout:20];(" + "".join(clauses) + ");out center tags 260;"
-    data = _overpass(query)
+    data = (
+        _overpass(query)
+        if max_mirrors is None
+        else _overpass(query, max_mirrors=max_mirrors)
+    )
 
     base_items, extra_items = [], []
     seen_base, seen_extra = set(), set()

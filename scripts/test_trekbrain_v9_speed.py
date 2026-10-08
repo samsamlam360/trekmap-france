@@ -332,6 +332,27 @@ blocked_sparse = dict(sparse_intent)
 blocked_sparse["via_query"] = "Point demandé"
 assert v3._sparse_region_route_candidates(sparse_start, blocked_sparse) == []
 
+# Combined regional discovery must forward an explicit mirror cap to the
+# TrekBrain fast Overpass wrapper. Accepting max_mirrors but dropping it here
+# would silently reopen the second public mirror on sparse-region requests.
+real_v3_overpass = v3._overpass
+mirror_forwarded = []
+def fake_limited_overpass(query, *, max_mirrors=None):
+    mirror_forwarded.append(max_mirrors)
+    return {"elements": []}
+
+v3._overpass = fake_limited_overpass
+try:
+    v3._combined_nearby(
+        {"lat": 48.0, "lon": 2.0},
+        10.0,
+        ["water"],
+        max_mirrors=1,
+    )
+finally:
+    v3._overpass = real_v3_overpass
+assert mirror_forwarded == [1], mirror_forwarded
+
 # Form-encoded Overpass POSTs use direct FOSSGIS backends first. Avoid the
 # generic redirecting host on the hot path so POST bodies are sent straight to
 # the interpreter instance.
