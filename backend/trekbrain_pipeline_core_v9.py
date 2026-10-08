@@ -21,6 +21,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 import math
+import time
 import re
 import unicodedata
 from typing import Any, Callable
@@ -385,7 +386,7 @@ def _preload_canonical_stays(
     for provider_name, provider in providers:
         if not callable(provider):
             continue
-        started = __import__("time").perf_counter()
+        started = time.perf_counter()
         rows = []
         outcome = "ok"
         try:
@@ -396,7 +397,7 @@ def _preload_canonical_stays(
         finally:
             perf.record(
                 f"logistics.canonical_{provider_name}",
-                (__import__("time").perf_counter() - started) * 1000,
+                (time.perf_counter() - started) * 1000,
                 category=category,
                 outcome=outcome,
             )
