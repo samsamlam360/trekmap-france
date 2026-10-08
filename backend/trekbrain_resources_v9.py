@@ -9,6 +9,7 @@ from __future__ import annotations
 import json
 import math
 import time
+import threading
 from concurrent.futures import ThreadPoolExecutor
 from copy import deepcopy
 from typing import Any
@@ -26,6 +27,34 @@ from .trekbrain_geo_safety_v9 import (
     route_safety_report,
     safety_error_message,
 )
+
+
+# Stop repeatedly hammering public Overpass mirrors after two complete
+# outages. No negative results are cached: one live request retries after the
+# cooldown, and any successful provider response resets the breaker.
+_OSM_OVERPASS_LOCK = threading.Lock()
+_OSM_OVERPASS_FAILURES = 0
+_OSM_OVERPASS_COOLDOWN_UNTIL = 0.0
+_OSM_OVERPASS_COOLDOWN_SECONDS = 60.0
+
+
+def _overpass_circuit_open() -> bool:
+    with _OSM_OVERPASS_LOCK:
+        return time.monotonic() < _OSM_OVERPASS_COOLDOWN_UNTIL
+
+
+def _overpass_circuit_report(provider_responded: bool) -> None:
+    global _OSM_OVERPASS_FAILURES, _OSM_OVERPASS_COOLDOWN_UNTIL
+    with _OSM_OVERPASS_LOCK:
+        if provider_responded:
+            _OSM_OVERPASS_FAILURES = 0
+            _OSM_OVERPASS_COOLDOWN_UNTIL = 0.0
+        else:
+            _OSM_OVERPASS_FAILURES += 1
+            if _OSM_OVERPASS_FAILURES >= 2:
+                _OSM_OVERPASS_COOLDOWN_UNTIL = (
+                    time.monotonic() + _OSM_OVERPASS_COOLDOWN_SECONDS
+                )
 
 
 RESOURCE_LIMITS = {
@@ -608,6 +637,11 @@ def _bbox_route_water_food(
 
     if not statements:
         return []
+    if _overpass_circuit_open():
+        if diagnostics is not None:
+            diagnostics["status"] = "unavailable"
+            diagnostics["errors"].append("circuit_open")
+        return []
     query = "[out:json][timeout:8];" + "".join(statements)
     urls = list(free.OVERPASS_URLS)
     mirrors = [urls[0], urls[-1]] if len(urls) >= 4 else urls[:2]
@@ -706,6 +740,7 @@ def _bbox_route_water_food(
         if any(row["category"] == "food" for row in found) if intent.get("food") else bool(found):
             break
 
+    _overpass_circuit_report(bool(any_elements or (diagnostics or {}).get("responses")))
     if diagnostics is not None:
         diagnostics["status"] = (
             "found" if found
