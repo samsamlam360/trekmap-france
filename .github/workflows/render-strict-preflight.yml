@@ -133,8 +133,19 @@ jobs:
               '- key: TREKBRAIN_RELEASE_CHANNEL',
               'value: v9-stable',
               'name: trekmap-france-db',
-              'property: connectionString',
           ]
+          # A migration to external Postgres must never be forced back to the
+          # expiring Render free database by an obsolete config assertion.
+          external = (
+              '- key: DATABASE_URL\n        sync: false' in cfg
+              and '- key: DB_SSLMODE\n        value: require' in cfg
+          )
+          internal = (
+              '- key: DATABASE_URL\n        fromDatabase:' in cfg
+              and 'property: connectionString' in cfg
+          )
+          if not (external or internal):
+              raise SystemExit('DATABASE_URL: expected private Neon secret or Render fromDatabase')
           missing=[item for item in required if item not in cfg]
           if missing:
               raise SystemExit('Configuration Render incomplète: '+', '.join(missing))
