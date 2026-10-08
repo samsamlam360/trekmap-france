@@ -67,13 +67,21 @@ jobs:
         shell: python
         run: |
           import glob, json, os, statistics
-          summary=['# TrekBrain: production benchmarks run serially','','| Suite | Valid | Quality | Mean latency | Source-linked food markers |','|---|---:|---:|---:|---:|']
+          summary=['# TrekBrain: production benchmarks run serially','','| Suite | Valid | Quality | Mean latency | Food markers | Food days missing | Water days missing | Cached POIs |','|---|---:|---:|---:|---:|---:|---:|---:|']
           for filename in sorted(glob.glob('benchmark-results/**/trekbrain-production-benchmark.json',recursive=True)):
               rows=json.load(open(filename,encoding='utf-8'))['scenarios']
               scores=[float(x['quality']) for x in rows if isinstance(x.get('quality'),(int,float))]
               times=[float(x['elapsed_s']) for x in rows if isinstance(x.get('elapsed_s'),(int,float))]
               name=filename.removeprefix('benchmark-results/').removesuffix('/trekbrain-production-benchmark.json')
-              summary.append(f"| {name} | {sum(bool(x['ok']) for x in rows)}/{len(rows)} | {statistics.fmean(scores):.1f} | {statistics.fmean(times):.1f}s | {sum(int(x.get('food_markers') or 0) for x in rows)} |" if scores and times else f"| {name} | n/a | n/a | n/a | n/a |")
+              summary.append(
+                  f"| {name} | {sum(bool(x['ok']) for x in rows)}/{len(rows)} | "
+                  f"{statistics.fmean(scores):.1f} | {statistics.fmean(times):.1f}s | "
+                  f"{sum(int(x.get('food_markers') or 0) for x in rows)} | "
+                  f"{sum(len(x.get('food_days_missing') or []) for x in rows)} | "
+                  f"{sum(len(x.get('water_days_missing') or []) for x in rows)} | "
+                  f"{sum(int(x.get('osm_cache_hits') or 0) for x in rows)} |"
+                  if scores and times else f"| {name} | n/a | n/a | n/a | n/a | n/a | n/a | n/a |"
+              )
           report='\n'.join(summary)+'\n'
           print(report)
           with open(os.environ['GITHUB_STEP_SUMMARY'],'a',encoding='utf-8') as f:f.write(report)
