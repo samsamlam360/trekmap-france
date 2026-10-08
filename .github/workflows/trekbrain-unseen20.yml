@@ -1,11 +1,7 @@
 name: TrekBrain 20 unseen regions audit
 
 on:
-  pull_request:
-    paths:
-      - 'scripts/benchmark_trekbrain_v9_unseen20.py'
-      - 'scripts/benchmark_trekbrain_v9_production.py'
-      - '.github/workflows/trekbrain-unseen20.yml'
+  # Manual audit only; push coverage belongs to the serial suite.
   workflow_dispatch:
 
 permissions:
