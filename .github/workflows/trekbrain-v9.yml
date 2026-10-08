@@ -115,6 +115,8 @@ jobs:
         run: python scripts/test_trekbrain_v9_food_merge.py
       - name: Positive-only PostGIS OSM cache and daily food gaps
         run: python scripts/test_trekbrain_v9_osm_cache.py
+      - name: Overpass provider outage circuit breaker
+        run: python scripts/test_trekbrain_v9_overpass_circuit.py
       - name: Missing terrain recovery regressions
         run: python scripts/test_trekbrain_v9_terrain_recovery.py
       - name: V8 and French language regressions
