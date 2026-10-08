@@ -183,8 +183,9 @@ assert all(
 )
 
 
-# Photon rescue for structured stays uses local text ranking, while the shared
-# lookup remains responsible for bbox/distance/semantic validation.
+# Structured campsite/refuge rescue must leave query_override unset so the
+# shared Photon helper sends q + osm_tag + bbox in the same request. A text
+# override suppresses osm_tag and made public-index results fluctuate.
 class FakePhotonRoundtrip(FakeRoundtrip):
     @staticmethod
     def _equal_anchors(_coords, days):
@@ -198,29 +199,31 @@ class FakePhotonV3:
 
     @staticmethod
     def _photon_anchor_resource(anchor, category, tags, radius, query_override=None):
-        FakePhotonV3.calls.append((category, tuple(tags), float(radius), query_override))
+        tag_tuple = tuple(tags)
+        FakePhotonV3.calls.append((category, tag_tuple, float(radius), query_override))
+        actual = "camping" if any("camp_site" in tag for tag in tag_tuple) else "refuge"
         return {
-            "name": f"{query_override or 'stay'} test",
+            "name": f"{actual} test",
             "lat": anchor["lat"],
             "lon": anchor["lon"],
-            "category": "camping" if query_override == "camping" else "refuge",
-            "source_url": f"osm://{query_override}/{anchor['lon']}",
+            "category": actual,
+            "source_url": f"osm://{actual}/{anchor['lon']}",
         }
 
 FakePhotonV3.calls = []
-text_camps = logistics._photon_split_stays(
+structured_camps = logistics._photon_split_stays(
     FakePhotonV3, FakePhotonRoundtrip, coords, "camping", 3
 )
-assert len(text_camps) == 2, text_camps
-assert all(call[3] == "camping" for call in FakePhotonV3.calls), FakePhotonV3.calls
+assert len(structured_camps) == 2, structured_camps
+assert all(call[3] is None for call in FakePhotonV3.calls), FakePhotonV3.calls
 assert all("tourism:camp_site" in call[1] for call in FakePhotonV3.calls), FakePhotonV3.calls
 
 FakePhotonV3.calls = []
-text_refuges = logistics._photon_split_stays(
+structured_refuges = logistics._photon_split_stays(
     FakePhotonV3, FakePhotonRoundtrip, coords, "refuge", 3
 )
-assert len(text_refuges) == 2, text_refuges
-assert all(call[3] == "refuge" for call in FakePhotonV3.calls), FakePhotonV3.calls
+assert len(structured_refuges) == 2, structured_refuges
+assert all(call[3] is None for call in FakePhotonV3.calls), FakePhotonV3.calls
 assert all("tourism:alpine_hut" in call[1] for call in FakePhotonV3.calls), FakePhotonV3.calls
 
 # Structured outdoor lodging should prefer one exact OSM corridor query and stop
