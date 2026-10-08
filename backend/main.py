@@ -256,6 +256,51 @@ def ensure_schema(force=False):
         """))
         db.execute(text("CREATE INDEX IF NOT EXISTS idx_trek_comments_trek ON trek_comments(trek_id, created_at DESC)"))
 
+        db.execute(text("""
+            UPDATE treks
+            SET duration_days = GREATEST(0.25, ROUND((COALESCE(distance,0)/20.0)*4)/4.0),
+                duration_minutes = GREATEST(1, ROUND((GREATEST(0.25, ROUND((COALESCE(distance,0)/20.0)*4)/4.0))*1440))
+            WHERE duration_days IS NULL AND distance IS NOT NULL
+        """))
+        db.execute(text("CREATE INDEX IF NOT EXISTS idx_treks_public ON treks(is_public)"))
+        db.execute(text("CREATE INDEX IF NOT EXISTS idx_treks_owner ON treks(owner_id)"))
+        db.execute(text("CREATE INDEX IF NOT EXISTS idx_trek_favorites_trek ON trek_favorites(trek_id)"))
+        db.execute(text("DELETE FROM user_sessions WHERE expires_at <= CURRENT_TIMESTAMP"))
+        db.execute(text("CREATE INDEX IF NOT EXISTS idx_sessions_expires ON user_sessions(expires_at)"))
+
+        if ADMIN_USERNAME and ADMIN_EMAIL and ADMIN_PASSWORD:
+            existing = db.execute(text("SELECT id FROM users WHERE LOWER(username)=LOWER(:u) OR LOWER(email)=LOWER(:e)"), {"u": ADMIN_USERNAME, "e": ADMIN_EMAIL}).first()
+            if existing:
+                db.execute(text("UPDATE users SET is_admin=TRUE WHERE id=:id"), {"id": existing.id})
+            else:
+                db.execute(text("INSERT INTO users(username,email,password_hash,is_admin) VALUES(:u,:e,:p,TRUE)"), {
+                    "u": ADMIN_USERNAME, "e": ADMIN_EMAIL, "p": hash_password(ADMIN_PASSWORD)
+                })
+        db.commit()
+        SCHEMA_READY = True
+    except Exception as exc:
+        db.rollback()
+        SCHEMA_READY = False
+        print("[TrekMap][core-schema] initialization failed:", type(exc).__name__, flush=True)
+        raise
+    finally:
+        db.close()
+
+
+
+# OSM context is an OPTIONAL feature. A permissions, storage, or PostGIS
+# index error in its migration must never make authentication, existing treks
+# and account creation return HTTP 503.
+OSM_CACHE_SCHEMA_READY = False
+
+
+def ensure_osm_cache_schema():
+    global OSM_CACHE_SCHEMA_READY
+    if OSM_CACHE_SCHEMA_READY:
+        return True
+    db = None
+    try:
+        db = SessionLocal()
         # Persist positive OSM evidence across Render deploys/restarts. These
         # indexed points are observational map data, never an availability
         # guarantee. Stale rows are excluded by the reader (10-day TTL).
@@ -284,39 +329,34 @@ def ensure_schema(force=False):
         """))
 
 
-        db.execute(text("""
-            UPDATE treks
-            SET duration_days = GREATEST(0.25, ROUND((COALESCE(distance,0)/20.0)*4)/4.0),
-                duration_minutes = GREATEST(1, ROUND((GREATEST(0.25, ROUND((COALESCE(distance,0)/20.0)*4)/4.0))*1440))
-            WHERE duration_days IS NULL AND distance IS NOT NULL
-        """))
-        db.execute(text("CREATE INDEX IF NOT EXISTS idx_treks_public ON treks(is_public)"))
-        db.execute(text("CREATE INDEX IF NOT EXISTS idx_treks_owner ON treks(owner_id)"))
-        db.execute(text("CREATE INDEX IF NOT EXISTS idx_trek_favorites_trek ON trek_favorites(trek_id)"))
-        db.execute(text("DELETE FROM user_sessions WHERE expires_at <= CURRENT_TIMESTAMP"))
-        db.execute(text("CREATE INDEX IF NOT EXISTS idx_sessions_expires ON user_sessions(expires_at)"))
 
-        if ADMIN_USERNAME and ADMIN_EMAIL and ADMIN_PASSWORD:
-            existing = db.execute(text("SELECT id FROM users WHERE LOWER(username)=LOWER(:u) OR LOWER(email)=LOWER(:e)"), {"u": ADMIN_USERNAME, "e": ADMIN_EMAIL}).first()
-            if existing:
-                db.execute(text("UPDATE users SET is_admin=TRUE WHERE id=:id"), {"id": existing.id})
-            else:
-                db.execute(text("INSERT INTO users(username,email,password_hash,is_admin) VALUES(:u,:e,:p,TRUE)"), {
-                    "u": ADMIN_USERNAME, "e": ADMIN_EMAIL, "p": hash_password(ADMIN_PASSWORD)
-                })
         db.commit()
-        SCHEMA_READY = True
-    except Exception:
-        db.rollback()
-        SCHEMA_READY = False
-        raise
+        OSM_CACHE_SCHEMA_READY = True
+        return True
+    except Exception as exc:
+        if db is not None:
+            db.rollback()
+        # SQLSTATE identifies permission vs storage vs transient failures
+        # without putting passwords, connection strings or SQL values in logs.
+        sqlstate = getattr(getattr(exc, "orig", None), "pgcode", None)
+        print(
+            "[TrekMap][optional-osm-cache] migration skipped:",
+            type(exc).__name__, "sqlstate=", sqlstate or "unknown",
+            flush=True,
+        )
+        return False
     finally:
-        db.close()
+        if db is not None:
+            db.close()
+
 
 @app.on_event("startup")
 def startup():
     try:
         ensure_schema()
+        # Run the optional cache migration at startup only: a failed PostGIS
+        # index or database permission must not stall regular user logins.
+        ensure_osm_cache_schema()
         print("[TrekMap] Base de données prête")
     except Exception as exc:
         print("[TrekMap] ATTENTION: base indisponible au démarrage:", repr(exc))
