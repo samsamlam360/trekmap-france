@@ -469,7 +469,11 @@ def _bbox_route_water_food(result: dict[str, Any], intent: dict[str, Any]) -> li
     # Never cache an empty result: a later user's water/food lookup must remain
     # retryable rather than inheriting the previous provider's outage.
     payload = None
-    for index, url in enumerate(list(free.OVERPASS_URLS)[:2]):
+    urls = list(free.OVERPASS_URLS)
+    # Prefer an independent instance to a sibling mirror on the fallback
+    # attempt, particularly while public FOSSGIS backends are throttled.
+    mirrors = [urls[0], urls[-1]] if len(urls) >= 4 else urls[:2]
+    for index, url in enumerate(mirrors):
         try:
             candidate = free._request_json(
                 url,
@@ -802,11 +806,13 @@ def _install_plan_overlay(app, legacy_main):
                 terrain_intent.get("water") or terrain_intent.get("food")
             )
             terrain_rows = []
+            reverse_food_rows = []
             supplement_ms = 0
             terrain_ms = 0
+            reverse_food_ms = 0
 
             def _timed_resource_call(kind, func, *args):
-                nonlocal supplement_ms, terrain_ms
+                nonlocal supplement_ms, terrain_ms, reverse_food_ms
                 started = time.monotonic()
                 try:
                     return func(*args)
@@ -816,6 +822,8 @@ def _install_plan_overlay(app, legacy_main):
                         supplement_ms = elapsed
                     elif kind == "terrain":
                         terrain_ms = elapsed
+                    elif kind == "reverse_food":
+                        reverse_food_ms = elapsed
 
             resource_started = time.monotonic()
             if terrain_preloaded and not terrain_lookup_needed:
@@ -834,7 +842,13 @@ def _install_plan_overlay(app, legacy_main):
                 # food was checked successfully. Query *only* missing classes,
                 # without re-requesting already located categories. The bounded
                 # OSM lookup and Photon supplement run concurrently.
-                with ThreadPoolExecutor(max_workers=2) as pool:
+                # The Photon text index and public Overpass mirrors may be
+                # unavailable simultaneously. Reverse shop lookup is independent
+                # of the text query and works directly around route-day anchors.
+                # Launch it IN PARALLEL with existing providers, not as a slow
+                # serial retry. Only real OSM shops close to the route qualify.
+                from . import trekbrain_food_reverse_v9 as reverse_shops
+                with ThreadPoolExecutor(max_workers=3) as pool:
                     logistics_future = pool.submit(
                         _timed_resource_call,
                         "supplement",
@@ -849,6 +863,15 @@ def _install_plan_overlay(app, legacy_main):
                         snapshot,
                         terrain_intent,
                     )
+                    reverse_future = (
+                        pool.submit(
+                            _timed_resource_call,
+                            "reverse_food",
+                            reverse_shops.discover_near_route_shops,
+                            snapshot,
+                        )
+                        if terrain_intent.get("food") else None
+                    )
                     try:
                         result = logistics_future.result()
                     except Exception:
@@ -857,11 +880,16 @@ def _install_plan_overlay(app, legacy_main):
                         terrain_rows = terrain_future.result()
                     except Exception:
                         terrain_rows = []
+                    if reverse_future is not None:
+                        try:
+                            reverse_food_rows = reverse_future.result()
+                        except Exception:
+                            reverse_food_rows = []
 
-                if terrain_rows:
+                if terrain_rows or reverse_food_rows:
                     result = _merge_supplemented_resources(
                         result,
-                        _filter_active(list(terrain_rows)),
+                        _filter_active(list(terrain_rows) + list(reverse_food_rows)),
                     )
                 result["_terrain_osm_preloaded"] = True
             else:
@@ -899,6 +927,8 @@ def _install_plan_overlay(app, legacy_main):
                     "resource_fetch_ms": resource_fetch_ms,
                     "supplement_ms": supplement_ms,
                     "terrain_ms": terrain_ms,
+                    "reverse_food_ms": reverse_food_ms,
+                    "reverse_food_rows": len(reverse_food_rows),
                     "enrich_ms": enrich_ms,
                     "annotate_ms": annotate_ms,
                     "quality_refresh_ms": quality_refresh_ms,

@@ -283,7 +283,14 @@ def _bbox_route_query(
         query += f"({food_clause});out center tags 90;"
 
     data = None
-    mirrors = list(free.OVERPASS_URLS)[:3]
+    all_mirrors = list(free.OVERPASS_URLS)
+    # Prefer an independent private.coffee instance over a sibling FOSSGIS
+    # backend when the primary is throttled. Keep the legacy mirror as the
+    # third option, still under the same bounded parallel fallback wave.
+    mirrors = (
+        [all_mirrors[0], all_mirrors[-1], all_mirrors[1]]
+        if len(all_mirrors) >= 4 else all_mirrors[:3]
+    )
 
     # Keep normal provider load unchanged: the primary mirror gets the first
     # chance on its own. Only when it fails or returns an empty corridor do we
