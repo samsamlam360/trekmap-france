@@ -457,18 +457,28 @@ def _bbox_route_water_food(result: dict[str, Any], intent: dict[str, Any]) -> li
         return []
 
     query = "[out:json][timeout:3];(" + "".join(clauses) + ");out center tags 120;"
-    try:
-        url = list(free.OVERPASS_URLS)[0]
-        payload = free._request_json(
-            url,
-            data={"data": query},
-            timeout=1.7,
-            ttl=3600,
-            service="Overpass route resources",
-            retries=1,
-            cache_empty=False,
-        )
-    except Exception:
+    # A single public Overpass mirror can be temporarily throttled or empty.
+    # Try a second independent mirror only on that miss, with a smaller budget.
+    # Never cache an empty result: a later user's water/food lookup must remain
+    # retryable rather than inheriting the previous provider's outage.
+    payload = None
+    for index, url in enumerate(list(free.OVERPASS_URLS)[:2]):
+        try:
+            candidate = free._request_json(
+                url,
+                data={"data": query},
+                timeout=1.7 if index == 0 else 0.9,
+                ttl=3600,
+                service="Overpass route resources",
+                retries=1,
+                cache_empty=False,
+            )
+            if isinstance(candidate, dict) and candidate.get("elements"):
+                payload = candidate
+                break
+        except Exception:
+            pass
+    if not isinstance(payload, dict):
         return []
 
     rows = []
@@ -777,10 +787,11 @@ def _install_plan_overlay(app, legacy_main):
                         terrain_ms = elapsed
 
             resource_started = time.monotonic()
-            if terrain_preloaded:
-                # Lodging discovery already queried this exact route corridor
-                # and attached its water/food rows. Only the bounded Photon
-                # supplement may still add something such as public transport.
+            if terrain_preloaded and not terrain_lookup_needed:
+                # Reuse lodging's terrain bundle ONLY when every requested
+                # water/food category has a concrete located resource. If one
+                # is missing, the independent targeted terrain search below
+                # must still have a chance, in parallel with Photon.
                 try:
                     result = _timed_resource_call(
                         "supplement", _supplement_route_resources, result, data
@@ -788,6 +799,10 @@ def _install_plan_overlay(app, legacy_main):
                 except Exception:
                     pass
             elif terrain_lookup_needed:
+                # A partial route bundle is not evidence that missing water or
+                # food was checked successfully. Query *only* missing classes,
+                # without re-requesting already located categories. The bounded
+                # OSM lookup and Photon supplement run concurrently.
                 with ThreadPoolExecutor(max_workers=2) as pool:
                     logistics_future = pool.submit(
                         _timed_resource_call,
