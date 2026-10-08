@@ -116,6 +116,20 @@ assert mirrors[1] == free.OVERPASS_URLS[-1], mirrors
 assert rows and rows[0]["category"] == "food", rows
 assert overpass_stats["status"] == "found", overpass_stats
 assert overpass_stats["attempts"] == 2 and overpass_stats["responses"] == 1
+
+# Two failed mirrors must be reported as an unavailable search, not as proof
+# that the hiking corridor contains no grocery or water points.
+free._request_json = blocked_provider
+no_overpass = {}
+try:
+    assert resources._bbox_route_water_food(
+        route, {"food": True, "water": False}, no_overpass
+    ) == []
+finally:
+    free._request_json = original
+assert no_overpass["status"] == "unavailable" and no_overpass["responses"] == 0, no_overpass
+assert no_overpass["attempts"] == 2, no_overpass
+
 # Long closed loops must sample distinct overnight stages instead of
 # wasting two of three reverse probes on the identical start/finish point.
 loop = {
