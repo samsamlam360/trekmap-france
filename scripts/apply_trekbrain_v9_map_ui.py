@@ -19,7 +19,7 @@ block = r'''<!-- TREKMAP_TREKBRAIN_V91_MAP_START -->
 <style id="trekmap-trekbrain-v91-map-css">
 .tm-v91-resource-icon{background:transparent!important;border:0!important}
 .tm-v91-resource-icon span{display:grid;place-items:center;width:30px;height:30px;border-radius:50%;background:#fff;border:2px solid #174f3a;box-shadow:0 2px 9px rgba(0,0,0,.26);font-size:17px;line-height:1}
-.tm-v91-resource-icon.water span{border-color:#2376a8}.tm-v91-resource-icon.camping span{border-color:#4b7f39}.tm-v91-resource-icon.refuge span{border-color:#77572f}.tm-v91-resource-icon.station span{border-color:#754aa5}.tm-v91-resource-icon.transport span{border-color:#b26b24}.tm-v91-resource-icon.trail span{border-color:#365f49}
+.tm-v91-resource-icon.water span{border-color:#2376a8}.tm-v91-resource-icon.food span{border-color:#b77917}.tm-v91-resource-icon.lodging span{border-color:#467c85}.tm-v91-resource-icon.camping span{border-color:#4b7f39}.tm-v91-resource-icon.refuge span{border-color:#77572f}.tm-v91-resource-icon.station span{border-color:#754aa5}.tm-v91-resource-icon.transport span{border-color:#b26b24}.tm-v91-resource-icon.trail span{border-color:#365f49}
 .tm-v91-legend{min-width:176px;padding:9px 10px;border-radius:12px;background:rgba(255,255,255,.96);box-shadow:0 5px 20px rgba(0,0,0,.18);font:600 12px/1.25 system-ui,sans-serif;color:#29473a}
 .tm-v91-legend b{display:block;margin-bottom:6px}.tm-v91-legend label{display:flex;align-items:center;gap:6px;margin:5px 0;cursor:pointer}.tm-v91-legend input{accent-color:#176b4b}.tm-v91-legend small{display:block;margin-top:5px;color:#65776e;font-weight:500;line-height:1.3}
 .tm-v91-map-summary{margin:10px 0;padding:9px 10px;border:1px solid #dce8e1;border-radius:10px;background:#f8fbf9;color:#466257;font-size:13px;line-height:1.45}.tm-v91-map-summary b{color:#224d3a}
@@ -33,7 +33,7 @@ block = r'''<!-- TREKMAP_TREKBRAIN_V91_MAP_START -->
   const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]));
   const safeUrl=v=>{try{const u=new URL(String(v||''));return ['http:','https:'].includes(u.protocol)?u.href:''}catch(_){return''}};
   const meta={
-    water:{emoji:'🚰',label:'Eau'},camping:{emoji:'⛺',label:'Campings'},refuge:{emoji:'🏠',label:'Refuges'},
+    water:{emoji:'🚰',label:'Eau'},food:{emoji:'🥖',label:'Ravitaillement'},camping:{emoji:'⛺',label:'Campings'},refuge:{emoji:'🏠',label:'Refuges'},lodging:{emoji:'🛏️',label:'Hébergements'},
     station:{emoji:'🚉',label:'Gares'},transport:{emoji:'🚌',label:'Bus / transports'},trail:{emoji:'🥾',label:'Sentiers nommés'}
   };
   let current=null,basePrompt='',history=[],savedTrekId=null,legend=null;
