@@ -15,10 +15,13 @@ services:
         value: production
       - key: FRONTEND_ORIGINS
         value: https://trekmap-france.onrender.com
+      # PostgreSQL 17 is now hosted on Neon (aws-us-west-2).
+      # DATABASE_URL is provisioned as a secret in Render's Environment page.
+      # Do not use fromDatabase here: that reattaches the expiring Render DB.
       - key: DATABASE_URL
-        fromDatabase:
-          name: trekmap-france-db
-          property: connectionString
+        sync: false
+      - key: DB_SSLMODE
+        value: require
       - key: ORS_API_KEY
         sync: false
       - key: GEMINI_API_KEY
