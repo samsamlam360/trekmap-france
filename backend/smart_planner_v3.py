@@ -374,7 +374,11 @@ def _extra_nearby(center: dict[str, Any], radius_km: float) -> tuple[list[dict[s
             category_for_filter.append(cat)
     query = "[out:json][timeout:20];(" + "".join(clauses) + ");out center tags 180;"
     try:
-        data = _overpass(query)
+        data = (
+        _overpass(query)
+        if max_mirrors is None
+        else _overpass(query, max_mirrors=max_mirrors)
+    )
     except RuntimeError as exc:
         return [], [str(exc)]
 
@@ -425,6 +429,8 @@ def _combined_nearby(
     center: dict[str, Any],
     radius_km: float,
     base_categories: list[str],
+    *,
+    max_mirrors: int | None = None,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[str]]:
     """Fetch route logistics and scenic context in one Overpass request.
 
@@ -1508,7 +1514,12 @@ def _build(data: AIPlanRequest, legacy_main):
     else:
         try:
             base, extra, extra_notes = perf.call(
-                "route.discovery", _combined_nearby, center, radius, base_categories
+                "route.discovery",
+                _combined_nearby,
+                center,
+                radius,
+                base_categories,
+                max_mirrors=1 if non_loop_region_only else None,
             )
             notes += extra_notes
         except RuntimeError as exc:
