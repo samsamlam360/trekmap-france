@@ -6,12 +6,6 @@ on:
       - 'scripts/benchmark_trekbrain_v9_unseen20.py'
       - 'scripts/benchmark_trekbrain_v9_production.py'
       - '.github/workflows/trekbrain-unseen20.yml'
-  push:
-    branches: [main]
-    paths:
-      - 'backend/trekbrain*.py'
-      - 'scripts/benchmark_trekbrain_v9_unseen20.py'
-      - '.github/workflows/trekbrain-unseen20.yml'
   workflow_dispatch:
 
 permissions:
