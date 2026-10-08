@@ -469,7 +469,11 @@ def _bbox_route_water_food(result: dict[str, Any], intent: dict[str, Any]) -> li
     # Never cache an empty result: a later user's water/food lookup must remain
     # retryable rather than inheriting the previous provider's outage.
     payload = None
-    for index, url in enumerate(list(free.OVERPASS_URLS)[:2]):
+    urls = list(free.OVERPASS_URLS)
+    # Prefer an independent instance to a sibling mirror on the fallback
+    # attempt, particularly while public FOSSGIS backends are throttled.
+    mirrors = [urls[0], urls[-1]] if len(urls) >= 4 else urls[:2]
+    for index, url in enumerate(mirrors):
         try:
             candidate = free._request_json(
                 url,
