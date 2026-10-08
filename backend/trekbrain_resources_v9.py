@@ -599,6 +599,13 @@ def _missing_terrain_intent(result: dict[str, Any], intent: dict[str, Any]) -> d
         for item in items or []:
             if not isinstance(item, dict) or _point(item) is None:
                 continue
+            # A guessed shop position without a traceable source must not
+            # suppress genuine OSM/Photon discovery. This is also the evidence
+            # standard used by production food benchmarks and the UI popups.
+            if kind == "food" and not str(item.get("source_url") or "").strip().startswith(
+                ("https://", "http://")
+            ):
+                continue
             if profile:
                 matched = _route_match(coords, item, profile)
                 if matched is None or matched[0] > limit:
