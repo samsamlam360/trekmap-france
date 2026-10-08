@@ -16,6 +16,7 @@ from backend import trekbrain_roundtrip_v9 as roundtrip
 from backend import trekbrain_route_logistics_v9 as logistics
 from backend import trekbrain_speed_v9 as speed
 from backend import trekbrain_ors_resilience_v9 as resilience
+from backend import trekbrain_circuit_breaker_v9 as breakers
 
 # This test validates the default interactive profile, not an operator override.
 os.environ.pop("TREKBRAIN_RETRY_BUDGET_SECONDS", None)
@@ -401,6 +402,40 @@ finally:
     free._request_json = real_request_json
 assert len(single_mirror_calls) == 1, single_mirror_calls
 assert single_mirror_calls[0] == free.OVERPASS_URLS[0], single_mirror_calls
+
+# The circuit breaker is installed after the fast Overpass wrapper in
+# production and must preserve optional controls such as max_mirrors.
+class DummyCircuitV3:
+    pass
+class DummyCircuitORS:
+    pass
+class DummyCircuitRoundtrip:
+    pass
+
+dummy_v3 = DummyCircuitV3()
+dummy_ors = DummyCircuitORS()
+dummy_roundtrip = DummyCircuitRoundtrip()
+guard_kwargs = {}
+def dummy_overpass(query, **kwargs):
+    guard_kwargs.update(kwargs)
+    return {"elements": []}
+dummy_v3._overpass = dummy_overpass
+dummy_ors._request_route = lambda coords, distance_gps, snap_radius_m=None: ({}, "", 200)
+dummy_ors.get_distance_matrix = lambda coords: {"distances": []}
+dummy_roundtrip._roundtrip_request = lambda start, target_km, seed: ({}, "")
+
+real_breaker_installed = breakers._INSTALLED
+real_free_overpass_after_speed = free._overpass
+breakers._INSTALLED = False
+breakers.reset_circuit_breakers()
+try:
+    breakers.install_circuit_breakers(dummy_v3, dummy_ors, dummy_roundtrip)
+    dummy_v3._overpass("[out:json];node(0,0,1,1);out;", max_mirrors=1)
+finally:
+    free._overpass = real_free_overpass_after_speed
+    breakers._INSTALLED = real_breaker_installed
+    breakers.reset_circuit_breakers()
+assert guard_kwargs.get("max_mirrors") == 1, guard_kwargs
 
 # Campsite lookup used to execute roughly three OSM searches per night. Fast
 # mode must fetch one broad pool and filter it locally for nearby stage probes.
