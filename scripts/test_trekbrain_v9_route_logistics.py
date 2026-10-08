@@ -427,7 +427,38 @@ finally:
 
 assert len(projected_preloaded) == 4, projected_preloaded
 assert len(chosen_preloaded) == 4, chosen_preloaded
-assert preloaded_calls == {"overpass": 1, "nominatim": 1, "photon": 0}, preloaded_calls
+assert preloaded_calls == {"overpass": 1, "nominatim": 0, "photon": 0}, preloaded_calls
+
+# A complete set of preloaded nights without terrain needs no provider at all.
+# In particular the generic route-first layer must not discard good canonical
+# stays merely to perform a second camping search.
+no_terrain_provider_calls = []
+real_preloaded_bbox = logistics._bbox_route_stays
+real_preloaded_nominatim = logistics._nominatim_route_stays
+real_preloaded_photon = logistics._photon_split_stays
+try:
+    def forbidden_preloaded_provider(*args, **kwargs):
+        no_terrain_provider_calls.append("unexpected")
+        raise AssertionError("complete preloaded nights must skip stay providers")
+
+    logistics._bbox_route_stays = forbidden_preloaded_provider
+    logistics._nominatim_route_stays = forbidden_preloaded_provider
+    logistics._photon_split_stays = forbidden_preloaded_provider
+    chosen_without_terrain, projected_without_terrain, meta_without_terrain = logistics._discover_stays(
+        FakeV3(), FakeRoundtrip, FakeStayRescue, coords,
+        {"name": "Départ", "lat": 0.0, "lon": 0.0},
+        "camping", 5, 20.0, False,
+        want_terrain=False, preloaded_rows=[dict(x) for x in camps],
+    )
+finally:
+    logistics._bbox_route_stays = real_preloaded_bbox
+    logistics._nominatim_route_stays = real_preloaded_nominatim
+    logistics._photon_split_stays = real_preloaded_photon
+
+assert not no_terrain_provider_calls, no_terrain_provider_calls
+assert len(chosen_without_terrain) == 4, chosen_without_terrain
+assert len(projected_without_terrain) == 4, projected_without_terrain
+assert meta_without_terrain["terrain_preloaded"] is False, meta_without_terrain
 
 # If both cheap route-wide primaries are empty, exactly one bounded Photon
 # rescue wave may recover real overnight candidates. This restores the proven
