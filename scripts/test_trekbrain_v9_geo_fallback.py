@@ -85,6 +85,7 @@ speed._NOMINATIM_COOLDOWN_UNTIL = 0.0
 try:
     beaufort = v3._geocode("Beaufort, Savoie, France")
     assert beaufort[0]["geocode_guard"] == "beaufort-savoie", beaufort
+    assert geo._geocode("Beaufort, Savoie")[0]["geocode_guard"] == "beaufort-savoie"
     assert attempts == [], attempts
 
     first = v3._geocode("Lieu inedit A")
