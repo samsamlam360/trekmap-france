@@ -17,11 +17,24 @@ route = {
     ],
 }
 missing = resources._missing_terrain_intent(route, {"water": True, "food": True})
-assert missing["water"] is True and missing["food"] is False, missing
+assert missing == {"water": True, "food": True}, (
+    "Unverified shop coordinates must not mask the source-linked resupply lookup", missing
+)
 assert resources._missing_terrain_intent(
     {**route, "water": [{"lat": 48.005, "lon": 2.005}]},
     {"water": True, "food": True},
-) == {"water": False, "food": False}, "A complete terrain preload is reusable"
+) == {"water": False, "food": True}, "Unsourced food is still missing"
+sourced = {
+    **route,
+    "resources": [{
+        **route["resources"][0],
+        "source_url": "https://www.openstreetmap.org/node/345678",
+    }],
+    "water": [{"lat": 48.005, "lon": 2.005}],
+}
+assert resources._missing_terrain_intent(
+    sourced, {"water": True, "food": True}
+) == {"water": False, "food": False}, "A sourced complete terrain preload is reusable"
 
 original_json = free._request_json
 attempts = []
