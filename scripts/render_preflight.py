@@ -89,6 +89,7 @@ def main() -> None:
         root / "scripts" / "test_trekbrain_v9_resources.py",
         root / "scripts" / "test_trekbrain_v9_food_corridor.py",
         root / "scripts" / "test_trekbrain_v9_food_reverse.py",
+        root / "scripts" / "test_trekbrain_v9_cold_resupply.py",
         root / "scripts" / "test_trekbrain_v9_food_merge.py",
         root / "scripts" / "test_trekbrain_v9_osm_cache.py",
         root / "scripts" / "test_trekbrain_v9_overpass_circuit.py",

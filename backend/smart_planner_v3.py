@@ -1189,7 +1189,16 @@ def _postroute_corridor_resources(boundaries, intent, existing_items):
     existing_items = list(existing_items or [])
     stays = [x for x in existing_items if x.get("category") in {"camping", "refuge", "lodging"}]
     waters = [x for x in existing_items if x.get("category") == "water"]
-    foods = [x for x in existing_items if x.get("category") == "food"]
+    # Only source-linked OSM shops can suppress a first-visit discovery.
+    # Guessed map coordinates from upstream planners are not evidence that a
+    # village's actual grocery has already been checked.
+    foods = [
+        x for x in existing_items
+        if x.get("category") == "food"
+        and str(x.get("source_url") or "").startswith(
+            "https://www.openstreetmap.org/"
+        )
+    ]
     transit = [x for x in existing_items if x.get("category") == "transit"]
 
     # Build small route-relative lookup groups, then interleave them. This gives
@@ -1215,7 +1224,10 @@ def _postroute_corridor_resources(boundaries, intent, existing_items):
     food_anchors = []
     if boundaries:
         food_anchors.append(boundaries[0])
-    food_anchors.extend(interiors[:1])
+    # If the first overnight boundary is at an isolated summit, a later
+    # overnight village can still have a real grocery. Include both first and
+    # last intermediate stages in the existing six-request wave.
+    food_anchors.extend(interiors)
 
     for boundary in interiors:
         if intent.get("water") and _closest(waters, boundary, 4.5) is None:
@@ -1246,12 +1258,12 @@ def _postroute_corridor_resources(boundaries, intent, existing_items):
                 "shop:general", "shop:grocery", "shop:greengrocer",
             ), 6.5))
 
-    # Prioritise access and overnight logistics when the six-call cap is tight,
-    # then food and water. All calls still run in one bounded parallel wave.
-    # Mountain itineraries need water at least as urgently as shops. Keep
-    # access first, then alternate overnight and water lookups before food so a
-    # six-call cap cannot starve water merely because lodging was sparse.
-    groups = [transit_jobs, stay_jobs, water_jobs, food_jobs]
+    # First-visit hikes have no warmed POI cache. Under the six-request budget
+    # give groceries two independent route-day attempts when available; the
+    # former order spent five slots on transit/stays/water and only one on
+    # food. The round robin still reserves the first slot for every needed
+    # logistics family, with no additional HTTP calls or serial retries.
+    groups = [food_jobs, transit_jobs, stay_jobs, water_jobs]
     jobs = []
     while groups and len(jobs) < 6:
         remaining = []

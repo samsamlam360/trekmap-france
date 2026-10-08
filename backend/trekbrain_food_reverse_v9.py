@@ -50,12 +50,52 @@ def discover_near_route_shops(
         round(i * (len(candidates) - 1) / max(1, count - 1))
         for i in range(count)
     })
+    # Real OSM villages near a walked stage are much better grocery probe
+    # centres than arbitrary equal-distance mountain splits. Reposition only
+    # intermediate probes; keep trailheads and traverse finish unchanged.
+    # Require an actual OSM reference and a position <=2 km off the verified
+    # footpath. No guessed place or extra HTTP request qualifies.
+    profile = resources._route_distance_profile(coords)
+    settlements = []
+    for item in (result.get("points_of_interest") or []):
+        if not isinstance(item, dict):
+            continue
+        tags = item.get("osm_tags") or {}
+        tag_place = str(tags.get("place") or "").casefold() if isinstance(tags, dict) else ""
+        label = str(item.get("category") or item.get("type") or "").casefold()
+        if (
+            tag_place not in {"village", "town", "hamlet", "city"}
+            and not any(part in label for part in ("village", "bourg", "hameau", "town", "hamlet"))
+        ):
+            continue
+        if not str(item.get("source_url") or "").startswith(
+            "https://www.openstreetmap.org/"
+        ):
+            continue
+        place = resources._point(item)
+        matched = resources._route_match(coords, item, profile) if place else None
+        if place and matched and matched[0] <= 2.0:
+            settlements.append(place)
+
     anchors = []
     seen_anchors = set()
+    village_probe_count = 0
     for index in indices:
         anchor = resources._point(candidates[index])
         if not anchor:
             continue
+        if index != 0 and (closed or index != len(candidates) - 1):
+            for _distance, town in sorted(
+                (resources._distance_km(anchor, town), town)
+                for town in settlements
+            ):
+                if _distance > 4.2:
+                    break
+                key = (round(town[0], 4), round(town[1], 4))
+                if key not in seen_anchors:
+                    anchor = town
+                    village_probe_count += 1
+                    break
         lat, lon = anchor
         if not (41.0 <= lat <= 51.6 and -5.6 <= lon <= 10.0):
             continue
@@ -66,7 +106,8 @@ def discover_near_route_shops(
     if not anchors:
         return []
 
-    profile = resources._route_distance_profile(coords)
+    if diagnostics is not None:
+        diagnostics["village_probes"] = village_probe_count
 
     def probe(anchor: tuple[float, float]):
         lat, lon = anchor
