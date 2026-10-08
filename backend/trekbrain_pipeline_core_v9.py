@@ -303,6 +303,143 @@ def _rebalance_stage_count(result: dict[str, Any], intent: dict[str, Any]) -> di
     return result
 
 
+def _preload_canonical_stays(
+    result: dict[str, Any],
+    state: PlanningState,
+    *,
+    canonical,
+    roundtrip,
+    stay_rescue,
+) -> int:
+    """Restore Belle-Île's dedicated stay discovery after route-only planning.
+
+    The explicit v9 pipeline deliberately removes lodging from the request before
+    building the pedestrian backbone.  That keeps campings from shaping GR 340,
+    but it must not discard the canonical planner's specialised island-wide stay
+    discovery.  Preload real overnight candidates *after* the route is fixed;
+    route-first logistics will still validate connectors and remains the only
+    layer allowed to annotate nights.
+    """
+    category = state.category
+    if not result.get("canonical_route") or category not in {"camping", "refuge"}:
+        return 0
+
+    try:
+        days = max(1, int(state.intent.get("days") or 1))
+    except (TypeError, ValueError):
+        days = 1
+    needed = max(0, days - 1)
+    if needed <= 0:
+        return 0
+
+    existing = [
+        dict(row)
+        for row in (result.get("accommodations") or [])
+        if isinstance(row, dict)
+        and str(row.get("category") or "").casefold() == category
+    ]
+    if len(existing) >= needed:
+        return len(existing)
+
+    route = result.get("route_preview") or {}
+    coords = route.get("coords") or []
+    if len(coords) < 3:
+        return 0
+
+    start = dict(result.get("start") or {})
+    if "lat" not in start or "lon" not in start:
+        try:
+            start = {
+                "name": "Départ GR 340",
+                "lat": float(coords[0][0]),
+                "lon": float(coords[0][1]),
+                "category": "trail",
+            }
+        except (TypeError, ValueError, IndexError):
+            return 0
+
+    try:
+        daily_target = float(state.intent.get("daily_target") or 18.0)
+    except (TypeError, ValueError):
+        daily_target = 18.0
+    try:
+        daily_min = float(state.intent.get("daily_min") or daily_target * 0.75)
+    except (TypeError, ValueError):
+        daily_min = daily_target * 0.75
+    try:
+        daily_max = float(state.intent.get("daily_max") or daily_target * 1.25)
+    except (TypeError, ValueError):
+        daily_max = daily_target * 1.25
+
+    discovered = list(existing)
+    chosen = []
+    projected = []
+    provider_rows = {}
+    radius = 30.0
+    providers = (
+        ("overpass", getattr(stay_rescue, "_direct_stays", None)),
+        ("photon", getattr(stay_rescue, "_photon_stays", None)),
+        ("nominatim", getattr(stay_rescue, "_nominatim_stays", None)),
+    )
+
+    for provider_name, provider in providers:
+        if not callable(provider):
+            continue
+        started = __import__("time").perf_counter()
+        rows = []
+        outcome = "ok"
+        try:
+            rows = list(provider(start, category, radius) or [])
+        except Exception:
+            outcome = "error"
+            rows = []
+        finally:
+            perf.record(
+                f"logistics.canonical_{provider_name}",
+                (__import__("time").perf_counter() - started) * 1000,
+                category=category,
+                outcome=outcome,
+            )
+        provider_rows[provider_name] = len(rows)
+        discovered.extend(rows)
+        try:
+            projected = canonical._project_stays(
+                roundtrip, coords, discovered, category
+            )
+            chosen = canonical._choose_ordered_stays(
+                roundtrip,
+                coords,
+                projected,
+                days,
+                daily_target,
+                daily_min,
+                daily_max,
+            )
+        except Exception:
+            projected, chosen = [], []
+        if len(chosen) >= needed:
+            break
+
+    diagnostics = {
+        "needed": needed,
+        "discovered": len(projected),
+        "chosen": len(chosen),
+        "max_offroute_km": getattr(canonical, "_MAX_STAY_OFFROUTE_KM", 5.0),
+        "providers": provider_rows,
+        "source": "canonical-preload",
+    }
+    result["stay_search"] = diagnostics
+
+    planner = result.setdefault("planner", {})
+    if isinstance(planner, dict):
+        planner["canonical_stays_preloaded"] = len(chosen)
+        planner["canonical_stay_search"] = diagnostics
+
+    if chosen:
+        result["accommodations"] = [dict(row) for row in chosen]
+    return len(chosen)
+
+
 def _mark_pipeline(result: dict[str, Any], state: PlanningState) -> dict[str, Any]:
     planner = result.get("planner")
     if not isinstance(planner, dict):
@@ -410,6 +547,17 @@ def install_planning_pipeline(
             return result
         state.route_result = result
 
+        if category is not None:
+            preloaded = _preload_canonical_stays(
+                result,
+                state,
+                canonical=canonical_module,
+                roundtrip=roundtrip,
+                stay_rescue=stay_rescue,
+            )
+            if preloaded:
+                state.phases.append("logistics:canonical-preload")
+
         # The route is now authoritative. Lodging may annotate it, never rebuild
         # or reshape it. This was the important boundary missing from the old
         # wrapper stack.
@@ -462,6 +610,7 @@ __all__ = [
     "PlanningState",
     "install_planning_pipeline",
     "_build_backbone",
+    "_preload_canonical_stays",
     "_rebalance_stage_count",
     "_relation_candidate_loop_allowed",
 ]
