@@ -336,9 +336,14 @@ def ensure_osm_cache_schema():
     except Exception as exc:
         if db is not None:
             db.rollback()
-        # Log the actual exception on Render, never expose a potentially
-        # credential-bearing database error to the HTTP caller.
-        print("[TrekMap][optional-osm-cache] migration skipped:", repr(exc), flush=True)
+        # SQLSTATE identifies permission vs storage vs transient failures
+        # without putting passwords, connection strings or SQL values in logs.
+        sqlstate = getattr(getattr(exc, "orig", None), "pgcode", None)
+        print(
+            "[TrekMap][optional-osm-cache] migration skipped:",
+            type(exc).__name__, "sqlstate=", sqlstate or "unknown",
+            flush=True,
+        )
         return False
     finally:
         if db is not None:
