@@ -20,7 +20,12 @@ SHOPS = frozenset({
 PHOTON_REVERSE_URL = "https://photon.komoot.io/reverse"
 
 
-def discover_near_route_shops(result: dict[str, Any]) -> list[dict[str, Any]]:
+def discover_near_route_shops(
+    result: dict[str, Any],
+    diagnostics: dict[str, Any] | None = None,
+) -> list[dict[str, Any]]:
+    if diagnostics is not None:
+        diagnostics.update(status="not_attempted", attempts=0, responses=0)
     from . import trekbrain_resources_v9 as resources
 
     coords = ((result.get("route_preview") or {}).get("coords") or [])
@@ -79,7 +84,7 @@ def discover_near_route_shops(result: dict[str, Any]) -> list[dict[str, Any]]:
                 cache_empty=False,
             )
         except Exception:
-            return []
+            return [], False
         result_rows = []
         features = payload.get("features") if isinstance(payload, dict) else []
         for feature in features if isinstance(features, list) else []:
@@ -120,16 +125,22 @@ def discover_near_route_shops(result: dict[str, Any]) -> list[dict[str, Any]]:
             matched = resources._route_match(coords, item, profile)
             if matched and matched[0] <= resources.RESOURCE_LIMITS["food"]:
                 result_rows.append((matched[0], item))
-        return result_rows
+        return result_rows, True
 
     found = []
+    responses = 0
     with ThreadPoolExecutor(max_workers=min(3, len(anchors))) as pool:
         futures = [pool.submit(probe, anchor) for anchor in anchors]
         for future in as_completed(futures):
             try:
-                found.extend(future.result() or [])
+                rows, responded = future.result()
+                responses += int(responded)
+                found.extend(rows or [])
             except Exception:
                 pass
+    if diagnostics is not None:
+        diagnostics["attempts"] = len(anchors)
+        diagnostics["responses"] = responses
     found.sort(key=lambda row: row[0])
     out, seen = [], set()
     for _distance, row in found:
@@ -140,6 +151,11 @@ def discover_near_route_shops(result: dict[str, Any]) -> list[dict[str, Any]]:
         out.append(row)
         if len(out) >= 12:
             break
+    if diagnostics is not None:
+        diagnostics["status"] = (
+            "found" if out else "no_route_match" if responses else "unavailable"
+        )
+        diagnostics["accepted"] = len(out)
     return out
 
 
