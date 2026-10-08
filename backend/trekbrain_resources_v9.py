@@ -231,6 +231,30 @@ def _food_candidates(result: dict[str, Any]) -> list[dict[str, Any]]:
     return merged
 
 
+def _cache_source_candidates(result: dict[str, Any]) -> list[dict[str, Any]]:
+    """Tag legacy resource lists for persistent OSM storage.
+
+    Existing planners put water, food, and accommodation items in dedicated
+    lists without necessarily setting `category`. The cache may store only
+    explicitly classified, source-linked types, so normalize the field's
+    meaning here before attempting persistence.
+    """
+    out = []
+    for field, default in (
+        ("water", "water"), ("food", "food"),
+        ("resources", "food"), ("accommodations", "lodging"),
+        ("points_of_interest", ""),
+    ):
+        for item in result.get(field) or []:
+            if not isinstance(item, dict):
+                continue
+            kind = _resource_kind(item, default)
+            if kind not in {"water", "food", "camping", "refuge", "lodging"}:
+                continue
+            out.append({**item, "category": kind})
+    return out
+
+
 def _candidate_resources(result: dict[str, Any]) -> list[dict[str, Any]]:
     items: list[dict[str, Any]] = []
     for w in result.get("water") or []:
@@ -980,13 +1004,10 @@ def _install_plan_overlay(app, legacy_main):
 
             # The initial planner's OSM references count as freshly observed;
             # previously cached records must NOT renew their own expiration.
-            initial_sources = [
-                item for key in (
-                    "water", "food", "resources", "accommodations", "points_of_interest"
-                )
-                for item in (result.get(key) or [])
-                if isinstance(item, dict)
-            ]
+            initial_sources = _cache_source_candidates(result)
+            initial_source_urls = {
+                str(item.get("source_url") or "") for item in initial_sources
+            }
             cache_diagnostics: dict[str, Any] = {}
             cache_write_diagnostics: dict[str, Any] = {}
             cached_rows = osm_cache.read_near_route(result, intent, cache_diagnostics)
@@ -1118,14 +1139,10 @@ def _install_plan_overlay(app, legacy_main):
             # Store positively identified OSM objects from fresh providers,
             # never empty results or records that were merely read from cache.
             source_linked = [
-                item for key in (
-                    "water", "food", "resources", "accommodations", "points_of_interest"
-                )
-                for item in (result.get(key) or [])
-                if isinstance(item, dict)
-                and (
+                item for item in _cache_source_candidates(result)
+                if (
                     str(item.get("source_url") or "") not in cached_sources
-                    or item in initial_sources
+                    or str(item.get("source_url") or "") in initial_source_urls
                 )
             ]
             osm_cache.store_sourced(
