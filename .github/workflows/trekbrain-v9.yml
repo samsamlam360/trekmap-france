@@ -109,6 +109,8 @@ jobs:
         run: python scripts/test_trekbrain_v9_resources.py
       - name: Validate route-close food and bakery discovery
         run: python scripts/test_trekbrain_v9_food_corridor.py
+      - name: Reverse shop resources and independent Overpass recovery
+        run: python scripts/test_trekbrain_v9_food_reverse.py
       - name: Missing terrain recovery regressions
         run: python scripts/test_trekbrain_v9_terrain_recovery.py
       - name: V8 and French language regressions
