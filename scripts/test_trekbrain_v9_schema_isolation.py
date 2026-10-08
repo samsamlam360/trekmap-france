@@ -79,7 +79,10 @@ optional = next(x for x in tree.body if isinstance(x, ast.FunctionDef)
                 and x.name == "ensure_osm_cache_schema")
 assert "CREATE TABLE IF NOT EXISTS trekbrain_osm_cache_v9" not in ast.unparse(core)
 assert "CREATE TABLE IF NOT EXISTS trekbrain_osm_cache_v9" in ast.unparse(optional)
-assert "ensure_osm_cache_schema()" in ast.unparse(core)
+assert "ensure_osm_cache_schema()" not in ast.unparse(core)
+startup = next(x for x in tree.body if isinstance(x, ast.FunctionDef)
+               and x.name == "startup")
+assert "ensure_osm_cache_schema()" in ast.unparse(startup)
 
 # Zero-hit cache metrics are a cold visit only on successful 'miss' response.
 # A database outage must never be mislabelled a successful cold search.
