@@ -1011,7 +1011,24 @@ def _photon_anchor_resource(anchor, category: str, osm_tags, radius_km: float, q
     # Use the documented forward-search contract instead: a local text query
     # plus one principal OSM tag. This keeps the bbox hard bound while avoiding
     # installation-specific category filters that can legitimately return zero.
-    primary_osm_tag = next((str(tag) for tag in tags if ":" in str(tag)), "")
+    parsed_tags = [
+        tuple(str(tag).split(":", 1))
+        for tag in tags
+        if ":" in str(tag)
+    ]
+    primary_osm_tag = next(
+        (f"{key}:{value}" for key, value in parsed_tags),
+        "",
+    )
+    if category == "stay" and not query_override:
+        # Camping/refuge requests usually carry several tourism subtypes. Photon
+        # supports filtering by OSM key alone; use that broader principal class
+        # and keep q + bbox + TrekBrain's post-response semantic validation.
+        # This preserves one request per anchor while avoiding an accidental
+        # alpine_hut-only search for all refuge requests.
+        tourism_values = [value for key, value in parsed_tags if key == "tourism"]
+        if len(tourism_values) >= 2:
+            primary_osm_tag = "tourism"
     params = {
         "q": query,
         "lat": round(lat, 6),
