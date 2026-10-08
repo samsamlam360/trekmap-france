@@ -1393,6 +1393,18 @@ def _candidate_score(candidate, route_points, route, intent, items, legacy_main,
     return score, distance, stage_dist, elevation, coords
 
 
+def _sparse_route_total_usable(intent: dict[str, Any], route: dict[str, Any], distance: float) -> bool:
+    """Return whether a sparse ORS geometry is good enough to stop comparing shapes."""
+    if route.get("fallback") is not False:
+        return False
+    minimum_total = max(3.0, float(intent["total_target"]) * 0.68)
+    maximum_total = max(
+        float(intent["total_target"]) * 1.30,
+        float(intent["daily_max"]) * max(1, int(intent["days"])),
+    )
+    return minimum_total <= float(distance) <= maximum_total
+
+
 def _region_only_non_loop_request(intent: dict[str, Any]) -> bool:
     """True when ORS may safely invent only route-shape hypotheses.
 
@@ -1612,6 +1624,17 @@ def _build(data: AIPlanRequest, legacy_main):
         row = (score, candidate, route_points, stage_highlights, route, distance, stage_dist, route_coords)
         evaluated.append(row)
         non_loop = _fold(intent.get("route_type") or "") != "boucle"
+
+        # Sparse regional candidates are only ORS shape hypotheses. Once the
+        # first real pedestrian geometry has a plausible total distance, the
+        # existing route-split recovery can rebalance the requested days on that
+        # exact line. Avoid paying ORS for more compass variants unnecessarily.
+        if (
+            str(candidate.strategy).startswith("sparse-region-ors-shape")
+            and _sparse_route_total_usable(intent, route, distance)
+        ):
+            break
+
         if (
             non_loop
             and route.get("fallback") is False
