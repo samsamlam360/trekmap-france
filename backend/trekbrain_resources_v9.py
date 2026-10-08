@@ -868,6 +868,8 @@ def _install_plan_overlay(app, legacy_main):
             )
             terrain_rows = []
             reverse_food_rows = []
+            terrain_diagnostics: dict[str, Any] = {"status": "not_attempted"}
+            reverse_diagnostics: dict[str, Any] = {"status": "not_attempted"}
             supplement_ms = 0
             terrain_ms = 0
             reverse_food_ms = 0
@@ -923,6 +925,7 @@ def _install_plan_overlay(app, legacy_main):
                         _bbox_route_water_food,
                         snapshot,
                         terrain_intent,
+                        terrain_diagnostics,
                     )
                     reverse_future = (
                         pool.submit(
@@ -930,6 +933,7 @@ def _install_plan_overlay(app, legacy_main):
                             "reverse_food",
                             reverse_shops.discover_near_route_shops,
                             snapshot,
+                            reverse_diagnostics,
                         )
                         if terrain_intent.get("food") else None
                     )
@@ -971,6 +975,34 @@ def _install_plan_overlay(app, legacy_main):
             enrich_ms = round((time.monotonic() - enrich_started) * 1000)
             result.pop("_terrain_osm_preloaded", None)
 
+            # A provider outage is not evidence that a region has no shops.
+            # Return the evidence status with the itinerary and show it on
+            # individual stage cards. No POIs are invented to hide outages.
+            points = ((result.get("map_resources") or {}).get("points") or [])
+            food_markers = sum(
+                1 for point in points
+                if isinstance(point, dict) and point.get("kind") == "food"
+                and point.get("source_url")
+            )
+            food_requested = bool(intent.get("food"))
+            unavailable = (
+                terrain_lookup_needed
+                and terrain_diagnostics.get("status") == "unavailable"
+                and reverse_diagnostics.get("status") == "unavailable"
+            )
+            food_status = (
+                "not_requested" if not food_requested
+                else "verified" if food_markers
+                else "providers_unavailable" if unavailable
+                else "not_verified"
+            )
+            result.setdefault("map_resources", {})["coverage"] = {
+                "food": food_status,
+                "verified_food_points": food_markers,
+                "terrain_provider": terrain_diagnostics.get("status"),
+                "reverse_provider": reverse_diagnostics.get("status"),
+            }
+
             annotate_started = time.monotonic()
             result = _annotate_stage_resources(result)
             annotate_ms = round((time.monotonic() - annotate_started) * 1000)
@@ -996,6 +1028,9 @@ def _install_plan_overlay(app, legacy_main):
                     "terrain_preloaded": terrain_preloaded,
                     "terrain_lookup_needed": terrain_lookup_needed,
                     "terrain_rows": len(terrain_rows),
+                    "terrain_provider": dict(terrain_diagnostics),
+                    "reverse_provider": dict(reverse_diagnostics),
+                    "food_coverage": food_status,
                     "water_count": len(result.get("water") or []),
                     "food_count": len(food_rows),
                     "accommodation_count": len(result.get("accommodations") or []),
