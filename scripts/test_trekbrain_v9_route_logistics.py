@@ -448,7 +448,33 @@ assert captured_nominatim.get("bounded") == 1, captured_nominatim
 assert captured_nominatim.get("countrycodes") == "fr", captured_nominatim
 assert captured_nominatim.get("viewbox"), captured_nominatim
 assert captured_nominatim.get("q") == "[camping]", captured_nominatim
-assert "osm.tourism.camp_site" in str(captured_nominatim.get("include") or ""), captured_nominatim
+assert "include" not in captured_nominatim, captured_nominatim
+
+# Refuge discovery uses Nominatim's French special phrase in the same bounded
+# request shape. The public Search API does not accept Photon's include filter.
+captured_refuge_nominatim = {}
+real_nominatim_request = free._request_json
+try:
+    def fake_refuge_nominatim_request(url, **kwargs):
+        captured_refuge_nominatim.update(dict(kwargs.get("params") or {}))
+        return [{
+            "lat": "0.01",
+            "lon": "0.40",
+            "class": "tourism",
+            "type": "alpine_hut",
+            "display_name": "Refuge Nominatim, Zone test, France",
+            "osm_type": "node",
+            "osm_id": 4343,
+        }]
+    free._request_json = fake_refuge_nominatim_request
+    nominatim_refuges = logistics._nominatim_route_stays(coords, "refuge")
+finally:
+    free._request_json = real_nominatim_request
+
+assert len(nominatim_refuges) == 1, nominatim_refuges
+assert captured_refuge_nominatim.get("q") == "[refuge]", captured_refuge_nominatim
+assert captured_refuge_nominatim.get("bounded") == 1, captured_refuge_nominatim
+assert "include" not in captured_refuge_nominatim, captured_refuge_nominatim
 
 # A public Overpass primary may be empty or unavailable while another mirror
 # still has the corridor data. Keep the normal single-primary path, then race at
