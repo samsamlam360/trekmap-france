@@ -182,8 +182,13 @@ def install_geo_filters(v3) -> None:
             ]
         return filtered, notes
 
-    def combined_nearby(center, radius_km, categories):
-        base, extra, notes = original_combined(center, radius_km, categories)
+    def combined_nearby(center, radius_km, categories, **kwargs):
+        # Stay signature-transparent as the planner gains optional controls
+        # such as max_mirrors. Safety filtering must never strip routing
+        # parameters that belong to the wrapped discovery implementation.
+        base, extra, notes = original_combined(
+            center, radius_km, categories, **kwargs
+        )
         filtered_base = _filter_active(base)
         filtered_extra = _filter_active(extra)
         if _ACTIVE_BOUNDS.get() and (
