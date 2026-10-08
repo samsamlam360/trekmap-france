@@ -366,6 +366,39 @@ except Exception as exc:
 assert west < 5.0 < east and south < 45.0 < north, captured_photon
 assert (east - west) < 0.20 and (north - south) < 0.20, captured_photon
 
+captured_refuge = {}
+def fake_refuge_request(url, *, params=None, **kwargs):
+    captured_refuge.update(dict(params or {}))
+    return {
+        "features": [{
+            "properties": {
+                "name": "Refuge test",
+                "countrycode": "FR",
+                "osm_key": "tourism",
+                "osm_value": "wilderness_hut",
+                "osm_type": "N",
+                "osm_id": 125,
+            },
+            "geometry": {"coordinates": [5.001, 45.001]},
+        }]
+    }
+
+v3_module._request_json = fake_refuge_request
+try:
+    structured_refuge = v3_module._photon_anchor_resource(
+        {"name": "Repère jour 1", "lat": 45.0, "lon": 5.0, "category": "route_anchor"},
+        "stay",
+        ("tourism:alpine_hut", "tourism:wilderness_hut", "amenity:shelter"),
+        8.0,
+    )
+finally:
+    v3_module._request_json = real_request_json
+
+assert structured_refuge and structured_refuge["category"] == "refuge", structured_refuge
+assert captured_refuge.get("q") == "refuge", captured_refuge
+assert captured_refuge.get("osm_tag") == "tourism", captured_refuge
+assert captured_refuge.get("bbox"), captured_refuge
+
 captured_lodging = {}
 def fake_lodging_request(url, *, params=None, **kwargs):
     captured_lodging.update(dict(params or {}))
