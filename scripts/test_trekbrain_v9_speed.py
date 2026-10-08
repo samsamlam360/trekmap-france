@@ -201,6 +201,25 @@ assert sorted(query for query, _timeout, _retries in sparse_calls) == sorted(exp
 assert len(sparse_calls) == 6, sparse_calls
 assert all(timeout <= 3.21 and retries == 1 for _query, timeout, retries in sparse_calls), sparse_calls
 
+# Only unconstrained non-loop regional requests may skip the second broad
+# provider sweep and fall through to ORS-generated route hypotheses.
+assert v3._region_only_non_loop_request({
+    "route_type": "Itinérance",
+    "start_query": "", "end_query": "", "via_query": "",
+}) is True
+assert v3._region_only_non_loop_request({
+    "route_type": "Traversée",
+    "start_query": "Tours", "end_query": "Chinon", "via_query": "",
+}) is False
+assert v3._region_only_non_loop_request({
+    "route_type": "Boucle",
+    "start_query": "", "end_query": "", "via_query": "",
+}) is False
+assert v3._region_only_non_loop_request({
+    "route_type": "Itinérance",
+    "start_query": "", "end_query": "", "via_query": "Col demandé",
+}) is False
+
 # Sparse region-only itineraries must still reach ORS when public POI
 # providers are empty. These generated points are routing hypotheses only:
 # no source URL, no scenic/resource category, and exactly one boundary per day.
