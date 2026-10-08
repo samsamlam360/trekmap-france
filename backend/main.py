@@ -256,6 +256,34 @@ def ensure_schema(force=False):
         """))
         db.execute(text("CREATE INDEX IF NOT EXISTS idx_trek_comments_trek ON trek_comments(trek_id, created_at DESC)"))
 
+        # Persist positive OSM evidence across Render deploys/restarts. These
+        # indexed points are observational map data, never an availability
+        # guarantee. Stale rows are excluded by the reader (10-day TTL).
+        db.execute(text("""
+            CREATE TABLE IF NOT EXISTS trekbrain_osm_cache_v9 (
+                source_url TEXT PRIMARY KEY,
+                category TEXT NOT NULL CHECK (
+                    category IN ('food','water','camping','refuge','lodging')
+                ),
+                name VARCHAR(160) NOT NULL,
+                lat DOUBLE PRECISION NOT NULL,
+                lon DOUBLE PRECISION NOT NULL,
+                water_status VARCHAR(40) NOT NULL DEFAULT 'unverified',
+                osm_tags JSONB NOT NULL DEFAULT '{}'::jsonb,
+                location GEOGRAPHY(Point,4326) NOT NULL,
+                last_seen TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            )
+        """))
+        db.execute(text("""
+            CREATE INDEX IF NOT EXISTS idx_trekbrain_osm_cache_location
+            ON trekbrain_osm_cache_v9 USING GIST (location)
+        """))
+        db.execute(text("""
+            CREATE INDEX IF NOT EXISTS idx_trekbrain_osm_cache_expiry
+            ON trekbrain_osm_cache_v9 (last_seen DESC)
+        """))
+
+
         db.execute(text("""
             UPDATE treks
             SET duration_days = GREATEST(0.25, ROUND((COALESCE(distance,0)/20.0)*4)/4.0),
