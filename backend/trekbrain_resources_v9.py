@@ -446,8 +446,14 @@ def _merge_supplemented_resources(result: dict[str, Any], rows: list[dict[str, A
 
 
 
-def _bbox_route_water_food(result: dict[str, Any], intent: dict[str, Any]) -> list[dict[str, Any]]:
-    """One short OSM lookup for water/food close to the final validated route."""
+def _bbox_route_water_food(
+    result: dict[str, Any],
+    intent: dict[str, Any],
+    diagnostics: dict[str, Any] | None = None,
+) -> list[dict[str, Any]]:
+    """Bounded OSM lookup; distinguish empty responses from provider outages."""
+    if diagnostics is not None:
+        diagnostics.update(status="not_attempted", attempts=0, responses=0, errors=[])
     if not (intent.get("water") or intent.get("food")):
         return []
     route = result.get("route_preview") or {}
@@ -505,6 +511,8 @@ def _bbox_route_water_food(result: dict[str, Any], intent: dict[str, Any]) -> li
     # attempt, particularly while public FOSSGIS backends are throttled.
     mirrors = [urls[0], urls[-1]] if len(urls) >= 4 else urls[:2]
     for index, url in enumerate(mirrors):
+        if diagnostics is not None:
+            diagnostics["attempts"] += 1
         try:
             candidate = free._request_json(
                 url,
@@ -515,12 +523,24 @@ def _bbox_route_water_food(result: dict[str, Any], intent: dict[str, Any]) -> li
                 retries=1,
                 cache_empty=False,
             )
-            if isinstance(candidate, dict) and candidate.get("elements"):
-                payload = candidate
-                break
-        except Exception:
-            pass
+            if isinstance(candidate, dict):
+                if diagnostics is not None:
+                    diagnostics["responses"] += 1
+                if candidate.get("elements"):
+                    payload = candidate
+                    break
+        except Exception as exc:
+            if diagnostics is not None:
+                message = str(exc).casefold()
+                kind = ("rate_limited" if "429" in message
+                        else "timeout" if "délai" in message or "timeout" in message
+                        else "provider_error")
+                diagnostics["errors"].append(kind)
     if not isinstance(payload, dict):
+        if diagnostics is not None:
+            diagnostics["status"] = (
+                "unavailable" if not diagnostics["responses"] else "empty"
+            )
         return []
 
     rows = []
@@ -579,6 +599,9 @@ def _bbox_route_water_food(result: dict[str, Any], intent: dict[str, Any]) -> li
         max_distance = 5.0 if category == "water" else 7.0
         if match[0] <= max_distance:
             rows.append(row)
+    if diagnostics is not None:
+        diagnostics["status"] = "found" if rows else "no_route_match"
+        diagnostics["accepted"] = len(rows)
     return rows
 
 
