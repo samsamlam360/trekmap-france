@@ -57,11 +57,11 @@ def install_circuit_breakers(v3, ors, roundtrip) -> None:
     current_matrix = ors.get_distance_matrix
     current_roundtrip = roundtrip._roundtrip_request
 
-    def guarded_overpass(query: str):
+    def guarded_overpass(query: str, **kwargs):
         if not _closed("overpass"):
             raise RuntimeError("OpenStreetMap/Overpass ignoré après un timeout récent pour préserver le budget interactif.")
         try:
-            return current_overpass(query)
+            return current_overpass(query, **kwargs)
         except RuntimeError as exc:
             if _network_failure(str(exc)):
                 _open("overpass")
