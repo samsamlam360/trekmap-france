@@ -185,7 +185,7 @@ def install_fast_planning(v3, v5, v9) -> None:
     )
     geocode_timeout = _env_seconds("TREKBRAIN_GEOCODE_TIMEOUT_SECONDS", 4.5, 2.0, 8.0)
 
-    def fast_request_json(url, *, params=None, data=None, timeout=20, ttl=1800, service="service cartographique", retries=2):
+    def fast_request_json(url, *, params=None, data=None, timeout=20, ttl=1800, service="service cartographique", retries=2, cache_empty=True):
         label = str(service or "")
         if label.startswith("Nominatim") or label.startswith("Photon"):
             timeout = min(float(timeout), geocode_timeout)
@@ -214,6 +214,7 @@ def install_fast_planning(v3, v5, v9) -> None:
                 ttl=ttl,
                 service=service,
                 retries=retries,
+                cache_empty=cache_empty,
             )
         except Exception:
             outcome = "error"
