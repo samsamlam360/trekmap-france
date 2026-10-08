@@ -281,3 +281,43 @@ assert len(probes) == 5, probes
 assert len({(p["lat"], p["lon"]) for p in probes}) == 5, probes
 
 print("TrekBrain segmented OSM food searches and per-day resupply coverage: PASS")
+
+
+# On a cold-cache hiking route, reposition *one* intermediate Photon probe to
+# a real sourced village near the walked footpath, not to an arbitrary stage
+# split in an empty mountain area. Preserve the start/end probes and total
+# request budget; guessed villages and remote places cannot hijack the search.
+village_route = {
+    **traverse,
+    "points_of_interest": [
+        {
+            "category": "village", "name": "Village d'étape",
+            "lat": 45.0106, "lon": 5.0106,
+            "source_url": "https://www.openstreetmap.org/node/944001",
+        },
+        {
+            "category": "village", "name": "Village inventé",
+            "lat": 45.0204, "lon": 5.0204,
+        },
+        {
+            "category": "village", "name": "Village hors trace",
+            "lat": 46.0, "lon": 6.0,
+            "source_url": "https://www.openstreetmap.org/node/944002",
+        },
+    ],
+}
+probes.clear()
+stats = {}
+free._request_json = empty_reverse
+try:
+    assert shops.discover_near_route_shops(village_route, stats) == []
+finally:
+    free._request_json = original
+locations = {(p["lat"], p["lon"]) for p in probes}
+assert len(probes) == 4 and len(locations) == 4, probes
+assert (45.0106, 5.0106) in locations, locations
+assert (45.0204, 5.0204) not in locations, locations
+assert (45.0, 5.0) in locations and (45.03, 5.03) in locations, locations
+assert stats["village_probes"] == 1 and stats["attempts"] == 4, stats
+
+print("TrekBrain first visit: actual route-close villages boost Photon grocery probes: PASS")
