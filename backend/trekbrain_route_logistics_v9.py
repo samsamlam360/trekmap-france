@@ -26,7 +26,7 @@ import os
 import re
 import time
 import unicodedata
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeoutError, as_completed
 from copy import deepcopy
 from typing import Any
 
@@ -777,6 +777,15 @@ def _logistics_budget_seconds() -> float:
     return max(2.5, min(value, 8.0))
 
 
+def _structured_stay_hedge_seconds() -> float:
+    """Head start for route-wide providers before starting structured Photon."""
+    try:
+        value = float(os.getenv("TREKBRAIN_STAY_HEDGE_SECONDS", "1.25") or 1.25)
+    except (TypeError, ValueError):
+        value = 1.25
+    return max(0.05, min(value, 2.0))
+
+
 def _discover_stays(
     v3, roundtrip, stay_rescue, coords, start, category: str,
     days: int, daily_target: float, strict_walk: bool,
@@ -822,8 +831,10 @@ def _discover_stays(
     # returning no stays, so keep Photon out of the hot path rather than paying
     # for several per-stage text searches.
     structured = category in {"camping", "refuge"}
+    photon_hedge_started = False
     if want_terrain:
-        with ThreadPoolExecutor(max_workers=2) as pool:
+        photon_hedge_rows = []
+        with ThreadPoolExecutor(max_workers=3 if structured else 2) as pool:
             bbox_future = pool.submit(
                 provider_call, "logistics.overpass_bundle",
                 _bbox_route_bundle, coords, category
@@ -832,16 +843,56 @@ def _discover_stays(
                 provider_call, "logistics.nominatim_wave",
                 _nominatim_route_stays, coords, category
             )
-            try:
-                bbox_stays, terrain_rows, terrain_preloaded = bbox_future.result()
-            except Exception:
-                bbox_stays, terrain_rows, terrain_preloaded = [], [], False
+            photon_future = None
+
+            if structured:
+                try:
+                    bbox_stays, terrain_rows, terrain_preloaded = bbox_future.result(
+                        timeout=_structured_stay_hedge_seconds()
+                    )
+                except FutureTimeoutError:
+                    # Do not wait for a slow public Overpass corridor query to
+                    # finish before opening the one Photon rescue wave. Give the
+                    # route-wide sources a real head start, then overlap only
+                    # their slow tail. This keeps normal provider load low while
+                    # shaving the sequential stall seen on Vercors.
+                    photon_hedge_started = True
+                    photon_future = pool.submit(
+                        provider_call,
+                        "logistics.photon_hedge",
+                        _photon_split_stays,
+                        v3,
+                        roundtrip,
+                        coords,
+                        category,
+                        days,
+                    )
+                    try:
+                        bbox_stays, terrain_rows, terrain_preloaded = bbox_future.result()
+                    except Exception:
+                        bbox_stays, terrain_rows, terrain_preloaded = [], [], False
+                except Exception:
+                    bbox_stays, terrain_rows, terrain_preloaded = [], [], False
+            else:
+                try:
+                    bbox_stays, terrain_rows, terrain_preloaded = bbox_future.result()
+                except Exception:
+                    bbox_stays, terrain_rows, terrain_preloaded = [], [], False
+
             try:
                 nominatim_stays = nominatim_future.result()
             except Exception:
                 nominatim_stays = []
+
+            if photon_future is not None:
+                try:
+                    photon_hedge_rows = list(photon_future.result() or [])
+                except Exception:
+                    photon_hedge_rows = []
+
         rows.extend(list(bbox_stays or []))
         rows.extend(list(nominatim_stays or []))
+        rows.extend(photon_hedge_rows)
     elif structured:
         rows.extend(provider_call(
             "logistics.overpass_stays", _bbox_route_stays, coords, category
@@ -862,7 +913,11 @@ def _discover_stays(
     # are both empty/incomplete, allow exactly one bounded Photon stage-anchor
     # wave as a rescue. The jobs inside that wave run concurrently and every
     # candidate is still projected back onto the validated route before use.
-    if len(chosen) < needed and deadline - time.monotonic() >= 0.9:
+    if (
+        len(chosen) < needed
+        and not photon_hedge_started
+        and deadline - time.monotonic() >= 0.9
+    ):
         rows.extend(provider_call(
             "logistics.photon_fallback",
             _photon_split_stays, v3, roundtrip, coords, category, days
