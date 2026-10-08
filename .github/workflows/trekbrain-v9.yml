@@ -189,3 +189,5 @@ jobs:
           node --check /tmp/trekbrain-route-days.js
       - name: Check inherited research panel stability
         run: node scripts/test_trekbrain_v9_ui.mjs frontend/index.html
+      - name: Check actual map JavaScript renders food and lodging sources
+        run: node scripts/test_trekbrain_v9_map_resources.mjs frontend/index.html
