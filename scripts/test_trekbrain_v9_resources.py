@@ -185,8 +185,8 @@ uneven_water = next(
 assert uneven_water["route_day"] == 1, uneven_water
 
 
-# The final resource overlay must not duplicate water, food or normal
-# route-first lodging discovery once usable route-relative rows already exist.
+# The final resource overlay must not duplicate water or lodging discovery;
+# food must still run when another walking day has no source-linked supplies.
 # Transport remains active when explicitly requested because it is a distinct
 # access requirement.
 from backend import trekbrain_resources_v9 as resources_module
@@ -236,7 +236,8 @@ finally:
 
 assert captured_post_intent.get("water") is False, captured_post_intent
 assert captured_post_intent.get("sleep") is False, captured_post_intent
-assert captured_post_intent.get("food") is False, captured_post_intent
+# A day-2 grocery does not settle food needs for day 1.
+assert captured_post_intent.get("food") is True, captured_post_intent
 assert captured_post_intent.get("transit") is True, captured_post_intent
 
 # With no transit request, fully resolved route resources must short-circuit
@@ -257,6 +258,12 @@ try:
         "lon": 5.050,
         "source_url": "https://www.openstreetmap.org/node/202",
     }]
+    # Source-linked shop on EACH day makes the route genuinely covered.
+    complete_plan["resources"].append({
+        "name": "Épicerie du premier jour", "type": "Ravitaillement",
+        "category": "food", "lat": 45.025, "lon": 5.025,
+        "source_url": "https://www.openstreetmap.org/node/203",
+    })
     complete_plan["food"] = list(complete_plan["resources"])
     complete_plan["logistics"] = {"status": "complete"}
     complete_request = AIPlanRequest(
