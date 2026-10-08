@@ -15,10 +15,12 @@ services:
         value: production
       - key: FRONTEND_ORIGINS
         value: https://trekmap-france.onrender.com
+      # Supplied only as a Render service secret, never committed.
+      # Keeps the existing Render web hosting while PostGIS moves to Neon.
       - key: DATABASE_URL
-        fromDatabase:
-          name: trekmap-france-db
-          property: connectionString
+        sync: false
+      - key: DB_SSLMODE
+        value: require
       - key: ORS_API_KEY
         sync: false
       - key: GEMINI_API_KEY
