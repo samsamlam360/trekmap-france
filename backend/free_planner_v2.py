@@ -384,9 +384,16 @@ FILTERS = {
 }
 
 
-def _overpass(query: str):
+def _overpass(query: str, *, max_mirrors: int | None = None):
     errors = []
-    for url in OVERPASS_URLS:
+    urls = list(OVERPASS_URLS)
+    if max_mirrors is not None:
+        try:
+            limit = max(1, int(max_mirrors))
+        except (TypeError, ValueError):
+            limit = len(urls)
+        urls = urls[:limit]
+    for url in urls:
         try:
             return _request_json(
                 url,
