@@ -220,6 +220,26 @@ assert v3._region_only_non_loop_request({
     "start_query": "", "end_query": "", "via_query": "Col demandé",
 }) is False
 
+# One real sparse ORS geometry with a plausible total distance is enough to
+# stop comparing compass variants; route-split recovery handles day balance.
+usable_intent = {
+    "days": 3,
+    "daily_max": 23.0,
+    "total_target": 60.0,
+}
+assert v3._sparse_route_total_usable(
+    usable_intent, {"fallback": False}, 59.7
+) is True
+assert v3._sparse_route_total_usable(
+    usable_intent, {"fallback": True}, 59.7
+) is False
+assert v3._sparse_route_total_usable(
+    usable_intent, {"fallback": False}, 35.0
+) is False
+assert v3._sparse_route_total_usable(
+    usable_intent, {"fallback": False}, 90.0
+) is False
+
 # Sparse region-only itineraries must still reach ORS when public POI
 # providers are empty. These generated points are routing hypotheses only:
 # no source URL, no scenic/resource category, and exactly one boundary per day.
