@@ -38,13 +38,14 @@ def discover_near_route_shops(
     # Preserve the trailhead: on most routes it is a village and one of the
     # best places to buy provisions. For a closed loop, exclude only the
     # duplicate finish. For a traverse, retain both start and finish.
-    # Use at most three geographically spread probes, never adding network
-    # requests when more overnight points are present.
+    # Search up to five geographically distributed daily anchors. They run
+    # in one concurrent wave: adding trekking days should not leave all
+    # intermediary villages unchecked.
     first = resources._point(day_points[0])
     last = resources._point(day_points[-1])
     closed = bool(first and last and resources._distance_km(first, last) <= 0.25)
     candidates = day_points[:-1] if closed else day_points
-    count = min(3, len(candidates))
+    count = min(5, len(candidates))
     indices = sorted({
         round(i * (len(candidates) - 1) / max(1, count - 1))
         for i in range(count)
@@ -129,7 +130,7 @@ def discover_near_route_shops(
 
     found = []
     responses = 0
-    with ThreadPoolExecutor(max_workers=min(3, len(anchors))) as pool:
+    with ThreadPoolExecutor(max_workers=min(5, len(anchors))) as pool:
         futures = [pool.submit(probe, anchor) for anchor in anchors]
         for future in as_completed(futures):
             try:
