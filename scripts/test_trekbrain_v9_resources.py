@@ -11,6 +11,37 @@ os.environ.setdefault("TREKBRAIN_VERSION", "v9")
 
 from backend.trekbrain_resources_v9 import enrich_resources
 from backend import free_planner_v2 as free
+from backend import trekbrain_geo_safety_v9 as geo_safety
+
+
+# Geographic filtering wrappers must stay transparent to optional planner
+# controls. Route discovery now passes max_mirrors on sparse-region requests.
+class _GeoWrapperDummy:
+    pass
+
+dummy_geo = _GeoWrapperDummy()
+dummy_geo._nearby = lambda lat, lon, radius, categories: []
+dummy_geo._extra_nearby = lambda center, radius: ([], [])
+captured_geo_kwargs = {}
+def _dummy_combined(center, radius, categories, **kwargs):
+    captured_geo_kwargs.update(kwargs)
+    return [], [], []
+dummy_geo._combined_nearby = _dummy_combined
+dummy_geo._photon_category_candidates = lambda location, center, categories: []
+
+geo_installed_before = geo_safety._INSTALLED
+geo_safety._INSTALLED = False
+try:
+    geo_safety.install_geo_filters(dummy_geo)
+    dummy_geo._combined_nearby(
+        {"lat": 45.0, "lon": 5.0},
+        20.0,
+        ["viewpoint"],
+        max_mirrors=1,
+    )
+finally:
+    geo_safety._INSTALLED = geo_installed_before
+assert captured_geo_kwargs.get("max_mirrors") == 1, captured_geo_kwargs
 
 
 # Public resource providers can transiently return a syntactically valid empty
