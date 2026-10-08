@@ -105,37 +105,75 @@ def _route_match(
     item: dict[str, Any],
     route_profile: tuple[list[float], float] | None = None,
 ) -> tuple[float, float] | None:
-    target = _point(item)
-    if not target or not coords:
-        return None
-    stride = max(1, len(coords) // 800)
-    best_d, best_i = float("inf"), 0
-    for i in range(0, len(coords), stride):
-        if not isinstance(coords[i], (list, tuple)) or len(coords[i]) < 2:
-            continue
-        p = (_number(coords[i][0]), _number(coords[i][1]))
-        if p[0] is None or p[1] is None:
-            continue
-        d = _distance_km(target, (p[0], p[1]))
-        if d < best_d:
-            best_d, best_i = d, i
-    if coords and (len(coords) - 1) % stride:
-        last = coords[-1]
-        if isinstance(last, (list, tuple)) and len(last) >= 2:
-            lat, lon = _number(last[0]), _number(last[1])
-            if lat is not None and lon is not None:
-                d = _distance_km(target, (lat, lon))
-                if d < best_d:
-                    best_d, best_i = d, len(coords) - 1
-    if not math.isfinite(best_d):
-        return None
+    """Nearest point on walked *segments*, and progress by distance walked.
 
-    progress = best_i / max(1, len(coords) - 1)
-    if route_profile:
-        cumulative, total = route_profile
-        if len(cumulative) == len(coords) and total > 0 and 0 <= best_i < len(cumulative):
-            progress = max(0.0, min(1.0, float(cumulative[best_i]) / float(total)))
-    return best_d, progress
+    The old vertex-only lookup misplaced village stores on sparse polylines:
+    a shop a quarter-way down an edge could be classified as day 2, or
+    wrongly discarded as several kilometres away from the hiking trail.
+    """
+    target = _point(item)
+    if not target or not isinstance(coords, list) or len(coords) < 2:
+        return None
+    if route_profile is None:
+        route_profile = _route_distance_profile(coords)
+    cumulative, total = route_profile
+    if len(cumulative) != len(coords):
+        cumulative, total = _route_distance_profile(coords)
+
+    # Cap the cost on exceptionally long GPS traces, while preserving both
+    # endpoints. Ordinary (<=1400 vertex) routes retain full precision.
+    stride = max(1, (len(coords) - 1) // 1400)
+    indices = list(range(0, len(coords), stride))
+    if indices[-1] != len(coords) - 1:
+        indices.append(len(coords) - 1)
+
+    best_distance = float("inf")
+    best_progress = 0.0
+    for start_index, end_index in zip(indices, indices[1:]):
+        first, last = coords[start_index], coords[end_index]
+        if not (
+            isinstance(first, (list, tuple)) and len(first) >= 2
+            and isinstance(last, (list, tuple)) and len(last) >= 2
+        ):
+            continue
+        a_lat, a_lon = _number(first[0]), _number(first[1])
+        b_lat, b_lon = _number(last[0]), _number(last[1])
+        if None in (a_lat, a_lon, b_lat, b_lon):
+            continue
+        # Locally planar projection determines the nearest place on an edge.
+        # Its distance is then verified with the same haversine metric used
+        # everywhere else for route-relative filtering.
+        lat_scale = 111.195
+        lon_scale = lat_scale * max(0.01, math.cos(math.radians(target[0])))
+        dx = (b_lon - a_lon) * lon_scale
+        dy = (b_lat - a_lat) * lat_scale
+        vx = (target[1] - a_lon) * lon_scale
+        vy = (target[0] - a_lat) * lat_scale
+        length_sq = dx * dx + dy * dy
+        position = (
+            max(0.0, min(1.0, (vx * dx + vy * dy) / length_sq))
+            if length_sq > 0 else 0.0
+        )
+        projected = (
+            a_lat + (b_lat - a_lat) * position,
+            a_lon + (b_lon - a_lon) * position,
+        )
+        distance = _distance_km(target, projected)
+        if distance < best_distance:
+            best_distance = distance
+            if total > 0:
+                walked = (
+                    cumulative[start_index]
+                    + position * (cumulative[end_index] - cumulative[start_index])
+                )
+                best_progress = max(0.0, min(1.0, walked / total))
+            else:
+                best_progress = max(
+                    0.0, min(1.0, (start_index + position * (end_index - start_index)) / (len(coords) - 1))
+                )
+    if not math.isfinite(best_distance):
+        return None
+    return best_distance, best_progress
 
 
 def _resource_kind(item: dict[str, Any], fallback: str = "") -> str:
