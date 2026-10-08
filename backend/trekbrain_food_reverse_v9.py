@@ -183,16 +183,51 @@ def discover_near_route_shops(
     if diagnostics is not None:
         diagnostics["attempts"] = len(anchors)
         diagnostics["responses"] = responses
-    found.sort(key=lambda row: row[0])
-    out, seen = [], set()
-    for _distance, row in found:
+    # A fixed top-12 sorted only by distance to the path tends to fill up
+    # with near-identical bakeries from one urban day. Preserve up to three
+    # distinct sourced shops from EACH walking day before filling any spare
+    # slots. A village on day 3 must not disappear because day 1 has 20 POIs.
+    buckets: dict[int, list[tuple[int, float, dict[str, Any]]]] = {}
+    seen: set[str] = set()
+    for distance, row in sorted(found, key=lambda item: item[0]):
         key = row["source_url"]
         if key in seen:
             continue
         seen.add(key)
-        out.append(row)
-        if len(out) >= 12:
-            break
+        matched = resources._route_match(coords, row, profile)
+        if not matched:
+            continue
+        day = min(days, int(math.floor(matched[1] * days)) + 1)
+        shop_type = str((row.get("osm_tags") or {}).get("shop") or "")
+        # Grocers and supermarkets are more useful for multi-day provisions
+        # than a bakery that may sell only bread.
+        full_shop = shop_type in {
+            "supermarket", "convenience", "grocery", "general",
+        }
+        buckets.setdefault(day, []).append((0 if full_shop else 1, distance, row))
+
+    for day in buckets:
+        buckets[day].sort(key=lambda item: (item[0], item[1]))
+
+    out = []
+    # Round-robin daily coverage before additional shops in the same village.
+    for _rank in range(3):
+        for day in sorted(buckets):
+            if len(out) >= 12:
+                break
+            if len(buckets[day]) > _rank:
+                out.append(buckets[day][_rank][2])
+    if len(out) < 12:
+        for day in sorted(buckets):
+            for _, _, row in buckets[day][3:]:
+                if len(out) >= 12:
+                    break
+                out.append(row)
+    if diagnostics is not None:
+        diagnostics["food_days"] = len({
+            min(days, int(math.floor(resources._route_match(coords, row, profile)[1] * days)) + 1)
+            for row in out
+        })
     if diagnostics is not None:
         diagnostics["status"] = (
             "found" if out else "no_route_match" if responses else "unavailable"
