@@ -321,3 +321,65 @@ assert (45.0, 5.0) in locations and (45.03, 5.03) in locations, locations
 assert stats["village_probes"] == 1 and stats["attempts"] == 4, stats
 
 print("TrekBrain first visit: actual route-close villages boost Photon grocery probes: PASS")
+
+
+# A real first-visit village may contain dozens of shops beside the trail.
+# Historically the twelve globally nearest shops could all be on day 1,
+# silently discarding all supplies on days 2 and 3.
+import math
+large_shops = []
+for index in range(18):
+    large_shops.append({
+        "properties": {
+            "name": f"Boulangerie day 1 #{index}",
+            "countrycode": "FR", "osm_key": "shop",
+            "osm_value": "bakery", "osm_type": "N",
+            "osm_id": 960000 + index,
+        },
+        "geometry": {"coordinates": [5.0005 + index * .00015, 45.0005 + index * .00015]},
+    })
+large_shops.extend([
+    {
+        "properties": {"name": "Boulangerie jour 2", "countrycode": "FR",
+                       "osm_key": "shop", "osm_value": "bakery",
+                       "osm_type": "N", "osm_id": 960050},
+        "geometry": {"coordinates": [5.015, 45.015]},
+    },
+    {
+        "properties": {"name": "Épicerie jour 2", "countrycode": "FR",
+                       "osm_key": "shop", "osm_value": "convenience",
+                       "osm_type": "N", "osm_id": 960051},
+        "geometry": {"coordinates": [5.016, 45.016]},
+    },
+    {
+        "properties": {"name": "Supérette jour 3", "countrycode": "FR",
+                       "osm_key": "shop", "osm_value": "supermarket",
+                       "osm_type": "N", "osm_id": 960052},
+        "geometry": {"coordinates": [5.027, 45.027]},
+    },
+])
+
+
+def many_shops(url, **kwargs):
+    return {"features": large_shops}
+
+
+free._request_json = many_shops
+try:
+    daily_stats = {}
+    day_balanced = shops.discover_near_route_shops(route, daily_stats)
+finally:
+    free._request_json = original
+assert len(day_balanced) == 12, len(day_balanced)
+profile = resources._route_distance_profile(route["route_preview"]["coords"])
+per_day = {}
+for item in day_balanced:
+    progress = resources._route_match(route["route_preview"]["coords"], item, profile)[1]
+    day = min(3, math.floor(progress * 3) + 1)
+    per_day.setdefault(day, []).append(item)
+assert sorted(per_day) == [1, 2, 3], per_day
+assert daily_stats["food_days"] == 3, daily_stats
+assert per_day[2][0]["source_url"].endswith("/960051"), per_day
+assert any(p["source_url"].endswith("/960052") for p in per_day[3]), per_day
+assert len(set(x["source_url"] for x in day_balanced)) == len(day_balanced)
+print("TrekBrain reverse shops: day-balanced selection retains remote stage groceries: PASS")
