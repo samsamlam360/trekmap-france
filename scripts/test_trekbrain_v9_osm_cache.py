@@ -188,4 +188,14 @@ partial_map = {
 resources._annotate_stage_resources(partial_map)
 assert partial_map["stages"][0]["food_notes"] == "Épicerie du départ"
 assert "Aucun commerce vérifié" in partial_map["stages"][1]["food_notes"]
-print("TrekBrain v9 positive-only OSM cache, expiry, failure fallback and food stage gaps: PASS")
+water_gap = {
+    "stages": [{"day": 1}, {"day": 2}],
+    "map_resources": {"points": [{
+        "kind": "water", "route_day": 1, "name": "Fontaine du départ",
+        "status": "potable_referenced",
+    }], "coverage": {"water": "partial", "days_without_water": [2]}}
+}
+resources._annotate_stage_resources(water_gap)
+assert "Fontaine du départ" in water_gap["stages"][0]["water_notes"]
+assert "Aucun point d'eau OSM confirmé" in water_gap["stages"][1]["water_notes"]
+print("TrekBrain v9 positive-only OSM cache, source-linked water/stays and daily food/water gaps: PASS")
