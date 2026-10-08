@@ -1393,6 +1393,23 @@ def _candidate_score(candidate, route_points, route, intent, items, legacy_main,
     return score, distance, stage_dist, elevation, coords
 
 
+def _region_only_non_loop_request(intent: dict[str, Any]) -> bool:
+    """True when ORS may safely invent only route-shape hypotheses.
+
+    Explicit start/end/via constraints must always keep their normal geodata
+    path. This helper deliberately says nothing about loops, which use the
+    dedicated round-trip recovery instead.
+    """
+    return (
+        _fold(intent.get("route_type") or "")
+        not in {"boucle", "aller-retour", "aller retour"}
+        and not any(
+            str(intent.get(key) or "").strip()
+            for key in ("start_query", "end_query", "via_query")
+        )
+    )
+
+
 def _human_understanding(intent, location):
     priorities = sorted(intent["priorities"].items(), key=lambda x: -x[1])
     focus = [CATEGORY_LABEL.get(k, k) for k, v in priorities if v >= 3.5][:3]
@@ -1470,6 +1487,7 @@ def _build(data: AIPlanRequest, legacy_main):
     base_categories = ["viewpoint", "water", "camping", "refuge", "food", "transit"]
     radius = min(30.0, max(10.0, intent["daily_target"] * min(intent["days"], 4) * 0.42))
     notes = []
+    non_loop_region_only = _region_only_non_loop_request(intent)
     if corridor_centered and intent.get("explicit_endpoint_pair") and forced_start and forced_end:
         # The two written endpoints are authoritative and already geocoded.
         # A 30 km broad POI scan cannot change their pedestrian backbone, so
@@ -1489,6 +1507,15 @@ def _build(data: AIPlanRequest, legacy_main):
             # then use the bounded post-route resource lookup on real day anchors.
             if corridor_centered and forced_start and forced_end:
                 base, extra = [], []
+            elif non_loop_region_only:
+                # The sparse-region ORS recovery below no longer needs a second
+                # broad provider sweep to prove that an itinerary can exist.
+                # Route first, then attach resources against the validated line.
+                base, extra = [], []
+                notes.append(
+                    "Overpass indisponible : passage direct au secours de tracé "
+                    "ORS avant l'enrichissement des ressources."
+                )
             else:
                 base = perf.call(
                     "route.photon_regional_fallback",
@@ -1528,13 +1555,6 @@ def _build(data: AIPlanRequest, legacy_main):
             notes.append("POI du corridor complétés près du départ et de l'arrivée.")
 
     items = _dedupe(base + extra + [x for x in (forced_start, forced_end, forced_via) if x], center, max_km=max(40, radius * 1.45))
-    non_loop_region_only = (
-        _fold(intent.get("route_type") or "") not in {"boucle", "aller-retour", "aller retour"}
-        and not any(
-            str(intent.get(key) or "").strip()
-            for key in ("start_query", "end_query", "via_query")
-        )
-    )
     if (
         len(items) < 4
         and not (corridor_centered and forced_start and forced_end and len(items) >= 2)
