@@ -31,6 +31,12 @@ route = {
          "source_url": "https://www.openstreetmap.org/node/333"},
     ],
 }
+# Exact segment projection separates first and second day, even with a
+# sparse three-point hiking line (nearest GPS vertex is ambiguous).
+a_match = terrain._route_match(route["route_preview"]["coords"], route["resources"][0])
+b_match = terrain._route_match(route["route_preview"]["coords"], route["food"][0])
+assert a_match and a_match[0] < 0.02 and 0 < a_match[1] < 0.5, a_match
+assert b_match and b_match[0] < 0.02 and 0.5 < b_match[1] < 1, b_match
 base_rows = terrain._food_candidates(route)
 assert len(base_rows) == 3, base_rows
 assert {"Boutique A", "Boutique B"} <= {item["name"] for item in base_rows}
