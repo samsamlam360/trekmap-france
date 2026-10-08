@@ -1,0 +1,322 @@
+"""Twenty unseen geographic scenarios for TrekBrain v9. No destination-specific fixes.
+
+The production benchmark uses a temporary authenticated user, preserves raw
+quality/latency/resource counts, and cleans the account in a finally block.
+It intentionally does not require every rural location to contain a shop.
+"""
+from __future__ import annotations
+import json
+import os
+import benchmark_trekbrain_v9_production as core
+
+SCENARIOS = json.loads(r'''[
+  {
+    "id": "etretat-pays-caux",
+    "prompt": "Je veux une boucle de deux jours au départ d'Étretat, 15 km par jour sur de vrais chemins, avec un gîte, de l'eau et des commerces alimentaires.",
+    "region": "Étretat, Seine-Maritime",
+    "days": 2,
+    "daily_km": 15,
+    "difficulty": "medium",
+    "route_type": "Boucle",
+    "require_transit": false,
+    "require_water": true,
+    "require_accommodation": true,
+    "require_food": true,
+    "expect_type": "boucle",
+    "expect_close": true
+  },
+  {
+    "id": "cote-granit-rose",
+    "prompt": "Trouve une boucle de trois jours près de Perros-Guirec, 17 km par jour, privilégiant le sentier littoral, avec camping et ravitaillement.",
+    "region": "Perros-Guirec, Côtes-d'Armor",
+    "days": 3,
+    "daily_km": 17,
+    "difficulty": "medium",
+    "route_type": "Boucle",
+    "require_transit": false,
+    "require_water": true,
+    "require_accommodation": true,
+    "require_food": true,
+    "expect_type": "boucle",
+    "expect_close": true
+  },
+  {
+    "id": "lac-blanc-vosges",
+    "prompt": "Je voudrais un trek en boucle de 2 jours au Lac Blanc dans les Vosges, 14 km par jour, en refuge ou auberge, avec de l'eau.",
+    "region": "Lac Blanc, Haut-Rhin",
+    "days": 2,
+    "daily_km": 14,
+    "difficulty": "hard",
+    "route_type": "Boucle",
+    "require_transit": false,
+    "require_water": true,
+    "require_accommodation": true,
+    "require_food": false,
+    "expect_type": "boucle",
+    "expect_close": true
+  },
+  {
+    "id": "cascade-herisson-jura",
+    "prompt": "Propose une boucle de 3 jours dans le Jura près des cascades du Hérisson, 16 km par jour, avec nuits en camping, eau et courses.",
+    "region": "Cascades du Hérisson, Jura",
+    "days": 3,
+    "daily_km": 16,
+    "difficulty": "medium",
+    "route_type": "Boucle",
+    "require_transit": false,
+    "require_water": true,
+    "require_accommodation": true,
+    "require_food": true,
+    "expect_type": "boucle",
+    "expect_close": true
+  },
+  {
+    "id": "nasbinals-aubrac",
+    "prompt": "Je veux marcher trois jours en boucle depuis Nasbinals sur l'Aubrac, environ 18 km chaque jour, avec gîte, eau et commerces.",
+    "region": "Nasbinals, Lozère",
+    "days": 3,
+    "daily_km": 18,
+    "difficulty": "medium",
+    "route_type": "Boucle",
+    "require_transit": false,
+    "require_water": true,
+    "require_accommodation": true,
+    "require_food": true,
+    "expect_type": "boucle",
+    "expect_close": true
+  },
+  {
+    "id": "sarlat-dordogne",
+    "prompt": "Crée un itinéraire pédestre en boucle de deux jours autour de Sarlat, environ 16 km par jour, avec hébergement et ravitaillement.",
+    "region": "Sarlat-la-Canéda, Dordogne",
+    "days": 2,
+    "daily_km": 16,
+    "difficulty": "easy",
+    "route_type": "Boucle",
+    "require_transit": false,
+    "require_water": false,
+    "require_accommodation": true,
+    "require_food": true,
+    "expect_type": "boucle",
+    "expect_close": true
+  },
+  {
+    "id": "florac-cevennes",
+    "prompt": "Je voudrais un circuit de 3 jours autour de Florac dans les Cévennes, 16 km par jour, refuge ou gîte, eau et ravitaillement si présent.",
+    "region": "Florac, Lozère",
+    "days": 3,
+    "daily_km": 16,
+    "difficulty": "medium",
+    "route_type": "Boucle",
+    "require_transit": false,
+    "require_water": true,
+    "require_accommodation": true,
+    "require_food": true,
+    "expect_type": "boucle",
+    "expect_close": true
+  },
+  {
+    "id": "chartreuse-saint-pierre",
+    "prompt": "Une boucle de 3 jours en Chartreuse au départ de Saint-Pierre-de-Chartreuse, 14 km par jour, nuit en refuge et points d'eau.",
+    "region": "Saint-Pierre-de-Chartreuse, Isère",
+    "days": 3,
+    "daily_km": 14,
+    "difficulty": "hard",
+    "route_type": "Boucle",
+    "require_transit": false,
+    "require_water": true,
+    "require_accommodation": true,
+    "require_food": false,
+    "expect_type": "boucle",
+    "expect_close": true
+  },
+  {
+    "id": "cauterets-pont-espagne",
+    "prompt": "Je veux une boucle sportive de deux jours sur les sentiers autour de Cauterets et du Pont d'Espagne, 13 km par jour, avec nuit en refuge et points d'eau.",
+    "region": "Cauterets, Hautes-Pyrénées",
+    "days": 2,
+    "daily_km": 13,
+    "difficulty": "hard",
+    "route_type": "Boucle",
+    "require_transit": false,
+    "require_water": true,
+    "require_accommodation": true,
+    "require_food": false,
+    "expect_type": "boucle",
+    "expect_close": true
+  },
+  {
+    "id": "riquewihr-vosges",
+    "prompt": "Prépare une boucle de deux jours depuis Riquewihr dans les Vosges, 17 km chaque jour, avec accès en transport, hébergement et ravitaillement.",
+    "region": "Riquewihr, Haut-Rhin",
+    "days": 2,
+    "daily_km": 17,
+    "difficulty": "medium",
+    "route_type": "Boucle",
+    "require_transit": true,
+    "require_water": true,
+    "require_accommodation": true,
+    "require_food": true,
+    "expect_type": "boucle",
+    "expect_close": true
+  },
+  {
+    "id": "nantua-bugey",
+    "prompt": "Je veux une boucle de 3 jours au départ de Nantua dans le Bugey, 16 km par jour, des gîtes, points d'eau et commerces.",
+    "region": "Nantua, Ain",
+    "days": 3,
+    "daily_km": 16,
+    "difficulty": "medium",
+    "route_type": "Boucle",
+    "require_transit": false,
+    "require_water": true,
+    "require_accommodation": true,
+    "require_food": true,
+    "expect_type": "boucle",
+    "expect_close": true
+  },
+  {
+    "id": "camargue-saintes-maries",
+    "prompt": "Propose une boucle facile de deux jours près des Saintes-Maries-de-la-Mer sans marcher dans l'eau, 15 km par jour, hébergement, eau et ravitaillement.",
+    "region": "Saintes-Maries-de-la-Mer, Bouches-du-Rhône",
+    "days": 2,
+    "daily_km": 15,
+    "difficulty": "easy",
+    "route_type": "Boucle",
+    "require_transit": false,
+    "require_water": true,
+    "require_accommodation": true,
+    "require_food": true,
+    "expect_type": "boucle",
+    "expect_close": true
+  },
+  {
+    "id": "luberon-bonnieux",
+    "prompt": "Je veux une boucle en randonnée de trois jours près de Bonnieux dans le Luberon, 17 km par jour, avec camping, eau et ravitaillement.",
+    "region": "Bonnieux, Vaucluse",
+    "days": 3,
+    "daily_km": 17,
+    "difficulty": "medium",
+    "route_type": "Boucle",
+    "require_transit": false,
+    "require_water": true,
+    "require_accommodation": true,
+    "require_food": true,
+    "expect_type": "boucle",
+    "expect_close": true
+  },
+  {
+    "id": "puy-mary-cantal",
+    "prompt": "Une boucle de deux jours autour du Puy Mary dans le Cantal, 15 km par jour, avec un refuge ou gîte et des informations fiables sur l'eau.",
+    "region": "Puy Mary, Cantal",
+    "days": 2,
+    "daily_km": 15,
+    "difficulty": "hard",
+    "route_type": "Boucle",
+    "require_transit": false,
+    "require_water": true,
+    "require_accommodation": true,
+    "require_food": false,
+    "expect_type": "boucle",
+    "expect_close": true
+  },
+  {
+    "id": "montherme-ardennes",
+    "prompt": "Je veux faire une boucle de 3 jours au départ de Monthermé dans les Ardennes, 18 km par jour, camping, eau et commerces.",
+    "region": "Monthermé, Ardennes",
+    "days": 3,
+    "daily_km": 18,
+    "difficulty": "medium",
+    "route_type": "Boucle",
+    "require_transit": false,
+    "require_water": true,
+    "require_accommodation": true,
+    "require_food": true,
+    "expect_type": "boucle",
+    "expect_close": true
+  },
+  {
+    "id": "marais-poitevin-coulon",
+    "prompt": "Trouve une boucle facile de deux jours à pied autour de Coulon dans le Marais poitevin, 14 km par jour, hébergement, commerces et transports.",
+    "region": "Coulon, Deux-Sèvres",
+    "days": 2,
+    "daily_km": 14,
+    "difficulty": "easy",
+    "route_type": "Boucle",
+    "require_transit": true,
+    "require_water": true,
+    "require_accommodation": true,
+    "require_food": true,
+    "expect_type": "boucle",
+    "expect_close": true
+  },
+  {
+    "id": "millevaches-meymac",
+    "prompt": "Je veux une boucle de 3 jours sur le plateau de Millevaches depuis Meymac, 16 km par jour, avec gîtes, eau et ravitaillement.",
+    "region": "Meymac, Corrèze",
+    "days": 3,
+    "daily_km": 16,
+    "difficulty": "medium",
+    "route_type": "Boucle",
+    "require_transit": false,
+    "require_water": true,
+    "require_accommodation": true,
+    "require_food": true,
+    "expect_type": "boucle",
+    "expect_close": true
+  },
+  {
+    "id": "pilat-croix-chaubouret",
+    "prompt": "Je voudrais une boucle de 2 jours dans le Pilat au départ de la Croix de Chaubouret, environ 17 km par jour, avec hébergement et eau.",
+    "region": "La Croix de Chaubouret, Loire",
+    "days": 2,
+    "daily_km": 17,
+    "difficulty": "medium",
+    "route_type": "Boucle",
+    "require_transit": false,
+    "require_water": true,
+    "require_accommodation": true,
+    "require_food": false,
+    "expect_type": "boucle",
+    "expect_close": true
+  },
+  {
+    "id": "gorges-tarn-sainte-enimie",
+    "prompt": "Prépare une boucle de randonnée de trois jours autour de Sainte-Enimie et des gorges du Tarn, 16 km par jour, avec camping et ravitaillement.",
+    "region": "Sainte-Enimie, Lozère",
+    "days": 3,
+    "daily_km": 16,
+    "difficulty": "medium",
+    "route_type": "Boucle",
+    "require_transit": false,
+    "require_water": true,
+    "require_accommodation": true,
+    "require_food": true,
+    "expect_type": "boucle",
+    "expect_close": true
+  },
+  {
+    "id": "briere-saint-lyphard",
+    "prompt": "Je veux une boucle pédestre facile de deux jours dans la Brière près de Saint-Lyphard, 15 km par jour, nuitée, eau et commerces. Pas de trajet sur l'eau.",
+    "region": "Saint-Lyphard, Loire-Atlantique",
+    "days": 2,
+    "daily_km": 15,
+    "difficulty": "easy",
+    "route_type": "Boucle",
+    "require_transit": false,
+    "require_water": true,
+    "require_accommodation": true,
+    "require_food": true,
+    "expect_type": "boucle",
+    "expect_close": true
+  }
+]''')
+assert len(SCENARIOS) == 20
+assert len({case["id"] for case in SCENARIOS}) == 20
+assert sum(bool(case["require_food"]) for case in SCENARIOS) >= 12
+
+if __name__ == "__main__":
+    core.SCENARIOS = SCENARIOS
+    core.OUT_DIR = core.Path(os.getenv("TREKBRAIN_BENCHMARK_OUT", "benchmark-results-20"))
+    core.OUT_DIR.mkdir(parents=True, exist_ok=True)
+    core.main()
