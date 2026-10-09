@@ -22,8 +22,8 @@ block = r'''<!-- TREKMAP_SCENIC_PHOTOS_START -->
   if(window.TrekViewPhotos)return;
   const cache=new Map();
   const CACHE_MS=12*60*60*1000;
-  const MAX_LOOKUPS=10; // At most 10 remote metadata lookups per loaded page.
-  let lookups=0;
+  const MAX_REQUESTS=12; // Maximum Wikimedia/Wikidata HTTP calls per loaded page.
+  let requests=0;
   const commons='https://commons.wikimedia.org';
   const validName=name=>typeof name==='string' && name.length>4 && name.length<=180 &&
     /\.(?:jpe?g|png|webp)$/i.test(name) && !/[<>|#?\r\n]/.test(name);
@@ -38,6 +38,8 @@ block = r'''<!-- TREKMAP_SCENIC_PHOTOS_START -->
       u.hostname==='upload.wikimedia.org'?u.href:'';}catch(_){return'';}
   };
   const fetchJSON=async(url,ms=5500)=>{
+    if(requests>=MAX_REQUESTS)throw Error('Quota images atteint');
+    requests++;
     const controller=new AbortController();
     const timer=setTimeout(()=>controller.abort(),ms);
     try{
@@ -65,7 +67,8 @@ block = r'''<!-- TREKMAP_SCENIC_PHOTOS_START -->
     const info=item?.imageinfo?.[0],meta=info?.extmetadata||{};
     const src=safeThumb(info?.thumburl||'');
     const license=cleanText(meta.LicenseShortName?.value||'');
-    if(!src||!/^image\/(jpeg|png|webp)$/i.test(info.mime||'')||!license)return null;
+    const freeLicense=/^(CC\s|CC[- ]|CC0|Public domain|PD-|GFDL|Free Art|Licence Art Libre)/i.test(license);
+    if(!src||!/^image\/(jpeg|png|webp)$/i.test(info.mime||'')||!freeLicense)return null;
     return {
       src,license,
       author:cleanText(meta.Artist?.value||meta.Attribution?.value||'Auteur non précisé'),
@@ -77,8 +80,7 @@ block = r'''<!-- TREKMAP_SCENIC_PHOTOS_START -->
     if(!key)return null;
     const cached=cache.get(key);
     if(cached && Date.now()-cached.at<CACHE_MS)return cached.data;
-    if(lookups>=MAX_LOOKUPS)return null;
-    lookups++;
+    if(requests>=MAX_REQUESTS)return null;
     try{
       const exact=validName(file)?file:await fromWikidata(id);
       const data=exact?await fetchCommons(exact):null;
