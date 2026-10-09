@@ -147,6 +147,15 @@ assert result["route_preview"]["distance_km"] == 100.0
 assert result["planner"]["logistics_mode"] == "route-first"
 assert result["logistics"]["nights_required"] == 4
 assert result["logistics"]["nights_resolved"] == 4
+# An available campsite with a transfer is not equivalent to a complete
+# hike on foot. Keep the legacy status but expose the actual readiness.
+assert result["logistics"]["status"] == "complete"
+assert result["logistics"]["nights_walk_confirmed"] == 3
+assert result["logistics"]["nights_transfer_required"] == 1
+assert result["logistics"]["nights_missing"] == 0
+assert result["logistics"]["walking_readiness"] == "transfer_to_arrange"
+assert result["logistics"]["ready_without_transfer"] is False
+assert any("Transfert à organiser" in note for note in result["advisor_notes"])
 assert len(result["accommodations"]) == 4
 assert all(float(stage["distance_km"]) == 20.0 for stage in result["stages"])
 assert max(float(stage["distance_km"]) for stage in result["stages"]) <= 25.0
@@ -179,6 +188,12 @@ finally:
 assert partial["route_preview"]["fallback"] is False
 assert partial["logistics"]["status"] == "partial"
 assert partial["logistics"]["nights_resolved"] == 0
+assert partial["logistics"]["nights_walk_confirmed"] == 0
+assert partial["logistics"]["nights_transfer_required"] == 0
+assert partial["logistics"]["nights_missing"] == 4
+assert partial["logistics"]["walking_readiness"] == "missing_nights"
+assert partial["logistics"]["ready_without_transfer"] is False
+assert any("Nuitées à organiser" in note for note in partial["advisor_notes"])
 assert all(
     "Nuitée à organiser" in str(stage.get("overnight") or "")
     for stage in partial["stages"][:-1]
