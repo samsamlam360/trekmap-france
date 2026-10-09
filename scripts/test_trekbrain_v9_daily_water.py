@@ -96,6 +96,21 @@ assert {w["water_status"] for w in found_water} == {
     "potable_referenced", "not_potable"
 }, found_water
 
+# A fresh "drinking_water=no" must override the same source previously
+# cached as potable, rather than disappearing during deduplication.
+stale = {
+    **long_plan,
+    "water": [{
+        **found_water[1], "status": "potable_referenced",
+        "water_status": "potable_referenced",
+        "notes": "Potable selon les anciennes données",
+    }],
+}
+resources._merge_supplemented_resources(stale, [found_water[1]])
+assert len(stale["water"]) == 1, stale["water"]
+assert stale["water"][0]["status"] == "not_potable", stale["water"]
+assert "ne pas boire" in stale["water"][0]["notes"], stale["water"]
+
 only_unsafe = {**long_plan, "water": [found_water[1]]}
 assert resources._missing_terrain_intent(
     only_unsafe, {"water": True}
