@@ -30,6 +30,15 @@ assert.ok(script.includes('if(days)days.value=choice.days'));
 assert.ok(script.includes('if(km)km.value=choice.km'));
 assert.ok(script.includes('getClientRects().length'), 'focus only visible elements');
 assert.ok(script.includes('lastTrigger.focus()'), 'restore focus after closing');
+assert.ok(css.includes('.tm-ux-selected'), 'collapsed options should show their active settings');
+assert.ok(script.includes('selected.id="tm-ux-settings-summary"'), 'active criteria overview needs a stable ID');
+assert.ok(script.includes('requirementIds.filter('), 'criteria are based on real checkboxes');
+assert.ok(script.includes('checks.querySelectorAll("input[type=checkbox]")'), 'checkbox changes update the overview');
+assert.ok(script.includes('input.addEventListener("change",updateSummary)'), 'changed criteria must refresh the overview');
+assert.ok(script.includes('updateSummary();'), 'initial defaults must be shown');
+assert.ok(script.includes('visible.indexOf(document.activeElement)<0'), 'recover escaped keyboard focus');
+assert.ok(!script.includes('summary.setAttribute("aria-label"'), 'native summary and selected values must be announced');
+
 assert.ok(script.includes('originalBack.click()'), 'mobile results should allow one-tap editing');
 assert.ok(script.includes('originalClose.click()'), 'mobile results must offer a visible close action');
 assert.ok(css.includes('tm-ux-mobile-result-nav'), 'mobile result navigation must be visibly styled');
