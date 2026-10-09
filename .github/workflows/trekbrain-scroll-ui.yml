@@ -34,6 +34,7 @@ jobs:
           python scripts/apply_route_day_visuals.py
           python scripts/apply_route_day_clarity.py
           python scripts/apply_trekbrain_scroll_ui.py
+          python scripts/apply_trekbrain_ux_refresh.py
 
       - name: Verify scroll and TrekBrain UI remain together
         shell: python
