@@ -407,6 +407,25 @@ block = r'''<!-- TREKMAP_TREKBRAIN_UX_2026_START -->
   mobileNav.appendChild(closeResult);
   result.insertBefore(mobileNav,result.firstChild);
 
+  /* Keep keyboard navigation inside the open dialog while preserving
+     the browser's natural tab order in visible (mobile/desktop) controls. */
+  overlay.addEventListener("keydown",function(event){
+    if(event.key!=="Tab" || !overlay.classList.contains("open"))return;
+    var candidates=overlay.querySelectorAll(
+      "button:not([disabled]), input:not([disabled]), select:not([disabled]), "+
+      "textarea:not([disabled]), a[href], summary, [tabindex]:not([tabindex='-1'])"
+    );
+    var visible=Array.prototype.filter.call(candidates,function(node){
+      return node.getClientRects().length && node.getAttribute("aria-hidden")!=="true";
+    });
+    if(!visible.length)return;
+    var first=visible[0],last=visible[visible.length-1];
+    if(event.shiftKey && document.activeElement===first){
+      event.preventDefault();last.focus();
+    }else if(!event.shiftKey && document.activeElement===last){
+      event.preventDefault();first.focus();
+    }
+  });
   var lastTrigger=null;
   document.addEventListener("click",function(ev){
     var target=ev.target;
