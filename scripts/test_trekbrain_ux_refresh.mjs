@@ -30,6 +30,9 @@ assert.ok(script.includes('if(days)days.value=choice.days'));
 assert.ok(script.includes('if(km)km.value=choice.km'));
 assert.ok(script.includes('getClientRects().length'), 'focus only visible elements');
 assert.ok(script.includes('lastTrigger.focus()'), 'restore focus after closing');
+assert.ok(script.includes('originalBack.click()'), 'mobile results should allow one-tap editing');
+assert.ok(script.includes('originalClose.click()'), 'mobile results must offer a visible close action');
+assert.ok(css.includes('tm-ux-mobile-result-nav'), 'mobile result navigation must be visibly styled');
 assert.ok(!/\/ai\/plan|\/treks\/draw|fetch\(/.test(script), 'presentation layer must never issue planning/network requests');
 for(const id of [
   'tm-ai-prompt','tm-ai-region','tm-ai-days','tm-ai-km','tm-ai-difficulty',
