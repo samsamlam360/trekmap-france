@@ -1176,6 +1176,21 @@ def _attach_preloaded_terrain(
         if key is None:
             continue
         kind = str(row.get("category") or "")
+        if kind == "water" and key in seen_water:
+            # A fresh OSM drinking_water=no must override stale, preloaded
+            # evidence of potable water for the same mapped source.
+            if str(row.get("water_status") or "") == "not_potable":
+                source = str(row.get("source_url") or "")
+                for existing in water:
+                    if coord_key(existing) != key:
+                        continue
+                    old_source = str(existing.get("source_url") or "")
+                    if source and old_source and source != old_source:
+                        continue
+                    existing["status"] = "not_potable"
+                    existing["water_status"] = "not_potable"
+                    existing["notes"] = "Eau signalée non potable : ne pas boire."
+            continue
         if kind == "water" and key not in seen_water:
             seen_water.add(key)
             status = str(row.get("water_status") or "unverified")
@@ -1187,7 +1202,11 @@ def _attach_preloaded_terrain(
                 "type": "Point d'eau",
                 "status": status,
                 "water_status": status,
-                "notes": "Point d'eau cartographié près du tracé ; disponibilité et potabilité à vérifier.",
+                "notes": (
+                    "Eau signalée non potable : ne pas boire."
+                    if status == "not_potable"
+                    else "Point d'eau cartographié près du tracé ; disponibilité et potabilité à vérifier."
+                ),
                 "source_url": row.get("source_url") or "",
                 "display_only": True,
             })
