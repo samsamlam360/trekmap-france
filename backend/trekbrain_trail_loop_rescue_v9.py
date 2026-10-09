@@ -434,6 +434,18 @@ def _relation_loop(v3, gr, start: dict[str, Any], target_km: float):
                 merged.append(trail)
         if len(merged) > len(trails):
             _LAST_DISCOVERED_TRAILS.set(merged)
+            preview = [
+                f"{str(x.get('ref') or x.get('name') or 'trail')[:28]}:{float(x.get('length_km') or _length(x.get('coords') or [])):.0f}km"
+                for x in merged[:10]
+            ]
+            _coastal_section_log(
+                "discovery-tiers",
+                fast=len(trails),
+                generic=len(generic),
+                waymarked=len(secondary),
+                merged=len(merged),
+                top="|".join(preview),
+            )
             for trail in merged:
                 if trail in trails:
                     continue
@@ -550,6 +562,12 @@ def _relation_loop(v3, gr, start: dict[str, Any], target_km: float):
 
     if not rows:
         detail = reasons[0] if reasons else "aucune relation fermée de longueur compatible"
+        _coastal_section_log(
+            "closed-relation-miss",
+            trails=len(_LAST_DISCOVERED_TRAILS.get() or []),
+            target=round(float(target_km), 1),
+            reason=str(detail)[:80],
+        )
         return None, detail
     rows.sort(key=lambda row: row[0])
     _, trail, closed, idx, start_off, relation_km = rows[0]
