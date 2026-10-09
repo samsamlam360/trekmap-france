@@ -41,7 +41,7 @@ block = r'''<!-- TREKMAP_TREKBRAIN_V91_MAP_START -->
   const safeUrl=v=>{try{const u=new URL(String(v||''));return ['http:','https:'].includes(u.protocol)?u.href:''}catch(_){return''}};
   const meta={
     water:{emoji:'🚰',label:'Eau'},food:{emoji:'🥖',label:'Ravitaillement'},camping:{emoji:'⛺',label:'Campings'},refuge:{emoji:'🏠',label:'Refuges'},lodging:{emoji:'🛏️',label:'Hébergements'},
-    station:{emoji:'🚉',label:'Gares'},transport:{emoji:'🚌',label:'Bus / transports'},trail:{emoji:'🥾',label:'Sentiers nommés'}
+    station:{emoji:'🚉',label:'Gares'},transport:{emoji:'🚌',label:'Bus / transports'},trail:{emoji:'🥾',label:'Sentiers nommés'},viewpoint:{emoji:'📷',label:'Points de vue'}
   };
   let current=null,basePrompt='',history=[],savedTrekId=null,legend=null;
   const groups={};
@@ -62,13 +62,27 @@ block = r'''<!-- TREKMAP_TREKBRAIN_V91_MAP_START -->
 
   function pointsFor(plan){
     const pts=Array.isArray(plan?.map_resources?.points)?plan.map_resources.points:fallbackPoints(plan);
-    return pts.filter(p=>meta[p.kind]&&Number.isFinite(Number(p.lat))&&Number.isFinite(Number(p.lon)));
+    const valid=pts.filter(p=>meta[p.kind]&&Number.isFinite(Number(p.lat))&&Number.isFinite(Number(p.lon)));
+    const seen=new Set(valid.map(p=>String(p.source_url||'')||[p.lat,p.lon].join(',')));
+    (plan?.points_of_interest||[]).forEach(p=>{
+      const type=String(p.category||p.type||'').toLowerCase();
+      if(!/viewpoint|panorama|point de vue|sommet|peak|cascade|waterfall/.test(type))return;
+      if(!Number.isFinite(Number(p.lat))||!Number.isFinite(Number(p.lon)))return;
+      const key=String(p.source_url||'')||[p.lat,p.lon].join(',');
+      if(seen.has(key))return;seen.add(key);
+      valid.push({...p,kind:'viewpoint'});
+    });
+    return valid;
   }
 
   function popupHtml(p){
     const m=meta[p.kind]||{emoji:'•',label:p.type||'Point'};
     const source=safeUrl(p.source_url);
-    return `<div style="min-width:190px"><b>${m.emoji} ${esc(p.name||m.label)}</b><br><span>${esc(m.label)}${p.route_day?` · jour ${Number(p.route_day)}`:''}</span>${Number.isFinite(Number(p.distance_to_route_km))?`<br><small>À ${Number(p.distance_to_route_km).toFixed(1)} km du tracé</small>`:''}${p.notes?`<br><small>${esc(p.notes)}</small>`:''}${source?`<br><a href="${esc(source)}" target="_blank" rel="noopener noreferrer">Voir la source cartographique</a>`:''}</div>`;
+    const hasPhotoKind=p.kind==='viewpoint';
+    const file=String(p.photo_commons_file||'').slice(0,180);
+    const wikidata=String(p.photo_wikidata||'').slice(0,24);
+    const photo=hasPhotoKind?`<div class="tm-ux-view-card" data-commons-file="${esc(file)}" data-wikidata="${esc(wikidata)}"><div class="tm-ux-photo-media"><span>🏔️ Photo à vérifier</span></div></div>`:'';
+    return `<div style="min-width:190px;max-width:270px"><b>${m.emoji} ${esc(p.name||m.label)}</b>${photo}<br><span>${esc(m.label)}${p.route_day?` · jour ${Number(p.route_day)}`:''}</span>${Number.isFinite(Number(p.distance_to_route_km))?`<br><small>À ${Number(p.distance_to_route_km).toFixed(1)} km du tracé</small>`:''}${p.notes?`<br><small>${esc(p.notes)}</small>`:''}${source?`<br><a href="${esc(source)}" target="_blank" rel="noopener noreferrer">Voir la source cartographique</a>`:''}</div>`;
   }
 
   function drawResources(plan){
@@ -78,7 +92,15 @@ block = r'''<!-- TREKMAP_TREKBRAIN_V91_MAP_START -->
     pts.forEach(p=>{
       const m=meta[p.kind];
       const icon=L.divIcon({className:`tm-v91-resource-icon ${p.kind}`,html:`<span>${m.emoji}</span>`,iconSize:[30,30],iconAnchor:[15,15],popupAnchor:[0,-16]});
-      L.marker([Number(p.lat),Number(p.lon)],{icon,title:p.name||m.label}).bindPopup(popupHtml(p)).addTo(groups[p.kind]);
+      const pin=L.marker([Number(p.lat),Number(p.lon)],{icon,title:p.name||m.label})
+        .bindPopup(popupHtml(p),{autoPanPaddingTopLeft:[20,120],autoPanPaddingBottomRight:[20,130]});
+      if(p.kind==='viewpoint' && typeof pin.on==='function'){
+        pin.on('popupopen',e=>{
+          const el=e.popup?.getElement?.();
+          if(el && window.TrekViewPhotos?.hydrate)window.TrekViewPhotos.hydrate(el);
+        });
+      }
+      pin.addTo(groups[p.kind]);
     });
     Object.values(groups).forEach(g=>g.addTo(map));
     const counts={};pts.forEach(p=>counts[p.kind]=(counts[p.kind]||0)+1);
