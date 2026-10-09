@@ -152,6 +152,8 @@ jobs:
           python scripts/apply_selected_trekbrain_ui.py
           python scripts/apply_route_day_visuals.py
           python scripts/apply_route_day_clarity.py
+          python scripts/apply_trekbrain_scroll_ui.py
+          python scripts/apply_trekbrain_ux_refresh.py
       - name: Check v9 frontend
         shell: python
         run: |
@@ -201,6 +203,8 @@ jobs:
           node --check /tmp/trekbrain-failure-actions.js
           node --check /tmp/trekbrain-error-diagnostics.js
           node --check /tmp/trekbrain-route-days.js
+      - name: Check research-based TrekBrain responsive UX
+        run: node scripts/test_trekbrain_ux_refresh.mjs
       - name: Check inherited research panel stability
         run: node scripts/test_trekbrain_v9_ui.mjs frontend/index.html
       - name: Check actual map JavaScript renders food and lodging sources

@@ -34,6 +34,7 @@ jobs:
           python scripts/apply_route_day_visuals.py
           python scripts/apply_route_day_clarity.py
           python scripts/apply_trekbrain_scroll_ui.py
+          python scripts/apply_trekbrain_ux_refresh.py
 
       - name: Verify scroll and TrekBrain UI remain together
         shell: python
@@ -60,6 +61,9 @@ jobs:
           if html.count('id="trekmap-trekbrain-scroll-css"') != 1:
               raise SystemExit('TrekBrain scroll CSS duplicated')
           print('TrekBrain independent scrolling + existing V9 UI: OK')
+
+      - name: Evidence-based TrekBrain UX regression
+        run: node scripts/test_trekbrain_ux_refresh.mjs
 
       - name: Python syntax
         run: python -m compileall -q backend scripts

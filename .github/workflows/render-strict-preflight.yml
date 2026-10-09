@@ -91,6 +91,7 @@ jobs:
           python scripts/apply_route_day_visuals.py
           python scripts/apply_route_day_clarity.py
           python scripts/apply_trekbrain_scroll_ui.py
+          python scripts/apply_trekbrain_ux_refresh.py
 
       - name: Validate generated production frontend
         shell: python
@@ -114,6 +115,9 @@ jobs:
               if html.count(marker) != 1:
                   raise SystemExit(f'Couche dupliquée: {marker} x{html.count(marker)}')
           print('Production frontend OK:', p.stat().st_size, 'bytes')
+
+      - name: Verify accessible TrekBrain UI redesign
+        run: node scripts/test_trekbrain_ux_refresh.mjs
 
       - name: Validate Render deployment configuration
         shell: python
