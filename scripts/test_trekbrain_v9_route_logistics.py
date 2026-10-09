@@ -167,6 +167,31 @@ assert night3["access_mode"] == "transfer", night3
 assert "transfert" in result["stages"][2]["overnight"].casefold()
 
 
+# All four stays really connected on foot must be marked ready without
+# transfers. The same source-backed itinerary is left geometrically intact.
+real_bbox_all_walk = logistics._bbox_route_stays
+try:
+    camps_all_walk = [
+        {**item, "lat": 0.010} for item in camps
+    ]
+    logistics._bbox_route_stays = lambda _coords, category: [
+        dict(item) for item in camps_all_walk
+    ]
+    fully_walkable = v3._build(Data(), FakeLegacy())
+finally:
+    logistics._bbox_route_stays = real_bbox_all_walk
+
+assert fully_walkable["logistics"]["nights_walk_confirmed"] == 4
+assert fully_walkable["logistics"]["nights_transfer_required"] == 0
+assert fully_walkable["logistics"]["nights_missing"] == 0
+assert fully_walkable["logistics"]["walking_readiness"] == "ready_on_foot"
+assert fully_walkable["logistics"]["ready_without_transfer"] is True
+assert fully_walkable["route_preview"]["coords"] == coords
+assert not any(
+    "Transfert à organiser" in note or "Nuitées à organiser" in note
+    for note in fully_walkable["advisor_notes"]
+)
+
 # Missing stays are a normal partial-logistics state, not an exception. This
 # protects the production KeyError regression where an unresolved night had no
 # "name" field but stage rendering accessed night["name"] anyway.
