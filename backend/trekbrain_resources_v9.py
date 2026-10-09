@@ -845,6 +845,9 @@ def _missing_terrain_intent(result: dict[str, Any], intent: dict[str, Any]) -> d
     for item in water_rows:
         if not isinstance(item, dict) or _point(item) is None or not profile:
             continue
+        # Never count an explicitly non-potable source as drinking-water coverage.
+        if str(item.get("water_status") or item.get("status") or "") == "not_potable":
+            continue
         if not str(item.get("source_url") or "").startswith(("https://", "http://")):
             continue
         match = _route_match(coords, item, profile)
@@ -988,10 +991,17 @@ def _annotate_stage_resources(result: dict[str, Any]) -> dict[str, Any]:
                 + (
                     " (potable référencée)"
                     if str(item.get("status") or "") == "potable_referenced"
+                    else " (non potable : ne pas boire)"
+                    if str(item.get("status") or "") == "not_potable"
                     else " (potabilité à vérifier)"
                 )
                 for item in water[:3]
             )
+            if all(str(item.get("status") or "") == "not_potable" for item in water):
+                stage["water_notes"] += (
+                    " · Aucune eau potable identifiée pour cette étape : "
+                    "prévoir une réserve suffisante."
+                )
         else:  # Route-wide coverage cannot guarantee water on this particular day.
             stage["water_notes"] = (
                 "Aucun point d'eau OSM confirmé pour cette étape ; "
