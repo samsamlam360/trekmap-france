@@ -950,7 +950,7 @@ def _annotate_stage_resources(result: dict[str, Any]) -> dict[str, Any]:
                 )
                 for item in water[:3]
             )
-        elif ((result.get("map_resources") or {}).get("coverage") or {}).get("water") in ("not_verified", "partial"):
+        else:  # Route-wide coverage cannot guarantee water on this particular day.
             stage["water_notes"] = (
                 "Aucun point d'eau OSM confirmé pour cette étape ; "
                 "prévoir une réserve et vérifier les sources avant le départ."
@@ -965,7 +965,7 @@ def _annotate_stage_resources(result: dict[str, Any]) -> dict[str, Any]:
                 "Ravitaillement non vérifié : services cartographiques indisponibles. "
                 "Prévoir ses provisions avant le départ."
             )
-        elif ((result.get("map_resources") or {}).get("coverage") or {}).get("food") in ("not_verified", "partial"):
+        else:  # A shop on another day cannot cover this stage.
             stage["food_notes"] = (
                 "Aucun commerce vérifié pour cette étape sur le tracé ; "
                 "vérifier les possibilités de ravitaillement avant de partir."
