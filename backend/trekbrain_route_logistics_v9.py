@@ -1166,6 +1166,10 @@ def _attach_preloaded_terrain(
             return None
 
     seen_water = {key for item in water if (key := coord_key(item)) is not None}
+    seen_water_sources = {
+        str(item.get("source_url") or "")
+        for item in water if item.get("source_url")
+    }
     seen_food = {key for item in food if (key := coord_key(item)) is not None}
     seen_pois = {key for item in pois if (key := coord_key(item)) is not None}
 
@@ -1176,8 +1180,26 @@ def _attach_preloaded_terrain(
         if key is None:
             continue
         kind = str(row.get("category") or "")
+        source = str(row.get("source_url") or "")
+        if kind == "water" and (key in seen_water or (source and source in seen_water_sources)):
+            # A fresh OSM drinking_water=no must override stale, preloaded
+            # evidence of potable water for the same mapped source.
+            if str(row.get("water_status") or "") == "not_potable":
+                for existing in water:
+                    old_source = str(existing.get("source_url") or "")
+                    same_source = bool(source and source == old_source)
+                    if not same_source and coord_key(existing) != key:
+                        continue
+                    if source and old_source and source != old_source:
+                        continue
+                    existing["status"] = "not_potable"
+                    existing["water_status"] = "not_potable"
+                    existing["notes"] = "Eau signalée non potable : ne pas boire."
+            continue
         if kind == "water" and key not in seen_water:
             seen_water.add(key)
+            if source:
+                seen_water_sources.add(source)
             status = str(row.get("water_status") or "unverified")
             water.append({
                 "name": row.get("name") or "Point d'eau",
@@ -1187,7 +1209,11 @@ def _attach_preloaded_terrain(
                 "type": "Point d'eau",
                 "status": status,
                 "water_status": status,
-                "notes": "Point d'eau cartographié près du tracé ; disponibilité et potabilité à vérifier.",
+                "notes": (
+                    "Eau signalée non potable : ne pas boire."
+                    if status == "not_potable"
+                    else "Point d'eau cartographié près du tracé ; disponibilité et potabilité à vérifier."
+                ),
                 "source_url": row.get("source_url") or "",
                 "display_only": True,
             })
