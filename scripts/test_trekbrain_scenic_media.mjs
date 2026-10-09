@@ -20,7 +20,7 @@ assert.ok(photoJS.includes('IntersectionObserver'),'lazy image metadata lookup')
 assert.ok(photoJS.includes('Photo : '),'visible author credit');
 assert.ok(photoJS.includes('Crédits Wikimedia Commons'),'Commons attribution link');
 assert.ok(photoJS.includes('if(!data)return'),'do not pretend unrelated image matches');
-assert.ok(resources.includes('kind:\\x27viewpoint\\x27'),'scenic map marker exists');
+assert.ok(resources.includes("kind:'viewpoint'"),'scenic map marker exists');
 assert.ok(resources.includes('data-commons-file'),'map popup supports exact photo refs');
 assert.ok(planner.includes('scenicCards(p)'),'real scenic cards present in itinerary');
 assert.ok(planner.includes('data-view-lat'),'cards locate the exact point on the map');
