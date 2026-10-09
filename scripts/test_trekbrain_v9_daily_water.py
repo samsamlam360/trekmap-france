@@ -97,6 +97,41 @@ resources._merge_supplemented_resources(stale_plan, [unsafe_plan["water"][1] | {
 assert len(stale_plan["water"]) == 1
 assert stale_plan["water"][0]["status"] == "not_potable", stale_plan["water"]
 assert "ne pas boire" in stale_plan["water"][0]["notes"]
+
+# Route-first logistics preloads water before the final resource overlay.
+# The same OSM source can already be present as "potable" from old data.
+# New drinking_water=no evidence must NOT be discarded by coord dedup.
+from backend import trekbrain_route_logistics_v9 as lodging
+old_source = {
+    "name": "Source du sentier", "lat": 45.08, "lon": 5.0,
+    "water_status": "potable_referenced", "status": "potable_referenced",
+    "source_url": "https://www.openstreetmap.org/node/9102",
+    "notes": "Old potable",
+}
+preload_plan = {"water": [old_source], "resources": [], "points_of_interest": []}
+unsafe_row = {
+    "category": "water", "water_status": "not_potable",
+    "lat": 45.08, "lon": 5.0,
+    "source_url": "https://www.openstreetmap.org/node/9102",
+}
+lodging._attach_preloaded_terrain(preload_plan, [unsafe_row], True)
+assert len(preload_plan["water"]) == 1, preload_plan["water"]
+assert preload_plan["water"][0]["status"] == "not_potable", preload_plan
+assert "ne pas boire" in preload_plan["water"][0]["notes"], preload_plan
+
+fresh_plan = {"water": [], "resources": [], "points_of_interest": []}
+lodging._attach_preloaded_terrain(fresh_plan, [unsafe_row], True)
+assert fresh_plan["water"][0]["status"] == "not_potable", fresh_plan
+assert "ne pas boire" in fresh_plan["water"][0]["notes"], fresh_plan
+
+# The exact source identity guards against mistakenly marking a distinct
+# source at the same coordinate as non-potable.
+other_source = {
+    **old_source, "source_url": "https://www.openstreetmap.org/node/9999",
+}
+different_plan = {"water": [other_source], "resources": [], "points_of_interest": []}
+lodging._attach_preloaded_terrain(different_plan, [unsafe_row], True)
+assert different_plan["water"][0]["status"] == "potable_referenced", different_plan
 # Every other discovery endpoint continues to use its old bounded query;
 # this test does not open any network connection.
 print("Non-potable source isolation and stale-cache safety: PASS")
