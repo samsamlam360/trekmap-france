@@ -60,14 +60,27 @@ const fakeFetch=async(url,options)=>{
   network.push(String(url));
   assert.equal(options.credentials,'omit');
   assert.ok(String(url).startsWith('https://commons.wikimedia.org/w/api.php'));
-  return {ok:true,async json(){return {query:{pages:{1:{imageinfo:[{
-    mime:'image/jpeg',
-    thumburl:'https://upload.wikimedia.org/wikipedia/commons/thumb/1/1a/Example.jpg/620px-Example.jpg',
-    extmetadata:{
-      LicenseShortName:{value:'CC BY-SA 4.0'},
-      Artist:{value:'Photographe de la commune'}
+  return {
+    ok:true,
+    async json(){
+      return {
+        query:{
+          pages:{
+            1:{
+              imageinfo:[{
+                mime:'image/jpeg',
+                thumburl:'https://upload.wikimedia.org/wikipedia/commons/thumb/1/1a/Example.jpg/620px-Example.jpg',
+                extmetadata:{
+                  LicenseShortName:{value:'CC BY-SA 4.0'},
+                  Artist:{value:'Photographe de la commune'}
+                }
+              }]
+            }
+          }
+        }
+      };
     }
-  }]}}}}};}};
+  };
 };
 const context=vm.createContext({
   window:fakeWindow,document:fakeDocument,fetch:fakeFetch,
