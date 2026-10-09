@@ -173,6 +173,30 @@ def _route_day_from_progress(progress: float, boundaries: list[float]) -> int:
     return len(boundaries) - 1
 
 
+
+def _sourced_water_coverage(points: list[dict[str, Any]]) -> tuple[list[int], int]:
+    """Count only OSM water not explicitly tagged as undrinkable.
+
+    'OSM sourced' is not proof of potable water: unknown sources still need
+    verification, whereas drinking_water=no can never cover a hiking day.
+    """
+    usable = [
+        point for point in points
+        if isinstance(point, dict)
+        and point.get("kind") == "water"
+        and str(point.get("status") or "") != "not_potable"
+        and str(point.get("source_url") or "").startswith(
+            "https://www.openstreetmap.org/"
+        )
+    ]
+    days = sorted({
+        int(point["route_day"]) for point in usable
+        if isinstance(point.get("route_day"), int)
+        and point["route_day"] >= 1
+    })
+    return days, len(usable)
+
+
 def _route_match(
     coords: list[list[float]],
     item: dict[str, Any],
@@ -1332,22 +1356,7 @@ def _install_plan_overlay(app, legacy_main):
                 and point.get("source_url")
             )
             water_requested = bool(intent.get("water"))
-            water_days = sorted({
-                int(point.get("route_day"))
-                for point in points
-                if isinstance(point, dict) and point.get("kind") == "water"
-                and str(point.get("source_url") or "").startswith(
-                    "https://www.openstreetmap.org/"
-                )
-                and isinstance(point.get("route_day"), int)
-            })
-            water_markers = sum(
-                1 for point in points
-                if isinstance(point, dict) and point.get("kind") == "water"
-                and str(point.get("source_url") or "").startswith(
-                    "https://www.openstreetmap.org/"
-                )
-            )
+            water_days, water_markers = _sourced_water_coverage(points)
             food_requested = bool(intent.get("food"))
             stage_count = max(1, len(result.get("stages") or [])
                               or int(result.get("duration_days") or 1))
