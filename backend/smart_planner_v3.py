@@ -508,10 +508,12 @@ def _combined_nearby(
             seen_base.add(identity)
             status = "unverified"
             if base_cat == "water":
-                if tags.get("amenity") == "drinking_water" or tags.get("drinking_water") == "yes":
-                    status = "potable_referenced"
-                elif tags.get("drinking_water") == "no":
+                # Negative potability takes precedence over contradictory
+                # amenity labels so sources are never incorrectly declared safe.
+                if tags.get("drinking_water") == "no":
                     status = "not_potable"
+                elif tags.get("amenity") == "drinking_water" or tags.get("drinking_water") == "yes":
+                    status = "potable_referenced"
             base_items.append({
                 "name": tags.get("name") or tags.get("ref") or f"{base_cat.title()} OSM",
                 "category": base_cat,
