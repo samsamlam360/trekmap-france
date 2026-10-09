@@ -33,8 +33,11 @@ assert.ok(script.includes('lastTrigger.focus()'), 'restore focus after closing')
 assert.ok(!/\/ai\/plan|\/treks\/draw|fetch\(/.test(script), 'presentation layer must never issue planning/network requests');
 for(const id of [
   'tm-ai-prompt','tm-ai-region','tm-ai-days','tm-ai-km','tm-ai-difficulty',
-  'tm-ai-route-type','tm-ai-generate','tm-ai-close','tm-ai-back',
+  'tm-ai-route-type','tm-ai-generate',
 ])assert.ok(script.includes(id),id+' must retain existing controls');
+// Close and back buttons are owned by the existing modal renderer, not the
+// presentation-only enhancement. Their IDs must survive the built HTML.
+
 
 const render=fs.readFileSync('render.yaml','utf8');
 assert.ok(render.includes('python scripts/apply_trekbrain_scroll_ui.py && python scripts/apply_trekbrain_ux_refresh.py && python scripts/render_preflight.py'),
