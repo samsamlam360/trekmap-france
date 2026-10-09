@@ -43,4 +43,73 @@ if(fs.existsSync('frontend/index.html')){
     }
   }
 }
+
+// Exercise the real photo loader with a controlled MediaWiki response. This
+// is deliberately OFFLINE and proves exact-source licensing/caching behavior.
+const fakeWindow={};
+const network=[];
+const fakeDocument={
+  getElementById(){return null},
+  createTextNode(value){return {textContent:String(value)}},
+  createElement(tag){
+    if(tag==='img')return {tagName:'IMG',addEventListener(){}};
+    return {tagName:tag.toUpperCase(),children:[],appendChild(child){this.children.push(child);}};
+  },
+};
+const fakeFetch=async(url,options)=>{
+  network.push(String(url));
+  assert.equal(options.credentials,'omit');
+  assert.ok(String(url).startsWith('https://commons.wikimedia.org/w/api.php'));
+  return {ok:true,async json(){return {query:{pages:{1:{imageinfo:[{
+    mime:'image/jpeg',
+    thumburl:'https://upload.wikimedia.org/wikipedia/commons/thumb/1/1a/Example.jpg/620px-Example.jpg',
+    extmetadata:{
+      LicenseShortName:{value:'CC BY-SA 4.0'},
+      Artist:{value:'Photographe de la commune'}
+    }
+  }]}}}}};}};
+};
+const context=vm.createContext({
+  window:fakeWindow,document:fakeDocument,fetch:fakeFetch,
+  setTimeout,clearTimeout,AbortController,URL,console,
+});
+vm.runInContext(photoJS,context);
+assert.ok(typeof fakeWindow.TrekViewPhotos?.hydrate==='function');
+function cardFor(file){
+  const holder={
+    image:null,credit:null,
+    replaceChildren(img){this.image=img},
+    insertAdjacentElement(_position,item){this.credit=item},
+  };
+  const card={
+    isConnected:true,
+    dataset:{commonsFile:file,wikidata:''},
+    querySelector(selector){
+      if(selector==='.tm-ux-photo-media')return holder;
+      if(selector==='.tm-ux-photo-credit')return holder.credit;
+      return null;
+    },
+  };
+  return {card,holder,root:{querySelectorAll(){return [card]}}};
+}
+const photo=cardFor('Mont Aiguille.jpg');
+fakeWindow.TrekViewPhotos.hydrate(photo.root);
+await new Promise(resolve=>setTimeout(resolve,10));
+assert.equal(network.length,1,'only one Commons request for exact OSM file');
+assert.equal(photo.holder.image?.loading,'lazy');
+assert.equal(photo.holder.image?.src?.startsWith('https://upload.wikimedia.org/'),true);
+assert.equal(photo.holder.credit?.className,'tm-ux-photo-credit');
+assert.ok(photo.holder.credit.children.some(x=>x.textContent?.includes('CC BY-SA 4.0')));
+assert.ok(photo.holder.credit.children.some(x=>x.textContent?.includes('Photographe de la commune')));
+assert.ok(photo.holder.credit.children.some(x=>x.href?.startsWith('https://commons.wikimedia.org/wiki/File:')));
+fakeWindow.TrekViewPhotos.hydrate(photo.root);
+await new Promise(resolve=>setTimeout(resolve,5));
+assert.equal(network.length,1,'image already loaded should not be re-fetched');
+const noEvidence=cardFor('');
+fakeWindow.TrekViewPhotos.hydrate(noEvidence.root);
+await new Promise(resolve=>setTimeout(resolve,5));
+assert.equal(network.length,1,'no reference must never trigger a guessed photo');
+assert.equal(noEvidence.holder.image,null);
+console.log('Commons photo: trusted thumbnail, author+license, in-memory cache and no false images PASS');
+
 console.log('Mobile map and source-matched licensed scenic photos: static/offline UI checks PASS');
