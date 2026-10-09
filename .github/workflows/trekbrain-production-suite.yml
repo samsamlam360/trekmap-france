@@ -67,7 +67,7 @@ jobs:
         shell: python
         run: |
           import glob, json, os, statistics
-          summary=['# TrekBrain: production benchmarks run serially','','| Suite | Valid | Quality | Mean latency | Food markers | Food days missing | Water days missing | Cached POIs |','|---|---:|---:|---:|---:|---:|---:|---:|']
+          summary=['# TrekBrain: production benchmarks run serially','','| Suite | Valid | Quality | Mean latency | Food markers | Food days missing | Water days missing | Walk nights | Transfer nights | Missing nights | Cached POIs |','|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|']
           for filename in sorted(glob.glob('benchmark-results/**/trekbrain-production-benchmark.json',recursive=True)):
               rows=json.load(open(filename,encoding='utf-8'))['scenarios']
               scores=[float(x['quality']) for x in rows if isinstance(x.get('quality'),(int,float))]
@@ -79,8 +79,11 @@ jobs:
                   f"{sum(int(x.get('food_markers') or 0) for x in rows)} | "
                   f"{sum(len(x.get('food_days_missing') or []) for x in rows)} | "
                   f"{sum(len(x.get('water_days_missing') or []) for x in rows)} | "
+                  f"{sum(int(x.get('nights_walk_confirmed') or 0) for x in rows)} | "
+                  f"{sum(int(x.get('nights_transfer_only') or 0) for x in rows)} | "
+                  f"{sum(int(x.get('nights_unresolved') or 0) for x in rows)} | "
                   f"{sum(int(x.get('osm_cache_hits') or 0) for x in rows)} |"
-                  if scores and times else f"| {name} | n/a | n/a | n/a | n/a | n/a | n/a | n/a |"
+                  if scores and times else f"| {name} | n/a | n/a | n/a | n/a | n/a | n/a | n/a | n/a | n/a | n/a |"
               )
           report='\n'.join(summary)+'\n'
           print(report)
