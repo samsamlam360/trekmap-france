@@ -463,7 +463,12 @@ def main():
                 f"production build mismatch: {status_payload.get('build_commit')} != {EXPECTED_SHA}"
             )
 
+        last_started = None
+        interval = max(0.0, min(60.0, float(os.getenv("TREKBRAIN_BENCHMARK_MIN_INTERVAL_SECONDS", "20"))))
         for case in SCENARIOS:
+            if last_started is not None:
+                time.sleep(max(0.0, interval - (time.monotonic() - last_started)))
+            last_started = time.monotonic()
             payload = {k: v for k, v in case.items() if k in {
                 "prompt", "region", "days", "daily_km", "difficulty", "route_type",
                 "require_transit", "require_water", "require_accommodation", "require_food",

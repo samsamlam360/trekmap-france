@@ -68,3 +68,41 @@ finally:
     free._overpass = real_free_overpass
 
 print("TrekBrain v9 timeout circuit breakers: OK")
+
+# A provider 429 must stop alternative Directions calls, survive the next
+# user request's timeout reset, expire, and leave Matrix independent.
+clock = [100.0]
+original_clock = cb.time.monotonic
+quota_calls = {"route": 0, "matrix": 0}
+def limited_route(*args):
+    quota_calls["route"] += 1
+    return None, "OpenRouteService HTTP 429", 429
+def healthy_matrix(*args):
+    quota_calls["matrix"] += 1
+    return {"distances": [[0, 1], [1, 0]], "fallback": False}
+try:
+    cb.time.monotonic = lambda: clock[0]
+    cb.reset_circuit_breakers()
+    cb._RATE_LIMITED_UNTIL.update(ors=0, matrix=0)
+    cb._INSTALLED = False
+    quota_ors = SimpleNamespace(_request_route=limited_route, get_distance_matrix=healthy_matrix)
+    quota_roundtrip = SimpleNamespace(_roundtrip_request=slow_roundtrip)
+    cb.install_circuit_breakers(SimpleNamespace(_overpass=slow_overpass), quota_ors, quota_roundtrip)
+    assert quota_ors._request_route([], None)[2] == 429
+    cb.reset_circuit_breakers()
+    assert quota_ors._request_route([], None)[2] == 429
+    assert "429" in quota_roundtrip._roundtrip_request({}, 20, 1)[1]
+    assert quota_calls["route"] == 1
+    assert not quota_ors.get_distance_matrix([])["fallback"]
+    clock[0] = 161
+    quota_ors._request_route([], None)
+    assert quota_calls["route"] == 2
+    cb._report_rate_limit("matrix", "OpenRouteService Matrix HTTP 429")
+    assert quota_ors.get_distance_matrix([])["fallback"]
+    assert quota_calls["matrix"] == 1
+finally:
+    cb.time.monotonic = original_clock
+    cb._RATE_LIMITED_UNTIL.update(ors=0, matrix=0)
+    cb.reset_circuit_breakers()
+    free._overpass = real_free_overpass
+print("ORS 429: shared Directions cooldown, reset resistance, expiry and Matrix isolation: OK")

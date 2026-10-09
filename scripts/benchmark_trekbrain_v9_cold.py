@@ -46,6 +46,8 @@ def child(index):
     try:
         result = _plan_endpoint()(request, {"id": 0, "username": "cold-audit", "is_admin": False})
         row = _summary(name, result, time.perf_counter()-started)
+        row["quality_acceptable"] = not bool(row.get("blockers"))
+        row["nights"] = (result.get("logistics") or {}).get("nights") or []
         row["coverage"] = (result.get("map_resources") or {}).get("coverage") or {}
         row["osm_cache"] = ((result.get("planner") or {}).get("resource_overlay") or {}).get("osm_cache") or {}
         row["cache_isolation_valid"] = int(row["osm_cache"].get("count") or 0) == 0
@@ -59,7 +61,11 @@ def child(index):
 
 def main():
     rows = []
+    last_started = None
     for index, case in enumerate(CASES):
+        if last_started is not None:
+            time.sleep(max(0.0, 20.0 - (time.monotonic() - last_started)))
+        last_started = time.monotonic()
         try:
             proc = subprocess.run([sys.executable, str(Path(__file__).resolve()), "--case", str(index)],
                 env=isolated_environment(), cwd=ROOT, capture_output=True, text=True, timeout=90)
