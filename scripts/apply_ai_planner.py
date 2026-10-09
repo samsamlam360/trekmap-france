@@ -321,7 +321,7 @@ block = r'''<!-- TREKMAP_AI_EXPERIENCE_START -->
     const route=p.route_preview||{},stages=Array.isArray(p.stages)?p.stages:[],water=Array.isArray(p.water)?p.water:[],accom=Array.isArray(p.accommodations)?p.accommodations:[],pois=Array.isArray(p.points_of_interest)?p.points_of_interest:[],sources=Array.isArray(p.sources)?p.sources:[];
     const limitations=p.confidence?.limitations||[];
     $('tm-ai-content').innerHTML=`
-      <div class="tm-ai-titlebar"><div><h2>${esc(p.title||'Trek proposé')}</h2><p>${esc(p.summary||'')}</p></div><button class="tm-ai-map-btn" id="tm-ai-back" type="button">← Modifier</button></div>
+      <div class="tm-ai-titlebar"><div><h2>${esc(p.title||'Trek proposé')}</h2><p>${esc(p.start?.name&&p.end?.name?(p.start.name===p.end.name?'Boucle au départ de '+p.start.name:p.start.name+' → '+p.end.name):'Parcours proposé · informations de terrain à vérifier')}</p></div><button class="tm-ai-map-btn" id="tm-ai-back" type="button">← Modifier</button></div>
       <div class="tm-ai-badges"><span class="tm-ai-badge">${esc(p.region||'France')}</span><span class="tm-ai-badge">${esc(difficultyLabel[p.difficulty]||p.difficulty||'Moyen')}</span><span class="tm-ai-badge">${esc(p.route_type||'Trek')}</span><span class="tm-ai-badge">${esc(p.best_season||'Saison à vérifier')}</span></div>
       <div class="tm-ai-stats">
         <div class="tm-ai-stat"><small>Distance vérifiée</small><b>${Number(route.distance_km||0).toFixed(1)} km</b></div>
@@ -337,7 +337,7 @@ block = r'''<!-- TREKMAP_AI_EXPERIENCE_START -->
       ${pois.length?`<details class="tm-ai-section tm-ux-other-pois"><summary>Autres points d'intérêt (${pois.length})</summary><div class="tm-ai-list">${pois.slice(0,12).map(x=>`<div class="tm-ai-item"><b>${esc(x.name)}</b><small>${esc(x.type)}</small></div>`).join('')}</div></details>`:''}
       <section class="tm-ai-section"><h3>Transports</h3><div class="tm-ai-item"><b>Aller</b><small>${esc(p.transport?.outbound||'À vérifier')}</small></div><div class="tm-ai-item"><b>Retour</b><small>${esc(p.transport?.return||'À vérifier')}</small></div><div class="tm-ai-item"><small>${esc(p.transport?.notes||'')}</small></div></section>
       ${limitations.length?`<details class="tm-ux-additional-checks tm-ai-section"><summary>Autres vérifications et limites (${limitations.length})</summary><div class="tm-ai-warning">${limitations.map(x=>'• '+esc(x)).join('<br>')}</div></details>`:''}
-      ${sources.length?`<section class="tm-ai-section"><h3>Sources</h3>${sources.map(sourceLink).join('')}</section>`:''}
+      ${sources.length?`<details class="tm-ai-section tm-ux-other-pois"><summary>Sources du trek (${sources.length})</summary>${sources.map(sourceLink).join('')}</details>`:''}
       <div class="tm-ai-refine-box"><b style="font-size:12px">Modifier avec l'IA</b><textarea id="tm-ai-refine-text" placeholder="Ex. raccourcis le jour 2, trouve une arrivée avec une gare, privilégie les campings..."></textarea><div class="tm-ai-refine-actions"><button id="tm-ai-refine" type="button">✨ Recalculer</button></div></div>
       <div class="tm-ai-actions"><button class="tm-ai-map-btn" id="tm-ai-preview" type="button">🗺️ Voir sur la carte</button><button id="tm-ai-save" type="button">Enregistrer dans TrekMap</button></div>`;
     $('tm-ai-back').onclick=()=>shell.classList.remove('has-result');
