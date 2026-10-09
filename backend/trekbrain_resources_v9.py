@@ -794,10 +794,21 @@ def _missing_terrain_intent(result: dict[str, Any], intent: dict[str, Any]) -> d
         item for item in (result.get("points_of_interest") or [])
         if isinstance(item, dict) and _resource_kind(item) == "food"
     )
-    adjusted["water"] = bool((intent or {}).get("water") and not located_near_route(water_rows, "water"))
     # One supermarket at the trailhead does not cover every day of a long
     # trek. Check evidence day by day before deciding to skip OSM discovery.
     days = max(1, int(result.get("duration_days") or len(result.get("stages") or []) or 1))
+    # A single water point cannot cover a multi-day trek. Only source-linked,
+    # route-close points can suppress discovery for their own walking day.
+    covered_water_days: set[int] = set()
+    for item in water_rows:
+        if not isinstance(item, dict) or _point(item) is None or not profile:
+            continue
+        if not str(item.get("source_url") or "").startswith(("https://", "http://")):
+            continue
+        match = _route_match(coords, item, profile)
+        if match and match[0] <= RESOURCE_LIMITS["water"]:
+            covered_water_days.add(min(days, int(math.floor(match[1] * days)) + 1))
+    adjusted["water"] = bool((intent or {}).get("water") and len(covered_water_days) < days)
     covered_food_days: set[int] = set()
     for item in food_rows:
         if not isinstance(item, dict) or _point(item) is None:

@@ -234,7 +234,7 @@ try:
 finally:
     resources_module.v7.v5.v3._postroute_corridor_resources = real_postroute_resources
 
-assert captured_post_intent.get("water") is False, captured_post_intent
+assert captured_post_intent.get("water") is True, captured_post_intent
 assert captured_post_intent.get("sleep") is False, captured_post_intent
 # A day-2 grocery does not settle food needs for day 1.
 assert captured_post_intent.get("food") is True, captured_post_intent
@@ -250,6 +250,11 @@ def forbidden_complete_lookup(boundaries, intent, existing_items):
 resources_module.v7.v5.v3._postroute_corridor_resources = forbidden_complete_lookup
 try:
     complete_plan = sample_plan()
+    complete_plan["water"].append({
+        "name": "Fontaine jour 2", "lat": 45.075, "lon": 5.075,
+        "source_url": "https://www.openstreetmap.org/node/204",
+        "water_status": "potable_referenced",
+    })
     complete_plan["resources"] = [{
         "name": "Épicerie proche",
         "type": "Ravitaillement",
@@ -361,17 +366,13 @@ finally:
     v3_module._request_json = real_request_json
 
 assert exact_water and exact_water["water_status"] == "potable_referenced", exact_water
-assert captured_photon.get("q") == "fontaine", captured_photon
-assert captured_photon.get("osm_tag") == "amenity:drinking_water", captured_photon
-assert "include" not in captured_photon, captured_photon
+assert "q" not in captured_photon, captured_photon
+assert set(captured_photon["osm_tag"]) == {
+    "amenity:drinking_water", "man_made:water_tap", "natural:spring"
+}, captured_photon
+assert captured_photon["radius"] == 5.5, captured_photon
 assert captured_photon.get("_cache_empty") is False, captured_photon
-assert captured_photon.get("bbox"), captured_photon
-try:
-    west, south, east, north = map(float, str(captured_photon["bbox"]).split(","))
-except Exception as exc:
-    raise AssertionError(f"invalid Photon bbox: {captured_photon!r}") from exc
-assert west < 5.0 < east and south < 45.0 < north, captured_photon
-assert (east - west) < 0.20 and (north - south) < 0.20, captured_photon
+
 
 captured_refuge = {}
 def fake_refuge_request(url, *, params=None, **kwargs):

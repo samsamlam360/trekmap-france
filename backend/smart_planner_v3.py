@@ -1052,9 +1052,19 @@ def _photon_anchor_resource(anchor, category: str, osm_tags, radius_km: float, q
     }
     if primary_osm_tag and not query_override:
         params["osm_tag"] = primary_osm_tag
+    request_url = PHOTON_URL
+    if category == "water" and not query_override:
+        # Reverse category search also finds unnamed drinking-water points.
+        # Keep the same single-request budget and strict OSM validation below.
+        request_url = PHOTON_URL.rstrip("/").removesuffix("/api") + "/reverse"
+        params = {
+            "lat": round(lat, 6), "lon": round(lon, 6),
+            "radius": min(5.5, float(radius_km)), "limit": 20, "lang": "fr",
+            "osm_tag": tags,
+        }
     try:
         payload = _request_json(
-            PHOTON_URL,
+            request_url,
             params=params,
             timeout=1.4,
             ttl=21600,
@@ -1154,7 +1164,8 @@ def _postroute_corridor_resources(boundaries, intent, existing_items):
 
     existing_items = list(existing_items or [])
     stays = [x for x in existing_items if x.get("category") in {"camping", "refuge", "lodging"}]
-    waters = [x for x in existing_items if x.get("category") == "water"]
+    waters = [x for x in existing_items if x.get("category") == "water"
+              and re.fullmatch(r"https://www\.openstreetmap\.org/(node|way|relation)/[1-9][0-9]*", str(x.get("source_url") or ""))]
     # Only source-linked OSM shops can suppress a first-visit discovery.
     # Guessed map coordinates from upstream planners are not evidence that a
     # village's actual grocery has already been checked.
@@ -1195,11 +1206,16 @@ def _postroute_corridor_resources(boundaries, intent, existing_items):
     # last intermediate stages in the existing six-request wave.
     food_anchors.extend(interiors)
 
-    for boundary in interiors:
+    # Include the trailhead and every overnight area, even on a one-day walk.
+    # The shared six-call cap still bounds the wave; never query a closed loop's
+    # identical start/finish twice.
+    for boundary in boundaries:
         if intent.get("water") and _closest(waters, boundary, 4.5) is None:
-            water_jobs.append((boundary, "water", (
-                "amenity:drinking_water", "man_made:water_tap", "natural:spring"
-            ), 5.5))
+            if not any(_dist(boundary, job[0]) < 0.25 for job in water_jobs):
+                water_jobs.append((boundary, "water", (
+                    "amenity:drinking_water", "man_made:water_tap", "natural:spring"
+                ), 5.5))
+    for boundary in interiors:
         if (
             intent.get("sleep")
             and intent.get("accommodation") != "bivouac"

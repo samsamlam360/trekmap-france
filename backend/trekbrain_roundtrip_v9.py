@@ -812,6 +812,19 @@ def _recover_unranked_oversized_roundtrip(
         row for row in rows
         if feasible_low * 0.90 <= float(row[1].get("distance") or 0) <= feasible_high + 0.35
     ]
+    if not feasible:
+        # The fast planner replaces _best_roundtrip, so its raw recovery must
+        # also reach the existing waypoint fallback after Matrix has no usable
+        # cycle. Every segment is routed; never fabricate or stretch geometry.
+        # _polygon_loop_candidates stops on the first feasible loop (max four).
+        for candidate in _polygon_loop_candidates(
+            start, target_km, daily_min, daily_max, days, v3
+        ):
+            add(candidate)
+        feasible = [
+            row for row in rows
+            if feasible_low * 0.90 <= float(row[1].get("distance") or 0) <= feasible_high + 0.35
+        ]
     pool = feasible or rows
     pool.sort(key=lambda row: row[0])
     selected = pool[0][1]

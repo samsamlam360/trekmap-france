@@ -23,14 +23,14 @@ assert missing == {"water": True, "food": True}, (
 assert resources._missing_terrain_intent(
     {**route, "water": [{"lat": 48.005, "lon": 2.005}]},
     {"water": True, "food": True},
-) == {"water": False, "food": True}, "Unsourced food is still missing"
+) == {"water": True, "food": True}, "Unsourced water and food are still missing"
 sourced = {
     **route,
     "resources": [{
         **route["resources"][0],
         "source_url": "https://www.openstreetmap.org/node/345678",
     }],
-    "water": [{"lat": 48.005, "lon": 2.005}],
+    "water": [{"lat": 48.005, "lon": 2.005, "source_url": "https://www.openstreetmap.org/node/345679"}],
 }
 assert resources._missing_terrain_intent(
     sourced, {"water": True, "food": True}
