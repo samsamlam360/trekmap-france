@@ -126,4 +126,35 @@ assert.equal(network.length,1,'no reference must never trigger a guessed photo')
 assert.equal(noEvidence.holder.image,null);
 console.log('Commons photo: trusted thumbnail, author+license, in-memory cache and no false images PASS');
 
+
+// Exercise mobile collapse without a browser or remote map-tile provider.
+const mapHandlers={};
+let popupPadding=null;
+const fakeLeafletMap={
+  on(name,handler){mapHandlers[name]=handler},
+  panInside(point,options){popupPadding={point,options}},
+};
+const mobileDetails=[{open:true},{open:true}];
+const focusDocument={querySelectorAll(){return mobileDetails}};
+const focusWindow={innerWidth:375};
+vm.runInNewContext(focusJS,{
+  window:focusWindow,map:fakeLeafletMap,document:focusDocument,
+  setTimeout,console
+});
+assert.ok(fakeLeafletMap._trekMapMobileFocusBound,'map listeners should bind once');
+assert.ok(typeof mapHandlers.movestart==='function');
+assert.ok(typeof mapHandlers.zoomstart==='function');
+assert.ok(typeof mapHandlers.popupopen==='function');
+mapHandlers.movestart();
+assert.deepEqual(mobileDetails.map(x=>x.open),[false,false],'map movement must compact both panels');
+mobileDetails.forEach(x=>x.open=true);
+mapHandlers.popupopen({popup:{getLatLng(){return [45.8,5.5]}}});
+assert.deepEqual(mobileDetails.map(x=>x.open),[false,false],'popup should free map space');
+assert.ok(popupPadding?.options?.paddingBottomRight?.[1]>=120,'popup must clear bottom nav');
+focusWindow.innerWidth=1100;
+mobileDetails.forEach(x=>x.open=true);
+mapHandlers.zoomstart();
+assert.deepEqual(mobileDetails.map(x=>x.open),[true,true],'desktop legends stay expanded');
+console.log('Mobile map: pan/zoom compact panels, popup safe area, desktop unaffected PASS');
+
 console.log('Mobile map and source-matched licensed scenic photos: static/offline UI checks PASS');
