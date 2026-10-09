@@ -99,3 +99,33 @@ finally:
 assert len(photon_rows) >= 3, photon_rows
 assert {x["name"] for x in photon_rows} >= {"Camping Photon A", "Camping Photon B", "Camping Photon C"}
 print("Accommodation discovery rescue: OK")
+
+# Names, street addresses, malformed coordinates and missing OSM identities
+# must never turn into campsites or refuges when the primary lookup fails.
+for category, key, value in [("camping", "tourism", "camp_site"), ("refuge", "tourism", "alpine_hut")]:
+    valid = {"osm_type": "N", "osm_id": 90, "osm_key": key, "osm_value": value, "name": "Étape"}
+    candidates = [valid,
+        dict(valid, osm_key="shop", osm_value="outdoor", name="Camping Refuge"),
+        dict(valid, osm_key="highway", osm_value="residential", name="Rue du Refuge Camping"),
+        dict(valid, osm_id=None), dict(valid, osm_type=""), dict(valid, osm_id=-1)]
+    features = [{"geometry": {"coordinates": [-1.36, 48.66]}, "properties": row} for row in candidates]
+    features.append({"geometry": {"coordinates": [float("nan"), 48.66]}, "properties": valid})
+    free._request_json = lambda *a, **k: {"features": features}
+    try:
+        found = rescue._photon_stays(START, category, 30)
+        assert len(found) == 1, found
+        assert found[0]["name"] == "Étape"
+    finally:
+        free._request_json = old_request
+    rows = [{"lat": 48.66, "lon": -1.36, "osm_type": "node", "osm_id": 90,
+             "category": key, "type": value, "display_name": "Étape"},
+            {"lat": 48.66, "lon": -1.36, "osm_type": "node", "osm_id": 91,
+             "category": "shop", "type": "outdoor", "display_name": "Camping Refuge"}]
+    free._request_json = lambda *a, **k: rows
+    try:
+        found = rescue._nominatim_stays(START, category, 30)
+        assert len(found) == 1, found
+        assert found[0]["name"] == "Étape"
+    finally:
+        free._request_json = old_request
+print("Accommodation evidence validation: OK")
