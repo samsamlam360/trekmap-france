@@ -53,4 +53,92 @@ try:
     assert len(seen) <= 6 and {'water','food','stay','transit'} <= {kind for _,kind in seen},seen
 finally:
     planner._photon_anchor_resource = old_lookup
-print('Daily water: partial/complete/unsourced, unnamed reverse search, outage, one-day and bounded wave: PASS')
+# New-region regression: long routes must distribute OSM water quotas
+# along the walked line without extra provider requests. A non-potable
+# spring stays visible but does NOT count as drinking-water coverage.
+from backend import free_planner_v2 as free
+long_plan = {
+    "duration_days": 6,
+    "stages": [{"day": i} for i in range(1, 7)],
+    "route_preview": {"coords": [[45 + i * 0.06, 5] for i in range(8)]},
+    "water": [],
+    "accommodations": [],
+}
+old_request = free._request_json
+captured = []
+def fake_osm_water(url, **kwargs):
+    query = kwargs["data"]["data"]
+    captured.append(query)
+    assert query.count("out center tags 36;") == 6, query
+    assert query.count("(around:4500,") == 18, query
+    assert "out center tags 220;" not in query
+    assert kwargs["cache_empty"] is False
+    return {"elements": [
+        {"type": "node", "id": 10001, "lat": 45.005, "lon": 5.0,
+         "tags": {"amenity": "drinking_water", "name": "Fontaine au départ"}},
+        {"type": "node", "id": 10002, "lat": 45.37, "lon": 5.0,
+         "tags": {"natural": "spring", "drinking_water": "no",
+                  "name": "Source non potable"}},
+    ]}
+free._request_json = fake_osm_water
+try:
+    diagnostics = {}
+    found_water = resources._bbox_route_water_food(
+        long_plan, {"water": True}, diagnostics
+    )
+finally:
+    free._request_json = old_request
+assert len(captured) == 1, captured
+assert diagnostics["water_segments"] == 6, diagnostics
+assert diagnostics["attempts"] == 1, diagnostics
+assert len(found_water) == 2, found_water
+assert {w["water_status"] for w in found_water} == {
+    "potable_referenced", "not_potable"
+}, found_water
+
+only_unsafe = {**long_plan, "water": [found_water[1]]}
+assert resources._missing_terrain_intent(
+    only_unsafe, {"water": True}
+)["water"] is True
+display_plan = resources.enrich_resources(
+    {**long_plan, "water": found_water}
+)
+water_points = [
+    item for item in display_plan["map_resources"]["points"]
+    if item["kind"] == "water"
+]
+assert {p["status"] for p in water_points} == {
+    "potable_referenced", "not_potable"
+}, water_points
+resources._annotate_stage_resources(display_plan)
+assert "potable référencée" in display_plan["stages"][0]["water_notes"]
+assert any(
+    "non potable" in stage["water_notes"]
+    and "Aucune eau potable" in stage["water_notes"]
+    for stage in display_plan["stages"]
+), display_plan["stages"]
+assert any(
+    "Aucun point d'eau OSM confirmé" in stage["water_notes"]
+    for stage in display_plan["stages"]
+), display_plan["stages"]
+
+# One-day routes retain the cheap legacy bbox rather than the segmented
+# search and do not increase the cost of the common short hike.
+short_plan = {
+    **long_plan,
+    "duration_days": 1,
+    "stages": [{"day": 1}],
+    "route_preview": {"coords": long_plan["route_preview"]["coords"][:2]},
+}
+seen_short = []
+free._request_json = lambda _url, **kwargs: (
+    seen_short.append(kwargs["data"]["data"]) or {"elements": []}
+)
+try:
+    resources._bbox_route_water_food(short_plan, {"water": True})
+finally:
+    free._request_json = old_request
+assert seen_short and "out center tags 90;" in seen_short[0], seen_short
+assert "out center tags 36;" not in seen_short[0], seen_short
+
+print('Daily water: source evidence, 6-stage quota fairness, potability safety, warnings, and bounded calls: PASS')
