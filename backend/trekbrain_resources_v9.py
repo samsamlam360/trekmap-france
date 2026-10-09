@@ -592,7 +592,7 @@ def _bbox_route_water_food(
             f"nwr{flt}({south:.6f},{west:.6f},{north:.6f},{east:.6f});"
             for flt in filters
         )
-        statements.append(f"({clauses});out center tags 90;")
+        statements.append(f"({clauses});out center tags 220;")
 
     if intent.get("food"):
         cumulative = [0.0]
