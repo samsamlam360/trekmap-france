@@ -126,6 +126,12 @@ block = r'''<!-- TREKMAP_TREKBRAIN_UX_2026_START -->
 }
 #tm-ai-overlay #tm-ai-generate:hover:not(:disabled) {background:var(--tb-green-dark)}
 #tm-ai-overlay .tm-ux-cta-help {font-size:12px;color:#4c6858;text-align:center;margin:9px 0 13px;line-height:1.4}
+#tm-ai-overlay .tm-ux-mobile-result-nav {display:none}
+#tm-ai-overlay .tm-ux-mobile-result-nav button {
+  min-height:47px;border:1px solid #b9d5c5;border-radius:12px;
+  padding:10px 13px;background:#fff;color:#14533c;font-size:14px;font-weight:800;
+}
+#tm-ai-overlay .tm-ux-mobile-result-nav .tm-ux-mobile-close {min-width:86px}
 #tm-ai-overlay #tm-ai-manual {
   color:var(--tb-green-dark);min-height:48px;font-size:14px;
   border:1px solid #ccdfd1;line-height:1.4;
@@ -230,7 +236,12 @@ block = r'''<!-- TREKMAP_TREKBRAIN_UX_2026_START -->
   #tm-ai-overlay .tm-ai-head {margin-bottom:20px}
   #tm-ai-overlay .tm-ai-stats {grid-template-columns:1fr 1fr}
   #tm-ai-overlay .tm-ai-titlebar {flex-wrap:wrap}
-  #tm-ai-overlay #tm-ai-back {order:-1;flex:0 0 auto}
+  #tm-ai-overlay #tm-ai-back {display:none}
+  #tm-ai-overlay .tm-ai-shell.has-result .tm-ux-mobile-result-nav {
+    display:flex;justify-content:space-between;align-items:center;gap:9px;
+    position:sticky;top:-4px;z-index:8;padding:7px 0 11px;
+    background:var(--tb-canvas);
+  }
   #tm-ai-overlay .tm-v9-grid {grid-template-columns:1fr}
   #tm-ai-overlay .tm-ai-actions {padding-bottom:calc(12px + env(safe-area-inset-bottom,0px))}
   #tm-ai-overlay .tm-ai-checks {grid-template-columns:1fr 1fr}
@@ -369,6 +380,29 @@ block = r'''<!-- TREKMAP_TREKBRAIN_UX_2026_START -->
     var changing=document.getElementById("tm-ai-progress-text");
     if(changing)changing.setAttribute("aria-live","off");
   }
+  /* On mobile the original X lives in the hidden request panel.
+     Offer one-tap edit and close actions in the visible results panel. */
+  var mobileNav=el("nav","tm-ux-mobile-result-nav");
+  mobileNav.setAttribute("aria-label","Actions du résultat TrekBrain");
+  var editResult=el("button","tm-ux-mobile-edit","← Modifier la demande");
+  editResult.type="button";
+  editResult.addEventListener("click",function(){
+    var originalBack=document.getElementById("tm-ai-back");
+    if(originalBack)originalBack.click();
+    else overlay.querySelector(".tm-ai-shell").classList.remove("has-result");
+    if(prompt && prompt.getClientRects().length)prompt.focus();
+  });
+  var closeResult=el("button","tm-ux-mobile-close","Fermer ×");
+  closeResult.type="button";
+  closeResult.setAttribute("aria-label","Fermer TrekBrain");
+  closeResult.addEventListener("click",function(){
+    var originalClose=document.getElementById("tm-ai-close");
+    if(originalClose)originalClose.click();
+  });
+  mobileNav.appendChild(editResult);
+  mobileNav.appendChild(closeResult);
+  result.insertBefore(mobileNav,result.firstChild);
+
   var lastTrigger=null;
   document.addEventListener("click",function(ev){
     var target=ev.target;
