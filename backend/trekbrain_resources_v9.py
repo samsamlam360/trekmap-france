@@ -342,7 +342,7 @@ def enrich_resources(result: dict[str, Any]) -> dict[str, Any]:
             "lon": round(point[1], 6),
             "route_day": route_day,
             "distance_to_route_km": round(distance, 2),
-            "status": str(item.get("status") or "")[:80],
+            "status": str(item.get("status") or (item.get("water_status") if kind == "water" else "") or "")[:80],
             "notes": str(item.get("notes") or "")[:500],
             "source_url": str(item.get("source_url") or "")[:1000],
         })
@@ -581,18 +581,60 @@ def _bbox_route_water_food(
 
     statements = []
     if intent.get("water"):
-        # Keep the established water lookup unchanged. The independent quotas
-        # ensure that fountains cannot displace grocery shops in the response.
         filters = (
             '["amenity"="drinking_water"]',
             '["man_made"="water_tap"]',
             '["natural"="spring"]',
         )
-        clauses = "".join(
-            f"nwr{flt}({south:.6f},{west:.6f},{north:.6f},{east:.6f});"
-            for flt in filters
+        cumulative_water = [0.0]
+        for first, second in zip(valid, valid[1:]):
+            cumulative_water.append(
+                cumulative_water[-1] + _distance_km(first, second)
+            )
+        water_km = cumulative_water[-1]
+        water_days = max(
+            1, int(result.get("duration_days") or len(result.get("stages") or []) or 1)
         )
-        statements.append(f"({clauses});out center tags 220;")
+        # Keep the cheap original query for short routes. For multi-day
+        # itineraries, a single town could otherwise consume all 90 results
+        # before the isolated days' fountains and springs are returned.
+        if water_km <= 25.0 or water_days <= 1:
+            clauses = "".join(
+                f"nwr{flt}({south:.6f},{west:.6f},{north:.6f},{east:.6f});"
+                for flt in filters
+            )
+            statements.append(f"({clauses});out center tags 90;")
+        else:
+            # At most six route-length-balanced segments and 36 results per
+            # segment. This remains ONE bounded HTTP request to Overpass.
+            # The filter set is unchanged; springs are not marked potable.
+            pieces = min(6, max(2, water_days, int(math.ceil(water_km / 25.0))))
+            for piece in range(pieces):
+                vertices = []
+                for subdivision in range(6):
+                    target = water_km * (piece + subdivision / 5) / pieces
+                    j = next(
+                        (idx for idx in range(1, len(cumulative_water))
+                         if cumulative_water[idx] >= target),
+                        len(cumulative_water) - 1,
+                    )
+                    edge = cumulative_water[j] - cumulative_water[j - 1]
+                    fraction = (target - cumulative_water[j - 1]) / edge if edge > 0 else 0.0
+                    point = (
+                        valid[j - 1][0] + (valid[j][0] - valid[j - 1][0]) * fraction,
+                        valid[j - 1][1] + (valid[j][1] - valid[j - 1][1]) * fraction,
+                    )
+                    if not vertices or _distance_km(vertices[-1], point) >= 0.03:
+                        vertices.append(point)
+                if len(vertices) < 2:
+                    continue
+                line = ",".join(f"{lat:.6f},{lon:.6f}" for lat, lon in vertices)
+                clauses = "".join(
+                    f"nwr{flt}(around:4500,{line});" for flt in filters
+                )
+                statements.append(f"({clauses});out center tags 36;")
+                if diagnostics is not None:
+                    diagnostics["water_segments"] = diagnostics.get("water_segments", 0) + 1
 
     if intent.get("food"):
         cumulative = [0.0]
