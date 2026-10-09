@@ -103,8 +103,13 @@ block = r'''<!-- TREKMAP_TREKBRAIN_UX_2026_START -->
 }
 #tm-ai-overlay .tm-ux-advanced summary {
   cursor:pointer;list-style:none;display:flex;align-items:center;
-  justify-content:space-between;gap:12px;min-height:50px;
+  flex-wrap:wrap;justify-content:space-between;gap:8px 12px;min-height:50px;
   padding:12px 14px;font-size:14px;line-height:1.4;font-weight:800;color:#174d38;
+}
+#tm-ai-overlay .tm-ux-selected {
+  flex:1 1 100%;order:3;display:block;
+  font-size:12px;line-height:1.5;font-weight:600;color:#426353;
+  overflow-wrap:anywhere;
 }
 #tm-ai-overlay .tm-ux-advanced summary::-webkit-details-marker {display:none}
 #tm-ai-overlay .tm-ux-advanced summary::after {content:"＋";font-size:18px;font-weight:600}
@@ -355,8 +360,31 @@ block = r'''<!-- TREKMAP_TREKBRAIN_UX_2026_START -->
   if(difficulty && routeType && checks){
     var advanced=el("details","tm-ux-advanced");
     advanced.id="tm-ux-advanced";
-    var summary=el("summary","","Personnaliser mon trek · critères et ressources");
-    summary.setAttribute("aria-label","Afficher les critères avancés et les ressources recherchées");
+    var summary=el("summary","","Personnaliser mon trek");
+    /* A visible overview prevents users from forgetting which defaults
+       will be sent, while preserving progressive disclosure. Text remains
+       accessible to screen readers via the native <summary> element. */
+    var selected=el("span","tm-ux-selected");
+    selected.id="tm-ux-settings-summary";
+    var requirementIds=[
+      ["tm-ai-transit","train/bus"],
+      ["tm-ai-water","eau"],
+      ["tm-ai-sleep","nuitées"],
+      ["tm-ai-food","ravitaillement"]
+    ];
+    function updateSummary(){
+      var active=requirementIds.filter(function(pair){
+        var input=document.getElementById(pair[0]);
+        return input && input.checked;
+      }).map(function(pair){return pair[1]});
+      var kind=String(routeType.selectedOptions && routeType.selectedOptions[0]
+        ?routeType.selectedOptions[0].textContent:routeType.value||"Parcours");
+      var level=String(difficulty.selectedOptions && difficulty.selectedOptions[0]
+        ?difficulty.selectedOptions[0].textContent:difficulty.value||"");
+      selected.textContent=kind+" · "+level+" · "+
+        (active.length?active.join(", "):"aucune ressource demandée");
+    }
+    summary.appendChild(selected);
     var body=el("div","tm-ux-advanced-body");
     var advancedFields=el("div","tm-ux-advanced-fields");
     advancedFields.appendChild(difficulty.closest(".tm-ai-field"));
@@ -366,6 +394,10 @@ block = r'''<!-- TREKMAP_TREKBRAIN_UX_2026_START -->
     advanced.appendChild(summary);
     advanced.appendChild(body);
     side.insertBefore(advanced,generate);
+    [routeType,difficulty].concat(Array.prototype.slice.call(
+      checks.querySelectorAll("input[type=checkbox]")
+    )).forEach(function(input){input.addEventListener("change",updateSummary)});
+    updateSummary();
   }
   var ctaHelp=el("p","tm-ux-cta-help","Gratuit · aucun itinéraire n'est garanti sans vérification du terrain.");
   generate.insertAdjacentElement("afterend",ctaHelp);
@@ -409,7 +441,9 @@ block = r'''<!-- TREKMAP_TREKBRAIN_UX_2026_START -->
 
   /* Keep keyboard navigation inside the open dialog while preserving
      the browser's natural tab order in visible (mobile/desktop) controls. */
-  overlay.addEventListener("keydown",function(event){
+  /* Listen at document capture so Tab is recovered even if another dynamic
+     widget moved focus entirely outside the open TrekBrain dialog. */
+  document.addEventListener("keydown",function(event){
     if(event.key!=="Tab" || !overlay.classList.contains("open"))return;
     var candidates=overlay.querySelectorAll(
       "button:not([disabled]), input:not([disabled]), select:not([disabled]), "+
@@ -420,12 +454,17 @@ block = r'''<!-- TREKMAP_TREKBRAIN_UX_2026_START -->
     });
     if(!visible.length)return;
     var first=visible[0],last=visible[visible.length-1];
+    if(visible.indexOf(document.activeElement)<0){
+      event.preventDefault();
+      (event.shiftKey?last:first).focus();
+      return;
+    }
     if(event.shiftKey && document.activeElement===first){
       event.preventDefault();last.focus();
     }else if(!event.shiftKey && document.activeElement===last){
       event.preventDefault();first.focus();
     }
-  });
+  },true);
   var lastTrigger=null;
   document.addEventListener("click",function(ev){
     var target=ev.target;
