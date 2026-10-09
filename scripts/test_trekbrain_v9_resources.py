@@ -185,6 +185,51 @@ uneven_water = next(
 assert uneven_water["route_day"] == 1, uneven_water
 
 
+# Two real hiking stages are 4 km then 16 km. A source at 30% of the
+# walked route belongs to day 2, not day 1 as an equal-halves split assumes.
+actual_stages = {
+    "duration_days": 2,
+    "route_preview": {"coords": [[45.0 + i * 0.02, 5.0] for i in range(11)]},
+    "start": {"lat": 45.0, "lon": 5.0, "name": "Start"},
+    "end": {"lat": 45.2, "lon": 5.0, "name": "End"},
+    "stages": [{"day": 1, "distance_km": 4.0}, {"day": 2, "distance_km": 16.0}],
+    "water": [
+        {"name": "Start water", "lat": 45.02, "lon": 5.0,
+         "source_url": "https://www.openstreetmap.org/node/7001"},
+        {"name": "Later water", "lat": 45.06, "lon": 5.0,
+         "source_url": "https://www.openstreetmap.org/node/7002"},
+    ],
+    "resources": [
+        {"name": "Later shop", "category": "food", "lat": 45.06, "lon": 5.0,
+         "source_url": "https://www.openstreetmap.org/node/7003"},
+    ],
+    "accommodations": [],
+}
+from backend import trekbrain_resources_v9 as stage_resources
+breaks = stage_resources._stage_progress_breaks(actual_stages, 2)
+assert [round(value, 2) for value in breaks] == [0.0, 0.2, 1.0], breaks
+stage_resources_enriched = stage_resources.enrich_resources(actual_stages)
+mapped = {point["name"]: point["route_day"]
+          for point in stage_resources_enriched["map_resources"]["points"]}
+assert mapped["Start water"] == 1, mapped
+assert mapped["Later water"] == 2, mapped
+assert mapped["Later shop"] == 2, mapped
+bounds = stage_resources._route_day_boundaries(actual_stages, 2)
+assert abs(bounds[1]["lat"] - 45.04) < 0.001, bounds
+missing_second_shop = stage_resources._missing_terrain_intent(
+    actual_stages, {"food": True, "water": True},
+)
+assert missing_second_shop["food"] is True, missing_second_shop
+assert missing_second_shop["water"] is False, missing_second_shop
+actual_stages["resources"].append({
+    "name": "First-day shop", "category": "food", "lat": 45.02, "lon": 5.0,
+    "source_url": "https://www.openstreetmap.org/node/7004",
+})
+assert not stage_resources._missing_terrain_intent(
+    actual_stages, {"food": True},
+)["food"]
+assert stage_resources._stage_progress_breaks({"stages": [{}, {}]}, 2) == [0, 0.5, 1]
+
 # The final resource overlay must not duplicate water or lodging discovery;
 # food must still run when another walking day has no source-linked supplies.
 # Transport remains active when explicitly requested because it is a distinct
