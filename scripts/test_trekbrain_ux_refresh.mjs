@@ -54,8 +54,19 @@ for(const id of [
 
 
 const render=fs.readFileSync('render.yaml','utf8');
-assert.ok(render.includes('python scripts/apply_trekbrain_scroll_ui.py && python scripts/apply_trekbrain_ux_refresh.py && python scripts/render_preflight.py'),
-  'production must install UX after scrolling layer');
+const productionSequence=[
+  'python scripts/apply_trekbrain_scroll_ui.py',
+  'python scripts/apply_trekbrain_ux_refresh.py',
+  'python scripts/apply_trekbrain_map_mobile.py',
+  'python scripts/apply_trekbrain_scenic_photos.py',
+  'python scripts/render_preflight.py',
+];
+let last=-1;
+for(const command of productionSequence){
+  const index=render.indexOf(command);
+  assert.ok(index>last, 'production must build UI in correct order: '+command);
+  last=index;
+}
 for(const workflow of [
   '.github/workflows/render-strict-preflight.yml',
   '.github/workflows/trekbrain-scroll-ui.yml',
