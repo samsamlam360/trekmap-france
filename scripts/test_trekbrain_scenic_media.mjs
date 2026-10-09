@@ -60,6 +60,11 @@ const fakeDocument={
 const fakeFetch=async(url,options)=>{
   network.push(String(url));
   assert.equal(options.credentials,'omit');
+  if(String(url).startsWith('https://www.wikidata.org/w/api.php')){
+    return {ok:true,async json(){return {
+      entities:{Q123:{claims:{P18:[{mainsnak:{datavalue:{value:'Wikidata scenic.jpg'}}}]}}}
+    }}};
+  }
   assert.ok(String(url).startsWith('https://commons.wikimedia.org/w/api.php'));
   return {
     ok:true,
@@ -72,7 +77,7 @@ const fakeFetch=async(url,options)=>{
                 mime:'image/jpeg',
                 thumburl:'https://upload.wikimedia.org/wikipedia/commons/thumb/1/1a/Example.jpg/620px-Example.jpg',
                 extmetadata:{
-                  LicenseShortName:{value:'CC BY-SA 4.0'},
+                  LicenseShortName:{value:String(url).includes('Restricted.jpg')?'Copyrighted':'CC BY-SA 4.0'},
                   Artist:{value:'Photographe de la commune'}
                 }
               }]
@@ -124,7 +129,17 @@ fakeWindow.TrekViewPhotos.hydrate(noEvidence.root);
 await new Promise(resolve=>setTimeout(resolve,5));
 assert.equal(network.length,1,'no reference must never trigger a guessed photo');
 assert.equal(noEvidence.holder.image,null);
-console.log('Commons photo: trusted thumbnail, author+license, in-memory cache and no false images PASS');
+const byWikidata=cardFor('');
+byWikidata.card.dataset.wikidata='Q123';
+fakeWindow.TrekViewPhotos.hydrate(byWikidata.root);
+await new Promise(resolve=>setTimeout(resolve,12));
+assert.ok(network.some(x=>x.includes('wikidata.org/w/api.php')),'Wikidata P18 must come from an exact linked entity');
+assert.ok(byWikidata.holder.image,'Wikidata P18 image must get licensed Commons thumbnail');
+const copyrighted=cardFor('Restricted.jpg');
+fakeWindow.TrekViewPhotos.hydrate(copyrighted.root);
+await new Promise(resolve=>setTimeout(resolve,12));
+assert.equal(copyrighted.holder.image,null,'unknown or non-free licence must never display');
+console.log('Commons photo: trusted thumbnail, author+licence, Wikidata P18, caching and honest fallback PASS');
 
 
 // Exercise mobile collapse without a browser or remote map-tile provider.
