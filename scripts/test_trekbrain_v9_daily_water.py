@@ -119,6 +119,14 @@ assert len(preload_plan["water"]) == 1, preload_plan["water"]
 assert preload_plan["water"][0]["status"] == "not_potable", preload_plan
 assert "ne pas boire" in preload_plan["water"][0]["notes"], preload_plan
 
+# OSM geometry may move by a few metres between observations while the
+# OSM source ID stays unchanged; identity must beat rounded coordinates.
+shifted_old = {**old_source, "lat": 45.0798, "status": "potable_referenced"}
+shifted_plan = {"water": [shifted_old], "resources": [], "points_of_interest": []}
+lodging._attach_preloaded_terrain(shifted_plan, [unsafe_row], True)
+assert len(shifted_plan["water"]) == 1, shifted_plan["water"]
+assert shifted_plan["water"][0]["status"] == "not_potable", shifted_plan
+
 fresh_plan = {"water": [], "resources": [], "points_of_interest": []}
 lodging._attach_preloaded_terrain(fresh_plan, [unsafe_row], True)
 assert fresh_plan["water"][0]["status"] == "not_potable", fresh_plan
