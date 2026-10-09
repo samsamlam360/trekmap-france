@@ -288,7 +288,14 @@ def _candidate_resources(result: dict[str, Any]) -> list[dict[str, Any]]:
     items: list[dict[str, Any]] = []
     for w in result.get("water") or []:
         if isinstance(w, dict):
-            items.append({**w, "kind": "water", "type": "Point d'eau", "notes": w.get("notes") or "Potabilité à vérifier."})
+            unsafe = str(w.get("water_status") or w.get("status") or "") == "not_potable"
+            items.append({
+                **w, "kind": "water", "type": "Point d'eau",
+                "notes": (
+                    "Eau signalée non potable : ne pas boire."
+                    if unsafe else w.get("notes") or "Potabilité à vérifier."
+                ),
+            })
     for a in result.get("accommodations") or []:
         if isinstance(a, dict):
             kind = _resource_kind(a, "lodging")
