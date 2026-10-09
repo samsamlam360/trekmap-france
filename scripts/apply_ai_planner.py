@@ -298,18 +298,27 @@ block = r'''<!-- TREKMAP_AI_EXPERIENCE_START -->
   }
   function scenicCards(plan){
     const points=(Array.isArray(plan.points_of_interest)?plan.points_of_interest:[])
-      .filter(isViewpoint).slice(0,8);
+      .filter(isViewpoint)
+      .sort((a,b)=>Number(Boolean(b.photo_commons_file||b.photo_wikidata))-
+        Number(Boolean(a.photo_commons_file||a.photo_wikidata)))
+      .slice(0,8);
     if(!points.length)return '';
     return '<section class="tm-ai-section tm-ux-scenic"><h3>📷 Points de vue et panoramas</h3>'+
       '<div class="tm-ux-scenic-grid">'+points.map(point=>{
         const file=String(point.photo_commons_file||'').slice(0,180);
         const wikidata=String(point.photo_wikidata||'').slice(0,24);
         const lat=Number(point.lat),lon=Number(point.lon);
+        const routeDistance=point.distance_to_route_km!=null?
+          Number(point.distance_to_route_km):NaN;
+        const distanceLabel=Number.isFinite(routeDistance)&&routeDistance>=0?
+          ' · à '+routeDistance.toFixed(1)+' km du tracé':'';
+        const description=String(point.description||point.notes||
+          'Point de vue cartographié ; visibilité et accès à vérifier sur place.');
         return '<article class="tm-ux-view-card" data-commons-file="'+esc(file)+
           '" data-wikidata="'+esc(wikidata)+'"><div class="tm-ux-photo-media" aria-label="Photo du lieu si disponible">'+
           '<span>🏔️<br>Pas de photographie vérifiée</span></div>'+
           '<div class="tm-ux-view-info"><b>'+esc(point.name||'Point de vue')+'</b>'+
-          '<small>Point cartographié · paysage et accès à vérifier</small>'+
+          '<small>'+esc(description)+esc(distanceLabel)+'</small>'+
           '<button type="button" class="tm-ux-go-view" data-view-lat="'+lat+
           '" data-view-lon="'+lon+'">📍 Voir sur la carte</button>'+
           '</div></article>';
