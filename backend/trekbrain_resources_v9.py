@@ -129,6 +129,50 @@ def _route_distance_profile(coords: list[list[float]]) -> tuple[list[float], flo
     return cumulative, total
 
 
+def _stage_progress_breaks(result: dict[str, Any], days: int) -> list[float]:
+    """Actual walking-day boundaries as route-distance fractions.
+
+    A 12 km day followed by 25 km does not split the trail at 50%.
+    Fall back to uniform distances only when stage lengths are unavailable.
+    No route geometry or itinerary stage is modified here.
+    """
+    days = max(1, int(days))
+    uniform = [index / days for index in range(days + 1)]
+    stages = result.get("stages") or []
+    if not isinstance(stages, list) or len(stages) < days:
+        return uniform
+    lengths = []
+    for stage in stages[:days]:
+        if not isinstance(stage, dict):
+            return uniform
+        km = _number(stage.get("distance_km"))
+        if km is None or km <= 0:
+            return uniform
+        lengths.append(km)
+    total = sum(lengths)
+    if not math.isfinite(total) or total <= 0:
+        return uniform
+    walked = 0.0
+    breaks = [0.0]
+    for km in lengths[:-1]:
+        walked += km
+        breaks.append(walked / total)
+    breaks.append(1.0)
+    return breaks
+
+
+def _route_day_from_progress(progress: float, boundaries: list[float]) -> int:
+    """Assign exact stage boundaries to the next day's walking section."""
+    if not boundaries or len(boundaries) < 2:
+        return 1
+    progress = max(0.0, min(1.0, float(progress)))
+    for day, upper in enumerate(boundaries[1:], start=1):
+        if progress < upper or day == len(boundaries) - 1:
+            return day
+    return len(boundaries) - 1
+
+
+
 def _route_match(
     coords: list[list[float]],
     item: dict[str, Any],
@@ -317,6 +361,7 @@ def enrich_resources(result: dict[str, Any]) -> dict[str, Any]:
     days = max(1, int(result.get("duration_days") or len(result.get("stages") or []) or 1))
     prepared, seen = [], set()
     route_profile = _route_distance_profile(coords)
+    day_boundaries = _stage_progress_breaks(result, days)
     for item in _candidate_resources(result):
         point = _point(item)
         if not point:
@@ -333,7 +378,7 @@ def enrich_resources(result: dict[str, Any]) -> dict[str, Any]:
         if key in seen:
             continue
         seen.add(key)
-        route_day = min(days, max(1, int(math.floor(progress * days)) + 1))
+        route_day = _route_day_from_progress(progress, day_boundaries)
         prepared.append({
             "name": str(item.get("name") or "Point")[:160],
             "kind": kind,
@@ -423,9 +468,10 @@ def _route_day_boundaries(result: dict[str, Any], days: int) -> list[dict[str, A
         end = {"name": "Arrivée", "lat": clean[-1][0], "lon": clean[-1][1], "category": "route_anchor"}
 
     boundaries = [start]
+    progress_breaks = _stage_progress_breaks(result, days)
     floor = 1
     for day in range(1, max(1, int(days))):
-        target = total * day / max(1, int(days))
+        target = total * progress_breaks[day]
         if floor >= len(clean) - 1:
             break
         idx = min(range(floor, len(clean) - 1), key=lambda i: abs(cumulative[i] - target))
@@ -797,6 +843,7 @@ def _missing_terrain_intent(result: dict[str, Any], intent: dict[str, Any]) -> d
     # One supermarket at the trailhead does not cover every day of a long
     # trek. Check evidence day by day before deciding to skip OSM discovery.
     days = max(1, int(result.get("duration_days") or len(result.get("stages") or []) or 1))
+    progress_breaks = _stage_progress_breaks(result, days)
     # A single water point cannot cover a multi-day trek. Only source-linked,
     # route-close points can suppress discovery for their own walking day.
     covered_water_days: set[int] = set()
@@ -807,7 +854,7 @@ def _missing_terrain_intent(result: dict[str, Any], intent: dict[str, Any]) -> d
             continue
         match = _route_match(coords, item, profile)
         if match and match[0] <= RESOURCE_LIMITS["water"]:
-            covered_water_days.add(min(days, int(math.floor(match[1] * days)) + 1))
+            covered_water_days.add(_route_day_from_progress(match[1], progress_breaks))
     adjusted["water"] = bool((intent or {}).get("water") and len(covered_water_days) < days)
     covered_food_days: set[int] = set()
     for item in food_rows:
@@ -818,7 +865,7 @@ def _missing_terrain_intent(result: dict[str, Any], intent: dict[str, Any]) -> d
             continue
         match = _route_match(coords, item, profile)
         if match and match[0] <= RESOURCE_LIMITS["food"]:
-            route_day = min(days, int(math.floor(match[1] * days)) + 1)
+            route_day = _route_day_from_progress(match[1], progress_breaks)
             covered_food_days.add(route_day)
     adjusted["food"] = bool(
         (intent or {}).get("food")
