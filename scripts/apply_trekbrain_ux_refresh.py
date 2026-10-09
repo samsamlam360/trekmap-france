@@ -441,7 +441,9 @@ block = r'''<!-- TREKMAP_TREKBRAIN_UX_2026_START -->
 
   /* Keep keyboard navigation inside the open dialog while preserving
      the browser's natural tab order in visible (mobile/desktop) controls. */
-  overlay.addEventListener("keydown",function(event){
+  /* Listen at document capture so Tab is recovered even if another dynamic
+     widget moved focus entirely outside the open TrekBrain dialog. */
+  document.addEventListener("keydown",function(event){
     if(event.key!=="Tab" || !overlay.classList.contains("open"))return;
     var candidates=overlay.querySelectorAll(
       "button:not([disabled]), input:not([disabled]), select:not([disabled]), "+
@@ -462,7 +464,7 @@ block = r'''<!-- TREKMAP_TREKBRAIN_UX_2026_START -->
     }else if(!event.shiftKey && document.activeElement===last){
       event.preventDefault();first.focus();
     }
-  });
+  },true);
   var lastTrigger=null;
   document.addEventListener("click",function(ev){
     var target=ev.target;
