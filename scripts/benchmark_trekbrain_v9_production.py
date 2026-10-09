@@ -254,6 +254,38 @@ def evaluate(case, result, elapsed_s, clarify):
     food_coverage = ((result.get("map_resources") or {}).get("coverage") or {}).get("food")
     missing_food_days = ((result.get("map_resources") or {}).get("coverage") or {}).get("days_without_food") or []
     missing_water_days = ((result.get("map_resources") or {}).get("coverage") or {}).get("days_without_water") or []
+
+    # Overnight candidates are not automatically usable overnight stops.
+    # Keep walk-validated nights separate from transfer-only accommodation,
+    # instead of inflating the campsite count with merely mapped POIs.
+    logistics = result.get("logistics") or {}
+    nights = [
+        row for row in logistics.get("nights") or []
+        if isinstance(row, dict)
+    ]
+    walk_nights = sum(
+        row.get("status") == "confirmed" and row.get("access_mode") == "walk"
+        for row in nights
+    )
+    transfer_nights = sum(
+        row.get("status") == "usable_with_transfer"
+        for row in nights
+    )
+    required_nights = max(0, int(case["days"]) - 1)
+    unresolved_nights = max(0, required_nights - walk_nights - transfer_nights)
+    source_water = [
+        row for row in ((result.get("map_resources") or {}).get("points") or [])
+        if isinstance(row, dict) and row.get("kind") == "water"
+        and str(row.get("source_url") or "").startswith(
+            "https://www.openstreetmap.org/"
+        )
+    ]
+    referenced_potable = sum(
+        row.get("status") == "potable_referenced" for row in source_water
+    )
+    explicitly_nonpotable = sum(
+        row.get("status") == "not_potable" for row in source_water
+    )
     if case.get("require_water") and missing_water_days:
         warnings.append(
             "eau non vérifiée sur les jours "
@@ -338,6 +370,13 @@ def evaluate(case, result, elapsed_s, clarify):
         "cold_cache": cold_cache,
         "osm_cache_status": cache_metrics.get("status"),
         "accommodations": len(result.get("accommodations") or []),
+        "nights_required": required_nights,
+        "nights_walk_confirmed": walk_nights,
+        "nights_transfer_only": transfer_nights,
+        "nights_unresolved": unresolved_nights,
+        "lodging_category": logistics.get("category"),
+        "water_potable_referenced": referenced_potable,
+        "water_explicitly_nonpotable": explicitly_nonpotable,
         "web_sources": len(result.get("web_sources") or []),
         "clarification_needed": bool((clarify or {}).get("needs_clarification")),
         "clarification_questions": (clarify or {}).get("questions") or [],
@@ -391,6 +430,11 @@ def write_reports(meta, rows):
         f"- Qualité moyenne TrekBrain: **{statistics.fmean(qualities):.1f}/100**" if qualities else "- Qualité moyenne: n/a",
         f"- Latence moyenne: **{statistics.fmean(elapsed):.1f} s**",
         f"- Latence max: **{max(elapsed):.1f} s**",
+        f"- Nuitées accessibles à pied avec liaison validée: **{sum(int(x.get('nights_walk_confirmed') or 0) for x in rows)}**",
+        f"- Nuitées nécessitant un transfert: **{sum(int(x.get('nights_transfer_only') or 0) for x in rows)}**",
+        f"- Nuitées non résolues: **{sum(int(x.get('nights_unresolved') or 0) for x in rows)}**",
+        f"- Points d'eau avec potabilité référencée: **{sum(int(x.get('water_potable_referenced') or 0) for x in rows)}**",
+        f"- Points d'eau explicitement non potables: **{sum(int(x.get('water_explicitly_nonpotable') or 0) for x in rows)}**",
         f"- Avertissements terrain: **{warnings}**",
         "",
         "| Scénario | Statut | Qualité | Temps | Commerces sourcés | Recherche | Moteur | Distance | Écart/jour | Alertes |",
