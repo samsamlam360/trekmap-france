@@ -231,9 +231,9 @@ old_request_json = v7.v5.v3._request_json
 try:
     def fake_route_resource_json(url, **kwargs):
         params = kwargs.get("params") or {}
-        if "/api/" not in str(url):
+        if "/api/" not in str(url) and not str(url).endswith("/reverse"):
             raise AssertionError(f"post-route Photon should use forward API, got {url!r}")
-        if not params.get("q"):
+        if not params.get("q") and not str(url).endswith("/reverse"):
             raise AssertionError(f"post-route Photon q selector missing: {params!r}")
         if "lat" not in params or "lon" not in params:
             raise AssertionError(f"post-route Photon bias missing: {params!r}")
@@ -249,7 +249,7 @@ try:
         # searches.
         if osm_tag == "railway:station" or "gare" in query:
             name, key, value = ("Gare test", "railway", "station")
-        elif osm_tag == "amenity:drinking_water" or "fontaine" in query:
+        elif "amenity:drinking_water" in osm_tag or "fontaine" in query:
             name, key, value = ("Fontaine test", "amenity", "drinking_water")
         elif (
             osm_tag in {"shop:supermarket", "shop:convenience", "shop:bakery"}
@@ -324,11 +324,11 @@ try:
         structured_calls.append(dict(params))
         osm_tag = str(params.get("osm_tag") or "").casefold()
         query = request_v9._fold(str(params.get("q") or ""))
-        if not params.get("bbox"):
+        if not params.get("bbox") and not params.get("radius"):
             raise AssertionError(f"Photon resource request must stay bbox-bounded: {params!r}")
         if osm_tag == "tourism" and "camping" in query:
             name, key, value = "Camping structuré", "tourism", "camp_site"
-        elif osm_tag == "amenity:drinking_water":
+        elif "amenity:drinking_water" in osm_tag:
             name, key, value = "Fontaine structurée", "amenity", "drinking_water"
         elif "hotel" in query:
             name, key, value = "Hôtel nommé", "tourism", "hotel"
@@ -382,8 +382,8 @@ if len(structured_calls) != 3:
 elif (
     structured_calls[0].get("osm_tag") != "tourism"
     or request_v9._fold(str(structured_calls[0].get("q") or "")) != "camping"
-    or structured_calls[1].get("osm_tag") != "amenity:drinking_water"
-    or request_v9._fold(str(structured_calls[1].get("q") or "")) != "fontaine"
+    or "amenity:drinking_water" not in structured_calls[1].get("osm_tag", [])
+    or "q" in structured_calls[1]
     or structured_calls[2].get("osm_tag")
     or request_v9._fold(str(structured_calls[2].get("q") or "")) != "hotel"
 ):

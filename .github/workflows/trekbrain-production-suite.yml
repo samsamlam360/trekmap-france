@@ -26,7 +26,7 @@ jobs:
           EXPECTED_SHA: ${{ github.sha }}
         run: |
           import json, os, time, urllib.request
-          for attempt in range(36):
+          for attempt in range(90):
               try:
                   req=urllib.request.Request('https://trekmap-france.onrender.com/ai/status',headers={'User-Agent':'TrekBrain-serial-audit'})
                   with urllib.request.urlopen(req,timeout=20) as res:

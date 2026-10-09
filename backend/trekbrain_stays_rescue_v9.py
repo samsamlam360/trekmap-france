@@ -15,16 +15,28 @@ ORS walking matrix and the final route engine to validate the actual legs.
 from __future__ import annotations
 
 import math
+import re
 from typing import Any
 
 _INSTALLED = False
 
 
 def _osm_url(element: dict[str, Any]) -> str:
-    typ = str(element.get("type") or element.get("osm_type") or "node").casefold()
+    typ = str(element.get("type") or element.get("osm_type") or "").casefold()
     typ = {"n": "node", "w": "way", "r": "relation"}.get(typ, typ)
     ident = element.get("id") if element.get("id") is not None else element.get("osm_id")
-    return f"https://www.openstreetmap.org/{typ}/{ident}" if ident is not None and typ in {"node", "way", "relation"} else ""
+    return f"https://www.openstreetmap.org/{typ}/{ident}" if re.fullmatch(r"[1-9][0-9]*", str(ident or "")) and typ in {"node", "way", "relation"} else ""
+
+
+def _valid_coordinates(lat, lon):
+    return math.isfinite(lat) and math.isfinite(lon) and -90 <= lat <= 90 and -180 <= lon <= 180
+
+
+def _stay_type_matches(category, key, value):
+    # A name or street address is never evidence of an accommodation type.
+    if category == "camping":
+        return key == "tourism" and value in {"camp_site", "caravan_site"}
+    return (key == "tourism" and value in {"alpine_hut", "wilderness_hut"}) or (key == "amenity" and value == "shelter")
 
 
 def _distance_km(a: dict[str, Any], b: dict[str, Any]) -> float:
@@ -102,6 +114,8 @@ def _direct_stays(start: dict[str, Any], category: str, radius_km: float) -> lis
             elat, elon = float(elat), float(elon)
         except (TypeError, ValueError):
             continue
+        if not _valid_coordinates(elat, elon) or not _osm_url(element):
+            continue
         if category == "camping" and tags.get("tourism") not in {"camp_site", "caravan_site"}:
             continue
         if category != "camping" and not (
@@ -158,11 +172,9 @@ def _photon_stays(start: dict[str, Any], category: str, radius_km: float) -> lis
             continue
         osm_value = str(props.get("osm_value") or "").casefold()
         name = str(props.get("name") or props.get("street") or term)
-        folded = name.casefold()
-        if category == "camping":
-            if osm_value not in {"camp_site", "caravan_site"} and "camp" not in folded:
-                continue
-        elif osm_value not in {"alpine_hut", "wilderness_hut", "shelter"} and not any(x in folded for x in ("refuge", "gîte", "gite", "abri")):
+        if not _valid_coordinates(lat, lon) or not _osm_url(props):
+            continue
+        if not _stay_type_matches(category, str(props.get("osm_key") or "").casefold(), osm_value):
             continue
         item = _normalise_stay(name, lat, lon, category, _osm_url(props), props)
         if _distance_km(start, item) <= float(radius_km) + 1.0:
@@ -203,13 +215,13 @@ def _nominatim_stays(start: dict[str, Any], category: str, radius_km: float) -> 
             continue
         typ = str(row.get("type") or "").casefold()
         display = str(row.get("display_name") or term)
-        folded = display.casefold()
-        if category == "camping":
-            if typ not in {"camp_site", "caravan_site"} and "camp" not in folded:
-                continue
-        elif not any(x in typ + " " + folded for x in ("refuge", "hut", "shelter", "gîte", "gite", "abri")):
+        if not _valid_coordinates(lat, lon):
+            continue
+        if not _stay_type_matches(category, str(row.get("category") or row.get("class") or "").casefold(), typ):
             continue
         source = _osm_url({"osm_type": row.get("osm_type"), "osm_id": row.get("osm_id")})
+        if not source:
+            continue
         item = _normalise_stay(display.split(",")[0], lat, lon, category, source, row)
         if _distance_km(start, item) <= float(radius_km) + 1.0:
             out.append(item)

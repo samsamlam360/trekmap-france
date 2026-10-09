@@ -113,6 +113,10 @@ jobs:
         run: python scripts/test_trekbrain_v9_food_reverse.py
       - name: Reject misleading resource names and missing OSM evidence
         run: python scripts/test_trekbrain_v9_resource_evidence.py
+      - name: Oversized fast-loop waypoint rescue
+        run: python scripts/test_trekbrain_v9_oversize_waypoint_rescue.py
+      - name: Daily unnamed water discovery and bounded provider failure
+        run: python scripts/test_trekbrain_v9_daily_water.py
       - name: Unseen route cold-cache resupply fairness
         run: python scripts/test_trekbrain_v9_cold_resupply.py
       - name: Merge shop lists into the map and daily stage cards

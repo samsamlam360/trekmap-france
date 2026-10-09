@@ -90,6 +90,9 @@ def main() -> None:
         root / "scripts" / "test_trekbrain_v9_food_corridor.py",
         root / "scripts" / "test_trekbrain_v9_food_reverse.py",
         root / "scripts" / "test_trekbrain_v9_cold_resupply.py",
+        root / "scripts" / "test_trekbrain_v9_daily_water.py",
+        root / "scripts" / "test_trekbrain_v9_oversize_waypoint_rescue.py",
+        root / "scripts" / "test_trekbrain_v9_resource_evidence.py",
         root / "scripts" / "test_trekbrain_v9_food_merge.py",
         root / "scripts" / "test_trekbrain_v9_osm_cache.py",
         root / "scripts" / "test_trekbrain_v9_schema_isolation.py",
@@ -121,6 +124,13 @@ def main() -> None:
             )
         except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as exc:
             fail(f"benchmark TrekBrain Render interrompu: {exc}")
+
+    if os.getenv("TREKBRAIN_RUN_BENCHMARK", "").strip().casefold() in {"1", "true", "yes", "on"}:
+        try:
+            subprocess.run([sys.executable, str(root / "scripts" / "benchmark_trekbrain_v9_cold.py")],
+                           cwd=root, check=True, timeout=380)
+        except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as exc:
+            fail(f"audit à froid interrompu: {exc}")
 
     import backend.app_v5 as app_v5
 
