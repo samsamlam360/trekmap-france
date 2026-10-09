@@ -147,6 +147,15 @@ assert result["route_preview"]["distance_km"] == 100.0
 assert result["planner"]["logistics_mode"] == "route-first"
 assert result["logistics"]["nights_required"] == 4
 assert result["logistics"]["nights_resolved"] == 4
+# An available campsite with a transfer is not equivalent to a complete
+# hike on foot. Keep the legacy status but expose the actual readiness.
+assert result["logistics"]["status"] == "complete"
+assert result["logistics"]["nights_walk_confirmed"] == 3
+assert result["logistics"]["nights_transfer_required"] == 1
+assert result["logistics"]["nights_missing"] == 0
+assert result["logistics"]["walking_readiness"] == "transfer_to_arrange"
+assert result["logistics"]["ready_without_transfer"] is False
+assert any("Transfert à organiser" in note for note in result["advisor_notes"])
 assert len(result["accommodations"]) == 4
 assert all(float(stage["distance_km"]) == 20.0 for stage in result["stages"])
 assert max(float(stage["distance_km"]) for stage in result["stages"]) <= 25.0
@@ -157,6 +166,31 @@ assert night3["name"] == "Camping C"
 assert night3["access_mode"] == "transfer", night3
 assert "transfert" in result["stages"][2]["overnight"].casefold()
 
+
+# All four stays really connected on foot must be marked ready without
+# transfers. The same source-backed itinerary is left geometrically intact.
+real_bbox_all_walk = logistics._bbox_route_stays
+try:
+    camps_all_walk = [
+        {**item, "lat": 0.010} for item in camps
+    ]
+    logistics._bbox_route_stays = lambda _coords, category: [
+        dict(item) for item in camps_all_walk
+    ]
+    fully_walkable = v3._build(Data(), FakeLegacy())
+finally:
+    logistics._bbox_route_stays = real_bbox_all_walk
+
+assert fully_walkable["logistics"]["nights_walk_confirmed"] == 4
+assert fully_walkable["logistics"]["nights_transfer_required"] == 0
+assert fully_walkable["logistics"]["nights_missing"] == 0
+assert fully_walkable["logistics"]["walking_readiness"] == "ready_on_foot"
+assert fully_walkable["logistics"]["ready_without_transfer"] is True
+assert fully_walkable["route_preview"]["coords"] == coords
+assert not any(
+    "Transfert à organiser" in note or "Nuitées à organiser" in note
+    for note in fully_walkable["advisor_notes"]
+)
 
 # Missing stays are a normal partial-logistics state, not an exception. This
 # protects the production KeyError regression where an unresolved night had no
@@ -179,6 +213,12 @@ finally:
 assert partial["route_preview"]["fallback"] is False
 assert partial["logistics"]["status"] == "partial"
 assert partial["logistics"]["nights_resolved"] == 0
+assert partial["logistics"]["nights_walk_confirmed"] == 0
+assert partial["logistics"]["nights_transfer_required"] == 0
+assert partial["logistics"]["nights_missing"] == 4
+assert partial["logistics"]["walking_readiness"] == "missing_nights"
+assert partial["logistics"]["ready_without_transfer"] is False
+assert any("Nuitées à organiser" in note for note in partial["advisor_notes"])
 assert all(
     "Nuitée à organiser" in str(stage.get("overnight") or "")
     for stage in partial["stages"][:-1]

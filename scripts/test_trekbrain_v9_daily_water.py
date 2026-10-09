@@ -142,6 +142,41 @@ lodging._attach_preloaded_terrain(different_plan, [unsafe_row], True)
 assert different_plan["water"][0]["status"] == "potable_referenced", different_plan
 # Every other discovery endpoint continues to use its old bounded query;
 # this test does not open any network connection.
+# A real OSM object can carry contradictory tags. The explicit water safety
+# label always wins over the generic amenity=drinking_water hint, at both
+# route-first discovery and the shared v3 Overpass parser.
+conflicting = {
+    "type": "node", "id": 990011, "lat": 45.04, "lon": 5.0,
+    "tags": {"amenity": "drinking_water", "drinking_water": "no", "name": "Fontaine condamnée"},
+}
+safe = {
+    "type": "node", "id": 990012, "lat": 45.06, "lon": 5.0,
+    "tags": {"amenity": "drinking_water", "drinking_water": "yes"},
+}
+unknown = {
+    "type": "node", "id": 990013, "lat": 45.08, "lon": 5.0,
+    "tags": {"natural": "spring"},
+}
+assert lodging._terrain_resource(conflicting)["water_status"] == "not_potable"
+assert lodging._terrain_resource(safe)["water_status"] == "potable_referenced"
+assert lodging._terrain_resource(unknown)["water_status"] == "unverified"
+
+real_overpass = planner._overpass
+try:
+    planner._overpass = lambda _query, **_kwargs: {
+        "elements": [conflicting, safe, unknown]
+    }
+    checked, _extras, _notes = planner._combined_nearby(
+        {"lat": 45.0, "lon": 5.0}, 5.0, ["water"]
+    )
+finally:
+    planner._overpass = real_overpass
+status_by_id = {x["source_url"].rsplit("/", 1)[-1]: x["water_status"] for x in checked}
+assert status_by_id["990011"] == "not_potable", status_by_id
+assert status_by_id["990012"] == "potable_referenced", status_by_id
+assert status_by_id["990013"] == "unverified", status_by_id
+print("Contradictory OSM water tags: explicit not-potable precedence: PASS")
+
 print("Non-potable source isolation and stale-cache safety: PASS")
 
 print('Daily water: partial/complete/unsourced, unnamed reverse search, outage, one-day and bounded wave: PASS')
