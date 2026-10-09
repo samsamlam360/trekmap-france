@@ -1,14 +1,11 @@
 name: TrekBrain serial production suite
+# Do not fire all 47 routing requests on every code push: repeated merges
+# exhausted the public ORS quota and created avoidable 429 failures.
+# Lightweight smoke, unit and release gates remain active on every push.
 on:
-  push:
-    branches: [main]
-    paths:
-      - 'backend/free_planner*.py'
-      - 'backend/smart_planner_v*.py'
-      - 'backend/trekbrain*.py'
-      - 'scripts/benchmark_trekbrain_v9*.py'
-      - '.github/workflows/trekbrain-production-suite.yml'
   workflow_dispatch:
+  schedule:
+    - cron: '17 3 * * *'
 permissions:
   contents: read
 concurrency:
