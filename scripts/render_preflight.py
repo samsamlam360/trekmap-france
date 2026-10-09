@@ -99,6 +99,7 @@ def main() -> None:
         root / "scripts" / "test_trekbrain_v9_overpass_circuit.py",
         root / "scripts" / "test_trekbrain_v9_terrain_recovery.py",
         root / "scripts" / "test_trekbrain_v9_route_logistics.py",
+        root / "scripts" / "test_trekbrain_scenic_photo.py",
         root / "scripts" / "test_trekbrain_v9_belle_ile_gr340.py",
         root / "scripts" / "test_trekbrain_v9_roundtrip_empty_primary.py",
     ]

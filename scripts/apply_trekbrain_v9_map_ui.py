@@ -21,6 +21,13 @@ block = r'''<!-- TREKMAP_TREKBRAIN_V91_MAP_START -->
 .tm-v91-resource-icon span{display:grid;place-items:center;width:30px;height:30px;border-radius:50%;background:#fff;border:2px solid #174f3a;box-shadow:0 2px 9px rgba(0,0,0,.26);font-size:17px;line-height:1}
 .tm-v91-resource-icon.water span{border-color:#2376a8}.tm-v91-resource-icon.food span{border-color:#b77917}.tm-v91-resource-icon.lodging span{border-color:#467c85}.tm-v91-resource-icon.camping span{border-color:#4b7f39}.tm-v91-resource-icon.refuge span{border-color:#77572f}.tm-v91-resource-icon.station span{border-color:#754aa5}.tm-v91-resource-icon.transport span{border-color:#b26b24}.tm-v91-resource-icon.trail span{border-color:#365f49}
 .tm-v91-legend{min-width:176px;padding:9px 10px;border-radius:12px;background:rgba(255,255,255,.96);box-shadow:0 5px 20px rgba(0,0,0,.18);font:600 12px/1.25 system-ui,sans-serif;color:#29473a}
+.tm-v91-resource-details>summary{display:flex;align-items:center;gap:8px;min-height:38px;font-size:13px;color:#184f38;font-weight:850;cursor:pointer;list-style:none}
+.tm-v91-resource-details>summary::-webkit-details-marker{display:none}
+.tm-v91-resource-details>summary::after{content:"⌄";margin-left:auto}
+.tm-v91-resource-details[open]>summary::after{content:"⌃"}
+.tm-v91-resource-details>summary:focus-visible{outline:3px solid #ffbf47;outline-offset:2px}
+.tm-v91-resource-details:not([open])>.tm-v91-resources-list,.tm-v91-resource-details:not([open])>small{display:none!important}
+.tm-v91-resource-details[open] .tm-v91-resources-list{max-height:min(32dvh,280px);overflow:auto;scrollbar-width:thin}
 .tm-v91-legend b{display:block;margin-bottom:6px}.tm-v91-legend label{display:flex;align-items:center;gap:6px;margin:5px 0;cursor:pointer}.tm-v91-legend input{accent-color:#176b4b}.tm-v91-legend small{display:block;margin-top:5px;color:#65776e;font-weight:500;line-height:1.3}
 .tm-v91-map-summary{margin:10px 0;padding:9px 10px;border:1px solid #dce8e1;border-radius:10px;background:#f8fbf9;color:#466257;font-size:13px;line-height:1.45}.tm-v91-map-summary b{color:#224d3a}
 </style>
@@ -34,7 +41,7 @@ block = r'''<!-- TREKMAP_TREKBRAIN_V91_MAP_START -->
   const safeUrl=v=>{try{const u=new URL(String(v||''));return ['http:','https:'].includes(u.protocol)?u.href:''}catch(_){return''}};
   const meta={
     water:{emoji:'🚰',label:'Eau'},food:{emoji:'🥖',label:'Ravitaillement'},camping:{emoji:'⛺',label:'Campings'},refuge:{emoji:'🏠',label:'Refuges'},lodging:{emoji:'🛏️',label:'Hébergements'},
-    station:{emoji:'🚉',label:'Gares'},transport:{emoji:'🚌',label:'Bus / transports'},trail:{emoji:'🥾',label:'Sentiers nommés'}
+    station:{emoji:'🚉',label:'Gares'},transport:{emoji:'🚌',label:'Bus / transports'},trail:{emoji:'🥾',label:'Sentiers nommés'},viewpoint:{emoji:'📷',label:'Points de vue'}
   };
   let current=null,basePrompt='',history=[],savedTrekId=null,legend=null;
   const groups={};
@@ -55,13 +62,27 @@ block = r'''<!-- TREKMAP_TREKBRAIN_V91_MAP_START -->
 
   function pointsFor(plan){
     const pts=Array.isArray(plan?.map_resources?.points)?plan.map_resources.points:fallbackPoints(plan);
-    return pts.filter(p=>meta[p.kind]&&Number.isFinite(Number(p.lat))&&Number.isFinite(Number(p.lon)));
+    const valid=pts.filter(p=>meta[p.kind]&&Number.isFinite(Number(p.lat))&&Number.isFinite(Number(p.lon)));
+    const seen=new Set(valid.map(p=>String(p.source_url||'')||[p.lat,p.lon].join(',')));
+    (plan?.points_of_interest||[]).forEach(p=>{
+      const type=String(p.category||p.type||'').toLowerCase();
+      if(!/viewpoint|panorama|point de vue|sommet|peak|cascade|waterfall/.test(type))return;
+      if(!Number.isFinite(Number(p.lat))||!Number.isFinite(Number(p.lon)))return;
+      const key=String(p.source_url||'')||[p.lat,p.lon].join(',');
+      if(seen.has(key))return;seen.add(key);
+      valid.push({...p,kind:'viewpoint'});
+    });
+    return valid;
   }
 
   function popupHtml(p){
     const m=meta[p.kind]||{emoji:'•',label:p.type||'Point'};
     const source=safeUrl(p.source_url);
-    return `<div style="min-width:190px"><b>${m.emoji} ${esc(p.name||m.label)}</b><br><span>${esc(m.label)}${p.route_day?` · jour ${Number(p.route_day)}`:''}</span>${Number.isFinite(Number(p.distance_to_route_km))?`<br><small>À ${Number(p.distance_to_route_km).toFixed(1)} km du tracé</small>`:''}${p.notes?`<br><small>${esc(p.notes)}</small>`:''}${source?`<br><a href="${esc(source)}" target="_blank" rel="noopener noreferrer">Voir la source cartographique</a>`:''}</div>`;
+    const hasPhotoKind=p.kind==='viewpoint';
+    const file=String(p.photo_commons_file||'').slice(0,180);
+    const wikidata=String(p.photo_wikidata||'').slice(0,24);
+    const photo=hasPhotoKind?`<div class="tm-ux-view-card" data-commons-file="${esc(file)}" data-wikidata="${esc(wikidata)}"><div class="tm-ux-photo-media"><span>🏔️ Photo à vérifier</span></div></div>`:'';
+    return `<div style="min-width:190px;max-width:270px"><b>${m.emoji} ${esc(p.name||m.label)}</b>${photo}<br><span>${esc(m.label)}${p.route_day?` · jour ${Number(p.route_day)}`:''}</span>${Number.isFinite(Number(p.distance_to_route_km))?`<br><small>À ${Number(p.distance_to_route_km).toFixed(1)} km du tracé</small>`:''}${p.notes?`<br><small>${esc(p.notes)}</small>`:''}${source?`<br><a href="${esc(source)}" target="_blank" rel="noopener noreferrer">Voir la source cartographique</a>`:''}</div>`;
   }
 
   function drawResources(plan){
@@ -71,14 +92,23 @@ block = r'''<!-- TREKMAP_TREKBRAIN_V91_MAP_START -->
     pts.forEach(p=>{
       const m=meta[p.kind];
       const icon=L.divIcon({className:`tm-v91-resource-icon ${p.kind}`,html:`<span>${m.emoji}</span>`,iconSize:[30,30],iconAnchor:[15,15],popupAnchor:[0,-16]});
-      L.marker([Number(p.lat),Number(p.lon)],{icon,title:p.name||m.label}).bindPopup(popupHtml(p)).addTo(groups[p.kind]);
+      const pin=L.marker([Number(p.lat),Number(p.lon)],{icon,title:p.name||m.label})
+        .bindPopup(popupHtml(p),{autoPanPaddingTopLeft:[20,120],autoPanPaddingBottomRight:[20,130]});
+      if(p.kind==='viewpoint' && typeof pin.on==='function'){
+        pin.on('popupopen',e=>{
+          const el=e.popup?.getElement?.();
+          if(el && window.TrekViewPhotos?.hydrate)window.TrekViewPhotos.hydrate(el);
+        });
+      }
+      pin.addTo(groups[p.kind]);
     });
     Object.values(groups).forEach(g=>g.addTo(map));
     const counts={};pts.forEach(p=>counts[p.kind]=(counts[p.kind]||0)+1);
     legend=L.control({position:'bottomright'});
     legend.onAdd=()=>{
       const div=L.DomUtil.create('div','tm-v91-legend');
-      div.innerHTML='<b>Repères TrekBrain</b>'+Object.keys(meta).filter(k=>counts[k]).map(k=>`<label><input type="checkbox" data-v91-kind="${k}" checked> <span>${meta[k].emoji} ${meta[k].label} (${counts[k]})</span></label>`).join('')+'<small>Points proches du tracé. Vérifie les conditions actuelles avant de partir.</small>';
+      const total=pts.length;
+      div.innerHTML=`<details class="tm-v91-resource-details" ${window.innerWidth>820?'open':''}><summary>📍 Repères TrekBrain · ${total}</summary><div class="tm-v91-resources-list">`+Object.keys(meta).filter(k=>counts[k]).map(k=>`<label><input type="checkbox" data-v91-kind="${k}" checked> <span>${meta[k].emoji} ${meta[k].label} (${counts[k]})</span></label>`).join('')+'</div><small>Points cartographiés. Vérifie les conditions avant de partir.</small></details>';
       L.DomEvent.disableClickPropagation(div);L.DomEvent.disableScrollPropagation(div);
       div.addEventListener('change',e=>{const input=e.target.closest('[data-v91-kind]');if(!input)return;const g=groups[input.dataset.v91Kind];if(!g)return;input.checked?g.addTo(map):map.removeLayer(g)});
       return div;

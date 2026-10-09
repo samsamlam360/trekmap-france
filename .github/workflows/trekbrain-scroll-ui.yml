@@ -35,6 +35,8 @@ jobs:
           python scripts/apply_route_day_clarity.py
           python scripts/apply_trekbrain_scroll_ui.py
           python scripts/apply_trekbrain_ux_refresh.py
+          python scripts/apply_trekbrain_map_mobile.py
+          python scripts/apply_trekbrain_scenic_photos.py
 
       - name: Verify scroll and TrekBrain UI remain together
         shell: python
@@ -63,7 +65,9 @@ jobs:
           print('TrekBrain independent scrolling + existing V9 UI: OK')
 
       - name: Evidence-based TrekBrain UX regression
-        run: node scripts/test_trekbrain_ux_refresh.mjs
+        run: |
+          node scripts/test_trekbrain_ux_refresh.mjs
+          node scripts/test_trekbrain_scenic_media.mjs
 
       - name: Python syntax
         run: python -m compileall -q backend scripts

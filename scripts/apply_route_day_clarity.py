@@ -41,6 +41,12 @@ clarity_css = r'''
   box-shadow:0 1px 4px rgba(0,0,0,.22);flex:0 0 auto
 }
 .tm-route-day-row-text{font-weight:800;color:#29473a}
+.tm-route-day-details>summary{list-style:none;cursor:pointer;display:flex;min-height:36px;align-items:center;color:#1b4934;font-size:13px;font-weight:800}
+.tm-route-day-details>summary::-webkit-details-marker{display:none}
+.tm-route-day-details>summary::after{content:"⌄";margin-left:auto;padding-left:10px}
+.tm-route-day-details[open]>summary::after{content:"⌃"}
+.tm-route-day-details>summary:focus-visible{outline:3px solid #ffbf47;outline-offset:2px}
+.tm-route-day-details:not([open]) .tm-route-day-rows{display:none!important}
 .tm-route-day-tooltip{font-weight:800!important}
 @media(max-width:820px){
   .leaflet-top.leaflet-left .tm-route-day-legend{margin-left:52px!important;margin-top:10px!important}
@@ -102,7 +108,7 @@ legend_replacement = r'''  function makeLegend(segments,title){
         const kmText=distance>0?` · ${distance.toFixed(1)} km`:'';
         return `<div class="tm-route-day-row"><span class="tm-route-day-chip" style="background:${color}">J${i+1}</span><span class="tm-route-day-row-text">Jour ${i+1}${kmText}</span></div>`;
       }).join('');
-      div.innerHTML=`<b class="tm-route-day-legend-title">${title}</b><div class="tm-route-day-rows">${rows}</div>`+'<small><b style="display:inline;color:#166534">D</b> départ · <b style="display:inline;color:#b42318">A</b> arrivée</small>';
+      div.innerHTML=`<details class="tm-route-day-details" ${window.innerWidth>820?'open':''}><summary>${title} · ${segments.length} jour${segments.length>1?'s':''}</summary><div class="tm-route-day-rows">${rows}</div>`+'<small><b style="display:inline;color:#166534">D</b> départ · <b style="display:inline;color:#b42318">A</b> arrivée</small></details>';
       L.DomEvent.disableClickPropagation(div);L.DomEvent.disableScrollPropagation(div);return div;
     };control.addTo(map);return control;
   }

@@ -87,6 +87,20 @@ block = r'''<!-- TREKMAP_AI_EXPERIENCE_START -->
 .tm-ux-safety b{display:block;font-size:14px}
 .tm-ux-safety p{font-size:13px;line-height:1.55;margin:7px 0 0}
 .tm-ux-essentials>small{display:block;margin-top:9px;font-size:12px;line-height:1.45;color:#51685b}
+.tm-ux-scenic-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.tm-ux-view-card{min-width:0;overflow:hidden;background:#fff;border:1px solid #d7e5db;border-radius:14px}
+.tm-ux-photo-media{height:152px;display:grid;place-items:center;overflow:hidden;text-align:center;background:linear-gradient(150deg,#e7eee9,#d4e5d9);color:#607b6a}
+.tm-ux-photo-media span{font-size:12px;line-height:1.5}
+.tm-ux-photo-media img{height:100%;width:100%;object-fit:cover;display:block}
+.tm-ux-view-info{padding:12px;display:grid;gap:8px}
+.tm-ux-view-info b{font-size:15px;line-height:1.4;color:#1f4d37}
+.tm-ux-view-info small{font-size:12px;line-height:1.4;color:#576f60}
+.tm-ux-go-view{min-height:44px;border-radius:10px;border:1px solid #b6d5c2;background:#f1f8f3;color:#1c6544;font-size:13px;font-weight:800}
+.tm-ux-photo-credit{font-size:11px;line-height:1.4;padding:7px 10px;background:#f7faf8;color:#455e4c}
+.tm-ux-photo-credit a{color:#135c3a;text-decoration:underline}
+.tm-ux-other-pois{padding:12px;background:#fff;border:1px solid #e0eae3;border-radius:12px}
+.tm-ux-other-pois>summary{cursor:pointer;min-height:44px;display:flex;align-items:center;color:#225a3e;font-weight:800;font-size:14px}
+@media(max-width:540px){.tm-ux-scenic-grid{grid-template-columns:1fr}.tm-ux-photo-media{height:180px}}
 .tm-ux-additional-checks{border:1px solid #dce8e0;border-radius:12px;padding:12px;background:#fff}
 .tm-ux-additional-checks summary{cursor:pointer;font-size:14px;font-weight:750;color:#215c41;min-height:42px;display:flex;align-items:center}
 .tm-ux-additional-checks summary:focus-visible{outline:3px solid #ffbf47;outline-offset:3px}
@@ -233,6 +247,14 @@ block = r'''<!-- TREKMAP_AI_EXPERIENCE_START -->
   }
 
   $('tm-ai-generate').onclick=()=>generate(requestPayload());
+  // Delegated once: generated viewpoint cards are replaced on every new plan.
+  $('tm-ai-content')?.addEventListener('click',event=>{
+    const button=event.target.closest?.('.tm-ux-go-view');if(!button)return;
+    const lat=Number(button.dataset.viewLat),lon=Number(button.dataset.viewLon);
+    if(!Number.isFinite(lat)||!Number.isFinite(lon))return;
+    try{map.setView([lat,lon],Math.max(13,Number(map.getZoom?.()||13)),{animate:true});}catch(_){}
+    closeAI();
+  });
 
   function waterLabel(status){return status==='potable_referenced'?['Eau potable référencée','tm-ai-water-ok']:status==='not_potable'?['Non potable','tm-ai-water-no']:['Potabilité non confirmée','tm-ai-water-unknown']}
   function sourceLink(s){const url=safeUrl(s?.url);return url?`<a class="tm-ai-source" href="${esc(url)}" target="_blank" rel="noopener noreferrer"><b>${esc(s.title||'Source')}</b><br>${esc(s.purpose||'')}</a>`:''}
@@ -269,12 +291,46 @@ block = r'''<!-- TREKMAP_AI_EXPERIENCE_START -->
     </section>`;
   }
 
+  function isViewpoint(p){
+    const kind=String(p?.category||p?.type||'').toLowerCase();
+    return /viewpoint|panorama|point de vue|sommet|peak|cascade|waterfall/.test(kind)
+      && Number.isFinite(Number(p.lat))&&Number.isFinite(Number(p.lon));
+  }
+  function scenicCards(plan){
+    const points=(Array.isArray(plan.points_of_interest)?plan.points_of_interest:[])
+      .filter(isViewpoint)
+      .sort((a,b)=>Number(Boolean(b.photo_commons_file||b.photo_wikidata))-
+        Number(Boolean(a.photo_commons_file||a.photo_wikidata)))
+      .slice(0,8);
+    if(!points.length)return '';
+    return '<section class="tm-ai-section tm-ux-scenic"><h3>📷 Points de vue et panoramas</h3>'+
+      '<div class="tm-ux-scenic-grid">'+points.map(point=>{
+        const file=String(point.photo_commons_file||'').slice(0,180);
+        const wikidata=String(point.photo_wikidata||'').slice(0,24);
+        const lat=Number(point.lat),lon=Number(point.lon);
+        const routeDistance=point.distance_to_route_km!=null?
+          Number(point.distance_to_route_km):NaN;
+        const distanceLabel=Number.isFinite(routeDistance)&&routeDistance>=0?
+          ' · à '+routeDistance.toFixed(1)+' km du tracé':'';
+        const description=String(point.description||point.notes||
+          'Point de vue cartographié ; visibilité et accès à vérifier sur place.');
+        return '<article class="tm-ux-view-card" data-commons-file="'+esc(file)+
+          '" data-wikidata="'+esc(wikidata)+'"><div class="tm-ux-photo-media" aria-label="Photo du lieu si disponible">'+
+          '<span>🏔️<br>Pas de photographie vérifiée</span></div>'+
+          '<div class="tm-ux-view-info"><b>'+esc(point.name||'Point de vue')+'</b>'+
+          '<small>'+esc(description)+esc(distanceLabel)+'</small>'+
+          '<button type="button" class="tm-ux-go-view" data-view-lat="'+lat+
+          '" data-view-lon="'+lon+'">📍 Voir sur la carte</button>'+
+          '</div></article>';
+      }).join('')+'</div></section>';
+  }
+
   function renderPlan(p){
     $('tm-ai-progress').classList.remove('show');$('tm-ai-empty').style.display='none';
     const route=p.route_preview||{},stages=Array.isArray(p.stages)?p.stages:[],water=Array.isArray(p.water)?p.water:[],accom=Array.isArray(p.accommodations)?p.accommodations:[],pois=Array.isArray(p.points_of_interest)?p.points_of_interest:[],sources=Array.isArray(p.sources)?p.sources:[];
     const limitations=p.confidence?.limitations||[];
     $('tm-ai-content').innerHTML=`
-      <div class="tm-ai-titlebar"><div><h2>${esc(p.title||'Trek proposé')}</h2><p>${esc(p.summary||'')}</p></div><button class="tm-ai-map-btn" id="tm-ai-back" type="button">← Modifier</button></div>
+      <div class="tm-ai-titlebar"><div><h2>${esc(p.title||'Trek proposé')}</h2><p>${esc(p.start?.name&&p.end?.name?(p.start.name===p.end.name?'Boucle au départ de '+p.start.name:p.start.name+' → '+p.end.name):'Parcours proposé · informations de terrain à vérifier')}</p></div><button class="tm-ai-map-btn" id="tm-ai-back" type="button">← Modifier</button></div>
       <div class="tm-ai-badges"><span class="tm-ai-badge">${esc(p.region||'France')}</span><span class="tm-ai-badge">${esc(difficultyLabel[p.difficulty]||p.difficulty||'Moyen')}</span><span class="tm-ai-badge">${esc(p.route_type||'Trek')}</span><span class="tm-ai-badge">${esc(p.best_season||'Saison à vérifier')}</span></div>
       <div class="tm-ai-stats">
         <div class="tm-ai-stat"><small>Distance vérifiée</small><b>${Number(route.distance_km||0).toFixed(1)} km</b></div>
@@ -286,10 +342,11 @@ block = r'''<!-- TREKMAP_AI_EXPERIENCE_START -->
       <section class="tm-ai-section"><h3>Étapes</h3>${stages.map(s=>`<article class="tm-ai-stage"><div class="tm-ai-stage-head"><b>Jour ${Number(s.day||0)} · ${esc(s.title||'Étape')}</b><span>${Number(s.distance_km||0).toFixed(1)} km · +${Math.round(s.elevation_gain_m||0)} m</span></div><p><b>${esc(s.from_name||'')}</b> → <b>${esc(s.to_name||'')}</b></p><p>🌙 ${esc(s.overnight||'À vérifier')}</p><p>🚰 ${esc(s.water_notes||'')}</p><p>🥖 ${esc(s.food_notes||'')}</p>${s.highlights?.length?`<p>🌄 ${s.highlights.map(esc).join(' · ')}</p>`:''}${s.safety_notes?`<p>⚠️ ${esc(s.safety_notes)}</p>`:''}</article>`).join('')}</section>
       ${water.length?`<section class="tm-ai-section"><h3>Eau</h3><div class="tm-ai-list">${water.map(w=>{const z=waterLabel(w.status);return `<div class="tm-ai-item"><b>${esc(w.name)}</b> · <span class="${z[1]}">${z[0]}</span><small>${esc(w.notes||'')}</small></div>`}).join('')}</div></section>`:''}
       ${accom.length?`<section class="tm-ai-section"><h3>Nuitées</h3><div class="tm-ai-list">${accom.map(a=>`<div class="tm-ai-item"><b>${esc(a.name)}</b> · ${esc(a.type)}<small>${esc(a.notes||'')}</small></div>`).join('')}</div></section>`:''}
-      ${pois.length?`<section class="tm-ai-section"><h3>Points d'intérêt</h3><div class="tm-ai-list">${pois.slice(0,12).map(x=>`<div class="tm-ai-item"><b>${esc(x.name)}</b><small>${esc(x.type)}</small></div>`).join('')}</div></section>`:''}
+      ${scenicCards(p)}
+      ${pois.length?`<details class="tm-ai-section tm-ux-other-pois"><summary>Autres points d'intérêt (${pois.length})</summary><div class="tm-ai-list">${pois.slice(0,12).map(x=>`<div class="tm-ai-item"><b>${esc(x.name)}</b><small>${esc(x.type)}</small></div>`).join('')}</div></details>`:''}
       <section class="tm-ai-section"><h3>Transports</h3><div class="tm-ai-item"><b>Aller</b><small>${esc(p.transport?.outbound||'À vérifier')}</small></div><div class="tm-ai-item"><b>Retour</b><small>${esc(p.transport?.return||'À vérifier')}</small></div><div class="tm-ai-item"><small>${esc(p.transport?.notes||'')}</small></div></section>
       ${limitations.length?`<details class="tm-ux-additional-checks tm-ai-section"><summary>Autres vérifications et limites (${limitations.length})</summary><div class="tm-ai-warning">${limitations.map(x=>'• '+esc(x)).join('<br>')}</div></details>`:''}
-      ${sources.length?`<section class="tm-ai-section"><h3>Sources</h3>${sources.map(sourceLink).join('')}</section>`:''}
+      ${sources.length?`<details class="tm-ai-section tm-ux-other-pois"><summary>Sources du trek (${sources.length})</summary>${sources.map(sourceLink).join('')}</details>`:''}
       <div class="tm-ai-refine-box"><b style="font-size:12px">Modifier avec l'IA</b><textarea id="tm-ai-refine-text" placeholder="Ex. raccourcis le jour 2, trouve une arrivée avec une gare, privilégie les campings..."></textarea><div class="tm-ai-refine-actions"><button id="tm-ai-refine" type="button">✨ Recalculer</button></div></div>
       <div class="tm-ai-actions"><button class="tm-ai-map-btn" id="tm-ai-preview" type="button">🗺️ Voir sur la carte</button><button id="tm-ai-save" type="button">Enregistrer dans TrekMap</button></div>`;
     $('tm-ai-back').onclick=()=>shell.classList.remove('has-result');
