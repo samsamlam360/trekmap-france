@@ -554,8 +554,9 @@ def _nominatim_route_stays(coords, category: str) -> list[dict[str, Any]]:
             "category": actual,
             "source_url": source,
             "osm_tags": {
-                "class": row.get("class"),
+                "class": row.get("category") or row.get("class"),
                 "type": row.get("type"),
+                "shelter_type": (row.get("extratags") or {}).get("shelter_type"),
             },
         })
 
@@ -688,6 +689,13 @@ def _project_stays(roundtrip, coords, rows, category: str, max_offroute_km: floa
     selected = {}
     for row in rows:
         if not isinstance(row, dict):
+            continue
+        tags = row.get("osm_tags") or {}
+        is_shelter = tags.get("amenity") == "shelter" or (
+            (tags.get("class") or tags.get("osm_key")) == "amenity"
+            and (tags.get("type") or tags.get("osm_value")) == "shelter"
+        )
+        if is_shelter and tags.get("shelter_type") != "basic_hut":
             continue
         item = dict(row)
         item["category"] = category
