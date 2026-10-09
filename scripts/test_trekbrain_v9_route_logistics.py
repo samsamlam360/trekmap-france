@@ -231,7 +231,7 @@ assert all("tourism:alpine_hut" in call[1] for call in FakePhotonV3.calls), Fake
 # Structured outdoor lodging should prefer one exact OSM corridor query and stop
 # before Photon when that query already resolves every night.
 real_bbox_order = logistics._bbox_route_stays
-real_photon_order = logistics._photon_split_stays
+real_photon_order = logistics._photon_route_stays
 order_calls = {"bbox": 0, "photon": 0}
 try:
     def counted_bbox(_coords, category):
@@ -243,7 +243,7 @@ try:
         return []
 
     logistics._bbox_route_stays = counted_bbox
-    logistics._photon_split_stays = counted_photon
+    logistics._photon_route_stays = counted_photon
     chosen_fast, projected_fast, meta_fast = logistics._discover_stays(
         FakeV3(),
         FakeRoundtrip,
@@ -257,7 +257,7 @@ try:
     )
 finally:
     logistics._bbox_route_stays = real_bbox_order
-    logistics._photon_split_stays = real_photon_order
+    logistics._photon_route_stays = real_photon_order
 
 assert len(chosen_fast) == 4, chosen_fast
 assert order_calls == {"bbox": 1, "photon": 0}, order_calls
@@ -269,7 +269,7 @@ assert meta_fast["elapsed_ms"] >= 0
 # path.
 real_bundle_parallel = logistics._bbox_route_bundle
 real_nominatim_parallel = logistics._nominatim_route_stays
-real_photon_parallel = logistics._photon_split_stays
+real_photon_parallel = logistics._photon_route_stays
 parallel_barrier = threading.Barrier(2)
 parallel_errors = []
 parallel_calls = {"overpass": 0, "nominatim": 0, "photon": 0}
@@ -308,7 +308,7 @@ def forbidden_parallel_photon(*args, **kwargs):
 try:
     logistics._bbox_route_bundle = parallel_bundle
     logistics._nominatim_route_stays = parallel_nominatim
-    logistics._photon_split_stays = forbidden_parallel_photon
+    logistics._photon_route_stays = forbidden_parallel_photon
     chosen_parallel, _projected_parallel, meta_parallel = logistics._discover_stays(
         FakeV3(),
         FakeRoundtrip,
@@ -324,7 +324,7 @@ try:
 finally:
     logistics._bbox_route_bundle = real_bundle_parallel
     logistics._nominatim_route_stays = real_nominatim_parallel
-    logistics._photon_split_stays = real_photon_parallel
+    logistics._photon_route_stays = real_photon_parallel
 
 assert parallel_errors == [], parallel_errors
 assert parallel_calls == {"overpass": 1, "nominatim": 1, "photon": 0}, parallel_calls
@@ -465,7 +465,7 @@ assert meta_without_terrain["terrain_preloaded"] is False, meta_without_terrain
 # resource coverage without putting Photon back on the normal hot path.
 real_bundle_rescue = logistics._bbox_route_bundle
 real_nominatim_rescue = logistics._nominatim_route_stays
-real_photon_rescue = logistics._photon_split_stays
+real_photon_rescue = logistics._photon_route_stays
 rescue_calls = {"overpass": 0, "nominatim": 0, "photon": 0}
 try:
     def empty_rescue_bundle(_coords, category):
@@ -482,7 +482,7 @@ try:
 
     logistics._bbox_route_bundle = empty_rescue_bundle
     logistics._nominatim_route_stays = empty_rescue_nominatim
-    logistics._photon_split_stays = successful_rescue_photon
+    logistics._photon_route_stays = successful_rescue_photon
     chosen_rescue, projected_rescue, meta_rescue = logistics._discover_stays(
         FakeV3(),
         FakeRoundtrip,
@@ -498,12 +498,74 @@ try:
 finally:
     logistics._bbox_route_bundle = real_bundle_rescue
     logistics._nominatim_route_stays = real_nominatim_rescue
-    logistics._photon_split_stays = real_photon_rescue
+    logistics._photon_route_stays = real_photon_rescue
 
 assert rescue_calls == {"overpass": 1, "nominatim": 1, "photon": 1}, rescue_calls
 assert len(projected_rescue) == 4, projected_rescue
 assert len(chosen_rescue) == 4, chosen_rescue
 assert meta_rescue["terrain_preloaded"] is False
+
+# Photon stay rescue is likewise one structured route-wide request. It must
+# carry exact OSM categories plus one bbox and may return several nights from
+# that single provider call.
+class RoutePhotonV3:
+    PHOTON_URL = "https://photon.test/api/"
+    calls = []
+
+    @staticmethod
+    def _request_json(url, **kwargs):
+        RoutePhotonV3.calls.append((url, dict(kwargs.get("params") or {}), kwargs))
+        return {
+            "features": [
+                {
+                    "properties": {
+                        "name": "Camping Photon A",
+                        "countrycode": "FR",
+                        "osm_key": "tourism",
+                        "osm_value": "camp_site",
+                        "osm_type": "N",
+                        "osm_id": 5101,
+                    },
+                    "geometry": {"coordinates": [0.20, 0.01]},
+                },
+                {
+                    "properties": {
+                        "name": "Camping Photon B",
+                        "countrycode": "FR",
+                        "osm_key": "tourism",
+                        "osm_value": "camp_site",
+                        "osm_type": "N",
+                        "osm_id": 5102,
+                    },
+                    "geometry": {"coordinates": [0.40, 0.01]},
+                },
+                {
+                    "properties": {
+                        "name": "Intrus",
+                        "countrycode": "FR",
+                        "osm_key": "amenity",
+                        "osm_value": "restaurant",
+                        "osm_type": "N",
+                        "osm_id": 5103,
+                    },
+                    "geometry": {"coordinates": [0.30, 0.01]},
+                },
+            ]
+        }
+
+RoutePhotonV3.calls.clear()
+route_photon_rows = logistics._photon_route_stays(
+    RoutePhotonV3,
+    coords,
+    "camping",
+)
+assert len(RoutePhotonV3.calls) == 1, RoutePhotonV3.calls
+assert [x["name"] for x in route_photon_rows] == ["Camping Photon A", "Camping Photon B"], route_photon_rows
+route_photon_params = RoutePhotonV3.calls[0][1]
+assert route_photon_params.get("bbox"), route_photon_params
+assert "osm.tourism.camp_site" in str(route_photon_params.get("include") or ""), route_photon_params
+assert "q" not in route_photon_params, route_photon_params
+assert int(route_photon_params.get("limit") or 0) >= 30, route_photon_params
 
 # Nominatim route-stay discovery is one bounded route-wide request and keeps
 # real OSM provenance. This is the resilient stay source when public Overpass is
@@ -628,7 +690,7 @@ assert empty_preloaded is False
 # instead of paying for a second terrain query after planning.
 real_bundle_terrain = logistics._bbox_route_bundle
 real_nominatim_terrain = logistics._nominatim_route_stays
-real_photon_terrain = logistics._photon_split_stays
+real_photon_terrain = logistics._photon_route_stays
 try:
     logistics._bbox_route_bundle = lambda _coords, category: (
         [dict(x) for x in camps],
@@ -659,7 +721,7 @@ try:
         True,
     )
     logistics._nominatim_route_stays = lambda *args, **kwargs: []
-    logistics._photon_split_stays = lambda *args, **kwargs: []
+    logistics._photon_route_stays = lambda *args, **kwargs: []
     chosen_terrain, _projected_terrain, meta_terrain = logistics._discover_stays(
         FakeV3(),
         FakeRoundtrip,
@@ -675,7 +737,7 @@ try:
 finally:
     logistics._bbox_route_bundle = real_bundle_terrain
     logistics._nominatim_route_stays = real_nominatim_terrain
-    logistics._photon_split_stays = real_photon_terrain
+    logistics._photon_route_stays = real_photon_terrain
 
 assert len(chosen_terrain) == 4, chosen_terrain
 assert meta_terrain["terrain_preloaded"] is True
