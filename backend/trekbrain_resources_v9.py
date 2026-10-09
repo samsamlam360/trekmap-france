@@ -173,6 +173,26 @@ def _route_day_from_progress(progress: float, boundaries: list[float]) -> int:
 
 
 
+def _sourced_water_coverage(points: list[dict[str, Any]]) -> tuple[list[int], int]:
+    """OSM water coverage, never counting a point explicitly marked undrinkable.
+
+    Unknown potability is still shown with a warning. A mapped spring is
+    not a guarantee of drinking water.
+    """
+    usable = [
+        point for point in points or []
+        if isinstance(point, dict)
+        and point.get("kind") == "water"
+        and str(point.get("status") or point.get("water_status") or "") != "not_potable"
+        and str(point.get("source_url") or "").startswith("https://www.openstreetmap.org/")
+    ]
+    days = sorted({
+        int(point["route_day"]) for point in usable
+        if isinstance(point.get("route_day"), int) and point["route_day"] >= 1
+    })
+    return days, len(usable)
+
+
 def _route_match(
     coords: list[list[float]],
     item: dict[str, Any],
@@ -332,7 +352,14 @@ def _candidate_resources(result: dict[str, Any]) -> list[dict[str, Any]]:
     items: list[dict[str, Any]] = []
     for w in result.get("water") or []:
         if isinstance(w, dict):
-            items.append({**w, "kind": "water", "type": "Point d'eau", "notes": w.get("notes") or "Potabilité à vérifier."})
+            unsafe = str(w.get("water_status") or w.get("status") or "") == "not_potable"
+            items.append({
+                **w, "kind": "water", "type": "Point d'eau",
+                "notes": (
+                    "Eau signalée non potable : ne pas boire."
+                    if unsafe else w.get("notes") or "Potabilité à vérifier."
+                ),
+            })
     for a in result.get("accommodations") or []:
         if isinstance(a, dict):
             kind = _resource_kind(a, "lodging")
@@ -387,7 +414,7 @@ def enrich_resources(result: dict[str, Any]) -> dict[str, Any]:
             "lon": round(point[1], 6),
             "route_day": route_day,
             "distance_to_route_km": round(distance, 2),
-            "status": str(item.get("status") or "")[:80],
+            "status": str(item.get("status") or (item.get("water_status") if kind == "water" else "") or "")[:80],
             "notes": str(item.get("notes") or "")[:500],
             "source_url": str(item.get("source_url") or "")[:1000],
         })
@@ -497,6 +524,16 @@ def _merge_supplemented_resources(result: dict[str, Any], rows: list[dict[str, A
     transit_rows = []
 
     def add_unique(target, item, *, category=None):
+        # A fresh 'drinking_water=no' overrides stale cached source metadata.
+        def preserve_newer_unsafe_status(existing):
+            if (
+                target is water
+                and str(item.get("status") or item.get("water_status") or "") == "not_potable"
+            ):
+                existing["status"] = "not_potable"
+                existing["water_status"] = "not_potable"
+                existing["notes"] = "Eau signalée non potable : ne pas boire."
+
         key = str(item.get("source_url") or "")
         try:
             coords_key = (round(float(item.get("lat")), 5), round(float(item.get("lon")), 5))
@@ -506,6 +543,7 @@ def _merge_supplemented_resources(result: dict[str, Any], rows: list[dict[str, A
             if not isinstance(existing, dict):
                 continue
             if key and str(existing.get("source_url") or "") == key:
+                preserve_newer_unsafe_status(existing)
                 return
             if coords_key is not None:
                 try:
@@ -513,6 +551,7 @@ def _merge_supplemented_resources(result: dict[str, Any], rows: list[dict[str, A
                         round(float(existing.get("lat")), 5),
                         round(float(existing.get("lon")), 5),
                     ) == coords_key and (category is None or str(existing.get("category") or "") == category):
+                        preserve_newer_unsafe_status(existing)
                         return
                 except (TypeError, ValueError):
                     pass
@@ -527,7 +566,11 @@ def _merge_supplemented_resources(result: dict[str, Any], rows: list[dict[str, A
                 "name": row.get("name") or "Point d'eau",
                 "lat": row.get("lat"), "lon": row.get("lon"),
                 "status": row.get("water_status") or "unverified",
-                "notes": "Repère cartographique proche du tracé ; disponibilité et potabilité à vérifier.",
+                "notes": (
+                    "Eau signalée non potable : ne pas boire."
+                    if row.get("water_status") == "not_potable"
+                    else "Repère cartographique proche du tracé ; disponibilité et potabilité à vérifier."
+                ),
                 "source_url": row.get("source_url") or "",
             })
         elif category == "food":
@@ -850,6 +893,8 @@ def _missing_terrain_intent(result: dict[str, Any], intent: dict[str, Any]) -> d
     for item in water_rows:
         if not isinstance(item, dict) or _point(item) is None or not profile:
             continue
+        if str(item.get("water_status") or item.get("status") or "") == "not_potable":
+            continue
         if not str(item.get("source_url") or "").startswith(("https://", "http://")):
             continue
         match = _route_match(coords, item, profile)
@@ -993,10 +1038,17 @@ def _annotate_stage_resources(result: dict[str, Any]) -> dict[str, Any]:
                 + (
                     " (potable référencée)"
                     if str(item.get("status") or "") == "potable_referenced"
+                    else " (non potable : ne pas boire)"
+                    if str(item.get("status") or "") == "not_potable"
                     else " (potabilité à vérifier)"
                 )
                 for item in water[:3]
             )
+            if all(str(item.get("status") or "") == "not_potable" for item in water):
+                stage["water_notes"] += (
+                    " · Aucune eau potable identifiée pour cette étape : "
+                    "prévoir une réserve suffisante."
+                )
         else:  # Route-wide coverage cannot guarantee water on this particular day.
             stage["water_notes"] = (
                 "Aucun point d'eau OSM confirmé pour cette étape ; "
@@ -1260,22 +1312,7 @@ def _install_plan_overlay(app, legacy_main):
                 and point.get("source_url")
             )
             water_requested = bool(intent.get("water"))
-            water_days = sorted({
-                int(point.get("route_day"))
-                for point in points
-                if isinstance(point, dict) and point.get("kind") == "water"
-                and str(point.get("source_url") or "").startswith(
-                    "https://www.openstreetmap.org/"
-                )
-                and isinstance(point.get("route_day"), int)
-            })
-            water_markers = sum(
-                1 for point in points
-                if isinstance(point, dict) and point.get("kind") == "water"
-                and str(point.get("source_url") or "").startswith(
-                    "https://www.openstreetmap.org/"
-                )
-            )
+            water_days, water_markers = _sourced_water_coverage(points)
             food_requested = bool(intent.get("food"))
             stage_count = max(1, len(result.get("stages") or [])
                               or int(result.get("duration_days") or 1))
