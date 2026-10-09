@@ -207,6 +207,10 @@ block = r'''<!-- TREKMAP_TREKBRAIN_UX_2026_START -->
 #tm-ai-overlay .tm-agent-research-meta {font-size:13px}
 #tm-ai-overlay .tm-agent-source b {font-size:14px}
 #tm-ai-overlay .tm-agent-source span {font-size:13px}
+#tm-ai-overlay .tm-ai-failure-buttons button {font-size:14px;min-height:48px}
+#tm-ai-overlay .tm-agent-q input {min-height:47px;font-size:16px}
+#tm-ai-overlay .tm-agent-clarify-actions button {min-height:48px;font-size:14px}
+#tm-ai-overlay .tm-v9-down textarea {font-size:16px;line-height:1.5}
 #tm-ai-overlay button:focus-visible,
 #tm-ai-overlay input:focus-visible,
 #tm-ai-overlay select:focus-visible,
@@ -351,7 +355,7 @@ block = r'''<!-- TREKMAP_TREKBRAIN_UX_2026_START -->
   if(difficulty && routeType && checks){
     var advanced=el("details","tm-ux-advanced");
     advanced.id="tm-ux-advanced";
-    var summary=el("summary","","Personnaliser mon trek");
+    var summary=el("summary","","Personnaliser mon trek · critères et ressources");
     summary.setAttribute("aria-label","Afficher les critères avancés et les ressources recherchées");
     var body=el("div","tm-ux-advanced-body");
     var advancedFields=el("div","tm-ux-advanced-fields");
