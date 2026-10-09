@@ -119,7 +119,10 @@ jobs:
           print('Production frontend OK:', p.stat().st_size, 'bytes')
 
       - name: Verify accessible TrekBrain UI redesign
-        run: node scripts/test_trekbrain_ux_refresh.mjs
+        run: |
+          node scripts/test_trekbrain_ux_refresh.mjs
+          node scripts/test_trekbrain_scenic_media.mjs
+          python scripts/test_trekbrain_scenic_photo.py
 
       - name: Validate Render deployment configuration
         shell: python
