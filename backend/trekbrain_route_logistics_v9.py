@@ -1418,7 +1418,27 @@ def _attach_logistics(result: dict[str, Any], data, legacy_main, v3, roundtrip, 
         })
         previous_return = access_out
 
-    complete = len([row for row in logistics_rows if row.get("status") in {"confirmed", "usable_with_transfer"}]) == max(0, days - 1)
+    nights_required = max(0, days - 1)
+    nights_walk_confirmed = sum(
+        row.get("status") == "confirmed" and row.get("access_mode") == "walk"
+        for row in logistics_rows
+    )
+    nights_transfer_required = sum(
+        row.get("status") == "usable_with_transfer" and row.get("access_mode") == "transfer"
+        for row in logistics_rows
+    )
+    nights_missing = max(
+        0, nights_required - nights_walk_confirmed - nights_transfer_required
+    )
+    # Keep the existing complete/partial API contract for compatibility.
+    # It means a candidate was found, NOT that a multi-day walk is ready
+    # without additional transport or campsite arrangements.
+    complete = nights_missing == 0
+    walking_readiness = (
+        "ready_on_foot" if nights_walk_confirmed == nights_required
+        else "missing_nights" if nights_missing
+        else "transfer_to_arrange"
+    )
     result["stages"] = stages
     result["duration_days"] = days
     result["accommodations"] = accommodations
@@ -1428,8 +1448,13 @@ def _attach_logistics(result: dict[str, Any], data, legacy_main, v3, roundtrip, 
         "status": "complete" if complete else "partial",
         "route_immutable": True,
         "discovered_candidates": len(discovered),
-        "nights_required": max(0, days - 1),
-        "nights_resolved": len([row for row in logistics_rows if row.get("status") in {"confirmed", "usable_with_transfer"}]),
+        "nights_required": nights_required,
+        "nights_resolved": nights_walk_confirmed + nights_transfer_required,
+        "nights_walk_confirmed": nights_walk_confirmed,
+        "nights_transfer_required": nights_transfer_required,
+        "nights_missing": nights_missing,
+        "walking_readiness": walking_readiness,
+        "ready_without_transfer": walking_readiness == "ready_on_foot",
         "strict_walk": strict_walk,
         "nights": logistics_rows,
         "timing": {
@@ -1450,6 +1475,19 @@ def _attach_logistics(result: dict[str, Any], data, legacy_main, v3, roundtrip, 
         0,
         "🧭 Itinéraire d'abord : TrekBrain a séparé le parcours pédestre des nuitées. Un camping éloigné ne déforme plus le trek ; une petite liaison est ajoutée si elle est validée, sinon un transfert séparé est conseillé.",
     )
+    if nights_missing:
+        advisor_notes.insert(
+            0,
+            f"⚠️ Nuitées à organiser : {nights_missing} nuit(s) sans solution d'hébergement utilisable. "
+            "Ce trek n'est pas prêt pour un départ avec ces nuitées.",
+        )
+    if nights_transfer_required:
+        advisor_notes.insert(
+            0,
+            f"⚠️ Transfert à organiser : {nights_transfer_required} nuit(s) ne sont pas "
+            "accessibles par une liaison pédestre validée. Le tracé principal "
+            "reste à pied, mais le séjour complet n'est pas garanti tout-à-pied.",
+        )
     planner = result.setdefault("planner", {})
     if isinstance(planner, dict):
         planner["logistics_mode"] = "route-first"
