@@ -92,6 +92,8 @@ jobs:
           python scripts/apply_route_day_clarity.py
           python scripts/apply_trekbrain_scroll_ui.py
           python scripts/apply_trekbrain_ux_refresh.py
+          python scripts/apply_trekbrain_map_mobile.py
+          python scripts/apply_trekbrain_scenic_photos.py
 
       - name: Validate generated production frontend
         shell: python
@@ -117,7 +119,10 @@ jobs:
           print('Production frontend OK:', p.stat().st_size, 'bytes')
 
       - name: Verify accessible TrekBrain UI redesign
-        run: node scripts/test_trekbrain_ux_refresh.mjs
+        run: |
+          node scripts/test_trekbrain_ux_refresh.mjs
+          node scripts/test_trekbrain_scenic_media.mjs
+          python scripts/test_trekbrain_scenic_photo.py
 
       - name: Validate Render deployment configuration
         shell: python

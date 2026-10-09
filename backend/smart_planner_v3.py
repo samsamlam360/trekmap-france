@@ -84,6 +84,36 @@ CATEGORY_LABEL = {
 SCENIC_CATEGORIES = {"viewpoint", "peak", "lake", "waterfall", "nature", "heritage", "village"}
 
 
+def _source_linked_scenic_photo(tags: dict[str, Any]) -> dict[str, str]:
+    """Only exact OSM Commons/Wikidata refs, never a geographically guessed photo.
+
+    Wikimedia image rights are checked on-demand by the client. No new planner
+    network calls, database migrations, or paid media endpoints.
+    """
+    raw = str(tags.get("wikimedia_commons") or tags.get("image") or "").strip()
+    file_name = ""
+    if raw.startswith("File:"):
+        file_name = raw[5:]
+    elif raw.startswith("https://commons.wikimedia.org/wiki/File:"):
+        from urllib.parse import unquote
+        file_name = unquote(raw.split("/wiki/File:", 1)[1])
+    file_name = file_name.replace("_", " ").strip()
+    if (
+        not 1 <= len(file_name) <= 180
+        or any(x in file_name for x in ('<', '>', '|', '#', '?', '\n', '\r'))
+        or not re.search(r"\.(?:jpe?g|png|webp)$", file_name, re.I)
+    ):
+        file_name = ""
+    entity = str(tags.get("wikidata") or "").strip().upper()
+    if not re.fullmatch(r"Q[1-9]\d{0,11}", entity):
+        entity = ""
+    return {
+        "photo_commons_file": file_name,
+        "photo_wikidata": entity,
+    }
+
+
+
 @dataclass
 class Candidate:
     boundaries: list[dict[str, Any]]
@@ -525,6 +555,7 @@ def _combined_nearby(
                 ),
                 "water_status": status,
                 "opening_hours": tags.get("opening_hours") or "",
+                **(_source_linked_scenic_photo(tags) if base_cat == "viewpoint" else {}),
             })
 
         extra_cat = None
@@ -559,6 +590,7 @@ def _combined_nearby(
                     "water_status": "unverified",
                     "opening_hours": tags.get("opening_hours") or "",
                     "trail_name": tags.get("name") if extra_cat == "trail" else "",
+                    **(_source_linked_scenic_photo(tags) if extra_cat in {"peak", "waterfall"} else {}),
                 })
 
     return base_items, extra_items, []
@@ -1947,7 +1979,14 @@ def _build(data: AIPlanRequest, legacy_main):
         if not key or key in seen_poi:
             continue
         seen_poi.add(key)
-        pois.append({"name": item["name"], "type": CATEGORY_LABEL.get(item.get("category"), item.get("category", "point")), "lat": item["lat"], "lon": item["lon"], "source_url": key})
+        pois.append({
+            "name": item["name"],
+            "type": CATEGORY_LABEL.get(item.get("category"), item.get("category", "point")),
+            "category": item.get("category", ""),
+            "lat": item["lat"], "lon": item["lon"], "source_url": key,
+            "photo_commons_file": item.get("photo_commons_file", ""),
+            "photo_wikidata": item.get("photo_wikidata", ""),
+        })
         if len(pois) >= 24:
             break
 
