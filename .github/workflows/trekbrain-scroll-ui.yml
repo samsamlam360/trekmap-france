@@ -65,7 +65,9 @@ jobs:
           print('TrekBrain independent scrolling + existing V9 UI: OK')
 
       - name: Evidence-based TrekBrain UX regression
-        run: node scripts/test_trekbrain_ux_refresh.mjs
+        run: |
+          node scripts/test_trekbrain_ux_refresh.mjs
+          node scripts/test_trekbrain_scenic_media.mjs
 
       - name: Python syntax
         run: python -m compileall -q backend scripts
