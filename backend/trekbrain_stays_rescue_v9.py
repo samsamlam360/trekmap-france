@@ -32,11 +32,11 @@ def _valid_coordinates(lat, lon):
     return math.isfinite(lat) and math.isfinite(lon) and -90 <= lat <= 90 and -180 <= lon <= 180
 
 
-def _stay_type_matches(category, key, value):
+def _stay_type_matches(category, key, value, tags=None):
     # A name or street address is never evidence of an accommodation type.
     if category == "camping":
         return key == "tourism" and value in {"camp_site", "caravan_site"}
-    return (key == "tourism" and value in {"alpine_hut", "wilderness_hut"}) or (key == "amenity" and value == "shelter")
+    return (key == "tourism" and value in {"alpine_hut", "wilderness_hut"}) or (key == "amenity" and value == "shelter" and (tags or {}).get("shelter_type") == "basic_hut")
 
 
 def _distance_km(a: dict[str, Any], b: dict[str, Any]) -> float:
@@ -78,7 +78,7 @@ def _direct_stays(start: dict[str, Any], category: str, radius_km: float) -> lis
         filters = (
             '["tourism"="alpine_hut"]',
             '["tourism"="wilderness_hut"]',
-            '["amenity"="shelter"]',
+            '["amenity"="shelter"]["shelter_type"="basic_hut"]',
         )
     # A bbox is significantly cheaper for Overpass than several repeated
     # around() searches and avoids the false "0 camping" seen in production.
@@ -120,7 +120,7 @@ def _direct_stays(start: dict[str, Any], category: str, radius_km: float) -> lis
             continue
         if category != "camping" and not (
             tags.get("tourism") in {"alpine_hut", "wilderness_hut"}
-            or tags.get("amenity") == "shelter"
+            or (tags.get("amenity") == "shelter" and tags.get("shelter_type") == "basic_hut")
         ):
             continue
         rows.append(_normalise_stay(
@@ -194,6 +194,7 @@ def _nominatim_stays(start: dict[str, Any], category: str, radius_km: float) -> 
             params={
                 "q": term,
                 "format": "jsonv2",
+                "extratags": 1,
                 "limit": 20,
                 "countrycodes": "fr",
                 "bounded": 1,
@@ -217,7 +218,7 @@ def _nominatim_stays(start: dict[str, Any], category: str, radius_km: float) -> 
         display = str(row.get("display_name") or term)
         if not _valid_coordinates(lat, lon):
             continue
-        if not _stay_type_matches(category, str(row.get("category") or row.get("class") or "").casefold(), typ):
+        if not _stay_type_matches(category, str(row.get("category") or row.get("class") or "").casefold(), typ, row.get("extratags")):
             continue
         source = _osm_url({"osm_type": row.get("osm_type"), "osm_id": row.get("osm_id")})
         if not source:

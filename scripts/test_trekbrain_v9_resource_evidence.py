@@ -20,6 +20,7 @@ def lookup(row, category, tags):
 
 try:
     cases = [
+        (feature("amenity", "shelter", "Abri de la Voie Verte"), "stay", ("amenity:shelter",)),
         (feature("highway", "residential", "Rue de la Fontaine"), "water", ("amenity:drinking_water",)),
         (feature("amenity", "restaurant", "La Boulangerie"), "food", ("shop:bakery",)),
         (feature("tourism", "museum", "Musée", street="Rue du Gîte"), "stay", ("tourism:guest_house",)),
@@ -48,3 +49,9 @@ finally:
     planner._request_json = original
 
 print("Resource evidence: misleading names, missing identity, invalid coordinates rejected; exact OSM types retained: PASS")
+
+from backend.free_planner_v2 import AIPlanRequest
+for word in ("gîte", "gite", "gîtes"):
+    intent = planner._parse_intent(AIPlanRequest(prompt=f"Boucle de 2 jours avec {word}", region="Huelgoat", days=2))
+    assert intent["sleep"] and intent["accommodation"] != "refuge", intent
+print("Gîte requests keep generic lodging discovery: PASS")

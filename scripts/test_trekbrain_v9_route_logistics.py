@@ -904,3 +904,22 @@ try:
 finally:
     free._request_json = real_request
 print("Route-wide accommodation evidence: OK")
+
+real_request = free._request_json
+try:
+    shelter = {'lat': '0.01', 'lon': '0.20', 'category': 'amenity', 'type': 'shelter',
+               'display_name': 'Abri', 'osm_type': 'node', 'osm_id': 880}
+    free._request_json = lambda *a, **k: [shelter, dict(shelter, osm_id=881, extratags={'shelter_type': 'public_transport'}),
+         dict(shelter, osm_id=882, extratags={'shelter_type': 'basic_hut'})]
+    sleeping = logistics._nominatim_route_stays(coords, 'refuge')
+    assert len(sleeping) == 1 and sleeping[0]['source_url'].endswith('/882'), sleeping
+finally:
+    free._request_json = real_request
+print('Route shelter sleeping evidence: OK')
+
+# The final projection gate also rejects old/preloaded generic shelters.
+preloaded_shelter = {"name": "Ancien abri", "lat": 0.01, "lon": 0.20,
+                     "source_url": "https://www.openstreetmap.org/node/999",
+                     "osm_tags": {"amenity": "shelter"}}
+assert logistics._project_stays(FakeRoundtrip, coords, [preloaded_shelter], "refuge", 8) == []
+print("Preloaded shelter evidence gate: OK")
