@@ -110,6 +110,10 @@ water_points = [
 assert {p["status"] for p in water_points} == {
     "potable_referenced", "not_potable"
 }, water_points
+assert any(
+    p["status"] == "not_potable" and "ne pas boire" in p["notes"]
+    for p in water_points
+), water_points
 resources._annotate_stage_resources(display_plan)
 assert "potable référencée" in display_plan["stages"][0]["water_notes"]
 assert any(
