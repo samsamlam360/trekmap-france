@@ -190,10 +190,10 @@ block = r'''<!-- TREKMAP_REASONING_AGENT_UI_START -->
     const sources=lastAgentPlan.web_sources||[];
     const agent=lastAgentPlan.agent||{};
     if(!sources.length&&!agent.brain)return;
-    const section=document.createElement('div');section.className='tm-agent-research';section.id='tm-agent-research';
+    const section=document.createElement('details');section.className='tm-agent-research tm-ux-sources';section.id='tm-agent-research';
     const badge=agent.brain==='gemini'?'Gemini + outils TrekMap':'Moteur TrekMap local + outils Web';
-    section.innerHTML=`<h3>🔎 Recherche et vérification</h3><div class="tm-agent-research-meta">${esc((lastAgentPlan.web_research||{}).queries?.length||0)} recherche(s) · ${esc((lastAgentPlan.web_research||{}).provider||'Web')}<br><span class="tm-agent-brain-badge">🧠 ${esc(badge)}</span></div>`+
-      sources.slice(0,8).map(s=>{const u=safeUrl(s.url);return u?`<a class="tm-agent-source" href="${esc(u)}" target="_blank" rel="noopener"><b>${esc(s.title||'Source Web')}</b><span>${esc(s.snippet||'')}</span></a>`:''}).join('');
+    section.innerHTML=`<summary>Sources et recherches (${esc(sources.length)})</summary><div class="tm-ux-sources-body"><div class="tm-agent-research-meta">${esc((lastAgentPlan.web_research||{}).queries?.length||0)} recherche(s) · ${esc((lastAgentPlan.web_research||{}).provider||'Web')}<br><span class="tm-agent-brain-badge">🧠 ${esc(badge)}</span></div>`+
+      sources.slice(0,8).map(s=>{const u=safeUrl(s.url);return u?`<a class="tm-agent-source" href="${esc(u)}" target="_blank" rel="noopener"><b>${esc(s.title||'Source Web')}</b><span>${esc(s.snippet||'')}</span></a>`:''}).join('')+'</div>';
     content.appendChild(section);
   }
 
