@@ -904,3 +904,15 @@ try:
 finally:
     free._request_json = real_request
 print("Route-wide accommodation evidence: OK")
+
+real_request = free._request_json
+try:
+    shelter = {'lat': '0.01', 'lon': '0.20', 'category': 'amenity', 'type': 'shelter',
+               'display_name': 'Abri', 'osm_type': 'node', 'osm_id': 880}
+    free._request_json = lambda *a, **k: [shelter, dict(shelter, osm_id=881, extratags={'shelter_type': 'public_transport'}),
+         dict(shelter, osm_id=882, extratags={'shelter_type': 'basic_hut'})]
+    sleeping = logistics._nominatim_route_stays(coords, 'refuge')
+    assert len(sleeping) == 1 and sleeping[0]['source_url'].endswith('/882'), sleeping
+finally:
+    free._request_json = real_request
+print('Route shelter sleeping evidence: OK')

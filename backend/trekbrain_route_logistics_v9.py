@@ -241,7 +241,7 @@ def _bbox_route_query(
         stay_filters = (
             '["tourism"="alpine_hut"]',
             '["tourism"="wilderness_hut"]',
-            '["amenity"="shelter"]',
+            '["amenity"="shelter"]["shelter_type"="basic_hut"]',
         )
     else:
         stay_filters = (
@@ -253,7 +253,7 @@ def _bbox_route_query(
             '["tourism"="camp_site"]',
             '["tourism"="alpine_hut"]',
             '["tourism"="wilderness_hut"]',
-            '["amenity"="shelter"]',
+            '["amenity"="shelter"]["shelter_type"="basic_hut"]',
         )
 
     terrain_filters = (
@@ -373,7 +373,7 @@ def _bbox_route_query(
         elif category == "refuge":
             stay_match = (
                 tags.get("tourism") in {"alpine_hut", "wilderness_hut"}
-                or tags.get("amenity") == "shelter"
+                or (tags.get("amenity") == "shelter" and tags.get("shelter_type") == "basic_hut")
             )
         else:
             stay_match = (
@@ -381,7 +381,7 @@ def _bbox_route_query(
                     "hotel", "hostel", "guest_house", "chalet", "apartment",
                     "camp_site", "alpine_hut", "wilderness_hut",
                 }
-                or tags.get("amenity") == "shelter"
+                or (tags.get("amenity") == "shelter" and tags.get("shelter_type") == "basic_hut")
             )
         if stay_match:
             stay = _normalise_stay(element, category)
@@ -502,6 +502,7 @@ def _nominatim_route_stays(coords, category: str) -> list[dict[str, Any]]:
                 "q": query,
                 "include": include,
                 "format": "jsonv2",
+                "extratags": 1,
                 "limit": 30,
                 "countrycodes": "fr",
                 "bounded": 1,
@@ -529,7 +530,7 @@ def _nominatim_route_stays(coords, category: str) -> list[dict[str, Any]]:
         display = str(row.get("display_name") or row.get("name") or query)
         if cls == "tourism" and typ in {"camp site", "caravan site"}:
             actual = "camping"
-        elif (cls == "tourism" and typ in {"alpine hut", "wilderness hut"}) or (cls == "amenity" and typ == "shelter"):
+        elif (cls == "tourism" and typ in {"alpine hut", "wilderness hut"}) or (cls == "amenity" and typ == "shelter" and (row.get("extratags") or {}).get("shelter_type") == "basic_hut"):
             actual = "refuge"
         elif cls == "tourism" and typ in {"hotel", "hostel", "guest house", "chalet", "apartment"}:
             actual = "lodging"

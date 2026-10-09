@@ -298,7 +298,7 @@ def _parse_intent(data: AIPlanRequest) -> dict[str, Any]:
         accommodation = "bivouac"
     elif not no_camping and any(k in explicit_text for k in ("camping", "campings", "tente")):
         accommodation = "camping"
-    elif not no_refuge and any(k in explicit_text for k in ("refuge", "refuges", "gite", "gîte")):
+    elif not no_refuge and any(k in explicit_text for k in ("refuge", "refuges")):
         accommodation = "refuge"
 
     transit = bool(data.require_transit or any(k in explicit_text for k in ("train", "gare", "bus", "transport en commun")))
@@ -1109,6 +1109,10 @@ def _photon_anchor_resource(anchor, category: str, osm_tags, radius_km: float, q
         if not exact_tag_match:
             continue
 
+        # Photon does not return shelter_type reliably. A generic shelter is
+        # not evidence of sleeping accommodation (bus/rain/picnic shelters).
+        if category == "stay" and osm_key == "amenity" and osm_value == "shelter":
+            continue
         final_category = category
         if category == "stay":
             if osm_value in {"camp_site", "caravan_site"}:

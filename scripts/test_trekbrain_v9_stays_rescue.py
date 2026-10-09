@@ -129,3 +129,10 @@ for category, key, value in [("camping", "tourism", "camp_site"), ("refuge", "to
     finally:
         free._request_json = old_request
 print("Accommodation evidence validation: OK")
+
+# Weather, picnic and transport shelters must not satisfy an overnight stop.
+for kind in (None, 'weather_shelter', 'picnic_shelter', 'public_transport'):
+    assert not rescue._stay_type_matches('refuge', 'amenity', 'shelter', {'shelter_type': kind})
+assert rescue._stay_type_matches('refuge', 'amenity', 'shelter', {'shelter_type': 'basic_hut'})
+assert rescue._stay_type_matches('refuge', 'tourism', 'wilderness_hut')
+print('Shelter sleeping evidence: OK')
