@@ -1,0 +1,97 @@
+name: TrekBrain full audit manual 2026-10-09
+# Do not fire all 47 routing requests on every code push: repeated merges
+# exhausted the public ORS quota and created avoidable 429 failures.
+# Lightweight smoke, unit and release gates remain active on every push.
+# This one-off branch workflow executes the PRODUCTION full audit without
+# touching main or triggering an unnecessary Render deploy.
+on:
+  push:
+    branches: ['benchmark/trekbrain-full-20261009-manual-01']
+    paths: ['.github/workflows/trekbrain-full-audit-20261009.yml']
+permissions:
+  contents: read
+concurrency:
+  group: trekbrain-serial-production-suite
+  cancel-in-progress: false
+jobs:
+  serial-benchmark:
+    runs-on: ubuntu-latest
+    timeout-minutes: 55
+    steps:
+      - uses: actions/checkout@v4
+      - name: Wait for exact production commit
+        shell: python
+        env:
+          EXPECTED_SHA: 3c640c372a392bfc2a5eee1c61a870fc6a668866
+        run: |
+          import json, os, time, urllib.request
+          for attempt in range(90):
+              try:
+                  req=urllib.request.Request('https://trekmap-france.onrender.com/ai/status',headers={'User-Agent':'TrekBrain-serial-audit'})
+                  with urllib.request.urlopen(req,timeout=20) as res:
+                      status=json.load(res)
+                  if str(status.get('build_commit') or '').lower()==os.environ['EXPECTED_SHA'].lower():
+                      print('Exact Render commit validated',status['build_commit']);break
+              except Exception as exc:
+                  print(type(exc).__name__,str(exc)[:200],flush=True)
+              time.sleep(10)
+          else:
+              raise SystemExit('Render has not deployed the expected commit')
+      - name: Historic six treks, three separate passes
+        env:
+          EXPECTED_SHA: 3c640c372a392bfc2a5eee1c61a870fc6a668866
+          TREKBRAIN_BENCHMARK_URL: https://trekmap-france.onrender.com
+        shell: bash
+        run: |
+          set -euo pipefail
+          for pass in 1 2 3; do
+            TREKBRAIN_BENCHMARK_OUT="benchmark-results/historic/pass-$pass" \
+            GITHUB_RUN_ID="${GITHUB_RUN_ID}-historic-$pass" \
+            python scripts/benchmark_trekbrain_v9_production.py
+          done
+      - name: Nine extended real treks
+        env:
+          EXPECTED_SHA: 3c640c372a392bfc2a5eee1c61a870fc6a668866
+          TREKBRAIN_BENCHMARK_URL: https://trekmap-france.onrender.com
+          TREKBRAIN_BENCHMARK_OUT: benchmark-results/extended
+        run: python scripts/benchmark_trekbrain_v9_extended.py
+      - name: Twenty new regional treks
+        env:
+          EXPECTED_SHA: 3c640c372a392bfc2a5eee1c61a870fc6a668866
+          TREKBRAIN_BENCHMARK_URL: https://trekmap-france.onrender.com
+          TREKBRAIN_BENCHMARK_OUT: benchmark-results/unseen20
+        run: python scripts/benchmark_trekbrain_v9_unseen20.py
+      - name: Summarize all completed audits
+        if: always()
+        shell: python
+        run: |
+          import glob, json, os, statistics
+          summary=['# TrekBrain: production benchmarks run serially','','| Suite | Valid | Quality | Mean latency | Food markers | Food days missing | Water days missing | Walk nights | Transfer nights | Missing nights | Cached POIs |','|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|']
+          for filename in sorted(glob.glob('benchmark-results/**/trekbrain-production-benchmark.json',recursive=True)):
+              rows=json.load(open(filename,encoding='utf-8'))['scenarios']
+              scores=[float(x['quality']) for x in rows if isinstance(x.get('quality'),(int,float))]
+              times=[float(x['elapsed_s']) for x in rows if isinstance(x.get('elapsed_s'),(int,float))]
+              name=filename.removeprefix('benchmark-results/').removesuffix('/trekbrain-production-benchmark.json')
+              summary.append(
+                  f"| {name} | {sum(bool(x['ok']) for x in rows)}/{len(rows)} | "
+                  f"{statistics.fmean(scores):.1f} | {statistics.fmean(times):.1f}s | "
+                  f"{sum(int(x.get('food_markers') or 0) for x in rows)} | "
+                  f"{sum(len(x.get('food_days_missing') or []) for x in rows)} | "
+                  f"{sum(len(x.get('water_days_missing') or []) for x in rows)} | "
+                  f"{sum(int(x.get('nights_walk_confirmed') or 0) for x in rows)} | "
+                  f"{sum(int(x.get('nights_transfer_only') or 0) for x in rows)} | "
+                  f"{sum(int(x.get('nights_unresolved') or 0) for x in rows)} | "
+                  f"{sum(int(x.get('osm_cache_hits') or 0) for x in rows)} |"
+                  if scores and times else f"| {name} | n/a | n/a | n/a | n/a | n/a | n/a | n/a | n/a | n/a | n/a |"
+              )
+          report='\n'.join(summary)+'\n'
+          print(report)
+          with open(os.environ['GITHUB_STEP_SUMMARY'],'a',encoding='utf-8') as f:f.write(report)
+      - name: Preserve complete results even when a trek fails
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: trekbrain-serial-audit
+          path: benchmark-results/
+          if-no-files-found: ignore
+          retention-days: 21
