@@ -154,6 +154,8 @@ jobs:
           python scripts/apply_route_day_clarity.py
           python scripts/apply_trekbrain_scroll_ui.py
           python scripts/apply_trekbrain_ux_refresh.py
+          python scripts/apply_trekbrain_map_mobile.py
+          python scripts/apply_trekbrain_scenic_photos.py
       - name: Check v9 frontend
         shell: python
         run: |
