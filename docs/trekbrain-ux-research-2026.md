@@ -32,6 +32,26 @@ repérer ce qui reste à vérifier sur le terrain, sans masquer les avertissemen
    « prefers-reduced-motion » (respect des paramètres d'accessibilité).
    - https://www.w3.org/WAI/WCAG22/Understanding/animation-from-interactions
 
+5. **Tractinsky, Katz & Ikar (2000), _What is beautiful is usable_,
+   Interacting with Computers 13(2), 127–145.**
+   L'expérience a observé une corrélation entre attrait esthétique perçu et
+   facilité d'utilisation perçue dans une application de distributeur de
+   billets. Cela ne prouve pas qu'un habillage augmente la réussite des tâches,
+   mais justifie de concevoir esthétique et compréhension ensemble.
+   - https://doi.org/10.1016/S0953-5438(00)00031-X
+   - Application : palette cohérente, espacement, hiérarchie des titres,
+     cartes de résultat et signaux d'état bien distincts.
+6. **Lindgaard et al. (2006), _Attention web designers: You have
+   50 milliseconds to make a good first impression!_, Behaviour &
+   Information Technology 25(2), 115–126.**
+   Des expériences avec des présentations très brèves de pages Web ont mis
+   en évidence des jugements esthétiques précoces et relativement stables.
+   Ce résultat porte sur le premier jugement d'apparence, pas sur le temps
+   de réalisation d'une randonnée.
+   - https://doi.org/10.1080/01449290500330448
+   - Application : en-tête clair et première action immédiatement visible,
+     couleurs et typographie simples, sans excès d'effets décoratifs.
+
 ## Choix d'interface
 
 - Palette vert forêt et fond minéral clair, sans importer de police ni de
