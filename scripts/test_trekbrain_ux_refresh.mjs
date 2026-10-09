@@ -37,6 +37,8 @@ assert.ok(script.includes('checks.querySelectorAll("input[type=checkbox]")'), 'c
 assert.ok(script.includes('input.addEventListener("change",updateSummary)'), 'changed criteria must refresh the overview');
 assert.ok(script.includes('updateSummary();'), 'initial defaults must be shown');
 assert.ok(script.includes('visible.indexOf(document.activeElement)<0'), 'recover escaped keyboard focus');
+assert.ok(script.includes('document.addEventListener("keydown",function(event)'), 'trap Tab from the document when the modal is open');
+assert.ok(script.includes('  },true);'), 'keyboard trap should run in capture phase');
 assert.ok(!script.includes('summary.setAttribute("aria-label"'), 'native summary and selected values must be announced');
 
 assert.ok(script.includes('originalBack.click()'), 'mobile results should allow one-tap editing');
