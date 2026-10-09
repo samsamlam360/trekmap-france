@@ -889,3 +889,18 @@ assert degraded["logistics"]["error_code"] == "TB-LOGISTICS-DEGRADED"
 assert degraded["planner"]["lodging_does_not_shape_route"] is True
 
 print("Route-first lodging logistics + fail-open recovery: OK")
+
+# Route-wide fallback must apply the same evidence rule as night-anchor lookup.
+real_request = free._request_json
+try:
+    genuine = {"lat": "0.01", "lon": "0.20", "category": "tourism", "type": "hotel",
+               "display_name": "Camping Refuge Hôtel, rue du Camping", "osm_type": "node", "osm_id": 777}
+    fake = dict(genuine, category="shop", type="outdoor", osm_id=778)
+    free._request_json = lambda *a, **k: [genuine, fake, dict(genuine, osm_id=None), dict(genuine, lat="nan")]
+    evidence_rows = logistics._nominatim_route_stays(coords, "lodging")
+    assert len(evidence_rows) == 1 and evidence_rows[0]["category"] == "lodging", evidence_rows
+    assert logistics._nominatim_route_stays(coords, "camping") == []
+    assert logistics._nominatim_route_stays(coords, "refuge") == []
+finally:
+    free._request_json = real_request
+print("Route-wide accommodation evidence: OK")

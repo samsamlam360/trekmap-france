@@ -522,41 +522,28 @@ def _nominatim_route_stays(coords, category: str) -> list[dict[str, Any]]:
             lat, lon = float(row["lat"]), float(row["lon"])
         except (KeyError, TypeError, ValueError):
             continue
-        typ = _fold(row.get("type") or "")
-        cls = _fold(row.get("class") or "")
-        display = str(row.get("display_name") or row.get("name") or query)
-        semantic = _fold(display)
-        accepted = False
-        actual = category
-        if category == "camping":
-            accepted = typ in {"camp site", "caravan site"} or "camp" in semantic
-        elif category == "refuge":
-            accepted = (
-                typ in {"alpine hut", "wilderness hut", "shelter"}
-                or any(token in semantic for token in ("refuge", "gite", "abri", "hut"))
-            )
-        else:
-            accepted = (
-                cls == "tourism"
-                and typ in {
-                    "hotel", "hostel", "guest house", "chalet", "apartment",
-                    "camp site", "alpine hut", "wilderness hut",
-                }
-            ) or any(token in semantic for token in (
-                "hotel", "gite", "auberge", "hostel", "chalet", "camping", "refuge"
-            ))
-            if "camp" in semantic or typ in {"camp site", "caravan site"}:
-                actual = "camping"
-            elif "refuge" in semantic or typ in {"alpine hut", "wilderness hut", "shelter"}:
-                actual = "refuge"
-            else:
-                actual = "lodging"
-        if not accepted:
+        if not (math.isfinite(lat) and math.isfinite(lon) and -90 <= lat <= 90 and -180 <= lon <= 180):
             continue
-        source = _osm_url({
-            "osm_type": row.get("osm_type"),
-            "osm_id": row.get("osm_id"),
-        })
+        typ = _fold(row.get("type") or "")
+        cls = _fold(row.get("category") or row.get("class") or "")
+        display = str(row.get("display_name") or row.get("name") or query)
+        if cls == "tourism" and typ in {"camp site", "caravan site"}:
+            actual = "camping"
+        elif (cls == "tourism" and typ in {"alpine hut", "wilderness hut"}) or (cls == "amenity" and typ == "shelter"):
+            actual = "refuge"
+        elif cls == "tourism" and typ in {"hotel", "hostel", "guest house", "chalet", "apartment"}:
+            actual = "lodging"
+        else:
+            continue
+        if category in {"camping", "refuge"} and actual != category:
+            continue
+        # Nominatim display names include entire street addresses. Never use
+        # those words as evidence for a stay or to reclassify an actual hotel.
+        source_type = str(row.get("osm_type") or "").casefold()
+        source_id = str(row.get("osm_id") or "")
+        if source_type not in {"node", "way", "relation"} or not re.fullmatch(r"[1-9][0-9]*", source_id):
+            continue
+        source = _osm_url({"osm_type": source_type, "osm_id": source_id})
         out.append({
             "name": display.split(",")[0].strip()[:180] or (
                 "Camping" if actual == "camping" else "Refuge" if actual == "refuge" else "Hébergement"
