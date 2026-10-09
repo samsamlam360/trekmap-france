@@ -458,6 +458,17 @@ def _merge_supplemented_resources(result: dict[str, Any], rows: list[dict[str, A
     transit_rows = []
 
     def add_unique(target, item, *, category=None):
+        # Fresh OSM evidence that water is not potable overrides an older
+        # duplicate from a cache or earlier planner layer.
+        def keep_unsafe_status(existing):
+            if (
+                str(item.get("status") or item.get("water_status") or "") == "not_potable"
+                and target is water
+            ):
+                existing["status"] = "not_potable"
+                existing["water_status"] = "not_potable"
+                existing["notes"] = "Eau signalée non potable : ne pas boire."
+
         key = str(item.get("source_url") or "")
         try:
             coords_key = (round(float(item.get("lat")), 5), round(float(item.get("lon")), 5))
@@ -467,6 +478,7 @@ def _merge_supplemented_resources(result: dict[str, Any], rows: list[dict[str, A
             if not isinstance(existing, dict):
                 continue
             if key and str(existing.get("source_url") or "") == key:
+                keep_unsafe_status(existing)
                 return
             if coords_key is not None:
                 try:
@@ -474,6 +486,7 @@ def _merge_supplemented_resources(result: dict[str, Any], rows: list[dict[str, A
                         round(float(existing.get("lat")), 5),
                         round(float(existing.get("lon")), 5),
                     ) == coords_key and (category is None or str(existing.get("category") or "") == category):
+                        keep_unsafe_status(existing)
                         return
                 except (TypeError, ValueError):
                     pass
