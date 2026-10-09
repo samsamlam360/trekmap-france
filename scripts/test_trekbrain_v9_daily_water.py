@@ -129,6 +129,13 @@ assert any(
     p["status"] == "not_potable" and "ne pas boire" in p["notes"]
     for p in water_points
 ), water_points
+assert resources._sourced_water_coverage(water_points) == ([1], 1), water_points
+assert resources._sourced_water_coverage([{
+    "kind": "water",
+    "status": "not_potable",
+    "route_day": 3,
+    "source_url": "https://www.openstreetmap.org/node/9999",
+}]) == ([], 0)
 resources._annotate_stage_resources(display_plan)
 assert "potable référencée" in display_plan["stages"][0]["water_notes"]
 assert any(
