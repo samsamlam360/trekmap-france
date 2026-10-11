@@ -24,6 +24,8 @@ jobs:
         run: pip install -r requirements.txt
       - name: Vérifier la syntaxe Python
         run: python -m compileall -q backend scripts
+      - name: Vérifier le gardien de correction automatique (sans réseau)
+        run: python scripts/test_trekmap_auto_triage.py
       - name: Vérifier l'import de l'application
         run: python -c "import backend.app_v5; print('TrekBrain v8 import OK')"
       - name: Vérifier les routes de l'agent apprenant
