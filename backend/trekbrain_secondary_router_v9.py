@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import os
 import time
+from threading import Lock
 from copy import deepcopy
 from typing import Any
 
@@ -28,6 +29,12 @@ _CACHE_TTL = 6 * 60 * 60
 _COOLDOWN_UNTIL = 0.0
 _MAX_POINTS = 22
 _CHUNK_SIZE = 8
+# A real ORS HTTP 429 is not a geometry failure. One independently validated
+# walking-route fallback per minute is a bounded alternative, not a retry storm
+# against another public demo service. This quota is shared by the worker.
+_QUOTA_FALLBACK_LOCK = Lock()
+_QUOTA_FALLBACK_NEXT = 0.0
+_QUOTA_FALLBACK_INTERVAL = 60.0
 
 
 def _key(coords):
@@ -249,6 +256,36 @@ def _route_secondary(coords) -> tuple[dict[str, Any] | None, str | None]:
     }, None
 
 
+def _quota_primary_failure(route) -> bool:
+    if not isinstance(route, dict) or route.get("fallback") is not True:
+        return False
+    warning = str(route.get("warning") or "").casefold()
+    return "http 429" in warning or "limite de requêtes" in warning
+
+
+def _quota_secondary_route(coords):
+    """One capped, network-validated pedestrian fallback for ORS rate limits.
+
+    Read-only cache hits cost no external call. New public Valhalla requests are
+    limited to one short route per worker per minute; complex multi-chunk
+    fallbacks are rejected to keep fair-use and interactive latency bounded.
+    """
+    global _QUOTA_FALLBACK_NEXT
+    if len(coords) < 2 or len(coords) > _CHUNK_SIZE:
+        return None, "Secours pédestre limité à 8 points quand ORS atteint son quota."
+    key = _key(coords)
+    now = time.monotonic()
+    if key and key in _CACHE and now - _CACHE[key][0] < _CACHE_TTL:
+        result = deepcopy(_CACHE[key][1])
+        result["route_cache"] = True
+        return result, None
+    with _QUOTA_FALLBACK_LOCK:
+        if now < _QUOTA_FALLBACK_NEXT:
+            return None, "Secours pédestre temporairement limité pour préserver les services gratuits."
+        _QUOTA_FALLBACK_NEXT = now + _QUOTA_FALLBACK_INTERVAL
+    return _route_secondary(coords)
+
+
 def _is_transient_primary_failure(route) -> bool:
     if not isinstance(route, dict) or route.get("fallback") is not True:
         return False
@@ -270,9 +307,13 @@ def install_secondary_router(ors) -> None:
 
     def get_route_with_secondary(coords, distance_gps):
         primary = primary_get_route(coords, distance_gps)
-        if not _is_transient_primary_failure(primary):
+        quota_exhausted = _quota_primary_failure(primary)
+        if not quota_exhausted and not _is_transient_primary_failure(primary):
             return primary
-        secondary, secondary_warning = _route_secondary(coords)
+        if quota_exhausted:
+            secondary, secondary_warning = _quota_secondary_route(coords)
+        else:
+            secondary, secondary_warning = _route_secondary(coords)
         if secondary is not None:
             secondary["primary_warning"] = str(primary.get("warning") or "")[:300]
             return secondary
