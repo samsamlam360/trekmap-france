@@ -1,7 +1,12 @@
 name: TrekBrain 20 unseen regions audit
 
 on:
-  # Manual audit only; push coverage belongs to the serial suite.
+  # A deliberate marker commit runs this once against the exact deployed SHA.
+  # Ordinary application pushes must NOT trigger twenty public routing requests.
+  push:
+    branches: [main]
+    paths:
+      - .github/benchmark-requests/unseen20.txt
   workflow_dispatch:
 
 permissions:
