@@ -74,19 +74,21 @@ class FakeLegacy:
 
 
 class FakeResult:
-    def __init__(self, owner_id=11):
+    def __init__(self, owner_id=11, exists=True):
         self.owner_id = owner_id
+        self.exists = exists
 
     def scalar_one(self):
         return 739
 
     def first(self):
-        return SimpleNamespace(id=739, owner_id=self.owner_id)
+        return SimpleNamespace(id=739, owner_id=self.owner_id) if self.exists else None
 
 
 class FakeDatabase:
     def __init__(self, owner_id=11):
         self.owner_id = owner_id
+        self.exists = True
         self.statements = []
         self.committed = 0
         self.rolled_back = 0
@@ -94,7 +96,7 @@ class FakeDatabase:
 
     def execute(self, sql, params):
         self.statements.append((str(sql), params))
-        return FakeResult(owner_id=self.owner_id)
+        return FakeResult(owner_id=self.owner_id, exists=self.exists)
 
     def commit(self):
         self.committed += 1
@@ -168,8 +170,9 @@ before_commit = db.committed
 expect_http(403, lambda: update(739, plan, user={"id": 11, "is_admin": False}))
 assert db.committed == before_commit
 assert db.rolled_back == 1
-expect_http(404, lambda: update(739, plan, user={"id": 11, "is_admin": False})
-            if db.owner_id == 0 else (_ for _ in ()).throw(HTTPException(404)))
+db.exists = False
+expect_http(404, lambda: update(739, plan, user={"id": 11, "is_admin": False}))
+db.exists = True
 db.owner_id = 22
 admin_updated = update(739, plan, user={"id": 1, "is_admin": True})
 assert admin_updated["id"] == 739
