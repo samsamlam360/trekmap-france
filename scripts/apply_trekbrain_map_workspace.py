@@ -428,6 +428,11 @@ body.tm-brain-route-mode.tm-brain-show-resources .tm-v91-legend {display:block!i
     body.classList.remove('tm-brain-route-mode','tm-brain-show-resources');
     body.style.removeProperty('--tm-brain-sheet-height');
     panel.hidden=true;panel.innerHTML='';
+    // Fermer le panneau enlève réellement TOUT l'aperçu IA de la carte,
+    // sans retirer le tracé sélectionné ou les treks enregistrés.
+    window.TrekMapClearAIPreview?.();
+    window.TrekMapClearAIRoute?.();
+    window.TrekMapClearAIResources?.();
     try{if(typeof map!=='undefined')map.invalidateSize();}catch(_){}
   }
   function mapMaybe(){
