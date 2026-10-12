@@ -1,0 +1,65 @@
+name: TrekBrain targeted 20-region audit 2026-10-12
+# This branch is one-time; NEVER fire public ORS benchmarks from ordinary main pushes.
+on:
+  push:
+    branches:
+      - benchmark/trekbrain-unseen20-20261012-once
+permissions:
+  contents: read
+concurrency:
+  group: trekbrain-serial-production-suite
+  cancel-in-progress: false
+jobs:
+  unseen20:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify exact Render production commit before any routing request
+        shell: python
+        env:
+          EXPECTED_SHA: 923a4d7dba92bbc612910c6f0333fa61002ee2a4
+        run: |
+          import json,os,time,urllib.request
+          expected=os.environ["EXPECTED_SHA"]
+          for index in range(40):
+              try:
+                  req=urllib.request.Request(
+                      "https://trekmap-france.onrender.com/ai/status",
+                      headers={"User-Agent":"TrekBrain-one-time-unseen20-audit"})
+                  with urllib.request.urlopen(req,timeout=20) as response:
+                      status=json.load(response)
+                  if str(status.get("build_commit") or "").lower()==expected:
+                      print("Pinned production commit validated", expected[:12])
+                      break
+              except Exception as exc:
+                  print("Waiting for Render", type(exc).__name__, str(exc)[:120],flush=True)
+              time.sleep(10)
+          else:
+              raise SystemExit("Production SHA differs from benchmark baseline; skip routing requests.")
+      - name: Verify 20 independent region prompts
+        run: |
+          python - <<'PY'
+          import sys
+          sys.path.insert(0,"scripts")
+          from benchmark_trekbrain_v9_unseen20 import SCENARIOS
+          assert len(SCENARIOS)==20 and len({x["region"] for x in SCENARIOS})==20
+          print("20 diverse region prompts: OK")
+          PY
+      - name: Run 20 real production scenarios once, sequentially
+        env:
+          EXPECTED_SHA: 923a4d7dba92bbc612910c6f0333fa61002ee2a4
+          TREKBRAIN_BENCHMARK_URL: https://trekmap-france.onrender.com
+          TREKBRAIN_BENCHMARK_OUT: benchmark-results-20261012-unseen20
+        run: python scripts/benchmark_trekbrain_v9_unseen20.py
+      - name: Show benchmark table, including failed cases
+        if: always()
+        run: cat benchmark-results-20261012-unseen20/trekbrain-production-benchmark.md 2>/dev/null || true
+      - name: Preserve complete quality, latency and terrain evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: trekbrain-unseen20-20261012-once
+          path: benchmark-results-20261012-unseen20/
+          if-no-files-found: ignore
+          retention-days: 21
