@@ -299,9 +299,10 @@ body.tm-brain-route-mode.tm-brain-show-resources .tm-v91-legend {display:block!i
   function validCoords(p){
     var coords=p?.route_preview?.coords;
     return Array.isArray(coords)&&coords.length>=2&&coords.every(function(pt){
-      return Array.isArray(pt)&&Number.isFinite(Number(pt[0]))&&
-        Number.isFinite(Number(pt[1]))&&Math.abs(Number(pt[0]))<=90&&
-        Math.abs(Number(pt[1]))<=180;
+      if(!Array.isArray(pt)||pt.length!==2)return false;
+      if(pt.some(function(v){return v===null||v===''||typeof v==='boolean';}))return false;
+      return Number.isFinite(Number(pt[0]))&&Number.isFinite(Number(pt[1]))&&
+        Math.abs(Number(pt[0]))<=90&&Math.abs(Number(pt[1]))<=180;
     });
   }
   function gpxEscape(value){
