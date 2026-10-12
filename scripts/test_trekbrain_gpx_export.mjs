@@ -78,6 +78,7 @@ for(const bad of [
   {route_preview:{coords:[[45,5],[null,5]]}},
   {route_preview:{coords:[[45,5],[true,5]]}},
   {route_preview:{coords:[[45,5],["",5]]}},
+  {route_preview:{coords:[[45,5],[45,5]]}},
 ]){
   context.plan=bad;
   assert.equal(context.__gpx.exportGPX(),false,'invalid GPS must not be exported');
