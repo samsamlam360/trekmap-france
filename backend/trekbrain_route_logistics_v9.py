@@ -169,12 +169,9 @@ def _terrain_resource(element: dict[str, Any]) -> dict[str, Any] | None:
         or tags.get("natural") == "spring"
     ):
         category = "water"
-        # Explicit drinking_water=no overrides the amenity classification.
-        # Contradictory OSM tags must never be presented as potable water.
-        if tags.get("drinking_water") == "no":
-            status = "not_potable"
-        elif tags.get("amenity") == "drinking_water" or tags.get("drinking_water") == "yes":
-            status = "potable_referenced"
+        # Consistent interpretation across all TrekBrain OSM providers.
+        from .trekbrain_water_evidence_v9 import potability_status
+        status = potability_status(tags)
     elif tags.get("shop") in {
         "supermarket", "convenience", "bakery", "general",
         "grocery", "deli", "greengrocer", "food",
