@@ -122,6 +122,7 @@ jobs:
       - name: Verify accessible TrekBrain UI redesign
         run: |
           node scripts/test_trekbrain_ux_refresh.mjs
+          node scripts/test_trekbrain_desktop_experience.mjs
           node scripts/test_trekbrain_scenic_media.mjs
           python scripts/test_trekbrain_scenic_photo.py
 
