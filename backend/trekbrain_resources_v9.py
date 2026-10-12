@@ -797,12 +797,9 @@ def _bbox_route_water_food(
                 or tags.get("natural") == "spring"
             ):
                 category = "water"
-                water_status = (
-                    "not_potable" if tags.get("drinking_water") == "no"
-                    else "potable_referenced"
-                    if tags.get("amenity") == "drinking_water" or tags.get("drinking_water") == "yes"
-                    else "unverified"
-                )
+                # An explicit OSM non-potable tag wins over the amenity.
+                from .trekbrain_water_evidence_v9 import potability_status
+                water_status = potability_status(tags)
             elif (
                 tags.get("shop") in {
                     "supermarket", "convenience", "bakery", "general",
