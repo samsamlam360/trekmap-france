@@ -84,7 +84,7 @@ def _element_point(element: dict[str, Any]):
         lat, lon = float(lat), float(lon)
     except (TypeError, ValueError):
         return None
-    if not (math.isfinite(lat) and math.isfinite(lon)):
+    if not (math.isfinite(lat) and math.isfinite(lon) and -90 <= lat <= 90 and -180 <= lon <= 180):
         return None
     return lat, lon
 
@@ -126,7 +126,7 @@ def discover_water_points(v3, result: dict[str, Any]) -> list[dict[str, Any]]:
         return []
 
     out = []
-    seen = set()
+    seen = {}
     for element in (payload.get("elements") or [])[:120] if isinstance(payload, dict) else []:
         point = _element_point(element)
         if not point:
@@ -158,9 +158,14 @@ def discover_water_points(v3, result: dict[str, Any]) -> list[dict[str, Any]]:
         )
         key = source_url or (round(lat, 5), round(lon, 5))
         if key in seen:
+            existing = seen[key]
+            if status == "not_potable":
+                existing.update({
+                    "water_status": "not_potable", "status": "not_potable",
+                    "notes": "Eau signalée non potable : ne pas boire.",
+                })
             continue
-        seen.add(key)
-        out.append({
+        item = {
             "name": str(tags.get("name") or default_name)[:160],
             "lat": lat,
             "lon": lon,
@@ -177,7 +182,9 @@ def discover_water_points(v3, result: dict[str, Any]) -> list[dict[str, Any]]:
             ),
             "source_url": source_url,
             "display_only": True,
-        })
+        }
+        out.append(item)
+        seen[key] = item
     return out
 
 
