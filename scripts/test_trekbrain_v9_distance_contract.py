@@ -50,7 +50,8 @@ assert huelgoat["route_preview"]==original_geometry
 assert huelgoat["logistics"]==original_logistics
 assert huelgoat["trekbrain"]==original_quality
 assert huelgoat["confidence"]["score"]==78
-assert "Distance demandée dépassée" in huelgoat["confidence"]["limitations"][-1]
+assert huelgoat["confidence"]["limitations"]==["Conditions météo non vérifiées."]
+assert "Distance demandée dépassée" in huelgoat["advisor_notes"][-1]
 snapshot=deepcopy(huelgoat)
 annotate_daily_distance(huelgoat,intent)
 assert huelgoat==snapshot,"Repeated pipeline must not duplicate warnings"
