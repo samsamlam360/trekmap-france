@@ -264,6 +264,12 @@ body.tm-brain-route-mode.tm-brain-show-resources .tm-v91-legend {display:block!i
     var cover=p.map_resources?.coverage||{};
     var logistics=p.logistics||{};
     var route=p.route_preview||{};
+    var dist=p.planner?.distance_contract;
+    if(dist?.target_exceeded&&Array.isArray(dist.days_exceeding)){
+      var days=dist.days_exceeding.map(function(row){return 'J'+row.day+' : '+row.distance_km+' km'});
+      notices.push('Distance supérieure à l’objectif de '+dist.daily_target_km+
+        ' km/jour ('+days.join(', ')+'). Vérifier les journées avant de partir.');
+    }
     if(route.warning)notices.push('Tracé : '+route.warning);
     var rawCoords=Array.isArray(route.coords)?route.coords:[];
     if(rawCoords.length<2)notices.push('Le tracé pédestre n’est pas disponible.');
