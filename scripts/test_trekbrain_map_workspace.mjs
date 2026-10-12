@@ -45,9 +45,12 @@ if(html.includes('TREKMAP_BRAIN_ROUTE_WORKSPACE_START')){
   for(const marker of ['TREKMAP_BRAIN_ROUTE_WORKSPACE_START','id="trekbrain-route-workspace-js"','id="trekbrain-route-workspace-css"']){
     assert.equal(html.split(marker).length-1,1,'idempotent insertion: '+marker);
   }
-  for(const id of ['tm-ai-overlay','tm-ai-content','tm-ai-preview','tm-ai-save','tm-unified-drawer','sidebar']){
+  for(const id of ['tm-ai-content','tm-ai-preview','tm-ai-save','sidebar']){
     assert.equal(html.split('id="'+id+'"').length-1,1,'original controls preserved: '+id);
   }
+  assert.ok(html.includes("overlay.id='tm-ai-overlay'"),'the existing modal is still initialized');
+  assert.ok(html.includes("drawer.id='tm-unified-drawer'"),'the original popular-treks drawer still exists for Explorer');
+
 }
 
 // Run a browser-like integration scenario covering both desktop and mobile.
