@@ -95,6 +95,7 @@ jobs:
           python scripts/apply_trekbrain_map_mobile.py
           python scripts/apply_trekbrain_scenic_photos.py
           python scripts/apply_trekbrain_desktop_experience.py
+          python scripts/apply_trekbrain_map_workspace.py
 
       - name: Validate generated production frontend
         shell: python
@@ -123,6 +124,7 @@ jobs:
         run: |
           node scripts/test_trekbrain_ux_refresh.mjs
           node scripts/test_trekbrain_desktop_experience.mjs
+          node scripts/test_trekbrain_map_workspace.mjs
           node scripts/test_trekbrain_scenic_media.mjs
           python scripts/test_trekbrain_scenic_photo.py
 

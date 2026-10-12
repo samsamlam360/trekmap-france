@@ -28,7 +28,7 @@ assert.ok(script.includes("item.node.focus({preventScroll:true})"),'keyboard foc
 assert.ok(script.includes("aria-label','Aller à une section"),'accessible section index');
 
 const render=fs.readFileSync('render.yaml','utf8');
-assert.ok(render.includes('python scripts/apply_trekbrain_scenic_photos.py && python scripts/apply_trekbrain_desktop_experience.py && python scripts/render_preflight.py'),
+assert.ok(render.includes('python scripts/apply_trekbrain_scenic_photos.py && python scripts/apply_trekbrain_desktop_experience.py && python scripts/apply_trekbrain_map_workspace.py && python scripts/render_preflight.py'),
   'desktop enhancement must execute last in Render UI chain');
 const workflowNames=[
   '.github/workflows/render-strict-preflight.yml',

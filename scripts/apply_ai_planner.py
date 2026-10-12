@@ -350,7 +350,7 @@ block = r'''<!-- TREKMAP_AI_EXPERIENCE_START -->
       <div class="tm-ai-refine-box"><b style="font-size:12px">Modifier avec l'IA</b><textarea id="tm-ai-refine-text" placeholder="Ex. raccourcis le jour 2, trouve une arrivée avec une gare, privilégie les campings..."></textarea><div class="tm-ai-refine-actions"><button id="tm-ai-refine" type="button">✨ Recalculer</button></div></div>
       <div class="tm-ai-actions"><button class="tm-ai-map-btn" id="tm-ai-preview" type="button">🗺️ Voir sur la carte</button><button id="tm-ai-save" type="button">Enregistrer dans TrekMap</button></div>`;
     $('tm-ai-back').onclick=()=>shell.classList.remove('has-result');
-    $('tm-ai-preview').onclick=()=>{previewPlan(p,true);closeAI()};
+    $('tm-ai-preview').onclick=()=>{previewPlan(p,true);closeAI();window.TrekBrainMapWorkspace?.open(p)};
     $('tm-ai-refine').onclick=()=>{const txt=String($('tm-ai-refine-text').value||'').trim();if(txt.length<5){typeof toast==='function'&&toast('Indique la modification souhaitée.');return}generate(requestPayload(txt))};
     $('tm-ai-save').onclick=savePlan;
   }
