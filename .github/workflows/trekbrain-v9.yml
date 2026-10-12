@@ -156,6 +156,7 @@ jobs:
           python scripts/apply_trekbrain_ux_refresh.py
           python scripts/apply_trekbrain_map_mobile.py
           python scripts/apply_trekbrain_scenic_photos.py
+          python scripts/apply_trekbrain_desktop_experience.py
       - name: Check v9 frontend
         shell: python
         run: |
@@ -206,7 +207,9 @@ jobs:
           node --check /tmp/trekbrain-error-diagnostics.js
           node --check /tmp/trekbrain-route-days.js
       - name: Check research-based TrekBrain responsive UX
-        run: node scripts/test_trekbrain_ux_refresh.mjs
+        run: |
+          node scripts/test_trekbrain_ux_refresh.mjs
+          node scripts/test_trekbrain_desktop_experience.mjs
       - name: Check real scenic photos and map mobile ergonomics
         run: |
           python scripts/test_trekbrain_scenic_photo.py
