@@ -108,7 +108,7 @@ legend_replacement = r'''  function makeLegend(segments,title){
         const kmText=distance>0?` · ${distance.toFixed(1)} km`:'';
         return `<div class="tm-route-day-row"><span class="tm-route-day-chip" style="background:${color}">J${i+1}</span><span class="tm-route-day-row-text">Jour ${i+1}${kmText}</span></div>`;
       }).join('');
-      div.innerHTML=`<details class="tm-route-day-details" ${window.innerWidth>820?'open':''}><summary>${title} · ${segments.length} jour${segments.length>1?'s':''}</summary><div class="tm-route-day-rows">${rows}</div>`+'<small><b style="display:inline;color:#166534">D</b> départ · <b style="display:inline;color:#b42318">A</b> arrivée</small></details>';
+      div.innerHTML=`<details class="tm-route-day-details" ${window.innerWidth>=1500?'open':''}><summary>${title} · ${segments.length} jour${segments.length>1?'s':''}</summary><div class="tm-route-day-rows">${rows}</div>`+'<small><b style="display:inline;color:#166534">D</b> départ · <b style="display:inline;color:#b42318">A</b> arrivée</small></details>';
       L.DomEvent.disableClickPropagation(div);L.DomEvent.disableScrollPropagation(div);return div;
     };control.addTo(map);return control;
   }
