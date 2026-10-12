@@ -423,6 +423,7 @@ block = r'''<!-- TREKMAP_AI_EXPERIENCE_START -->
       const d=await r.json().catch(()=>({}));
       if(!r.ok)throw new Error(typeof d.detail==='string'?d.detail:
         r.status===401?'Connecte-toi à ton compte pour enregistrer ce trek.':'Création du trek impossible.');
+      window.TrekMapRecordSavedAI?.(Number(d.id));
       const extras={
         route_type:currentPlan.route_type||'',
         best_season:currentPlan.best_season||'',
