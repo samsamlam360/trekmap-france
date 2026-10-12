@@ -496,19 +496,30 @@ def _route_day_boundaries(result: dict[str, Any], days: int) -> list[dict[str, A
 
     boundaries = [start]
     progress_breaks = _stage_progress_breaks(result, days)
-    floor = 1
+
+    # The planner may return only a few route vertices on a validated walking
+    # segment. Nearest-vertex snapping previously placed a four-day trek's
+    # overnight anchors at the very start, or returned only start+finish. This
+    # deprived the first-visit Photon fallback of actual middle-day villages.
+    # Interpolate on the existing walking geometry at each stage-distance
+    # fraction. This changes only discovery anchors, never the stored line.
+    segment = 1
     for day in range(1, max(1, int(days))):
         target = total * progress_breaks[day]
-        if floor >= len(clean) - 1:
-            break
-        idx = min(range(floor, len(clean) - 1), key=lambda i: abs(cumulative[i] - target))
+        while segment < len(clean) - 1 and cumulative[segment] < target:
+            segment += 1
+        lower, upper = cumulative[segment - 1], cumulative[segment]
+        portion = (
+            max(0.0, min(1.0, (target - lower) / (upper - lower)))
+            if upper > lower else 0.0
+        )
+        a, b = clean[segment - 1], clean[segment]
         boundaries.append({
             "name": f"Repère jour {day}",
-            "lat": clean[idx][0],
-            "lon": clean[idx][1],
+            "lat": a[0] + (b[0] - a[0]) * portion,
+            "lon": a[1] + (b[1] - a[1]) * portion,
             "category": "route_anchor",
         })
-        floor = idx + 1
     boundaries.append(end)
     return boundaries
 
