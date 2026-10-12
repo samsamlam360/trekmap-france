@@ -69,6 +69,8 @@ jobs:
         run: python scripts/test_trekbrain_v9_belle_ile_canonical.py
       - name: Route-first lodging logistics regression
         run: python scripts/test_trekbrain_v9_route_logistics.py
+      - name: TrekBrain authenticated save and in-place route geometry
+        run: python scripts/test_trekbrain_route_persistence.py
       - name: GR backbone campsite stitch regression
         run: python scripts/test_trekbrain_v9_relation_stitch.py
       - name: Multi-trail path-network regressions
