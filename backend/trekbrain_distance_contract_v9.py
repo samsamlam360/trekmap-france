@@ -105,11 +105,12 @@ def annotate_daily_distance(result: dict[str, Any], intent: dict[str, Any]) -> d
         if stage_notice not in current:
             stage["safety_notes"] = (current + " " + stage_notice).strip()
 
-    confidence = result.get("confidence")
-    if isinstance(confidence, dict):
-        limitations = confidence.setdefault("limitations", [])
-        if isinstance(limitations, list) and notice not in limitations:
-            limitations.append(notice)
+    # The v8/v9 heuristic already penalises the measured stage distances.
+    # Adding this presentation-only warning to confidence.limitations would
+    # impose another -2 points per limitation and create an artificial quality
+    # regression (Huelgoat 59.0 -> 57.1) without any route change.
+    # Stage notes + advisor_notes + structured distance_contract carry the
+    # warning to the user without modifying the underlying quality score.
     notes = result.get("advisor_notes")
     if isinstance(notes, list) and notice not in notes:
         notes.append(notice)
