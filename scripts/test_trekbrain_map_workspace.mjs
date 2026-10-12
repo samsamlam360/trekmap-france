@@ -13,6 +13,7 @@ assert.ok(css.includes('body.tm-brain-route-mode #tm-unified-drawer'),'popular t
 assert.ok(css.includes('body.tm-brain-route-mode .tm-route-day-legend'),'duplicate route legend hidden');
 assert.ok(css.includes('@media(max-width:820px)'),'phone has a real adapted route sheet');
 assert.ok(css.includes('env(safe-area-inset-bottom,0px)'),'respect mobile system navigation');
+assert.ok(css.includes('position:sticky;bottom:0;z-index:2'),'save and modify remain usable on short phones');
 assert.ok(css.includes('.tm-brain-actions'),'save and modify remain accessible');
 assert.ok(css.includes('.tm-brain-alert'),'safety warnings are visibly surfaced');
 assert.ok(css.includes('.tm-brain-detail'),'one scrollable stage list');
@@ -101,9 +102,15 @@ const windowObj={
   TrekMapOpenTrek(){savedOpened++},
 };
 const documentEvents={};
+const aiMobileButton=new FakeElement('button');aiMobileButton.dataset.mobileAction='ai';
+aiMobileButton.classList.add('active');
+const exploreMobileButton=new FakeElement('button');exploreMobileButton.dataset.mobileAction='explore';
 const doc={
   body,
   createElement(tag){return new FakeElement(tag)},
+  querySelectorAll(selector){
+    return selector==='#tm-mobile-nav [data-mobile-action]'?[aiMobileButton,exploreMobileButton]:[];
+  },
   getElementById(id){
     return id==='tm-main-search'?search:id==='tm-ai-save'?originalSave:null;
   },
@@ -180,6 +187,8 @@ assert.equal(originalSave.clicked,1,'existing save control must be reused');
 clickAction('exit');
 assert.equal(body.classList.contains('tm-brain-route-mode'),false);
 assert.equal(panel.hidden,true);
+assert.equal(aiMobileButton.classList.contains('active'),false,'TrekBrain active tab must be reset');
+assert.equal(exploreMobileButton.classList.contains('active'),true,'Explorer tab should be active after exiting');
 assert.equal('bottom' in styles,false);
 
 windowObj.innerWidth=375;windowObj.innerHeight=812;
