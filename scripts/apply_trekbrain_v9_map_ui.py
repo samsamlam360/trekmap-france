@@ -186,7 +186,11 @@ block = r'''<!-- TREKMAP_TREKBRAIN_V91_MAP_START -->
     }catch(_){}
     const response=await previous(input,nextInit);
     try{
-      if(response.ok&&url.includes('/ai/plan'))response.clone().json().then(data=>{if(data&&typeof data==='object'){current=data;setTimeout(()=>{drawResources(data);resourceSummary();decorateSaveButton()},80)}}).catch(()=>{});
+      if(response.ok&&url.includes('/ai/plan'))response.clone().json().then(data=>{if(data&&typeof data==='object'){current=data;setTimeout(()=>{
+        // Never resurrect POI layers after the user closed the map workspace.
+        if(!window.TrekBrainMapWorkspace || window.TrekBrainMapWorkspace.isActive())drawResources(data);
+        resourceSummary();decorateSaveButton();
+      },80)}}).catch(()=>{});
       if(response.ok&&/\/treks\/(?:draw|ai-save)(?:\?|$)/.test(url))response.clone().json().then(data=>{if(data?.id){savedTrekId=Number(data.id);setTimeout(decorateSaveButton,120)}}).catch(()=>{});
     }catch(_){}
     return response;
