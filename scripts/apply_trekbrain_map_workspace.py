@@ -304,6 +304,54 @@ body.tm-brain-route-mode.tm-brain-show-resources .tm-v91-legend {display:block!i
         Math.abs(Number(pt[1]))<=180;
     });
   }
+  function gpxEscape(value){
+    return String(value==null?'':value)
+      .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\uFFFE\uFFFF]/g,'')
+      .replace(/[&<>"']/g,function(char){
+        return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&apos;'}[char];
+      });
+  }
+  function formatGPX(p){
+    if(!p||!validCoords(p))throw new Error('Aucun tracé GPS exploitable à exporter.');
+    var coords=p.route_preview.coords;
+    if(coords.length>50000)throw new Error('Le tracé est trop volumineux pour cet export.');
+    var name=gpxEscape(String(p.title||'Itinéraire TrekBrain').slice(0,160));
+    var points=coords.map(function(point){
+      return '<trkpt lat="'+Number(point[0]).toFixed(7)+
+        '" lon="'+Number(point[1]).toFixed(7)+'"></trkpt>';
+    });
+    return '<?xml version="1.0" encoding="UTF-8"?>\n'+
+      '<gpx version="1.1" creator="TrekMap France - TrekBrain" '+
+      'xmlns="http://www.topografix.com/GPX/1/1">'+
+      '<metadata><name>'+name+'</name></metadata>'+
+      '<trk><name>'+name+'</name><trkseg>'+
+      points.join('')+'</trkseg></trk></gpx>';
+  }
+  function exportGPX(){
+    if(!active||!plan)return false;
+    try{
+      var gpx=formatGPX(plan);
+      var title=String(plan.title||'trekbrain').normalize('NFKD')
+        .replace(/[\u0300-\u036f]/g,'').toLowerCase()
+        .replace(/[^a-z0-9-]+/g,'-').replace(/^-+|-+$/g,'').slice(0,64)||'trekbrain';
+      var blob=new Blob([gpx],{type:'application/gpx+xml;charset=utf-8'});
+      var url=URL.createObjectURL(blob);
+      var link=document.createElement('a');
+      link.href=url;link.download=title+'.gpx';
+      link.setAttribute('aria-label','Télécharger le parcours GPX');
+      link.hidden=true;document.body.appendChild(link);
+      try{link.click();}
+      finally{
+        link.remove();
+        setTimeout(function(){URL.revokeObjectURL(url);},5000);
+      }
+      if(typeof toast==='function')toast('Tracé GPX téléchargé. Les fonds de carte ne sont pas inclus.');
+      return true;
+    }catch(error){
+      if(typeof toast==='function')toast(error.message||'Export GPX indisponible.');
+      return false;
+    }
+  }
   function updatePanelHeight(){
     if(active){
       body.style.setProperty('--tm-brain-sheet-height',
@@ -352,6 +400,7 @@ body.tm-brain-route-mode.tm-brain-show-resources .tm-v91-legend {display:block!i
     }
     parts.push('<div class="tm-brain-tools">'+
       '<button type="button" data-workspace-action="fit">⌖ Recentrer le tracé</button>'+
+      '<button type="button" data-workspace-action="gpx" title="Télécharger le tracé GPX pour une application GPS hors ligne">⬇ GPX</button>'+
       '<button type="button" data-workspace-action="resources" aria-pressed="'+
       String(body.classList.contains('tm-brain-show-resources'))+'">📍 Repères</button>'+
       '<button type="button" class="tm-brain-expand" data-workspace-action="expand" aria-controls="tm-brain-route-detail" aria-expanded="'+String(expanded)+'">'+
@@ -465,6 +514,7 @@ body.tm-brain-route-mode.tm-brain-show-resources .tm-v91-legend {display:block!i
     var action=button.dataset.workspaceAction;
     if(action==='exit')exit();
     else if(action==='fit')recenter();
+    else if(action==='gpx')exportGPX();
     else if(action==='expand'){expanded=!expanded;syncExpanded();}
     else if(action==='resources'){
       var show=!body.classList.contains('tm-brain-show-resources');
@@ -518,7 +568,9 @@ body.tm-brain-route-mode.tm-brain-show-resources .tm-v91-legend {display:block!i
     new ResizeObserver(updatePanelHeight).observe(panel);
   }
   window.TrekBrainMapWorkspace={
-    open:enter,exit:exit,recenter:recenter,isActive:function(){return active;}
+    open:enter,exit:exit,recenter:recenter,
+    exportGPX:exportGPX,
+    isActive:function(){return active;}
   };
 })();
 </script>
