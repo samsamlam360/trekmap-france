@@ -51,6 +51,10 @@ jobs:
           PY
       - name: Stable pipeline topology
         run: python scripts/test_trekbrain_v9_pipeline_core.py
+      - name: Distance constraint and excessive-day warning regression
+        run: |
+          python scripts/test_trekbrain_v9_distance_contract.py
+          node scripts/test_trekbrain_v9_distance_contract_ui.mjs
       - name: Five golden prompt stability gate
         run: python scripts/test_trekbrain_v9_stability_gate.py
       - name: Forty realistic field scenarios

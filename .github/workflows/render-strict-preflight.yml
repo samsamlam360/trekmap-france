@@ -125,6 +125,7 @@ jobs:
           node scripts/test_trekbrain_ux_refresh.mjs
           node scripts/test_trekbrain_desktop_experience.mjs
           node scripts/test_trekbrain_map_workspace.mjs
+          node scripts/test_trekbrain_v9_distance_contract_ui.mjs
           node scripts/test_trekbrain_close_save.mjs
           node scripts/test_trekbrain_gpx_export.mjs
           python scripts/test_trekbrain_route_persistence.py

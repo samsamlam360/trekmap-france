@@ -267,6 +267,12 @@ block = r'''<!-- TREKMAP_AI_EXPERIENCE_START -->
     const stages=Array.isArray(p.stages)?p.stages:[];
     const routeHasGeometry=Array.isArray(route.coords)&&route.coords.length>=2;
     const warnings=[];
+    const dist=p.planner?.distance_contract;
+    if(dist?.target_exceeded&&Array.isArray(dist.days_exceeding)){
+      const days=dist.days_exceeding.map(d=>'J'+d.day+' : '+d.distance_km+' km');
+      warnings.push('Distance supérieure à votre objectif de '+dist.daily_target_km+
+        ' km/jour ('+days.join(', ')+'). Adaptez la durée ou le parcours.');
+    }
     if(route.warning)warnings.push('Tracé : '+String(route.warning));
     if(!routeHasGeometry)warnings.push('Tracé pédestre non confirmé : itinéraire à vérifier avant le départ.');
     const waterMissing=Array.isArray(cover.days_without_water)?cover.days_without_water:[];

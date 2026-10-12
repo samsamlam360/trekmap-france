@@ -29,6 +29,7 @@ from typing import Any, Callable
 from fastapi import HTTPException
 
 from . import trekbrain_perf_profile_v9 as perf
+from .trekbrain_distance_contract_v9 import annotate_daily_distance
 
 _INSTALLED = False
 PIPELINE_VERSION = "v9-explicit-1"
@@ -598,6 +599,7 @@ def install_planning_pipeline(
                 )
 
         result = _rebalance_stage_count(result, state.intent)
+        result = annotate_daily_distance(result, state.intent)
         if (result.get("planner") or {}).get("stage_rebalanced"):
             state.phases.append("stages:rebalanced")
         state.phases.append("finalize")
