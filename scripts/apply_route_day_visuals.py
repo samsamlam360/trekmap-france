@@ -214,6 +214,11 @@ block = r'''<!-- TREKMAP_ROUTE_DAY_VISUALS_START -->
       clearDrawingLayers=function(){const value=originalClearDrawingLayers.apply(this,arguments);try{if(manualEndpoints)map.removeLayer(manualEndpoints)}catch(_){}manualEndpoints=null;return value};window.clearDrawingLayers=clearDrawingLayers;
     }
   }catch(_){}
+  window.TrekMapClearAIRoute=function(){
+    try{if(aiGroup&&typeof map!=='undefined')map.removeLayer(aiGroup)}catch(_){}
+    aiGroup=null;
+    aiLegend=clearControl(aiLegend);
+  };
   window.TrekMapExitSelectedTrek=exitSelectedTrek;
   bindMapExit();
 })();
