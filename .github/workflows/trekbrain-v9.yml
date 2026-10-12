@@ -157,6 +157,7 @@ jobs:
           python scripts/apply_trekbrain_map_mobile.py
           python scripts/apply_trekbrain_scenic_photos.py
           python scripts/apply_trekbrain_desktop_experience.py
+          python scripts/apply_trekbrain_map_workspace.py
       - name: Check v9 frontend
         shell: python
         run: |
