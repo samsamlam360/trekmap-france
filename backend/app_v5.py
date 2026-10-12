@@ -27,6 +27,10 @@ else:
 
 install_smart_planner(app, legacy_main)
 if TREKBRAIN_VERSION == "v9":
+    from .trekbrain_route_persistence_v9 import install_trekbrain_route_persistence
+    install_trekbrain_route_persistence(app, legacy_main, robust_db_or_503)
+
+if TREKBRAIN_VERSION == "v9":
     # V9 architecture, in order:
     # 1) pin high-confidence ambiguous places before any geographic work;
     # 2) understand hiking relations;
