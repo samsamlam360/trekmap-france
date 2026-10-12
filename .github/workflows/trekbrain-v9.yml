@@ -170,7 +170,7 @@ jobs:
             'TREKMAP_TREKBRAIN_V9_UI_START','trekmap-trekbrain-v9-js','Décision TrekBrain',
             'Confirmé','À vérifier','Important','/ai/feedback',
             'TREKMAP_TREKBRAIN_V91_MAP_START','trekmap-trekbrain-v91-map-js',
-            'Repères TrekBrain','ai-redraw','Mettre à jour ce trek dans TrekMap',
+            'Repères TrekBrain','ai-geometry','Mettre à jour ce trek dans TrekMap',
             'TREKMAP_FAILURE_ACTIONS_V93_START','trekmap-failure-actions-v93-js',
             'Voir quand même le trek','Modifier la requête','Nouvelle requête',
             'Tracé provisoire non validé',
