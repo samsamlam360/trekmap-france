@@ -173,7 +173,12 @@ block = r'''<!-- TREKMAP_ROUTE_DAY_VISUALS_START -->
       const response=await previous(input,init);try{const url=String(typeof input==='string'?input:(input&&input.url)||'');if(response.ok&&url.includes('/ai/plan'))response.clone().json().then(data=>{if(data&&typeof data==='object'){aiPlan=data}}).catch(()=>{});}catch(_){}return response;
     };
   }
-  document.addEventListener('click',e=>{if(e.target.closest('#tm-ai-preview')&&aiPlan)setTimeout(()=>renderAi(aiPlan,true),70)},false);
+  document.addEventListener('click',e=>{
+    if(e.target.closest('#tm-ai-preview')&&aiPlan)setTimeout(()=>{
+      if(window.TrekBrainMapWorkspace&&!window.TrekBrainMapWorkspace.isActive())return;
+      renderAi(aiPlan,true);
+    },70);
+  },false);
 
   try{
     if(typeof drawTrace==='function'){
