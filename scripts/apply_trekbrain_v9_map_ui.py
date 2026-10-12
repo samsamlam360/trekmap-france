@@ -52,6 +52,8 @@ block = r'''<!-- TREKMAP_TREKBRAIN_V91_MAP_START -->
     try{if(legend&&typeof map!=='undefined')map.removeControl(legend)}catch(_){}legend=null;
   }
 
+  window.TrekMapClearAIResources=clearGroups;
+
   function fallbackPoints(plan){
     const out=[];
     (plan?.water||[]).forEach(x=>out.push({...x,kind:'water',type:"Point d'eau"}));
