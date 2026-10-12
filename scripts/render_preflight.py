@@ -161,6 +161,9 @@ def main() -> None:
         )
 
     if trekbrain == "v9":
+        for api_path in ("/treks/ai-save", "/treks/{trek_id}/ai-geometry"):
+            if routes.count(api_path) != 1:
+                fail(f"Route de sauvegarde TrekBrain absente ou dupliquée: {api_path}")
         status_route = next(
             route
             for route in app_v5.app.routes
