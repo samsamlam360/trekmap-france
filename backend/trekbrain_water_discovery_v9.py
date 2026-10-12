@@ -135,17 +135,10 @@ def discover_water_points(v3, result: dict[str, Any]) -> list[dict[str, Any]]:
         tags = element.get("tags") or {}
         # Explicit negative OSM tags override amenity=drinking_water.
         # A spring/water_tap is never guaranteed potable without evidence.
-        unsafe = (
-            str(tags.get("drinking_water") or "").casefold() == "no"
-            or str(tags.get("water:potable") or "").casefold() == "no"
-            or str(tags.get("potable") or "").casefold() == "no"
-        )
-        referenced = not unsafe and (
-            tags.get("amenity") == "drinking_water"
-            or tags.get("drinking_water") == "yes"
-            or tags.get("water:potable") == "yes"
-        )
-        status = "not_potable" if unsafe else "potable_referenced" if referenced else "unverified"
+        from .trekbrain_water_evidence_v9 import potability_status
+        status = potability_status(tags)
+        unsafe = status == "not_potable"
+        referenced = status == "potable_referenced"
         is_spring = tags.get("natural") == "spring"
         is_tap = tags.get("man_made") == "water_tap"
         default_name = "Source" if is_spring else "Robinet d'eau" if is_tap else "Point d'eau"
