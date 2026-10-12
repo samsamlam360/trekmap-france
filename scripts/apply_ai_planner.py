@@ -407,6 +407,8 @@ block = r'''<!-- TREKMAP_AI_EXPERIENCE_START -->
     };
   }
 
+  window.TrekMapGeometryPayloadFromAI=trekbrainSavePayload;
+
   async function savePlan(){
     if(!currentPlan)return;
     const btn=$('tm-ai-save');
