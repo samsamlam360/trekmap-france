@@ -108,7 +108,7 @@ block = r'''<!-- TREKMAP_TREKBRAIN_V91_MAP_START -->
     legend.onAdd=()=>{
       const div=L.DomUtil.create('div','tm-v91-legend');
       const total=pts.length;
-      div.innerHTML=`<details class="tm-v91-resource-details" ${window.innerWidth>820?'open':''}><summary>📍 Repères TrekBrain · ${total}</summary><div class="tm-v91-resources-list">`+Object.keys(meta).filter(k=>counts[k]).map(k=>`<label><input type="checkbox" data-v91-kind="${k}" checked> <span>${meta[k].emoji} ${meta[k].label} (${counts[k]})</span></label>`).join('')+'</div><small>Points cartographiés. Vérifie les conditions avant de partir.</small></details>';
+      div.innerHTML=`<details class="tm-v91-resource-details" ${window.innerWidth>=1500?'open':''}><summary>📍 Repères TrekBrain · ${total}</summary><div class="tm-v91-resources-list">`+Object.keys(meta).filter(k=>counts[k]).map(k=>`<label><input type="checkbox" data-v91-kind="${k}" checked> <span>${meta[k].emoji} ${meta[k].label} (${counts[k]})</span></label>`).join('')+'</div><small>Points cartographiés. Vérifie les conditions avant de partir.</small></details>';
       L.DomEvent.disableClickPropagation(div);L.DomEvent.disableScrollPropagation(div);
       div.addEventListener('change',e=>{const input=e.target.closest('[data-v91-kind]');if(!input)return;const g=groups[input.dataset.v91Kind];if(!g)return;input.checked?g.addTo(map):map.removeLayer(g)});
       return div;
