@@ -178,6 +178,7 @@ body.tm-brain-route-mode.tm-brain-show-resources .tm-v91-legend {display:block!i
     left:9px;right:9px;top:auto;
     bottom:calc(var(--tm-mobile-nav-h,74px) + 15px + env(safe-area-inset-bottom,0px));
     width:auto;max-height:min(58dvh,570px);
+    overflow-y:auto;overscroll-behavior:contain;
     border-radius:18px;
     box-shadow:0 10px 42px rgba(8,45,28,.22);
   }
@@ -192,7 +193,11 @@ body.tm-brain-route-mode.tm-brain-show-resources .tm-v91-legend {display:block!i
   #tm-brain-route-panel .tm-brain-safe {margin:0 13px 9px;padding:8px 10px}
   #tm-brain-route-panel .tm-brain-tools {padding:0 13px 9px;gap:6px}
   #tm-brain-route-panel .tm-brain-tools button {min-height:40px;padding:7px 9px}
-  #tm-brain-route-panel .tm-brain-actions {padding:9px 13px 12px;gap:8px}
+  #tm-brain-route-panel .tm-brain-actions {
+    position:sticky;bottom:0;z-index:2;
+    padding:9px 13px 12px;gap:8px;
+    background:#fbfdfb;
+  }
   #tm-brain-route-panel .tm-brain-actions button {min-height:46px}
   #tm-brain-route-panel .tm-brain-detail {padding:10px 13px;max-height:35dvh}
   #tm-brain-route-panel .tm-brain-expand {display:block!important;flex:1}
@@ -417,6 +422,9 @@ body.tm-brain-route-mode.tm-brain-show-resources .tm-v91-legend {display:block!i
   function exit(){
     if(!active)return;
     active=false;plan=null;expanded=false;
+    document.querySelectorAll('#tm-mobile-nav [data-mobile-action]').forEach(function(button){
+      button.classList.toggle('active',button.dataset.mobileAction==='explore');
+    });
     body.classList.remove('tm-brain-route-mode','tm-brain-show-resources');
     body.style.removeProperty('--tm-brain-sheet-height');
     panel.hidden=true;panel.innerHTML='';
