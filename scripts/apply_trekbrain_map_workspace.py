@@ -474,8 +474,11 @@ body.tm-brain-route-mode.tm-brain-show-resources .tm-v91-legend {display:block!i
     else if(action==='modify')window.TrekMapOpenAI?.();
     else if(action==='save'){
       var original=document.getElementById('tm-ai-save');
-      if(original&&!original.disabled)original.click();
-      else window.TrekMapOpenAI?.();
+      if(original){
+        if(!original.disabled)original.click();
+      }else{
+        window.TrekMapOpenAI?.();
+      }
     }
   }
   panel.addEventListener('click',makeAction);
