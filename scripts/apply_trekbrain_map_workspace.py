@@ -517,7 +517,9 @@ body.tm-brain-route-mode.tm-brain-show-resources .tm-v91-legend {display:block!i
   if(typeof ResizeObserver==='function'){
     new ResizeObserver(updatePanelHeight).observe(panel);
   }
-  window.TrekBrainMapWorkspace={open:enter,exit:exit,recenter:recenter};
+  window.TrekBrainMapWorkspace={
+    open:enter,exit:exit,recenter:recenter,isActive:function(){return active;}
+  };
 })();
 </script>
 <!-- TREKMAP_BRAIN_ROUTE_WORKSPACE_END -->'''
