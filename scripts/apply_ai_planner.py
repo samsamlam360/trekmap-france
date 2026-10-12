@@ -452,7 +452,10 @@ block = r'''<!-- TREKMAP_AI_EXPERIENCE_START -->
     }catch(e){
       if(typeof toast==='function')toast(e.message||'Enregistrement impossible.');
     }finally{
-      if(btn){btn.disabled=false;btn.textContent='Enregistrer dans TrekMap'}
+      if(btn){
+        btn.disabled=false;btn.textContent='Enregistrer dans TrekMap';
+        window.TrekMapRefreshAISaveButton?.();
+      }
     }
   }
 
