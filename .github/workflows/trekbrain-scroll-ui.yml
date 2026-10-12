@@ -68,6 +68,7 @@ jobs:
       - name: Evidence-based TrekBrain UX regression
         run: |
           node scripts/test_trekbrain_ux_refresh.mjs
+          node scripts/test_trekbrain_desktop_experience.mjs
           node scripts/test_trekbrain_scenic_media.mjs
 
       - name: Python syntax
