@@ -31,6 +31,8 @@ assert.ok(dayJS.includes('!window.TrekBrainMapWorkspace.isActive()'),
   'pending colored drawing must not resurrect after closing');
 assert.ok(resourcesJS.includes('!window.TrekBrainMapWorkspace.isActive()'),
   'pending POI drawing must not resurrect after closing');
+assert.ok(resourcesJS.includes('window.TrekBrainMapWorkspace.isActive())drawResources(data)'),
+  'late AI fetch results must not recreate pins after closing the route');
 assert.ok(!/waypoints\.length<2|pas assez de waypoints/.test(code),
   'save must no longer require a sparse waypoints array');
 assert.ok(!resourcesJS.includes("'/ai-redraw'"),
