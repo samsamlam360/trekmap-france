@@ -200,6 +200,7 @@ block = r'''<!-- TREKMAP_TREKBRAIN_V91_MAP_START -->
     const save=e.target.closest('#tm-ai-save');if(save&&savedTrekId&&current){e.preventDefault();e.stopPropagation();e.stopImmediatePropagation();updateSavedPlan()}
   },true);
 
+  window.TrekMapRefreshAISaveButton=decorateSaveButton;
   window.TrekMapRecordSavedAI=function(id){
     if(Number.isInteger(Number(id))&&Number(id)>0){
       savedTrekId=Number(id);
