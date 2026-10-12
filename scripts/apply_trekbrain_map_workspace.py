@@ -317,6 +317,9 @@ body.tm-brain-route-mode.tm-brain-show-resources .tm-v91-legend {display:block!i
   }
   function formatGPX(p){
     if(!p||!validCoords(p))throw new Error('Aucun tracé GPS exploitable à exporter.');
+    if(p.route_preview.fallback!==false){
+      throw new Error('Tracé pédestre non validé : export GPX bloqué pour éviter les lignes non praticables.');
+    }
     var coords=p.route_preview.coords;
     if(coords.length>50000)throw new Error('Le tracé est trop volumineux pour cet export.');
     var name=gpxEscape(String(p.title||'Itinéraire TrekBrain').slice(0,160));

@@ -19,6 +19,7 @@ const isolated=js.slice(start,end);
 const plan={
   title:'Boucle <Sancy> & "Mont-Dore" éte\\nchemin',
   route_preview:{
+    fallback:false,
     coords:[[45.512345678,2.819999999],[45.52,2.84],[45.53,2.86]]
   }
 };
@@ -79,6 +80,8 @@ for(const bad of [
   {route_preview:{coords:[[45,5],[true,5]]}},
   {route_preview:{coords:[[45,5],["",5]]}},
   {route_preview:{coords:[[45,5],[45,5]]}},
+  {route_preview:{fallback:true,coords:[[45,5],[45.4,5.5]]}},
+  {route_preview:{coords:[[45,5],[45.4,5.5]]}},
 ]){
   context.plan=bad;
   assert.equal(context.__gpx.exportGPX(),false,'invalid GPS must not be exported');
