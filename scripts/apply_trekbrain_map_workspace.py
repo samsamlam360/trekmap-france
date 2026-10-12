@@ -303,6 +303,9 @@ body.tm-brain-route-mode.tm-brain-show-resources .tm-v91-legend {display:block!i
       if(pt.some(function(v){return v===null||v===''||typeof v==='boolean';}))return false;
       return Number.isFinite(Number(pt[0]))&&Number.isFinite(Number(pt[1]))&&
         Math.abs(Number(pt[0]))<=90&&Math.abs(Number(pt[1]))<=180;
+    })&&coords.some(function(pt,index){
+      return index>0&&(Number(pt[0])!==Number(coords[0][0])||
+        Number(pt[1])!==Number(coords[0][1]));
     });
   }
   function gpxEscape(value){
