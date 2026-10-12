@@ -22,7 +22,8 @@ assert.ok(script.includes("data-workspace-action=\"fit\""),'recenter action');
 assert.ok(script.includes("data-workspace-action=\"save\""),'save action');
 assert.ok(script.includes("data-workspace-action=\"exit\""),'return to explorer');
 assert.ok(script.includes("data-workspace-action=\"expand\""),'mobile expandable stages');
-assert.ok(script.includes('window.TrekBrainMapWorkspace={open:enter,exit:exit,recenter:recenter}'));
+assert.ok(script.includes('window.TrekBrainMapWorkspace={'));
+assert.ok(script.includes('isActive:function(){return active;}'),'map workspace must expose active state');
 assert.ok(!/fetch\s*\(|XMLHttpRequest|localStorage|\/ai\/plan/.test(script),'no duplicate route planning nor extra network');
 assert.ok(script.includes('if(!p||typeof p!=='), 'invalid/missing planning response must not open');
 assert.ok(script.includes('if(!active||!plan||!validCoords(plan))return;'),'recenter only verified coordinates');
@@ -94,12 +95,16 @@ const search=new FakeElement('input');
 const originalSave=new FakeElement('button');originalSave.clicked=0;originalSave.click=()=>originalSave.clicked++;
 const windowEvents={};
 let aiOpened=0,savedOpened=0;
+let previewCleared=0,coloredCleared=0,resourcesCleared=0;
 const windowObj={
   innerWidth:1440,innerHeight:900,
   addEventListener(k,fn){windowEvents[k]=fn},
   matchMedia(){return {matches:false}},
   TrekMapOpenAI(){aiOpened++},
   TrekMapOpenTrek(){savedOpened++},
+  TrekMapClearAIPreview(){previewCleared++},
+  TrekMapClearAIRoute(){coloredCleared++},
+  TrekMapClearAIResources(){resourcesCleared++},
 };
 const documentEvents={};
 const aiMobileButton=new FakeElement('button');aiMobileButton.dataset.mobileAction='ai';
@@ -138,6 +143,7 @@ vm.runInNewContext(script,{
 });
 const workspace=windowObj.TrekBrainMapWorkspace;
 assert.ok(workspace,'browser API exists');
+assert.equal(workspace.isActive(),false);
 const panel=body.child;
 assert.equal(panel.id,'tm-brain-route-panel');
 assert.equal(panel.hidden,true,'starts without replacing filter pane');
@@ -159,6 +165,7 @@ const plan={
   logistics:{nights_missing:1,nights_transfer_required:0}
 };
 assert.equal(workspace.open(plan),true);
+assert.equal(workspace.isActive(),true);
 assert.equal(panel.hidden,false);
 assert.equal(body.classList.contains('tm-brain-route-mode'),true);
 assert.ok(panel.innerHTML.includes('Trois jours dans le Vercors'));
@@ -185,8 +192,14 @@ assert.equal(aiOpened,1,'existing editor must remain available');
 clickAction('save');
 assert.equal(originalSave.clicked,1,'existing save control must be reused');
 clickAction('exit');
+assert.equal(workspace.isActive(),false);
+assert.equal(previewCleared,1,'closing the panel removes the old dashed preview');
+assert.equal(coloredCleared,1,'closing the panel removes the colored J1/J2 lines');
+assert.equal(resourcesCleared,1,'closing the panel removes its resource markers');
 assert.equal(body.classList.contains('tm-brain-route-mode'),false);
 assert.equal(panel.hidden,true);
+clickAction('exit');
+assert.equal(previewCleared,1,'closing twice must be idempotent');
 assert.equal(aiMobileButton.classList.contains('active'),false,'TrekBrain active tab must be reset');
 assert.equal(exploreMobileButton.classList.contains('active'),true,'Explorer tab should be active after exiting');
 assert.equal('bottom' in styles,false);
@@ -202,6 +215,9 @@ mapEvents.movestart();
 assert.equal(panel.classList.contains('expanded'),false,'moving the map folds mobile steps');
 doc.body.classList.add('tm-mobile-filters-open');
 workspace.exit();
+assert.equal(previewCleared,2);
+assert.equal(coloredCleared,2);
+assert.equal(resourcesCleared,2);
 assert.equal(body.classList.contains('tm-brain-route-mode'),false);
 assert.equal(body.classList.contains('tm-brain-show-resources'),false);
 assert.equal(panel.hidden,true);
@@ -210,6 +226,9 @@ assert.ok(!Object.keys(styles).length,'old layout properties must be restored');
 assert.equal(workspace.open(plan),true);
 windowObj.TrekMapOpenTrek(71);
 assert.equal(savedOpened,1);
+assert.equal(previewCleared,3,'opening a saved trek clears only the generated preview');
+assert.equal(coloredCleared,3);
+assert.equal(resourcesCleared,3);
 assert.equal(body.classList.contains('tm-brain-route-mode'),false,'opening a saved trek must restore Explorer');
 
 console.log('TrekBrain responsive map workspace: PC/mobile, security alerts, editor/save, recenter, explorer restore PASS');

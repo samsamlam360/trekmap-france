@@ -428,6 +428,11 @@ body.tm-brain-route-mode.tm-brain-show-resources .tm-v91-legend {display:block!i
     body.classList.remove('tm-brain-route-mode','tm-brain-show-resources');
     body.style.removeProperty('--tm-brain-sheet-height');
     panel.hidden=true;panel.innerHTML='';
+    // Fermer le panneau enlève réellement TOUT l'aperçu IA de la carte,
+    // sans retirer le tracé sélectionné ou les treks enregistrés.
+    window.TrekMapClearAIPreview?.();
+    window.TrekMapClearAIRoute?.();
+    window.TrekMapClearAIResources?.();
     try{if(typeof map!=='undefined')map.invalidateSize();}catch(_){}
   }
   function mapMaybe(){
@@ -469,8 +474,11 @@ body.tm-brain-route-mode.tm-brain-show-resources .tm-v91-legend {display:block!i
     else if(action==='modify')window.TrekMapOpenAI?.();
     else if(action==='save'){
       var original=document.getElementById('tm-ai-save');
-      if(original&&!original.disabled)original.click();
-      else window.TrekMapOpenAI?.();
+      if(original){
+        if(!original.disabled)original.click();
+      }else{
+        window.TrekMapOpenAI?.();
+      }
     }
   }
   panel.addEventListener('click',makeAction);
@@ -509,7 +517,9 @@ body.tm-brain-route-mode.tm-brain-show-resources .tm-v91-legend {display:block!i
   if(typeof ResizeObserver==='function'){
     new ResizeObserver(updatePanelHeight).observe(panel);
   }
-  window.TrekBrainMapWorkspace={open:enter,exit:exit,recenter:recenter};
+  window.TrekBrainMapWorkspace={
+    open:enter,exit:exit,recenter:recenter,isActive:function(){return active;}
+  };
 })();
 </script>
 <!-- TREKMAP_BRAIN_ROUTE_WORKSPACE_END -->'''

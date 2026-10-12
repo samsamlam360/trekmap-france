@@ -237,7 +237,10 @@ block = r'''<!-- TREKMAP_AI_EXPERIENCE_START -->
       const d=await r.json().catch(()=>({}));
       if(r.status===401){closeAI();$('tm-account-btn')?.click();throw new Error('Connecte-toi pour utiliser TrekMap AI.')}
       if(!r.ok)throw new Error(d.detail||'La préparation IA a échoué.');
-      currentPlan=d;renderPlan(d);previewPlan(d,true);
+      currentPlan=d;
+      window.TrekMapClearAIRoute?.();
+      window.TrekMapClearAIResources?.();
+      renderPlan(d);previewPlan(d,true);
     }catch(e){
       $('tm-ai-progress').classList.remove('show');
       $('tm-ai-content').innerHTML=`<div class="tm-ai-warning"><b>Impossible de préparer ce trek.</b><br>${esc(e.message||'Erreur inconnue')}</div>`;
@@ -355,38 +358,105 @@ block = r'''<!-- TREKMAP_AI_EXPERIENCE_START -->
     $('tm-ai-save').onclick=savePlan;
   }
 
+  function clearAIPreview(){
+    try{if(previewLayer&&typeof map!=='undefined')map.removeLayer(previewLayer)}catch(_){}
+    previewLayer=null;
+  }
+  window.TrekMapClearAIPreview=clearAIPreview;
+
   function previewPlan(p,fit){
     const coords=p?.route_preview?.coords;if(!Array.isArray(coords)||coords.length<2)return;
     try{
-      if(previewLayer)map.removeLayer(previewLayer);
+      clearAIPreview();
       previewLayer=L.polyline(coords,{weight:6,opacity:.92,dashArray:'10 7'}).addTo(map);
       if(fit)map.fitBounds(previewLayer.getBounds(),{paddingTopLeft:[25,70],paddingBottomRight:[25,210],maxZoom:15,animate:true});
     }catch(e){console.warn('Aperçu IA indisponible',e)}
   }
 
+  function existingRouteCoords(plan){
+    const route=plan?.route_preview?.coords;
+    if(!Array.isArray(route)||route.length<2){
+      throw new Error('Aucun tracé pédestre suffisamment détaillé à enregistrer.');
+    }
+    if(route.length>50000)throw new Error('Tracé trop détaillé pour l’enregistrement (50 000 points maximum).');
+    const coords=route.map(p=>{
+      if(!Array.isArray(p)||p.length!==2)throw new Error('Le tracé contient un point GPS incomplet.');
+      const lat=Number(p[0]),lon=Number(p[1]);
+      if(!Number.isFinite(lat)||!Number.isFinite(lon)||Math.abs(lat)>90||Math.abs(lon)>180){
+        throw new Error('Le tracé contient des coordonnées GPS invalides.');
+      }
+      return [lat,lon];
+    });
+    if(!coords.some((p,i)=>i>0&&(p[0]!==coords[0][0]||p[1]!==coords[0][1]))){
+      throw new Error('Le tracé ne contient pas deux positions différentes.');
+    }
+    return coords;
+  }
+
+  function trekbrainSavePayload(plan){
+    const elevation=Number(plan?.route_preview?.elevation_gain_m);
+    return {
+      name:plan.title||'Trek TrekBrain',
+      region:plan.region||'Non renseignée',
+      difficulty:plan.difficulty||'medium',
+      description:[plan.summary||'',...(plan.stages||[]).map(s=>
+        'Jour '+s.day+': '+s.title+' — '+s.distance_km+' km, +'+s.elevation_gain_m+' m.')].join('\n'),
+      duration_days:Number(plan.duration_days||1),
+      coords:existingRouteCoords(plan),
+      elevation_m:Number.isFinite(elevation)&&elevation>=0&&elevation<=100000?elevation:null
+    };
+  }
+
+  window.TrekMapGeometryPayloadFromAI=trekbrainSavePayload;
+
   async function savePlan(){
     if(!currentPlan)return;
-    const btn=$('tm-ai-save');btn.disabled=true;btn.textContent='Enregistrement…';
+    const btn=$('tm-ai-save');
+    if(btn?.disabled)return;
+    if(btn){btn.disabled=true;btn.textContent='Enregistrement…'}
     try{
-      const waypoints=(currentPlan.waypoints||[]).map(p=>[Number(p.lat),Number(p.lon)]).filter(p=>p.every(Number.isFinite));
-      if(waypoints.length<2)throw new Error('Le plan ne contient pas assez de waypoints.');
-      const description=[currentPlan.summary||'',...(currentPlan.stages||[]).map(s=>`Jour ${s.day}: ${s.title} — ${s.distance_km} km, +${s.elevation_gain_m} m.`)].join('\n');
-      const r=await fetch(api()+'/treks/draw',{method:'POST',headers:authHeaders({'Content-Type':'application/json'},'POST'),body:JSON.stringify({
-        name:currentPlan.title||'Trek IA',region:currentPlan.region||'Non renseignée',difficulty:currentPlan.difficulty||'medium',
-        description,is_public:false,duration_days:Number(currentPlan.duration_days||1),coords:waypoints
-      })});
-      const d=await r.json().catch(()=>({}));if(!r.ok)throw new Error(d.detail||'Création du trek impossible.');
+      const payload=trekbrainSavePayload(currentPlan);
+      const r=await fetch(api()+'/treks/ai-save',{
+        method:'POST',headers:authHeaders({'Content-Type':'application/json'},'POST'),
+        body:JSON.stringify(payload)
+      });
+      const d=await r.json().catch(()=>({}));
+      if(!r.ok)throw new Error(typeof d.detail==='string'?d.detail:
+        r.status===401?'Connecte-toi à ton compte pour enregistrer ce trek.':'Création du trek impossible.');
+      window.TrekMapRecordSavedAI?.(Number(d.id));
       const extras={
-        route_type:currentPlan.route_type||'',best_season:currentPlan.best_season||'',
-        start_name:currentPlan.start?.name||'',end_name:currentPlan.end?.name||'',photos:[],
-        points_of_interest:(currentPlan.points_of_interest||[]).slice(0,30).map(p=>({name:p.name||'Point',type:p.type||'Point',lat:Number(p.lat),lon:Number(p.lon)}))
+        route_type:currentPlan.route_type||'',
+        best_season:currentPlan.best_season||'',
+        start_name:currentPlan.start?.name||'',
+        end_name:currentPlan.end?.name||'',
+        photos:[],
+        points_of_interest:(currentPlan.points_of_interest||[]).slice(0,30)
+          .filter(p=>Number.isFinite(Number(p.lat))&&Number.isFinite(Number(p.lon)))
+          .map(p=>({name:p.name||'Point',type:p.type||'Point',
+            lat:Number(p.lat),lon:Number(p.lon)}))
       };
-      await fetch(api()+`/treks/${Number(d.id)}/extras`,{method:'PUT',headers:authHeaders({'Content-Type':'application/json'},'PUT'),body:JSON.stringify(extras)});
+      let enriched=true;
+      try{
+        const extraResponse=await fetch(api()+'/treks/'+Number(d.id)+'/extras',{
+          method:'PUT',headers:authHeaders({'Content-Type':'application/json'},'PUT'),
+          body:JSON.stringify(extras)
+        });
+        enriched=extraResponse.ok;
+      }catch(_){enriched=false}
       try{await loadTraces()}catch(_){}
-      closeAI();if(typeof toast==='function')toast('Trek IA enregistré en privé. Vérifie-le puis publie-le quand il est prêt.');
+      closeAI();
+      if(typeof toast==='function')toast(enriched?
+        'Trek enregistré en privé avec le tracé TrekBrain complet.':
+        'Trek privé enregistré avec son tracé. Certains détails restent à compléter.');
       setTimeout(()=>{try{window.TrekMapOpenTrek?.(Number(d.id))}catch(_){}},120);
-    }catch(e){if(typeof toast==='function')toast(e.message||'Enregistrement impossible.');}
-    finally{if(btn){btn.disabled=false;btn.textContent='Enregistrer dans TrekMap'}}
+    }catch(e){
+      if(typeof toast==='function')toast(e.message||'Enregistrement impossible.');
+    }finally{
+      if(btn){
+        btn.disabled=false;btn.textContent='Enregistrer dans TrekMap';
+        window.TrekMapRefreshAISaveButton?.();
+      }
+    }
   }
 
   window.TrekMapOpenAI=openAI;

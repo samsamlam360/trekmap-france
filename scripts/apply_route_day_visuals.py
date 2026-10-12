@@ -173,7 +173,12 @@ block = r'''<!-- TREKMAP_ROUTE_DAY_VISUALS_START -->
       const response=await previous(input,init);try{const url=String(typeof input==='string'?input:(input&&input.url)||'');if(response.ok&&url.includes('/ai/plan'))response.clone().json().then(data=>{if(data&&typeof data==='object'){aiPlan=data}}).catch(()=>{});}catch(_){}return response;
     };
   }
-  document.addEventListener('click',e=>{if(e.target.closest('#tm-ai-preview')&&aiPlan)setTimeout(()=>renderAi(aiPlan,true),70)},false);
+  document.addEventListener('click',e=>{
+    if(e.target.closest('#tm-ai-preview')&&aiPlan)setTimeout(()=>{
+      if(window.TrekBrainMapWorkspace&&!window.TrekBrainMapWorkspace.isActive())return;
+      renderAi(aiPlan,true);
+    },70);
+  },false);
 
   try{
     if(typeof drawTrace==='function'){
@@ -214,6 +219,11 @@ block = r'''<!-- TREKMAP_ROUTE_DAY_VISUALS_START -->
       clearDrawingLayers=function(){const value=originalClearDrawingLayers.apply(this,arguments);try{if(manualEndpoints)map.removeLayer(manualEndpoints)}catch(_){}manualEndpoints=null;return value};window.clearDrawingLayers=clearDrawingLayers;
     }
   }catch(_){}
+  window.TrekMapClearAIRoute=function(){
+    try{if(aiGroup&&typeof map!=='undefined')map.removeLayer(aiGroup)}catch(_){}
+    aiGroup=null;
+    aiLegend=clearControl(aiLegend);
+  };
   window.TrekMapExitSelectedTrek=exitSelectedTrek;
   bindMapExit();
 })();

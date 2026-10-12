@@ -52,6 +52,8 @@ block = r'''<!-- TREKMAP_TREKBRAIN_V91_MAP_START -->
     try{if(legend&&typeof map!=='undefined')map.removeControl(legend)}catch(_){}legend=null;
   }
 
+  window.TrekMapClearAIResources=clearGroups;
+
   function fallbackPoints(plan){
     const out=[];
     (plan?.water||[]).forEach(x=>out.push({...x,kind:'water',type:"Point d'eau"}));
@@ -152,10 +154,9 @@ block = r'''<!-- TREKMAP_TREKBRAIN_V91_MAP_START -->
     if(!savedTrekId||!current)return;
     const btn=$('tm-ai-save');if(btn){btn.disabled=true;btn.textContent='Mise à jour…'}
     try{
-      const waypoints=(current.waypoints||[]).map(p=>[Number(p.lat),Number(p.lon)]).filter(p=>p.every(Number.isFinite));
-      if(waypoints.length<2)throw new Error('Le plan ne contient pas assez de waypoints.');
-      const payload={name:current.title||'Trek IA',region:current.region||'Non renseignée',difficulty:current.difficulty||'medium',description:descriptionFor(current),duration_days:Number(current.duration_days||1),coords:waypoints};
-      const r=await fetch(endpoint(`/treks/${Number(savedTrekId)}/ai-redraw`),{method:'PUT',headers:authHeaders({'Content-Type':'application/json'},'PUT'),body:JSON.stringify(payload)});
+      const payload=window.TrekMapGeometryPayloadFromAI?.(current);
+      if(!payload)throw new Error('Le tracé TrekBrain complet est indisponible pour la mise à jour.');
+      const r=await fetch(endpoint(`/treks/${Number(savedTrekId)}/ai-geometry`),{method:'PUT',headers:authHeaders({'Content-Type':'application/json'},'PUT'),body:JSON.stringify(payload)});
       const d=await r.json().catch(()=>({}));if(!r.ok)throw new Error(d.detail||'Mise à jour du trek impossible.');
       await fetch(endpoint(`/treks/${Number(savedTrekId)}/extras`),{method:'PUT',headers:authHeaders({'Content-Type':'application/json'},'PUT'),body:JSON.stringify(extrasFor(current))});
       try{await loadTraces()}catch(_){};if(typeof toast==='function')toast('Trek recalculé et mis à jour sans créer de doublon.');
@@ -185,17 +186,31 @@ block = r'''<!-- TREKMAP_TREKBRAIN_V91_MAP_START -->
     }catch(_){}
     const response=await previous(input,nextInit);
     try{
-      if(response.ok&&url.includes('/ai/plan'))response.clone().json().then(data=>{if(data&&typeof data==='object'){current=data;setTimeout(()=>{drawResources(data);resourceSummary();decorateSaveButton()},80)}}).catch(()=>{});
-      if(response.ok&&/\/treks\/draw(?:\?|$)/.test(url))response.clone().json().then(data=>{if(data?.id){savedTrekId=Number(data.id);setTimeout(decorateSaveButton,120)}}).catch(()=>{});
+      if(response.ok&&url.includes('/ai/plan'))response.clone().json().then(data=>{if(data&&typeof data==='object'){current=data;setTimeout(()=>{
+        // Never resurrect POI layers after the user closed the map workspace.
+        if(!window.TrekBrainMapWorkspace || window.TrekBrainMapWorkspace.isActive())drawResources(data);
+        resourceSummary();decorateSaveButton();
+      },80)}}).catch(()=>{});
+      if(response.ok&&/\/treks\/(?:draw|ai-save)(?:\?|$)/.test(url))response.clone().json().then(data=>{if(data?.id){savedTrekId=Number(data.id);setTimeout(decorateSaveButton,120)}}).catch(()=>{});
     }catch(_){}
     return response;
   };
 
   document.addEventListener('click',e=>{
-    const preview=e.target.closest('#tm-ai-preview');if(preview&&current)setTimeout(()=>drawResources(current),60);
+    const preview=e.target.closest('#tm-ai-preview');if(preview&&current)setTimeout(()=>{
+      if(window.TrekBrainMapWorkspace && !window.TrekBrainMapWorkspace.isActive())return;
+      drawResources(current);
+    },60);
     const save=e.target.closest('#tm-ai-save');if(save&&savedTrekId&&current){e.preventDefault();e.stopPropagation();e.stopImmediatePropagation();updateSavedPlan()}
   },true);
 
+  window.TrekMapRefreshAISaveButton=decorateSaveButton;
+  window.TrekMapRecordSavedAI=function(id){
+    if(Number.isInteger(Number(id))&&Number(id)>0){
+      savedTrekId=Number(id);
+      decorateSaveButton();
+    }
+  };
   const content=$('tm-ai-content');if(content)new MutationObserver(()=>{if(current)setTimeout(()=>{resourceSummary();decorateSaveButton()},20)}).observe(content,{childList:true,subtree:false});
 })();
 </script>

@@ -69,6 +69,8 @@ jobs:
         run: python scripts/test_trekbrain_v9_belle_ile_canonical.py
       - name: Route-first lodging logistics regression
         run: python scripts/test_trekbrain_v9_route_logistics.py
+      - name: TrekBrain authenticated save and in-place route geometry
+        run: python scripts/test_trekbrain_route_persistence.py
       - name: GR backbone campsite stitch regression
         run: python scripts/test_trekbrain_v9_relation_stitch.py
       - name: Multi-trail path-network regressions
@@ -168,7 +170,7 @@ jobs:
             'TREKMAP_TREKBRAIN_V9_UI_START','trekmap-trekbrain-v9-js','Décision TrekBrain',
             'Confirmé','À vérifier','Important','/ai/feedback',
             'TREKMAP_TREKBRAIN_V91_MAP_START','trekmap-trekbrain-v91-map-js',
-            'Repères TrekBrain','ai-redraw','Mettre à jour ce trek dans TrekMap',
+            'Repères TrekBrain','ai-geometry','Mettre à jour ce trek dans TrekMap',
             'TREKMAP_FAILURE_ACTIONS_V93_START','trekmap-failure-actions-v93-js',
             'Voir quand même le trek','Modifier la requête','Nouvelle requête',
             'Tracé provisoire non validé',
@@ -212,6 +214,7 @@ jobs:
           node scripts/test_trekbrain_ux_refresh.mjs
           node scripts/test_trekbrain_desktop_experience.mjs
           node scripts/test_trekbrain_map_workspace.mjs
+          node scripts/test_trekbrain_close_save.mjs
       - name: Check real scenic photos and map mobile ergonomics
         run: |
           python scripts/test_trekbrain_scenic_photo.py
