@@ -13,6 +13,7 @@ import requests
 from fastapi import HTTPException
 
 from . import ors
+from . import trekbrain_perf_profile_v9 as perf
 
 _INSTALLED = False
 
@@ -121,16 +122,48 @@ def _polygon_loop_candidates(start, target_km: float, daily_min: float, daily_ma
         (270.0, 0.84),
     )
     variants = []
-    # Explicit call budget for the fast cold-region fallback. The default
-    # retains the historical full search for non-interactive recovery.
+    # Explicit call budget for cold-region fallback. In normal recovery retain
+    # all four historical orientations. Only a two-attempt fast rescue calibrates
+    # the second radius against a real, successfully routed first candidate.
     limit = max(0, min(len(attempts), int(max_attempts)))
+    first_valid = None
+
+    def mark_candidate(index, orientation, r, reason, distance=None, closure=None):
+        # Neither coordinates nor full provider errors are logged. This is
+        # intentionally safe to inspect when a geographic request fails.
+        fields = {
+            "attempt": index + 1, "orientation": round(orientation, 1),
+            "radius_km": round(r, 2), "reason": reason,
+            "target_km": round(float(target_km), 1),
+        }
+        if distance is not None and math.isfinite(distance):
+            fields["route_km"] = round(distance, 1)
+        if closure is not None and math.isfinite(closure):
+            fields["closure_km"] = round(closure, 2)
+        perf.mark("route.polygon_candidate", **fields)
+        if limit < len(attempts):
+            # One short statement per attempt, without personal location or API keys.
+            print("[TrekBrain v9][polygon-candidate] " +
+                  " ".join(f"{key}={value}" for key, value in fields.items()),
+                  flush=True)
+
     for index, (orientation, scale) in enumerate(attempts[:limit]):
         if index and limit < len(attempts):
-            # Fair use of the independent public Valhalla instance: at most
-            # one fresh request per second when ORS is unavailable.
+            # Public Valhalla demo instance is fair-use, not an unlimited pool.
             import time
             time.sleep(1.05)
         r = radius * scale
+        if index == 1 and limit == 2 and first_valid is not None:
+            # A mountain fan may produce a 60-90 km network detour despite
+            # being requested at ~28 km. Repeating nearly the same radius in
+            # another direction often fails identically. Use the first *real*
+            # route's observed inflation to shorten the same connected fan.
+            # A low bound prevents degenerate sub-kilometre loops; the upper
+            # bound prevents an unbounded retry if the first route is short.
+            earlier_radius, earlier_km, earlier_orientation = first_valid
+            ratio = max(0.38, min(1.6, float(target_km) / earlier_km))
+            r = max(1.25, min(18.0, earlier_radius * ratio))
+            orientation = earlier_orientation
         bearings = (orientation - 55.0, orientation, orientation + 55.0)
         targets = [_destination(start_coord, r, bearing) for bearing in bearings]
         routed = ors.get_route(
@@ -138,24 +171,37 @@ def _polygon_loop_candidates(start, target_km: float, daily_min: float, daily_ma
             _polyline_haversine,
         )
         if not isinstance(routed, dict) or routed.get("fallback") is not False:
+            mark_candidate(index, orientation, r, "router_unavailable")
             continue
         coords = routed.get("coords") or []
         if len(coords) < 4:
+            mark_candidate(index, orientation, r, "geometry_too_short")
             continue
         try:
             distance = float(routed.get("distance") or 0)
         except (TypeError, ValueError):
+            mark_candidate(index, orientation, r, "invalid_distance")
             continue
         if not math.isfinite(distance) or distance <= 0:
+            mark_candidate(index, orientation, r, "invalid_distance")
             continue
-        if _haversine(coords[-1], start_coord) > 0.15:
+        try:
+            closure = _haversine(coords[-1], start_coord)
+        except (TypeError, ValueError, IndexError):
+            mark_candidate(index, orientation, r, "invalid_geometry", distance=distance)
             continue
+        if not math.isfinite(closure) or closure > 0.15:
+            mark_candidate(index, orientation, r, "open_loop", distance=distance, closure=closure)
+            continue
+        if index == 0 and limit == 2:
+            first_valid = (r, distance, orientation)
+        feasible = feasible_low * 0.90 <= distance <= feasible_high + 0.35
+        reason = ("feasible" if feasible else
+                  "too_long" if distance > feasible_high + 0.35 else "too_short")
+        mark_candidate(index, orientation, r, reason, distance=distance, closure=closure)
         retrace = float(v3._route_retrace_ratio(coords)) if hasattr(v3, "_route_retrace_ratio") else 0.0
-        # Do not duplicate the central distance/retrace gates here. ORS may
-        # produce a perfectly valid loop that looks mediocre to this local
-        # heuristic but is still the closest feasible option. Keep every closed,
-        # routed candidate and let _best_roundtrip apply the common scoring and
-        # hard distance preference consistently.
+        # Keep every closed, network-routed candidate for the shared safety
+        # and distance gate; never invent a connector or redraw geometry.
         candidate = dict(routed)
         candidate.update({
             "distance": round(distance, 2),
@@ -174,9 +220,7 @@ def _polygon_loop_candidates(start, target_km: float, daily_min: float, daily_ma
             "waypoint_retrace_ratio": round(retrace, 4),
         })
         variants.append(candidate)
-        if feasible_low * 0.90 <= distance <= feasible_high + 0.35:
-            # One genuinely feasible routed loop is enough to avoid wasting API
-            # budget. Candidate ranking will still compare it with other rows.
+        if feasible:
             break
     return variants
 
