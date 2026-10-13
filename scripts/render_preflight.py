@@ -53,8 +53,8 @@ def main() -> None:
     database_url = os.getenv("DATABASE_URL", "").strip()
     if not database_url:
         fail(
-            "DATABASE_URL est absent. Le service web doit être relié à la base "
-            "Render 'trekmap-france-db' (fromDatabase dans render.yaml)."
+            "DATABASE_URL est absent. Renseigner le secret Render vers la base "
+            "Neon PostgreSQL/PostGIS de production (ne jamais le stocker dans GitHub)."
         )
     parsed = urlparse(database_url)
     if parsed.scheme not in {"postgres", "postgresql", "postgresql+psycopg2"}:
@@ -83,6 +83,7 @@ def main() -> None:
     # semantics without calling ORS/Overpass/Photon, so they are cheap enough to
     # be a real deployment gate instead of documentation that merely hopes.
     regression_scripts = [
+        root / "scripts" / "test_render_neon_contract.py",
         root / "scripts" / "test_trekbrain_v9.py",
         root / "scripts" / "test_trekbrain_v9_speed.py",
         root / "scripts" / "test_trekbrain_v9_geo_fallback.py",
@@ -105,10 +106,13 @@ def main() -> None:
         root / "scripts" / "test_trekbrain_v9_overpass_circuit.py",
         root / "scripts" / "test_trekbrain_v9_terrain_recovery.py",
         root / "scripts" / "test_trekbrain_v9_route_logistics.py",
+        root / "scripts" / "test_trekbrain_v9_single_day_stays.py",
+        root / "scripts" / "test_trekbrain_v9_logistics_guard_parity.py",
         root / "scripts" / "test_trekbrain_route_persistence.py",
         root / "scripts" / "test_trekbrain_scenic_photo.py",
         root / "scripts" / "test_trekbrain_v9_belle_ile_gr340.py",
         root / "scripts" / "test_trekbrain_v9_roundtrip_empty_primary.py",
+        root / "scripts" / "test_trekbrain_v9_cold_roundtrip_failover.py",
     ]
     for script in regression_scripts:
         try:

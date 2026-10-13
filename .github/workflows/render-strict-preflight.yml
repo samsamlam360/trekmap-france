@@ -149,20 +149,14 @@ jobs:
               'value: v9',
               '- key: TREKBRAIN_RELEASE_CHANNEL',
               'value: v9-stable',
-              'name: trekmap-france-db',
+              '- key: DB_SSLMODE',
+              'value: require',
           ]
-          # A migration to external Postgres must never be forced back to the
-          # expiring Render free database by an obsolete config assertion.
-          external = (
-              '- key: DATABASE_URL\n        sync: false' in cfg
-              and '- key: DB_SSLMODE\n        value: require' in cfg
-          )
-          internal = (
-              '- key: DATABASE_URL\n        fromDatabase:' in cfg
-              and 'property: connectionString' in cfg
-          )
-          if not (external or internal):
-              raise SystemExit('DATABASE_URL: expected private Neon secret or Render fromDatabase')
+          # The retired free Render DB must never be provisioned again.
+          if 'databases:' in cfg or 'fromDatabase:' in cfg:
+              raise SystemExit('La production doit utiliser Neon, sans base Render declaree')
+          if '- key: DATABASE_URL\n        sync: false' not in cfg:
+              raise SystemExit('DATABASE_URL doit rester un secret Render Neon')
           missing=[item for item in required if item not in cfg]
           if missing:
               raise SystemExit('Configuration Render incomplète: '+', '.join(missing))
@@ -248,6 +242,27 @@ jobs:
           PY
           curl -fsS http://127.0.0.1:10000/statistics >/tmp/statistics.json
           python -m json.tool /tmp/statistics.json >/dev/null
+
+      - name: Install Chromium for real responsive smoke
+        if: matrix.python-version == '3.11'
+        uses: browser-actions/setup-chrome@v1
+        with:
+          chrome-version: stable
+
+      - name: Exercise real Chrome on PC and mobile
+        if: matrix.python-version == '3.11'
+        run: |
+          python -m pip install 'selenium>=4.25,<5'
+          python scripts/test_trekmap_real_browser.py
+
+      - name: Preserve PC and mobile browser screenshots
+        if: always() && matrix.python-version == '3.11'
+        uses: actions/upload-artifact@v4
+        with:
+          name: trekmap-chrome-pc-mobile
+          path: trekmap-browser-checks/
+          if-no-files-found: ignore
+          retention-days: 7
 
       - name: Show server log
         if: always()

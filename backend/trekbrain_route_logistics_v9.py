@@ -807,8 +807,25 @@ def _discover_stays(
     started = time.monotonic()
     budget = _logistics_budget_seconds()
     deadline = started + budget
-    needed = max(1, days - 1)
+    needed = max(0, days - 1)
     profile = perf.current()
+
+    # A one-day hike has no intermediate night to book. On a terrain-free
+    # request, never spend free-provider quotas searching for a stay that cannot
+    # be attached to a day. Terrain requests still use the shared OSM pass.
+    if needed == 0 and not want_terrain:
+        perf.record(
+            "logistics.discovery", 0, profile=profile,
+            category=category, resolved=0, discovered=0,
+            budget_seconds=budget, single_day=True,
+        )
+        return [], [], {
+            "budget_seconds": budget,
+            "elapsed_ms": 0,
+            "budget_exhausted": False,
+            "terrain_rows": [],
+            "terrain_preloaded": False,
+        }
 
     def provider_call(metric, func, *args):
         call_started = time.perf_counter()

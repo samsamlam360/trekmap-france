@@ -1,49 +1,46 @@
-# TrekMap France - déploiement
+# TrekMap France
 
-Version 4.5.1 préparée pour un déploiement Render propre.
+Application web de randonnée avec FastAPI, PostgreSQL/PostGIS (Neon) et TrekBrain v9.
+
+## Production (octobre 2026)
+
+- Site : https://trekmap-france.onrender.com
+- Dépôt : `samsamlam360/trekmap-france`, branche `main`
+- Hébergement : service web Python Render `trekmap-france`, plan `free`.
+- Point d'entrée **effectif** : `backend.app_v5:app`.
+- Données : PostgreSQL 17/PostGIS sur Neon, projet `trekmap-france`, branche `production`.
+- `DATABASE_URL` est un secret du service Render. Ne jamais le committer ni afficher son mot de passe.
+- L'ancienne base Render `trekmap-france-db` a expiré et est suspendue. **Ne pas la recréer ni la supprimer pendant la migration.**
+- TrekBrain : `TREKBRAIN_VERSION=v9`, `TREKBRAIN_RELEASE_CHANNEL=v9-stable`, `TREKBRAIN_FREE_MODE=1`.
+
+Le fichier `render.yaml` ne déclare **aucune** nouvelle base Render. La configuration du service conserve un secret `DATABASE_URL` indépendant du dépôt et `DB_SSLMODE=require`.
 
 ## Structure
 
-- `backend/main.py` : API FastAPI + logique principale
-- `backend/main_production.py` : point d'entrée Render avec sécurité HTTP sans l'ancien contrôle CSRF bloquant
-- `backend/database.py` : connexion PostgreSQL/PostGIS
-- `frontend/index.html` : interface TrekMap France
-- `requirements.txt` : dépendances Python
-- `render.yaml` : configuration Render
+- `backend/app_v5.py` : application ASGI de production.
+- `backend/database.py` : accès PostgreSQL/PostGIS.
+- `backend/trekbrain_pipeline_core_v9.py` : orchestration TrekBrain v9.
+- `frontend/index.html` et `scripts/apply_*.py` : interface et assemblage Render.
+- `scripts/render_preflight.py` : régressions hors ligne, contrôle d'environnement et import de l'application.
+- `.github/workflows/` : tests, santé, benchmarks en production.
 
-## Lancer en local
+## Développer et vérifier
 
-Depuis la racine du projet :
+Installer les dépendances : `python -m pip install -r requirements.txt`.
 
-```powershell
-$env:DATABASE_URL="postgresql+psycopg2://postgres:motdepasse@localhost:5432/trekmap"
-$env:TREKMAP_ENV="development"
-$env:FRONTEND_ORIGINS="http://127.0.0.1:5500,http://localhost:5500"
-$env:ORS_API_KEY="TA_CLE_ORS"
-python -m uvicorn backend.main:app --reload
-```
+Définir en **local** `TREKMAP_ENV=development`, `FRONTEND_ORIGINS`, une `DATABASE_URL` de **test** et, si nécessaire, une clé ORS personnelle. Ne pas utiliser la base `production` pour les développements. Démarrer : `python -m uvicorn backend.app_v5:app --reload`.
 
-L'interface est ensuite disponible sur `http://127.0.0.1:8000/`.
+Contrôles principaux :
+- `python scripts/test_trekbrain_v9.py`
+- `python scripts/test_trekbrain_v9_route_logistics.py`
+- `python scripts/test_render_neon_contract.py`
+- `node scripts/test_trekbrain_map_workspace.mjs`
+- `node scripts/test_trekbrain_gpx_export.mjs`
 
-## Déploiement Render
+Ne pas confondre tests simulés et treks réels : les benchmarks de production doivent signaler tous les échecs et préserver les artefacts des résultats.
 
-Le `render.yaml` utilise `backend.main_production:app`. Ce point d'entrée conserve l'application existante mais remplace l'ancien middleware CSRF par un contrôle d'origine et un limiteur de requêtes, afin d'éviter les refus d'authentification liés aux anciens cookies CSRF.
+## Exploitation
 
-1. Connecter le dépôt GitHub à Render.
-2. Créer ou synchroniser le Blueprint depuis `render.yaml`.
-3. Renseigner les secrets : `ORS_API_KEY`, `ADMIN_USERNAME`, `ADMIN_EMAIL`, `ADMIN_PASSWORD`.
-4. Déployer la dernière version et vérifier le déploiement marqué **Live**.
+Lire [le guide de sécurité Neon et de migration](docs/TREKMAP_RUNBOOK_NEON.md) avant toute opération sur les branches, restaurations, bases de données ou Render. Des snapshots Neon sont utiles pour une restauration rapide, mais **ne remplacent pas un export PostgreSQL indépendant et protégé**.
 
-## Base de données
-
-PostgreSQL/PostGIS est configuré dans `render.yaml`. L'application crée l'extension PostGIS au démarrage si nécessaire.
-
-Le plan PostgreSQL gratuit est adapté au test, pas à une mise en production durable. Pour un site public durable, utiliser une base adaptée et conserver des sauvegardes.
-
-## Sécurité
-
-Les secrets ne sont pas dans le code. Les sessions utilisent un cookie HttpOnly sécurisé en production. Les requêtes sont limitées sur les endpoints sensibles et les origines sont contrôlées en production. L'ancien contrôle CSRF qui provoquait `Protection CSRF : requête refusée.` n'est plus utilisé par l'entrée Render.
-
-## ORS
-
-La clé OpenRouteService doit être configurée uniquement comme variable d'environnement. Ne jamais la mettre dans GitHub ni dans `index.html`.
+Ne pas modifier/supprimer la base de production ni fusionner une régression non résolue pour faire passer la CI. Les API externes gratuites conservent des quotas et des délais variables ; aucune disponibilité illimitée n'est garantie.

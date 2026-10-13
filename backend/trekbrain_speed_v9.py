@@ -744,6 +744,15 @@ def install_fast_planning(v3, v5, v9) -> None:
             if route is None:
                 if warning:
                     warnings.append(warning)
+                    # A second ORS round-trip after a network timeout is
+                    # blocked by the circuit breaker anyway. Switch routing
+                    # strategy rather than burning another failed attempt.
+                    lower = str(warning).casefold()
+                    if any(token in lower for token in (
+                        "timeout", "délai", "delai", "ignoré", "http 429",
+                        "limite de requêtes",
+                    )):
+                        break
                 continue
             distance = float(route.get("distance") or 0)
             per_day = distance / max(int(days), 1)
@@ -794,6 +803,57 @@ def install_fast_planning(v3, v5, v9) -> None:
                 correction = max(0.72, min(1.28, correction))
                 requested_km = max(6.0, min(99.0, float(target_km) * correction))
         if not rows:
+            # 13/20 unseen-region production failures started with a timed-out
+            # ORS round-trip and no secondary attempt. Normal get_route already
+            # validates real pedestrian geometry and can fall back to Valhalla.
+            # Never invent a straight line, bypass an invalid ORS key, or turn
+            # a legitimate provider quota into unbounded public-demo traffic.
+            transient = any(any(token in str(w).casefold() for token in (
+                "timeout", "délai", "delai", "inaccessible", "injoignable",
+                "http 500", "http 502", "http 503", "http 504",
+                "ignoré", "indisponible",
+            )) for w in warnings)
+            forbidden = any(any(token in str(w).casefold() for token in (
+                "http 401", "http 403", "http 429", "limite de requêtes",
+                "non configuré", "api_key", "clé api",
+            )) for w in warnings)
+            if transient and not forbidden:
+                # At most two distinct waypoints patterns, rather than four
+                # ORS retries plus four secondary calls. Each geometry must
+                # pass both the pedestrian router and the distance gate.
+                alternatives = roundtrip._polygon_loop_candidates(
+                    start, target_km, daily_min, daily_max, days,
+                    v3_module, max_attempts=2,
+                )
+                low = max(3.0, float(daily_min) * max(int(days), 1)) * 0.90
+                high = float(daily_max) * max(int(days), 1) + 0.35
+                feasible = [
+                    candidate for candidate in (alternatives or [])
+                    if isinstance(candidate, dict)
+                    and candidate.get("fallback") is False
+                    and len(candidate.get("coords") or []) >= 4
+                    and low <= float(candidate.get("distance") or 0) <= high
+                ]
+                if feasible:
+                    chosen = min(
+                        feasible,
+                        key=lambda r: abs(float(r.get("distance") or 0) - float(target_km)),
+                    )
+                    selected = dict(chosen)
+                    selected.update({
+                        "distance_window_preferred": True,
+                        "fast_ranked": True,
+                        "round_trip_attempt_count": len(attempt_rows),
+                        "round_trip_attempts": list(attempt_rows),
+                        "candidate_pool_size": len(feasible),
+                        "candidate_modes": sorted({str(x.get("routing_mode") or "unknown") for x in feasible}),
+                        "candidate_summary": [
+                            {"mode": str(x.get("routing_mode") or "unknown"),
+                             "km": round(float(x.get("distance") or 0), 1)}
+                            for x in feasible
+                        ],
+                    })
+                    return selected
             from fastapi import HTTPException
             detail = warnings[0] if warnings else "OpenRouteService n'a produit aucune boucle pédestre."
             raise HTTPException(status_code=503, detail=detail)

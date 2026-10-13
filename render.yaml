@@ -16,7 +16,8 @@ services:
       - key: FRONTEND_ORIGINS
         value: https://trekmap-france.onrender.com
       # Supplied only as a Render service secret, never committed.
-      # Keeps the existing Render web hosting while PostGIS moves to Neon.
+      # Keep this as an existing Render secret pointing to Neon PostgreSQL/PostGIS.
+      # Never commit a connection string or recreate the expired Render database.
       - key: DATABASE_URL
         sync: false
       - key: DB_SSLMODE
@@ -49,10 +50,3 @@ services:
         value: "300000"
       - key: SESSION_DURATION_DAYS
         value: "30"
-
-databases:
-  - name: trekmap-france-db
-    plan: free
-    databaseName: trekmap
-    user: trekmap
-    postgresMajorVersion: "17"
