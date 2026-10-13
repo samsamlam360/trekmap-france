@@ -214,6 +214,42 @@ def evaluate(case, result, elapsed_s, clarify):
     if worst_dev > 0.55:
         warnings.append(f"une journée s'écarte fortement de la cible: {worst_dev*100:.0f}%")
 
+    # The user sees a distance warning from +18% AND +2 km; the historical
+    # benchmark only warned at +35% average / +55% worst. That hid real
+    # 20%-oversized hikes under the reassuring but misleading label "aucune".
+    distance_excess = []
+    for index, stage in enumerate(stages):
+        if isinstance(stage.get("distance_km"), bool):
+            continue
+        try:
+            km = float(stage.get("distance_km") or 0)
+        except (ValueError, TypeError):
+            continue
+        if not math.isfinite(km):
+            continue
+        if km > target * 1.18 and km - target >= 2.0:
+            distance_excess.append({
+                "day": index + 1,
+                "km": round(km, 1),
+                "extra_pct": round((km / target - 1) * 100),
+            })
+    contract = ((result.get("planner") or {}).get("distance_contract") or {})
+    reported_days = {
+        int(x.get("day")) for x in (contract.get("days_exceeding") or [])
+        if isinstance(x, dict) and isinstance(x.get("day"), int)
+    }
+    unreported_distance_days = [x["day"] for x in distance_excess if x["day"] not in reported_days]
+    if distance_excess:
+        warnings.append(
+            "distance au-dessus de la demande : "
+            + ", ".join(f"J{x['day']} {x['km']:.1f} km (+{x['extra_pct']}%)" for x in distance_excess)
+        )
+    if unreported_distance_days:
+        warnings.append(
+            "alerte de distance absente du contrat de réponse pour les jours "
+            + ", ".join(str(day) for day in unreported_distance_days)
+        )
+
     if coords:
         mainland_ok = all(41.0 <= p[0] <= 51.6 and -5.6 <= p[1] <= 10.0 for p in coords)
         if not mainland_ok:
@@ -359,6 +395,8 @@ def evaluate(case, result, elapsed_s, clarify):
         "stage_distances_km": distances,
         "mean_daily_deviation_pct": round(mean_dev * 100, 1),
         "worst_daily_deviation_pct": round(worst_dev * 100, 1),
+        "distance_days_above_target": distance_excess,
+        "distance_days_missing_warning": unreported_distance_days,
         "closing_gap_km": round(closing, 3) if closing is not None else None,
         "coords": len(coords),
         "water_markers": len(result.get("water") or []),

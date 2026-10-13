@@ -95,6 +95,7 @@ def main() -> None:
         root / "scripts" / "test_trekbrain_v9_daily_water.py",
         root / "scripts" / "test_trekbrain_v9_cold_water_distribution.py",
         root / "scripts" / "test_trekbrain_v9_distance_contract.py",
+        root / "scripts" / "test_benchmark_distance_alerts.py",
         root / "scripts" / "test_trekbrain_v9_cold_stage_anchors.py",
         root / "scripts" / "test_trekbrain_v9_water_evidence_consistency.py",
         root / "scripts" / "test_trekbrain_v9_oversize_waypoint_rescue.py",
@@ -113,6 +114,7 @@ def main() -> None:
         root / "scripts" / "test_trekbrain_v9_belle_ile_gr340.py",
         root / "scripts" / "test_trekbrain_v9_roundtrip_empty_primary.py",
         root / "scripts" / "test_trekbrain_v9_cold_roundtrip_failover.py",
+        root / "scripts" / "test_trekbrain_v9_adaptive_polygon.py",
     ]
     for script in regression_scripts:
         try:
