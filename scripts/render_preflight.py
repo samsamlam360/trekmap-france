@@ -107,6 +107,7 @@ def main() -> None:
         root / "scripts" / "test_trekbrain_v9_terrain_recovery.py",
         root / "scripts" / "test_trekbrain_v9_route_logistics.py",
         root / "scripts" / "test_trekbrain_v9_single_day_stays.py",
+        root / "scripts" / "test_trekbrain_v9_logistics_guard_parity.py",
         root / "scripts" / "test_trekbrain_route_persistence.py",
         root / "scripts" / "test_trekbrain_scenic_photo.py",
         root / "scripts" / "test_trekbrain_v9_belle_ile_gr340.py",
