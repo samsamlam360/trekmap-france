@@ -100,7 +100,7 @@ def _destination(point, distance_km: float, bearing_deg: float):
     return [math.degrees(lat2), math.degrees(lon2)]
 
 
-def _polygon_loop_candidates(start, target_km: float, daily_min: float, daily_max: float, days: int, v3):
+def _polygon_loop_candidates(start, target_km: float, daily_min: float, daily_max: float, days: int, v3, *, max_attempts: int = 4):
     """Generate bounded waypoint loops and validate every metre through ORS.
 
     ORS round_trip can overshoot its requested length badly on constrained path
@@ -121,7 +121,15 @@ def _polygon_loop_candidates(start, target_km: float, daily_min: float, daily_ma
         (270.0, 0.84),
     )
     variants = []
-    for orientation, scale in attempts:
+    # Explicit call budget for the fast cold-region fallback. The default
+    # retains the historical full search for non-interactive recovery.
+    limit = max(0, min(len(attempts), int(max_attempts)))
+    for index, (orientation, scale) in enumerate(attempts[:limit]):
+        if index and limit < len(attempts):
+            # Fair use of the independent public Valhalla instance: at most
+            # one fresh request per second when ORS is unavailable.
+            import time
+            time.sleep(1.05)
         r = radius * scale
         bearings = (orientation - 55.0, orientation, orientation + 55.0)
         targets = [_destination(start_coord, r, bearing) for bearing in bearings]
