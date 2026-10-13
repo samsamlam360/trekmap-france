@@ -1,0 +1,148 @@
+name: One-shot all TrekBrain benchmarks in sequence
+on:
+  push:
+    branches: [audit-all-benchmarks-serial-20261013]
+    paths: [.github/workflows/audit-all-benchmarks-serial-once.yml]
+permissions:
+  contents: read
+concurrency:
+  group: trekbrain-serial-production-suite
+  cancel-in-progress: false
+jobs:
+  benchmarks:
+    name: All five suites, one at a time
+    runs-on: ubuntu-latest
+    timeout-minutes: 160
+    env:
+      PYTHONUNBUFFERED: "1"
+      EXPECTED_SHA: 97b703b51973fefd017e115bbf0db4bba4e38a88
+      TREKBRAIN_BENCHMARK_URL: https://trekmap-france.onrender.com
+      TREKBRAIN_BENCHMARK_MIN_INTERVAL_SECONDS: "20"
+      DATABASE_URL: postgresql://benchmark:benchmark@127.0.0.1:1/isolated
+      DB_CONNECT_TIMEOUT: "1"
+      TREKMAP_ENV: development
+      TREKBRAIN_VERSION: v9
+      TREKBRAIN_RELEASE_CHANNEL: v9-stable
+      TREKBRAIN_FREE_MODE: "1"
+      TREKBRAIN_GEMINI_AUDIT: "0"
+      TREKBRAIN_OSM_CACHE: "0"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: 97b703b51973fefd017e115bbf0db4bba4e38a88
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install dependencies for isolated local benchmarks
+        run: python -m pip install -r requirements.txt
+      - name: Execute every suite serially and preserve failures
+        shell: python
+        run: |
+          import json, os, pathlib, subprocess, sys, time
+          root = pathlib.Path("benchmark-results")
+          root.mkdir(exist_ok=True)
+          cases = [
+              ("cold", "scripts/benchmark_trekbrain_v9_cold.py", 4, 380),
+              ("render-local", "scripts/benchmark_trekbrain_v9_render.py", 4, 180),
+              ("historic-pass-1", "scripts/benchmark_trekbrain_v9_production.py", 6, 1200),
+              ("historic-pass-2", "scripts/benchmark_trekbrain_v9_production.py", 6, 1200),
+              ("historic-pass-3", "scripts/benchmark_trekbrain_v9_production.py", 6, 1200),
+              ("extended", "scripts/benchmark_trekbrain_v9_extended.py", 9, 1500),
+              ("unseen20", "scripts/benchmark_trekbrain_v9_unseen20.py", 20, 2100),
+          ]
+          runner = """import runpy, signal, sys
+          script, seconds = sys.argv[1:]
+          sys.argv = [script]
+          def stop(signum, frame):
+              signal.alarm(0)
+              raise SystemExit("BENCHMARK_TIMEOUT")
+          signal.signal(signal.SIGALRM, stop)
+          signal.alarm(int(seconds))
+          runpy.run_path(script, run_name="__main__")
+          """
+          results = []
+          for name, script, expected, limit in cases:
+              out = root / name
+              out.mkdir(exist_ok=True)
+              env = dict(os.environ)
+              env["TREKBRAIN_BENCHMARK_OUT"] = str(out)
+              env["GITHUB_RUN_ID"] = env.get("GITHUB_RUN_ID", "audit") + "-" + name
+              start = time.monotonic()
+              print("BENCHMARK_START", name, "expected_cases", expected, flush=True)
+              local_rows = []
+              with (out / "execution.log").open("w", encoding="utf-8") as log:
+                  proc = subprocess.Popen(
+                      [sys.executable, "-u", "-c", runner, script, str(limit)],
+                      env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                      text=True, bufsize=1,
+                  )
+                  for line in proc.stdout:
+                      log.write(line)
+                      log.flush()
+                      print(line, end="", flush=True)
+                      for prefix in ("[TrekBrain cold] ", "[TrekBrain benchmark] "):
+                          if line.startswith(prefix):
+                              try:
+                                  local_rows.append(json.loads(line[len(prefix):]))
+                              except json.JSONDecodeError:
+                                  pass
+                  code = proc.wait()
+              report = out / "trekbrain-production-benchmark.json"
+              meta = {}
+              if report.exists():
+                  data = json.loads(report.read_text(encoding="utf-8"))
+                  rows = data.get("scenarios", [])
+                  meta = data.get("meta", {})
+              else:
+                  rows = local_rows
+              if name in ("cold", "render-local"):
+                  (out / "local-benchmark.json").write_text(
+                      json.dumps({"scenarios": rows}, ensure_ascii=False, indent=2),
+                      encoding="utf-8",
+                  )
+              metrics = {
+                  "suite": name, "expected_cases": expected,
+                  "completed_cases": len(rows),
+                  "valid_cases": sum(bool(row.get("ok")) for row in rows),
+                  "returncode": code,
+                  "duration_s": round(time.monotonic() - start, 1),
+                  "environment": "isolated GitHub runner without ORS key" if name in ("cold", "render-local") else "HTTP production",
+                  "meta": meta,
+              }
+              (out / "execution-status.json").write_text(
+                  json.dumps(metrics, ensure_ascii=False, indent=2), encoding="utf-8",
+              )
+              results.append(metrics)
+              print("BENCHMARK_SUMMARY_JSON=" + json.dumps(metrics, ensure_ascii=False), flush=True)
+              for row in rows:
+                  selected = {k: v for k, v in row.items() if k in {
+                      "id", "region", "ok", "quality", "grade", "decision_grade",
+                      "elapsed_s", "seconds", "status", "http_status", "route_type",
+                      "route_distance_km", "stage_distances_km", "mean_daily_deviation_pct",
+                      "closing_gap_km", "water_markers", "water_days_missing",
+                      "food_markers", "food_days_missing", "food_coverage",
+                      "accommodations", "nights_walk_confirmed", "nights_transfer_only",
+                      "nights_unresolved", "hard_failures", "warnings", "blockers",
+                      "errors", "error", "checks", "reason", "failure",
+                  }}
+                  selected["suite"] = name
+                  print("BENCHMARK_RESULT_JSON=" + json.dumps(selected, ensure_ascii=False), flush=True)
+              if report.exists():
+                  md = out / "trekbrain-production-benchmark.md"
+                  if md.exists():
+                      with open(os.environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as summary:
+                          summary.write("\n## " + name + "\n\n" + md.read_text(encoding="utf-8") + "\n")
+          (root / "all-suites-summary.json").write_text(
+              json.dumps(results, ensure_ascii=False, indent=2), encoding="utf-8",
+          )
+          print("ALL_BENCHMARKS_FINISHED", flush=True)
+          if any(item["completed_cases"] != item["expected_cases"] or item["valid_cases"] != item["expected_cases"] or item["returncode"] for item in results):
+              raise SystemExit("At least one benchmark failed or could not finish; all available results preserved")
+      - name: Preserve logs and complete benchmark reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: trekbrain-all-benchmarks-serial-97b703b
+          path: benchmark-results/
+          if-no-files-found: warn
+          retention-days: 14
