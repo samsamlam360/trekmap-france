@@ -53,8 +53,8 @@ def main() -> None:
     database_url = os.getenv("DATABASE_URL", "").strip()
     if not database_url:
         fail(
-            "DATABASE_URL est absent. Le service web doit être relié à la base "
-            "Render 'trekmap-france-db' (fromDatabase dans render.yaml)."
+            "DATABASE_URL est absent. Renseigner le secret Render vers la base "
+            "Neon PostgreSQL/PostGIS de production (ne jamais le stocker dans GitHub)."
         )
     parsed = urlparse(database_url)
     if parsed.scheme not in {"postgres", "postgresql", "postgresql+psycopg2"}:
