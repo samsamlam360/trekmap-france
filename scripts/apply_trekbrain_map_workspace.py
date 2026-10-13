@@ -30,6 +30,10 @@ block = r'''<!-- TREKMAP_BRAIN_ROUTE_WORKSPACE_START -->
 body.tm-brain-route-mode #sidebar,
 body.tm-brain-route-mode #tm-unified-drawer,
 body.tm-brain-route-mode .tm-route-day-legend {display:none!important}
+/* Only the real hiking map should be interactive in TrekBrain mode. The
+   landing illustration previously intercepted mobile stage-expand taps. */
+body.tm-brain-route-mode .tm-hero-visual,
+body.tm-brain-route-mode .tm-map-orb {visibility:hidden!important;pointer-events:none!important}
 body.tm-brain-route-mode #tm-brain-route-panel {
   position:fixed;
   z-index:3600;
