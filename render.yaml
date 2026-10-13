@@ -34,6 +34,10 @@ services:
         value: v9-stable
       - key: TREKBRAIN_FREE_MODE
         value: "1"
+      # Never run API-consuming audit batches while Render builds the site:
+      # heavy real-world tests run in separate, bounded GitHub Actions jobs.
+      - key: TREKBRAIN_RUN_BENCHMARK
+        value: "0"
       - key: TREKBRAIN_V9_RETRY_THRESHOLD
         value: "80"
       - key: TREKBRAIN_GEMINI_AUDIT
