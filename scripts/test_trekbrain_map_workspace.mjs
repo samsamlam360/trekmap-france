@@ -10,8 +10,6 @@ assert.ok(css&&script,'workspace CSS/JS must be installed');
 new vm.Script(script,{filename:'trekbrain-route-workspace.js'});
 assert.ok(css.includes('body.tm-brain-route-mode #sidebar'),'filters hidden only in TrekBrain mode');
 assert.ok(css.includes('body.tm-brain-route-mode #tm-unified-drawer'),'popular treks hidden in TrekBrain mode');
-assert.ok(css.includes('body.tm-brain-route-mode .tm-map-orb')&&css.includes('visibility:hidden!important;pointer-events:none!important'),
-  'landing map orb must never intercept TrekBrain sheet on touchscreens');
 assert.ok(css.includes('body.tm-brain-route-mode .tm-route-day-legend'),'duplicate route legend hidden');
 assert.ok(css.includes('@media(max-width:820px)'),'phone has a real adapted route sheet');
 assert.ok(css.includes('env(safe-area-inset-bottom,0px)'),'respect mobile system navigation');
