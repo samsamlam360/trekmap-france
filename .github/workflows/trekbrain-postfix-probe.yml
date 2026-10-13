@@ -1,0 +1,71 @@
+name: TrekBrain four cold-region production probes
+# One-shot review-branch workflow. No action on main, no Render deploy, no daily cron.
+on:
+  push:
+    branches: [stabilisation-audit-2026-10-13]
+    paths:
+      - .github/workflows/trekbrain-postfix-probe.yml
+permissions:
+  contents: read
+concurrency:
+  group: trekbrain-postfix-probe
+  cancel-in-progress: true
+jobs:
+  four-regions:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Wait for exact deployed PR 180 commit
+        shell: python
+        env:
+          EXPECTED_SHA: e06aad6f0c93670c0b070b4464b887148d86b2eb
+        run: |
+          import json, os, time, urllib.request
+          base='https://trekmap-france.onrender.com'
+          for attempt in range(75):
+              try:
+                  req=urllib.request.Request(base+'/ai/status',headers={'User-Agent':'TrekBrain-postfix-audit'})
+                  with urllib.request.urlopen(req,timeout=18) as res:
+                      status=json.load(res)
+                  if str(status.get('build_commit') or '').lower()==os.environ['EXPECTED_SHA']:
+                      print('Exact new Render commit verified',status['build_commit'],flush=True)
+                      break
+              except Exception as exc:
+                  print(type(exc).__name__,str(exc)[:160],flush=True)
+              time.sleep(10)
+          else:
+              raise SystemExit('The exact production commit was not deployed')
+      - name: Four formerly failing regions with real authenticated requests
+        working-directory: scripts
+        env:
+          EXPECTED_SHA: e06aad6f0c93670c0b070b4464b887148d86b2eb
+          TREKBRAIN_BENCHMARK_URL: https://trekmap-france.onrender.com
+          TREKBRAIN_BENCHMARK_OUT: ../benchmark-results-postfix
+        run: |
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          import benchmark_trekbrain_v9_production as core
+          import benchmark_trekbrain_v9_unseen20 as unseen
+          ids={'etretat-pays-caux','lac-blanc-vosges','nasbinals-aubrac','sarlat-dordogne'}
+          core.SCENARIOS=[case for case in unseen.SCENARIOS if case['id'] in ids]
+          assert len(core.SCENARIOS)==4, core.SCENARIOS
+          core.OUT_DIR=Path('../benchmark-results-postfix')
+          core.OUT_DIR.mkdir(exist_ok=True)
+          core.main()
+          PY
+      - name: Print complete results, including failed requests
+        if: always()
+        run: cat benchmark-results-postfix/trekbrain-production-benchmark.md 2>/dev/null || true
+      - name: Preserve verification results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: trekbrain-postfix-four-regions
+          path: benchmark-results-postfix/
+          if-no-files-found: ignore
+          retention-days: 14
