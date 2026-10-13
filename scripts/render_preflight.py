@@ -83,6 +83,7 @@ def main() -> None:
     # semantics without calling ORS/Overpass/Photon, so they are cheap enough to
     # be a real deployment gate instead of documentation that merely hopes.
     regression_scripts = [
+        root / "scripts" / "test_render_neon_contract.py",
         root / "scripts" / "test_trekbrain_v9.py",
         root / "scripts" / "test_trekbrain_v9_speed.py",
         root / "scripts" / "test_trekbrain_v9_geo_fallback.py",
