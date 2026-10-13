@@ -1,11 +1,12 @@
 name: TrekBrain serial production suite
 # Do not fire all 47 routing requests on every code push: repeated merges
 # exhausted the public ORS quota and created avoidable 429 failures.
-# Lightweight smoke, unit and release gates remain active on every push.
+# Run the full 47-route suite weekly to preserve free ORS quota.
+# Daily health checks, light unit and release gates remain active on every push.
 on:
   workflow_dispatch:
   schedule:
-    - cron: '17 3 * * *'
+    - cron: '17 3 * * 1'
 permissions:
   contents: read
 concurrency:
