@@ -1,4 +1,4 @@
-name: One-shot all TrekBrain benchmarks in sequence
+name: Continue extended and unseen20 benchmarks in sequence
 on:
   push:
     branches: [audit-all-benchmarks-serial-20261013]
@@ -10,9 +10,9 @@ concurrency:
   cancel-in-progress: false
 jobs:
   benchmarks:
-    name: All five suites, one at a time
+    name: Extended then unseen20, one at a time
     runs-on: ubuntu-latest
-    timeout-minutes: 160
+    timeout-minutes: 70
     env:
       PYTHONUNBUFFERED: "1"
       EXPECTED_SHA: 97b703b51973fefd017e115bbf0db4bba4e38a88
@@ -42,17 +42,13 @@ jobs:
           root = pathlib.Path("benchmark-results")
           root.mkdir(exist_ok=True)
           cases = [
-              ("cold", "scripts/benchmark_trekbrain_v9_cold.py", 4, 380),
-              ("render-local", "scripts/benchmark_trekbrain_v9_render.py", 4, 180),
-              ("historic-pass-1", "scripts/benchmark_trekbrain_v9_production.py", 6, 1200),
-              ("historic-pass-2", "scripts/benchmark_trekbrain_v9_production.py", 6, 1200),
-              ("historic-pass-3", "scripts/benchmark_trekbrain_v9_production.py", 6, 1200),
               ("extended", "scripts/benchmark_trekbrain_v9_extended.py", 9, 1500),
               ("unseen20", "scripts/benchmark_trekbrain_v9_unseen20.py", 20, 2100),
           ]
-          runner = """import runpy, signal, sys
+          runner = """import pathlib, runpy, signal, sys
           script, seconds = sys.argv[1:]
           sys.argv = [script]
+          sys.path.insert(0, str(pathlib.Path(script).resolve().parent))
           def stop(signum, frame):
               signal.alarm(0)
               raise SystemExit("BENCHMARK_TIMEOUT")
@@ -142,7 +138,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: trekbrain-all-benchmarks-serial-97b703b
+          name: trekbrain-extended-unseen20-continuation-97b703b
           path: benchmark-results/
           if-no-files-found: warn
           retention-days: 14
