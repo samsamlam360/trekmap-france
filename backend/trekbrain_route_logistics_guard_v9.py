@@ -24,16 +24,18 @@ def _fold(value: Any) -> str:
 
 
 def _requested_category(v3, data) -> str | None:
+    """Use the same category policy as the route-first logistics engine.
+
+    A generic gîte/hotel request also needs a graceful degradation path when
+    lodging discovery fails; previously the guard only protected camping/refuges.
+    """
+    from .trekbrain_route_logistics_v9 import _requested_category as category_for
+
     try:
         intent = v3._parse_intent(data)
     except Exception:
         return None
-    accommodation = _fold(intent.get("accommodation") or "")
-    if accommodation == "camping":
-        return "camping"
-    if accommodation == "refuge":
-        return "refuge"
-    return None
+    return category_for(intent)
 
 
 def _route_only(data):
