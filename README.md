@@ -39,6 +39,10 @@ Contrôles principaux :
 
 Ne pas confondre tests simulés et treks réels : les benchmarks de production doivent signaler tous les échecs et préserver les artefacts des résultats.
 
+## Benchmarks et coût des fournisseurs
+
+Les gros benchmarks réseau ne doivent pas être exécutés par Render au moment de construire ou redéployer le site. `TREKBRAIN_RUN_BENCHMARK=0` est imposé dans le blueprint et doit également être désactivé dans les variables du service existant. Les tests hors réseau restent requis avant chaque déploiement ; les tests réels sur de nouvelles régions se lancent dans les workflows GitHub séparés, avec limites de fréquence et de volume. Ne jamais lancer une vague de requêtes ORS/Overpass à chaque push.
+
 ## Exploitation
 
 Lire [le guide de sécurité Neon et de migration](docs/TREKMAP_RUNBOOK_NEON.md) avant toute opération sur les branches, restaurations, bases de données ou Render. Des snapshots Neon sont utiles pour une restauration rapide, mais **ne remplacent pas un export PostgreSQL indépendant et protégé**.

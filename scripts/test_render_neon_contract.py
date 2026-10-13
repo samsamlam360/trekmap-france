@@ -11,6 +11,9 @@ readme = (ROOT / "README.md").read_text(encoding="utf-8")
 
 assert "name: trekmap-france" in config
 assert "plan: free" in config
+assert 'key: TREKBRAIN_RUN_BENCHMARK\n        value: "0"' in config, (
+    "Real ORS/Overpass benchmarks must never run inside each Render build"
+)
 assert "backend.app_v5:app" in config, "Unexpected production entry point"
 assert "DB_SSLMODE" in config and "value: require" in config
 assert "key: DATABASE_URL" in config and "sync: false" in config
