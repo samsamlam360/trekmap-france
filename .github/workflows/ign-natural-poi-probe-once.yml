@@ -20,10 +20,12 @@ jobs:
           tests=[
             ('completion/',{'text':'Lac Blanc','type':'PositionOfInterest','maximumResponses':'3'}),
             ('search',{'q':'Cascades du Hérisson','limit':'3','index':'poi'}),
-            ('search',{'q':'Lac Blanc','limit':'3','type':'poi'}),
+            ('search',{'q':'Lac Blanc','limit':'4','index':'poi','depcode':'68'}),
+            ('search',{'q':'Cascades du Hérisson','limit':'3','index':'poi','depcode':'39'}),
+            ('../departements',{'nom':'Haut-Rhin','fields':'nom,code','format':'json'}),
           ]
           for endpoint,params in tests:
-              url=base+endpoint+'?'+urllib.parse.urlencode(params)
+              url=(('https://geo.api.gouv.fr/departements') if endpoint=='../departements' else base+endpoint)+'?'+urllib.parse.urlencode(params)
               req=urllib.request.Request(url,headers={'User-Agent':'TrekMapFrance-generic-geocoder-evaluation/1'})
               try:
                   with urllib.request.urlopen(req,timeout=7) as res:
