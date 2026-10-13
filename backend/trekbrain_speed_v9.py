@@ -332,6 +332,25 @@ def install_fast_planning(v3, v5, v9) -> None:
                 (time.perf_counter() - ign_started) * 1000,
                 outcome=outcome,
             )
+        # The address-oriented IGN search is not a guaranteed commune lookup.
+        # If all previous providers failed, query the official municipality
+        # registry once. Its exact name + department matching rejects homonyms.
+        from . import trekbrain_commune_fallback_v9 as communes
+        commune_started = time.perf_counter()
+        commune_outcome = "ok"
+        try:
+            commune_rows = communes.geocode_commune(query, timeout=2.5)
+            if commune_rows:
+                return commune_rows
+        except Exception as exc:
+            commune_outcome = "error"
+            errors.append(str(exc))
+        finally:
+            perf.record(
+                "communes.geocode",
+                (time.perf_counter() - commune_started) * 1000,
+                outcome=commune_outcome,
+            )
         if errors:
             raise RuntimeError(
                 "Impossible de localiser la zone. "

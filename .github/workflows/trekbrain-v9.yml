@@ -106,7 +106,9 @@ jobs:
       - name: Interactive latency regressions
         run: python scripts/test_trekbrain_v9_speed.py
       - name: Geo providers rate-limit fallback
-        run: python scripts/test_trekbrain_v9_geo_fallback.py
+        run: |
+          python scripts/test_trekbrain_v9_geo_fallback.py
+          python scripts/test_trekbrain_v9_commune_fallback.py
       - name: Request-local performance profiler regression
         run: python scripts/test_trekbrain_v9_perf_profile.py
       - name: Timeout circuit breaker regression
