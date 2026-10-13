@@ -1,6 +1,8 @@
 # TrekBrain production verification request
 # Changing this exact file on main triggers one scoped 20-region audit.
 # Unlike automatic push suites, this protects the free ORS quota.
-requested_on=2026-10-11
-purpose=verify-latest-render-build-and-20-region-structural-quality
+requested_on=2026-10-13
+purpose=validate-new-geocoding-fallback-and-cold-region-terrain-quality-on-f2c60ae
 scenarios=20
+
+audit_batch=2026-10-13-baseline-after-geocoding-correction
