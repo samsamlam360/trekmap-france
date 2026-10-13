@@ -1,0 +1,60 @@
+name: TrekBrain PR181 20-region production audit (one shot)
+# One bounded production audit. Never automatically repeat on main or schedule.
+on:
+  push:
+    branches: [audit-unseen20-after-pr181-20261013]
+    paths:
+      - .github/workflows/trekbrain-pr181-unseen20-once.yml
+permissions:
+  contents: read
+concurrency:
+  group: trekbrain-pr181-unseen20-once
+  cancel-in-progress: true
+jobs:
+  real-unseen20:
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Check exact Render code and database readiness
+        shell: python
+        env:
+          EXPECTED_SHA: b7c3a37e088c572d351ad9292663d7e3e018f652
+        run: |
+          import json,os,time,urllib.request
+          base='https://trekmap-france.onrender.com'
+          for attempt in range(70):
+              try:
+                  req=urllib.request.Request(base+'/ai/status',headers={'User-Agent':'TrekBrain-one-shot-20'})
+                  with urllib.request.urlopen(req,timeout=18) as res: status=json.load(res)
+                  ok=str(status.get('build_commit') or '').lower()==os.environ['EXPECTED_SHA']
+                  req2=urllib.request.Request(base+'/health/ready',headers={'User-Agent':'TrekBrain-one-shot-20'})
+                  with urllib.request.urlopen(req2,timeout=18) as res: ready=json.load(res)
+                  if ok and ready.get('status')=='ok':
+                      print('Release verified, DB ready:',status['build_commit'],flush=True)
+                      break
+              except Exception as exc:
+                  print(type(exc).__name__,str(exc)[:140],flush=True)
+              time.sleep(10)
+          else:
+              raise SystemExit('Correct Render release and database did not become ready')
+      - name: Run 20 unseen regions, one request at a time
+        env:
+          EXPECTED_SHA: b7c3a37e088c572d351ad9292663d7e3e018f652
+          TREKBRAIN_BENCHMARK_URL: https://trekmap-france.onrender.com
+          TREKBRAIN_BENCHMARK_OUT: benchmark-results/unseen20-pr181
+        run: python scripts/benchmark_trekbrain_v9_unseen20.py
+      - name: Print measured benchmark, including failures
+        if: always()
+        run: cat benchmark-results/unseen20-pr181/trekbrain-production-benchmark.md 2>/dev/null || true
+      - name: Preserve all results even on failures
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: trekbrain-unseen20-after-pr181
+          path: benchmark-results/
+          if-no-files-found: ignore
+          retention-days: 14
