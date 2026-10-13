@@ -351,6 +351,25 @@ def install_fast_planning(v3, v5, v9) -> None:
                 (time.perf_counter() - commune_started) * 1000,
                 outcome=commune_outcome,
             )
+        # Landmarks are not municipalities or addresses. IGN's separate BD
+        # TOPO POI index can recover exact, department-qualified natural sites
+        # even when Photon, Nominatim and IGN address search are unavailable.
+        # The new resolver MUST NOT guess an unqualified homonymous landmark.
+        poi_started = time.perf_counter()
+        poi_outcome = "ok"
+        try:
+            poi_rows = ign.geocode_ign_poi(query, timeout=2.5)
+            if poi_rows:
+                return poi_rows
+        except Exception as exc:
+            poi_outcome = "error"
+            errors.append(str(exc))
+        finally:
+            perf.record(
+                "ign.poi.geocode",
+                (time.perf_counter() - poi_started) * 1000,
+                outcome=poi_outcome,
+            )
         if errors:
             raise RuntimeError(
                 "Impossible de localiser la zone. "

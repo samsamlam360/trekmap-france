@@ -87,6 +87,7 @@ def main() -> None:
         root / "scripts" / "test_trekbrain_v9.py",
         root / "scripts" / "test_trekbrain_v9_speed.py",
         root / "scripts" / "test_trekbrain_v9_geo_fallback.py",
+        root / "scripts" / "test_trekbrain_v9_ign_poi.py",
         root / "scripts" / "test_trekbrain_v9_commune_fallback.py",
         root / "scripts" / "test_trekbrain_v9_resources.py",
         root / "scripts" / "test_trekbrain_v9_food_corridor.py",
