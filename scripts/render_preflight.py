@@ -112,6 +112,7 @@ def main() -> None:
         root / "scripts" / "test_trekbrain_scenic_photo.py",
         root / "scripts" / "test_trekbrain_v9_belle_ile_gr340.py",
         root / "scripts" / "test_trekbrain_v9_roundtrip_empty_primary.py",
+        root / "scripts" / "test_trekbrain_v9_cold_roundtrip_failover.py",
     ]
     for script in regression_scripts:
         try:
