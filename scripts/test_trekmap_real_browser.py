@@ -53,6 +53,17 @@ try:
         "return !!(document.getElementById('map') && window.TrekBrainMapWorkspace && "
         "typeof window.TrekBrainMapWorkspace.open === 'function')"
     ))
+    # A real user enters the Explorer before opening TrekBrain. Opening the
+    # workspace programmatically from the landing page is not a valid journey:
+    # the homepage is intentionally above the map (z-index 15000).
+    home = driver.find_element(By.ID, "tm-home")
+    if home.is_displayed():
+        entries = [x for x in driver.find_elements(By.CSS_SELECTOR, "[data-home-explore]")
+                   if x.is_displayed()]
+        assert entries, "Homepage has no visible Explorer entry"
+        entries[0].click()
+        wait.until(lambda d: "tm-hidden" in d.find_element(By.ID, "tm-home").get_attribute("class").split())
+    assert not home.is_displayed(), "Explorer navigation did not close homepage"
     assert driver.find_element(By.ID, "map").is_displayed(), "Main hiking map is hidden"
 
     def open_and_check(label: str, width: int, height: int):
