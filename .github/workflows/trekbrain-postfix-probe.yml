@@ -19,10 +19,10 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      - name: Wait for exact deployed PR 180 commit
+      - name: Wait for exact deployed PR 181 commit
         shell: python
         env:
-          EXPECTED_SHA: e06aad6f0c93670c0b070b4464b887148d86b2eb
+          EXPECTED_SHA: 76b551f67e5cf1614a0c38b998788e03f93db86f
         run: |
           import json, os, time, urllib.request
           base='https://trekmap-france.onrender.com'
@@ -39,10 +39,10 @@ jobs:
               time.sleep(10)
           else:
               raise SystemExit('The exact production commit was not deployed')
-      - name: Four formerly failing regions with real authenticated requests
+      - name: Four regions after adaptive fallback with real authenticated requests
         working-directory: scripts
         env:
-          EXPECTED_SHA: e06aad6f0c93670c0b070b4464b887148d86b2eb
+          EXPECTED_SHA: 76b551f67e5cf1614a0c38b998788e03f93db86f
           TREKBRAIN_BENCHMARK_URL: https://trekmap-france.onrender.com
           TREKBRAIN_BENCHMARK_OUT: ../benchmark-results-postfix
         run: |
@@ -65,7 +65,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: trekbrain-postfix-four-regions
+          name: trekbrain-pr181-four-regions
           path: benchmark-results-postfix/
           if-no-files-found: ignore
           retention-days: 14
