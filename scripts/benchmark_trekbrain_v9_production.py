@@ -217,19 +217,22 @@ def evaluate(case, result, elapsed_s, clarify):
     # The user sees a distance warning from +18% AND +2 km; the historical
     # benchmark only warned at +35% average / +55% worst. That hid real
     # 20%-oversized hikes under the reassuring but misleading label "aucune".
-    distance_excess = [
-        {
-            "day": index + 1,
-            "km": round(float(stage["distance_km"]), 1),
-            "extra_pct": round((float(stage["distance_km"]) / target - 1) * 100),
-        }
-        for index, stage in enumerate(stages)
-        if isinstance(stage.get("distance_km"), (int, float))
-        and not isinstance(stage.get("distance_km"), bool)
-        and math.isfinite(float(stage["distance_km"]))
-        and float(stage["distance_km"]) > target * 1.18
-        and float(stage["distance_km"]) - target >= 2.0
-    ]
+    distance_excess = []
+    for index, stage in enumerate(stages):
+        if isinstance(stage.get("distance_km"), bool):
+            continue
+        try:
+            km = float(stage.get("distance_km") or 0)
+        except (ValueError, TypeError):
+            continue
+        if not math.isfinite(km):
+            continue
+        if km > target * 1.18 and km - target >= 2.0:
+            distance_excess.append({
+                "day": index + 1,
+                "km": round(km, 1),
+                "extra_pct": round((km / target - 1) * 100),
+            })
     contract = ((result.get("planner") or {}).get("distance_contract") or {})
     reported_days = {
         int(x.get("day")) for x in (contract.get("days_exceeding") or [])
