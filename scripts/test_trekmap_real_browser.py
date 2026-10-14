@@ -123,6 +123,18 @@ try:
     map_options.click()
     wait.until(lambda d: "tm-show" not in options_panel.get_attribute("class").split())
 
+    topbar_layout = driver.execute_script(
+        "const s=document.getElementById('tm-main-search-wrap').getBoundingClientRect();"
+        "const b=document.getElementById('tm-ai-launch').getBoundingClientRect();"
+        "return {searchRight:s.right,brainLeft:b.left,brainRight:b.right,"
+        "viewport:innerWidth};"
+    )
+    assert topbar_layout["brainLeft"] >= topbar_layout["searchRight"] - 1, (
+        f"Desktop search overlaps TrekBrain button: {topbar_layout}"
+    )
+    assert topbar_layout["brainRight"] <= topbar_layout["viewport"], (
+        f"TrekBrain button out of desktop viewport: {topbar_layout}"
+    )
     ai_launcher = driver.find_element(By.ID, "tm-ai-launch")
     ai_launcher.click()
     wait.until(lambda d: d.find_element(By.ID, "tm-ai-overlay").is_displayed())
