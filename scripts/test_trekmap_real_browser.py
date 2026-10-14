@@ -182,12 +182,13 @@ try:
         "return document.getElementById('tm-drawer-track').scrollLeft>100"))
     card=driver.find_element(By.CSS_SELECTOR, '#tm-drawer-track .tm-trek-tile:nth-child(5)')
     name=card.find_element(By.TAG_NAME,'strong').text
+    card_id=card.get_attribute('data-id')
     card.click()
     wait.until(lambda d: d.find_element(By.ID,'modal-backdrop').is_displayed())
     assert name in driver.find_element(By.ID,'modal').text, "Card click opened the wrong trek"
     assert name in info.text, "Side panel did not update to chosen trek"
     assert 'selected' in driver.find_element(
-        By.CSS_SELECTOR, f'#tm-drawer-track .tm-trek-tile[data-id="{card.get_attribute("data-id")}"]'
+        By.CSS_SELECTOR, f'#tm-drawer-track .tm-trek-tile[data-id="{card_id}"]'
     ).get_attribute('class'), "Selected card lost its highlight"
     driver.find_element(By.ID,'modal-close').click()
     wait.until(lambda d: not d.find_element(By.ID,'modal-backdrop').is_displayed())
