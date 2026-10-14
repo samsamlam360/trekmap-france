@@ -1,1 +1,1 @@
-Run exactly six geocoding regression cases after PR 188 is live. Keep strict preparation verdicts, never loosen route validity. Only this one push triggers this expensive audit.
+Second one-shot production check after PR #189 (Dijon postcode municipality safeguard, massif-qualified Ceillac official geocoding). Run the same six cases sequentially with their existing strict readiness contract; keep all failing reports; no paid providers. Previous run: 4/6 valid routes (Dijon and Ceillac refused). Requested once on 2026-10-14.
