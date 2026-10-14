@@ -19,6 +19,8 @@ block=r'''<!-- TREKMAP_DESKTOP_MAP_2026_START -->
 #tm-main-search-wrap:focus-within {outline:0!important;border-color:#68b395!important;box-shadow:0 0 0 2px rgba(32,137,92,.19)!important}
 #tm-main-search:focus,#tm-main-search:focus-visible {outline:none!important;box-shadow:none!important}
 #tm-main-search::placeholder {font-size:14px}
+/* Informational toast must never intercept modal close or map controls. */
+.toast {pointer-events:none!important}
 .tm-drawer-nav {position:absolute;top:4px;right:56px;z-index:3;display:flex;gap:5px}
 .tm-drawer-nav button {display:grid;place-items:center;width:36px;height:36px;min-height:36px;padding:0;background:#f0f8f3;color:#145b3e;border:1px solid #d3e5d8;border-radius:10px;font-size:23px;font-weight:600;line-height:1;cursor:pointer}
 .tm-drawer-nav button:hover:not(:disabled) {background:#dff2e6;border-color:#7bbaa0}
