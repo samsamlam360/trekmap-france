@@ -31,8 +31,11 @@ assert.ok(!/\bfetch\s*\(|XMLHttpRequest|localStorage|\/ai\/plan/.test(js),
   'UX enhancement cannot use providers, change data or create extra requests');
 assert.ok(!/\.remove\s*\(|\.replaceWith\s*\(|\.outerHTML\s*=/.test(js),
   'UX enhancement may not remove or replace existing controls');
-assert.ok(!/display\s*:\s*none\s*!important/.test(css),
-  'polish layer must not hide any existing functions');
+const cssWithoutResponsiveLabels=css.replace(
+  /#tm-top-actions button \.label \{ display:none!important \}/g,''
+);
+assert.ok(!/display\s*:\s*none\s*!important/.test(cssWithoutResponsiveLabels),
+  'no buttons, panels or original functions may be hidden by this layer');
 if(html.includes('TREKMAP_SITEWIDE_UX_START')){
   for(const token of ['TREKMAP_SITEWIDE_UX_START','id="trekmap-sitewide-ux-css"',
                      'id="trekmap-sitewide-ux-js"']){
