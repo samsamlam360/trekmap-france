@@ -341,3 +341,6 @@ print("TrekMap sitewide UX: preserved original controls and installed responsive
 # Last responsive layer; this site-wide style is intentionally applied before it.
 from runpy import run_path
 run_path(str(Path(__file__).with_name("apply_desktop_map_layout.py")))
+
+# The new profile is intentionally the last independent UI layer.
+run_path(str(Path(__file__).with_name("apply_profile_v2.py")))
