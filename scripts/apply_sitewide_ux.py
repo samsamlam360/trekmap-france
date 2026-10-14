@@ -75,6 +75,21 @@ button:disabled { cursor:not-allowed;opacity:.60 }
   background:linear-gradient(115deg,#093c2a 0%,#0c573e 72%,#0d6145 100%)!important;
   border-bottom:1px solid rgba(255,255,255,.14);
 }
+/* Preserve five real topbar actions: a rigid search column used to overlap
+   the TrekBrain button at 1440px, making a visible action unclickable. */
+@media(min-width:1101px) {
+  #tm-unified-topbar {
+    grid-template-columns:235px minmax(250px,480px) minmax(0,1fr)!important;
+    gap:12px!important;
+  }
+  #tm-top-actions { min-width:0!important;justify-content:flex-end!important }
+  #tm-top-actions button { flex-shrink:1;min-width:44px }
+}
+@media(min-width:1101px) and (max-width:1320px) {
+  #tm-unified-topbar { grid-template-columns:190px minmax(230px,420px) minmax(0,1fr)!important }
+  #tm-top-actions button .label { display:none!important }
+  #tm-top-actions button { width:44px!important;justify-content:center }
+}
 #tm-main-search-wrap { border:1px solid #d4e6da!important;border-radius:15px!important }
 #tm-main-search { color:var(--tm-ux-text)!important }
 #tm-main-search::placeholder { color:#526c5e;opacity:1 }
