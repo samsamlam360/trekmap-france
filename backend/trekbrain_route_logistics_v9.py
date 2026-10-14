@@ -236,6 +236,41 @@ def _terrain_resource(element: dict[str, Any]) -> dict[str, Any] | None:
     }
 
 
+def _is_requested_stay(element: dict[str, Any], category: str) -> bool:
+    """Check actual requested accommodation, not just nonempty terrain data.
+
+    Water, a bus stop or a food shop proves an Overpass server answered, but
+    does not mean it found a place to sleep. Only a located, source-backed
+    matching OSM accommodation can stop lodging-provider failover.
+    """
+    if not isinstance(element, dict) or _element_point(element) is None:
+        return False
+    from .trekbrain_water_evidence_v9 import has_osm_identity
+    if not has_osm_identity({"source_url": _osm_url(element)}):
+        return False
+    tags = element.get("tags") or {}
+    if not isinstance(tags, dict):
+        return False
+    if tags.get("access") in {"private", "no"} or tags.get("disused") == "yes":
+        return False
+    if category == "camping":
+        return tags.get("tourism") in {"camp_site", "caravan_site"}
+    if category == "refuge":
+        return tags.get("tourism") in {"alpine_hut", "wilderness_hut"} or (
+            tags.get("amenity") == "shelter" and tags.get("shelter_type") == "basic_hut"
+        )
+    return tags.get("tourism") in {
+        "hotel", "hostel", "guest_house", "chalet", "apartment",
+        "camp_site", "alpine_hut", "wilderness_hut",
+    } or (tags.get("amenity") == "shelter" and tags.get("shelter_type") == "basic_hut")
+
+
+def _has_requested_stay(payload: dict[str, Any] | None, category: str) -> bool:
+    return bool(isinstance(payload, dict) and not payload.get("remark") and
+                isinstance(payload.get("elements"), list) and
+                any(_is_requested_stay(row, category) for row in payload["elements"]))
+
+
 def _bbox_route_query(
     coords,
     category: str,
@@ -319,17 +354,13 @@ def _bbox_route_query(
 
     data = None
     all_mirrors = list(free.OVERPASS_URLS)
-    # Prefer an independent private.coffee instance over a sibling FOSSGIS
-    # backend when the primary is throttled. Keep the legacy mirror as the
-    # third option, still under the same bounded parallel fallback wave.
+    # Respect the existing 1.8-second primary and two 0.85-second fallback
+    # limits; do not launch an extra provider phase on top of the former one.
     mirrors = (
         [all_mirrors[0], all_mirrors[-1], all_mirrors[1]]
         if len(all_mirrors) >= 4 else all_mirrors[:3]
     )
 
-    # Keep normal provider load unchanged: the primary mirror gets the first
-    # chance on its own. Only when it fails or returns an empty corridor do we
-    # fan out to the two independent fallback mirrors in parallel.
     if mirrors:
         try:
             primary = free._request_json(
@@ -343,31 +374,38 @@ def _bbox_route_query(
             )
         except Exception:
             primary = None
-        if isinstance(primary, dict):
+        if isinstance(primary, dict) and isinstance(primary.get("elements"), list) and not primary.get("remark"):
             data = primary
 
-    if not (isinstance(data, dict) and data.get("elements")) and len(mirrors) > 1:
+    # Crucial: a response containing only springs, shops or bus stops is
+    # PARTIAL for the requested lodging type. The previous len(elements)
+    # check silently disabled lodging failover on such responses.
+    if not _has_requested_stay(data, category) and len(mirrors) > 1:
         fallback_urls = mirrors[1:3]
 
         def fallback_request(index_url):
             index, url = index_url
             try:
-                return index, free._request_json(
+                candidate = free._request_json(
                     url,
                     data={"data": query},
                     timeout=0.85,
                     ttl=3600,
-                    service=(
-                        ("Overpass route bundle" if include_terrain else "Overpass route stays")
-                        + f" fallback {index}"
-                    ),
+                    service=("Overpass route bundle" if include_terrain else "Overpass route stays")
+                            + f" fallback {index}",
                     retries=1,
                     cache_empty=False,
                 )
+                if (not isinstance(candidate, dict)
+                        or not isinstance(candidate.get("elements"), list)
+                        or candidate.get("remark")):
+                    candidate = None
+                return index, candidate
             except Exception:
                 return index, None
 
         fallback_results = {}
+        selected = None
         with ThreadPoolExecutor(max_workers=len(fallback_urls)) as pool:
             futures = [
                 pool.submit(fallback_request, (index + 1, url))
@@ -376,22 +414,46 @@ def _bbox_route_query(
             for future in as_completed(futures):
                 index, candidate = future.result()
                 fallback_results[index] = candidate
-                if isinstance(candidate, dict) and candidate.get("elements"):
-                    data = candidate
+                if _has_requested_stay(candidate, category):
+                    selected = candidate
                     for pending in futures:
                         if pending is not future:
                             pending.cancel()
                     break
 
-        # If every fallback mirror was empty, retain one syntactically valid
-        # empty response only so the parser can return preloaded=False. The
-        # outer Photon/resource fallbacks then remain eligible.
-        if not (isinstance(data, dict) and data.get("elements")):
+        if selected is not None:
+            # Keep all already discovered water/food/transit evidence and
+            # prepend only genuinely matching, independently sourced stays.
+            # Do not discard primary data just because a backup has a bed.
+            previous = data.get("elements") or [] if isinstance(data, dict) else []
+            rescued = [row for row in selected["elements"]
+                       if _is_requested_stay(row, category)]
+            merged = []
+            seen_osm = set()
+            for row in rescued + previous:
+                if not isinstance(row, dict):
+                    continue
+                key = (row.get("type"), row.get("id"))
+                if key != (None, None) and key in seen_osm:
+                    continue
+                seen_osm.add(key)
+                merged.append(row)
+                if len(merged) >= (290 if include_terrain else 160):
+                    break
+            data = {"elements": merged}
+        elif not (isinstance(data, dict) and data.get("elements")):
+            # A backup with only route resources can still help if the
+            # primary truly returned nothing. Prefer nonempty valid replies.
             for index in sorted(fallback_results):
                 candidate = fallback_results[index]
-                if isinstance(candidate, dict):
+                if isinstance(candidate, dict) and candidate.get("elements"):
                     data = candidate
                     break
+            if data is None:
+                for index in sorted(fallback_results):
+                    if isinstance(fallback_results[index], dict):
+                        data = fallback_results[index]
+                        break
 
     if not isinstance(data, dict):
         return [], [], False
