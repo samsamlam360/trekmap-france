@@ -43,10 +43,14 @@ assert.ok(server.includes('@app.get("/trek-scenery.svg"'),
           'scenery image must be served locally without paid services');
 assert.ok(unified.includes('window.innerWidth<1240 && localStorage.getItem'),
           'desktop explorer should expand filters by default regardless of stale mobile preference');
-assert.ok(unified.includes('tm-tile-landscape-'), 'route cards must include scenic previews');
+assert.ok(unified.includes('function routePreview(t)'), 'trek cards must derive previews from route geometry');
+assert.ok(unified.includes('routePreview(t)}'), 'route thumbnail must be rendered per trek');
 assert.ok(css.includes("left:calc(var(--tm-panel) + 31px)") &&
           css.includes("height:calc(100dvh - var(--tm-top) - 26px)"),
           'desktop map must keep sidebar and carousel in separate zones');
-assert.ok(css.includes("background-image:url('/trek-scenery.svg')"),
-          'trek cards should contain a landscape thumbnail');
+assert.ok(css.includes('.tm-mini-route') && css.includes('height:126px'),
+          'compact geometry-based cards must be styled');
+assert.ok(css.includes('--tm-panel:282px;--tm-drawer:179px') &&
+          css.includes('#tm-desktop-info.has-selection'),
+          'real map space and context-sensitive info layout must be protected');
 console.log('DESKTOP MAP CONTRACT PASS: brand, trek selection, scroll, information panel, responsive');
