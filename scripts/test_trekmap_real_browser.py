@@ -418,6 +418,9 @@ try:
     driver.execute_script("window.openProfile()")
     wait.until(lambda d: d.find_element(By.ID,"tm-profile-v2").is_displayed())
     assert driver.find_element(By.CSS_SELECTOR,'[data-p-tab="preferences"]').is_displayed()
+    assert driver.execute_script(
+        "return document.querySelector('#tm-profile-v2 .tm-p-nav').scrollLeft<=2"
+    ), "Mobile profile navigation must open at the dashboard tab"
     layout=driver.execute_script(
         "const r=document.querySelector('.tm-p-shell').getBoundingClientRect();"
         "return {right:r.right,window:innerWidth};"
