@@ -153,6 +153,11 @@ try:
         assert "expanded" in panel.get_attribute("class").split(), (
             f"{label}: native expand click cannot reveal the stage list"
         )
+        # The expanded CSS class is synchronous, but Chromium may still be
+        # applying the responsive slide/scroll layout on a short viewport.
+        # Wait for actual visibility instead of failing on a transient frame.
+        # Do not weaken the assertion: a permanently hidden list still fails.
+        wait.until(lambda d: d.find_element(By.ID, "tm-brain-route-detail").is_displayed())
         assert panel.find_element(By.ID, "tm-brain-route-detail").is_displayed(), (
             f"{label}: expanded stage list is hidden"
         )
