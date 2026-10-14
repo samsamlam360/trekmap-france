@@ -135,6 +135,16 @@ try:
     assert topbar_layout["brainRight"] <= topbar_layout["viewport"], (
         f"TrekBrain button out of desktop viewport: {topbar_layout}"
     )
+    # Import, create, favorites and profile remain functional for a visitor:
+    # clicking should open the existing login dialog, never a dead button.
+    for action_id in ("tm-import-btn", "tm-create-btn",
+                      "tm-favorites-btn", "tm-account-btn"):
+        control = driver.find_element(By.ID, action_id)
+        control.click()
+        wait.until(lambda d: d.find_element(By.ID, "modal-backdrop").is_displayed())
+        driver.execute_script("closeModal();")
+        wait.until(lambda d: not d.find_element(By.ID, "modal-backdrop").is_displayed())
+
     ai_launcher = driver.find_element(By.ID, "tm-ai-launch")
     ai_launcher.click()
     wait.until(lambda d: d.find_element(By.ID, "tm-ai-overlay").is_displayed())
@@ -146,6 +156,13 @@ try:
     driver.set_window_size(390, 844)
     mobile_navigation = driver.find_element(By.ID, "tm-mobile-nav")
     assert mobile_navigation.is_displayed(), "Mobile navigation is hidden"
+    mobile_filters = mobile_navigation.find_element(By.CSS_SELECTOR, '[data-mobile-action="filters"]')
+    mobile_filters.click()
+    wait.until(lambda d: "tm-mobile-filters-open" in
+               d.find_element(By.TAG_NAME, "body").get_attribute("class").split())
+    driver.find_element(By.ID, "tm-filter-toggle").click()
+    wait.until(lambda d: "tm-mobile-filters-open" not in
+               d.find_element(By.TAG_NAME, "body").get_attribute("class").split())
     mobile_ai = mobile_navigation.find_element(By.CSS_SELECTOR, '[data-mobile-action="ai"]')
     mobile_ai.click()
     wait.until(lambda d: d.find_element(By.ID, "tm-ai-overlay").is_displayed())
