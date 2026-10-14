@@ -22,6 +22,21 @@ def feature(name, lon, lat, code="39", score=.9):
 
 
 class GeocodeEvidenceTests(unittest.TestCase):
+    def test_geocoder_query_excludes_trail_instructions_not_area_qualifiers(self):
+        self.assertEqual(
+            request._clean_place("Saintes-Maries-de-la-Mer sans marcher dans l'eau"),
+            "Saintes-Maries-de-la-Mer",
+        )
+        self.assertEqual(
+            request._clean_place("Sainte-Enimie et des gorges du Tarn"),
+            "Sainte-Enimie",
+        )
+        self.assertEqual(
+            request._clean_place("Lac Blanc dans les Vosges"),
+            "Lac Blanc dans les Vosges",
+            "Do not erase an explicitly written geographic disambiguator",
+        )
+
     def test_provider_identity_prevents_town_centroid_ambiguity(self):
         # A city place node must outrank its administrative boundary centroid
         # without authorizing arbitrary similarly named roads or other towns.
