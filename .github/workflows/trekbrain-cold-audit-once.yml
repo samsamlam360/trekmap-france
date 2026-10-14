@@ -1,0 +1,58 @@
+name: TrekBrain readiness cold audit (one shot)
+
+# One-shot validation on this isolated QA branch; no production deployment.
+on:
+  push:
+    branches: [qa-cold-readiness-20261014]
+    paths:
+      - .github/workflows/trekbrain-cold-audit-once.yml
+permissions:
+  contents: read
+concurrency:
+  group: trekbrain-manual-cold-audit
+  cancel-in-progress: false
+jobs:
+  cold-benchmark:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      TREKBRAIN_BENCHMARK_OUT: benchmark-results/cold
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Require an existing ORS credential before any live case
+        env:
+          ORS_API_KEY: ${{ secrets.ORS_API_KEY }}
+        run: python scripts/benchmark_trekbrain_v9_cold.py --check-config
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+      - name: Four serial first-visit cases, at most 400 seconds
+        env:
+          ORS_API_KEY: ${{ secrets.ORS_API_KEY }}
+          TREKBRAIN_VERSION: v9
+          TREKBRAIN_FREE_MODE: '1'
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p benchmark-results/cold
+          python scripts/benchmark_trekbrain_v9_cold.py | tee benchmark-results/cold/runner.log
+      - name: Preserve reports even when configuration or a case fails
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: trekbrain-cold-benchmark
+          path: benchmark-results/cold/
+          if-no-files-found: warn
+          retention-days: 14
+      - name: Publish readable results
+        if: always()
+        shell: python
+        run: |
+          import os
+          from pathlib import Path
+          report = Path('benchmark-results/cold/trekbrain-cold-benchmark.md')
+          text = report.read_text(encoding='utf-8') if report.exists() else 'Cold audit did not produce a report. Check the failed setup step.\n'
+          with open(os.environ['GITHUB_STEP_SUMMARY'], 'a', encoding='utf-8') as out:
+              out.write(text)
