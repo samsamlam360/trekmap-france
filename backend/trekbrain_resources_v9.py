@@ -1404,7 +1404,18 @@ def _install_plan_overlay(app, legacy_main):
                         result,
                         _filter_active(list(terrain_rows) + list(reverse_food_rows)),
                     )
-                result["_terrain_osm_preloaded"] = True
+                # If both bounded terrain mirrors were unavailable, the
+                # independent water display scanner must NOT be suppressed by
+                # a flag meaning merely "we tried". Give it one short attempt
+                # on a different existing free mirror, only for missing water.
+                # Never grant verified coverage without an OSM potable tag.
+                water_rescue_needed = (
+                    bool(terrain_intent.get("water"))
+                    and terrain_diagnostics.get("status") == "unavailable"
+                )
+                result["_terrain_osm_preloaded"] = not water_rescue_needed
+                if water_rescue_needed:
+                    result["_water_rescue_mirror_index"] = 2
             else:
                 # Water/food are already present in the validated route result.
                 # Keep transit or a genuinely missing lodging supplement eligible
