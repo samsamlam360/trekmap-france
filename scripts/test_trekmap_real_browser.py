@@ -88,6 +88,60 @@ try:
     assert not home.is_displayed(), "Explorer navigation did not close homepage"
     assert driver.find_element(By.ID, "map").is_displayed(), "Main hiking map is hidden"
 
+    # Sitewide UX: exercise the original actions with native Chromium clicks.
+    # No mutations to the live database, no account registration, no AI calls.
+    assert driver.find_element(By.ID, "trekmap-sitewide-ux-css"), (
+        "Sitewide UX stylesheet was not assembled into the served HTML"
+    )
+    search = driver.find_element(By.ID, "tm-main-search")
+    search.click()
+    search.send_keys("Vercors")
+    assert search.get_attribute("value") == "Vercors", "Header search cannot receive typing"
+    driver.find_element(By.ID, "tm-main-search-clear").click()
+    assert search.get_attribute("value") == "", "Search clear action is broken"
+
+    filter_button = driver.find_element(By.ID, "tm-filter-toggle")
+    filters = driver.find_element(By.CSS_SELECTOR, "#sidebar .filters")
+    was_collapsed = "tm-collapsed" in filters.get_attribute("class").split()
+    filter_button.click()
+    wait.until(lambda d: ("tm-collapsed" in filters.get_attribute("class").split()) != was_collapsed)
+    filter_button.click()
+    wait.until(lambda d: ("tm-collapsed" in filters.get_attribute("class").split()) == was_collapsed)
+
+    drawer_button = driver.find_element(By.ID, "tm-drawer-head")
+    drawer = driver.find_element(By.ID, "tm-unified-drawer")
+    prior = "collapsed" in drawer.get_attribute("class").split()
+    drawer_button.click()
+    wait.until(lambda d: ("collapsed" in drawer.get_attribute("class").split()) != prior)
+    drawer_button.click()
+    wait.until(lambda d: ("collapsed" in drawer.get_attribute("class").split()) == prior)
+
+    map_options = driver.find_element(By.ID, "tm-map-options")
+    options_panel = driver.find_element(By.ID, "tm-map-options-panel")
+    map_options.click()
+    wait.until(lambda d: "tm-show" in options_panel.get_attribute("class").split())
+    map_options.click()
+    wait.until(lambda d: "tm-show" not in options_panel.get_attribute("class").split())
+
+    ai_launcher = driver.find_element(By.ID, "tm-ai-launch")
+    ai_launcher.click()
+    wait.until(lambda d: d.find_element(By.ID, "tm-ai-overlay").is_displayed())
+    assert driver.find_element(By.ID, "tm-ai-prompt").is_displayed()
+    driver.find_element(By.ID, "tm-ai-close").click()
+    wait.until(lambda d: not d.find_element(By.ID, "tm-ai-overlay").is_displayed())
+    driver.save_screenshot(str(OUT / "sitewide-desktop-actions.png"))
+
+    driver.set_window_size(390, 844)
+    mobile_navigation = driver.find_element(By.ID, "tm-mobile-nav")
+    assert mobile_navigation.is_displayed(), "Mobile navigation is hidden"
+    mobile_ai = mobile_navigation.find_element(By.CSS_SELECTOR, '[data-mobile-action="ai"]')
+    mobile_ai.click()
+    wait.until(lambda d: d.find_element(By.ID, "tm-ai-overlay").is_displayed())
+    driver.find_element(By.ID, "tm-ai-close").click()
+    wait.until(lambda d: not d.find_element(By.ID, "tm-ai-overlay").is_displayed())
+    driver.save_screenshot(str(OUT / "sitewide-mobile-actions.png"))
+    driver.set_window_size(1440, 900)
+
     def open_and_check(label: str, width: int, height: int, plan=PLAN):
         driver.set_window_size(width, height)
         opened = driver.execute_script(
