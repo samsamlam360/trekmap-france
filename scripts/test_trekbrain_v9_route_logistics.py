@@ -1019,3 +1019,46 @@ assert logistics._night_access_diagnostics(
     [None],
 )[0]["reason"] == "walking_connector_unverified"
 print("Night-stage candidate diagnostics distinguish unsearched, distant and unverified walk: OK")
+
+
+# Cold benchmark Nantua exposed a source-backed night candidate around 2.8 km
+# in a straight line from the stage end. The previous 2.8-km gate never even
+# asked the walking Matrix whether a legitimate <=4-km pedestrian connector
+# exists. Open a narrow 3.2-km *candidate check*, never a presumed shortcut.
+assert logistics._WALK_CONNECTOR_LIMIT_KM == 3.2
+borderline = {
+    "name": "Camping proche à vérifier",
+    "source_url": "https://www.openstreetmap.org/node/771001",
+    "lat": 0.027, "lon": 0.0,
+    "_night": 1, "_anchor": {"lat": 0.0, "lon": 0.0},
+    "_anchor_distance_km": 3.0,
+}
+verified_borderline, checked_meta = logistics._validate_night_options(
+    FakeORS, FakeLegacy, FakeRoundtrip, coords, {1: [borderline]}
+)
+key = logistics._connector_key(borderline)
+assert checked_meta["connector_matrix_calls"] == 1, checked_meta
+assert checked_meta["connector_candidates_checked"] == 1, checked_meta
+assert verified_borderline[key]["validated"] is True
+assert verified_borderline[key]["return_validated"] is True
+selected_borderline = logistics._assign_verified_nights(
+    {1: [borderline]}, verified_borderline, [15.0, 15.0], 20.0, True
+)
+assert selected_borderline[0]["_access_mode"] == "walk", selected_borderline
+
+# Slightly farther away, no connector call is made; do not widen the walk
+# guarantee beyond the verified pedestrian limit or consume extra API quota.
+out_of_range = {**borderline, "_anchor_distance_km": 3.3}
+unused, unused_meta = logistics._validate_night_options(
+    FakeORS, FakeLegacy, FakeRoundtrip, coords, {1: [out_of_range]}
+)
+assert unused == {} and unused_meta["connector_matrix_calls"] == 0, unused_meta
+# Even a technically valid walking route longer than four kilometres must not
+# turn a distant camp into an on-foot overnight or an altered hiking backbone.
+too_long = {key: {"validated": True, "return_validated": True,
+                  "distance_km": 4.1, "return_distance_km": 4.1}}
+rejected = logistics._assign_verified_nights(
+    {1: [borderline]}, too_long, [15.0, 15.0], 21.0, True
+)
+assert rejected == [None], rejected
+print("Borderline 3.2km candidates get one bounded round-trip check, never a fake 4km walking connection: OK")
