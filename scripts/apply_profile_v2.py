@@ -295,7 +295,8 @@ function render(){
  }
 }
 function close(){
- root.hidden=true;document.body.style.removeProperty('overflow');if(previousFocus&&previousFocus.focus)previousFocus.focus();
+ root.hidden=true;model=null;plan=null;document.body.style.removeProperty('overflow');
+ if(previousFocus&&previousFocus.focus)previousFocus.focus();
 }
 async function open(){
  if(typeof currentUser!=='undefined'&&!currentUser){if(typeof authModal==='function')authModal('login');return}
