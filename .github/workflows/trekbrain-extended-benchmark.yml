@@ -14,7 +14,7 @@ concurrency:
 
 jobs:
   benchmark:
-    name: Six new production treks
+    name: Nine new production treks
     runs-on: ubuntu-latest
     timeout-minutes: 25
 
@@ -49,7 +49,7 @@ jobs:
           else:
               raise SystemExit('Render build did not converge to '+expected[:12]+'; last='+last)
 
-      - name: Run six exploratory production treks
+      - name: Run nine exploratory production treks
         env:
           EXPECTED_SHA: ${{ github.sha }}
           TREKBRAIN_BENCHMARK_URL: https://trekmap-france.onrender.com
@@ -58,7 +58,15 @@ jobs:
 
       - name: Show extended benchmark report
         if: always()
-        run: cat benchmark-results-extended/trekbrain-production-benchmark.md 2>/dev/null || true
+        shell: python
+        run: |
+          import os
+          from pathlib import Path
+          report=Path('benchmark-results-extended/trekbrain-production-benchmark.md')
+          text=report.read_text(encoding='utf-8') if report.exists() else 'Audit non exécuté : consulter les étapes en échec.\n'
+          print(text)
+          with open(os.environ['GITHUB_STEP_SUMMARY'],'a',encoding='utf-8') as summary:
+              summary.write(text)
 
       - name: Upload extended benchmark report
         if: always()

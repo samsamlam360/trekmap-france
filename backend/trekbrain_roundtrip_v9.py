@@ -14,6 +14,7 @@ from fastapi import HTTPException
 
 from . import ors
 from . import trekbrain_perf_profile_v9 as perf
+from .trekbrain_distance_tolerance_v9 import intent_daily_bounds
 
 _INSTALLED = False
 
@@ -57,15 +58,23 @@ def _equal_anchors(coords, days):
     if total <= 0:
         return []
     anchors = []
-    floor = 1
     for day in range(1, days):
         target = total * day / days
-        choices = range(floor, len(cum) - 1)
-        if not list(choices):
-            return []
-        best = min(range(floor, len(cum) - 1), key=lambda i: abs(cum[i] - target))
-        anchors.append(_route_anchor(coords, cum, best, f"Repère jour {day}"))
-        floor = min(best + 1, len(cum) - 2)
+        # Place the boundary on the actual routed segment at equal progress.
+        # Rounding to the nearest vertex can turn a nominal 16 km day into a
+        # much longer day when a provider returns sparse geometry. This adds a
+        # stage marker only; it never redraws the pedestrian route.
+        index = next((i for i in range(1, len(cum)) if cum[i] >= target), len(cum) - 1)
+        length = cum[index] - cum[index - 1]
+        ratio = (target - cum[index - 1]) / length if length > 0 else 0.0
+        a, b = coords[index - 1], coords[index]
+        anchors.append({
+            "name": f"Repère jour {day}",
+            "lat": float(a[0]) + ratio * (float(b[0]) - float(a[0])),
+            "lon": float(a[1]) + ratio * (float(b[1]) - float(a[1])),
+            "category": "route_anchor",
+            "route_progress_km": round(target, 6),
+        })
     return anchors
 
 
@@ -101,7 +110,7 @@ def _destination(point, distance_km: float, bearing_deg: float):
     return [math.degrees(lat2), math.degrees(lon2)]
 
 
-def _polygon_loop_candidates(start, target_km: float, daily_min: float, daily_max: float, days: int, v3, *, max_attempts: int = 4):
+def _polygon_loop_candidates(start, target_km: float, daily_min: float, daily_max: float, days: int, v3, *, max_attempts: int = 4, route_router=None):
     """Generate bounded waypoint loops and validate every metre through ORS.
 
     ORS round_trip can overshoot its requested length badly on constrained path
@@ -166,7 +175,7 @@ def _polygon_loop_candidates(start, target_km: float, daily_min: float, daily_ma
             orientation = earlier_orientation
         bearings = (orientation - 55.0, orientation, orientation + 55.0)
         targets = [_destination(start_coord, r, bearing) for bearing in bearings]
-        routed = ors.get_route(
+        routed = (route_router or ors.get_route)(
             [start_coord] + targets + [start_coord],
             _polyline_haversine,
         )
@@ -771,6 +780,150 @@ def _best_roundtrip(start, target_km: float, daily_min: float, daily_max: float,
     return selected
 
 
+def _optimize_target_roundtrip(route, start, target_km, daily_min, daily_max, days, v3, intent=None):
+    """Compare at most two new routed loops before the backbone is final.
+
+    The broad approximate-distance window is a safety ceiling, not the target.
+    A ranked 40.8 km loop for two 16 km days therefore still merits a bounded
+    search. Existing hiking relations and mandatory places keep their backbone.
+    Geometry and measured distances are returned together, never rescaled to
+    make the route look closer to the request.
+    """
+    intent = intent or {}
+    if not isinstance(route, dict) or route.get("distance_search") is not None:
+        return route
+    if route.get("relation_geometry") or route.get("relation_ref"):
+        return route
+    raw = str(intent.get("raw") or "").casefold()
+    import re
+    if re.search(r"\b(?:gr\s*\d+|grp\b|pr\s*\d+)\b", raw):
+        return route
+    if any(intent.get(key) for key in ("start_query", "end_query", "via_query", "avoid", "max_dplus_day")):
+        return route
+    if not (3.0 <= float(target_km) <= 99.0) or int(days) < 1:
+        return route
+
+    start_coord = [float(start["lat"]), float(start["lon"])]
+    days = max(1, int(days))
+    target = float(target_km)
+    declared_min, declared_max = intent_daily_bounds(intent)
+    low = float(declared_min) * days if declared_min is not None else float(daily_min) * days * 0.90
+    # Explicit maxima remain exact; the candidate search does not spend even
+    # the ordinary approximate-target rounding allowance.
+    high = float(declared_max if declared_max is not None else daily_max) * days
+
+    def measured(candidate):
+        if not isinstance(candidate, dict) or candidate.get("fallback") is not False:
+            return None
+        if candidate.get("profile") and str(candidate["profile"]).casefold() not in {
+            "foot-hiking", "foot-walking", "walking", "pedestrian", "hiking",
+        }:
+            return None
+        coords = candidate.get("coords") or []
+        try:
+            distance = float(candidate.get("distance") or candidate.get("distance_km") or 0)
+            if not math.isfinite(distance) or distance <= 0 or len(coords) < 4:
+                return None
+            for point in coords:
+                lat, lon = float(point[0]), float(point[1])
+                if not math.isfinite(lat) or not math.isfinite(lon) or not -90 <= lat <= 90 or not -180 <= lon <= 180:
+                    return None
+            if max(_haversine(coords[0], start_coord), _haversine(coords[-1], start_coord)) > 0.15:
+                return None
+            retrace = float(v3._route_retrace_ratio(coords)) if hasattr(v3, "_route_retrace_ratio") else 0.0
+            if not math.isfinite(retrace):
+                return None
+            return distance, retrace
+        except (TypeError, ValueError, IndexError):
+            return None
+
+    observed = measured(route)
+    if observed is None:
+        return route
+    distance, retrace = observed
+    significant = abs(distance - target) > target * 0.18 and abs(distance - target) / days >= 2.0
+    outside_window = distance > high or distance < low
+    if not significant and not outside_window:
+        return route
+
+    # No extra calls are useful when the configured round-trip service is
+    # absent. An already validated secondary pedestrian route stays available.
+    request_available = bool(ors.ORS_API_KEY)
+    diagnostics = {
+        "status": "no_closer_route", "max_additional_routing_calls": 2,
+        "additional_routing_calls": 0, "target_total_km": round(target, 2),
+        "original_total_km": round(distance, 2), "selected_total_km": round(distance, 2),
+        "candidates": [{"mode": str(route.get("routing_mode") or "unknown"), "distance_km": round(distance, 2)}],
+    }
+    rows = [(distance, retrace, route)]
+
+    def add(candidate):
+        numbers = measured(candidate)
+        if numbers is None:
+            return
+        actual, candidate_retrace = numbers
+        diagnostics["candidates"].append({
+            "mode": str(candidate.get("routing_mode") or "unknown"),
+            "distance_km": round(actual, 2),
+            "within_window": low <= actual <= high,
+        })
+        # Distance precision must not replace the user's route with a badly
+        # retraced circuit. The final shared geometry checks still run normally.
+        if low <= actual <= high and candidate_retrace <= 0.30:
+            rows.append((actual, candidate_retrace, candidate))
+
+    warning = ""
+    if request_available:
+        original_request = float(route.get("round_trip_requested_km") or target)
+        ratio = max(0.38, min(1.65, target / distance))
+        calibrated = max(3.0, min(99.0, original_request * ratio))
+        candidate, warning = _roundtrip_request(start, calibrated, 47)
+        diagnostics["additional_routing_calls"] += 1
+        if candidate is not None:
+            candidate["round_trip_requested_km"] = round(calibrated, 2)
+            add(candidate)
+
+    # One Directions loop is the last alternative. Auth, quota and timeout
+    # failures stop the search instead of starting more provider traffic.
+    blocked = any(token in str(warning or "").casefold() for token in (
+        "http 401", "http 403", "http 429", "clé api", "limite de requêtes",
+        "non configuré", "api_key", "délai", "delai", "timeout", "ignoré",
+    ))
+    feasible = [row for row in rows if low <= row[0] <= high]
+    close = any(abs(row[0] - target) <= max(1.0 * days, target * 0.10) for row in feasible)
+    if request_available and not blocked and not close:
+        diagnostics["additional_routing_calls"] += 1
+        def one_directions_request(coords, distance_fn):
+            # Precision is optional: one HTTP call is enough. Do not invoke the
+            # ordinary snap/segment/provider recovery chain for this experiment.
+            routed, _warning, _status = ors._request_route(coords, distance_fn)
+            return routed
+
+        for candidate in _polygon_loop_candidates(
+            start, target, daily_min, daily_max, days, v3, max_attempts=1,
+            route_router=one_directions_request,
+        ):
+            add(candidate)
+
+    feasible = [row for row in rows if low <= row[0] <= high]
+    pool = feasible or [rows[0]]
+    selected_row = min(pool, key=lambda row: (abs(row[0] - target), row[1]))
+    minimum_gain = max(0.5, target * 0.02)
+    gain = abs(distance - target) - abs(selected_row[0] - target)
+    if selected_row[2] is not route and (outside_window or gain >= minimum_gain):
+        selected = dict(selected_row[2])
+        diagnostics["status"] = "closer_route_selected"
+        selected["distance_precision_preferred"] = True
+    else:
+        selected = dict(route)
+    diagnostics["selected_total_km"] = round(float(selected.get("distance") or selected.get("distance_km") or distance), 2)
+    if not request_available:
+        diagnostics["status"] = "routing_unavailable"
+    selected["distance_search"] = diagnostics
+    perf.mark("route.distance_search", calls=diagnostics["additional_routing_calls"], status=diagnostics["status"])
+    return selected
+
+
 def _recover_unranked_oversized_roundtrip(
     route, start, target_km: float, daily_min: float, daily_max: float, days: int, v3
 ):
@@ -916,10 +1069,30 @@ def _project_stay_to_route(coords, cum, stay: dict):
         point = [float(stay["lat"]), float(stay["lon"])]
     except Exception:
         return None
-    if not coords:
+    if not coords or len(cum) != len(coords) or not all(math.isfinite(value) for value in point):
         return None
-    index = min(range(len(coords)), key=lambda i: _haversine(coords[i], point))
-    return index, float(cum[index]), float(_haversine(coords[index], point))
+    if len(coords) == 1:
+        return 0, float(cum[0]), float(_haversine(coords[0], point))
+    # Sparse provider geometries still describe complete routed segments.
+    # Project onto those segments before filtering the off-route distance:
+    # an establishment beside a segment's middle is not far from the trail.
+    lat_scale = 111.195
+    lon_scale = lat_scale * max(0.01, math.cos(math.radians(point[0])))
+    best = None
+    for right in range(1, len(coords)):
+        a, b = coords[right - 1], coords[right]
+        dx, dy = (float(b[1]) - float(a[1])) * lon_scale, (float(b[0]) - float(a[0])) * lat_scale
+        vx, vy = (point[1] - float(a[1])) * lon_scale, (point[0] - float(a[0])) * lat_scale
+        length_sq = dx * dx + dy * dy
+        ratio = max(0.0, min(1.0, (vx * dx + vy * dy) / length_sq)) if length_sq > 0 else 0.0
+        projected = [float(a[0]) + ratio * (float(b[0]) - float(a[0])),
+                     float(a[1]) + ratio * (float(b[1]) - float(a[1]))]
+        offroute = _haversine(projected, point)
+        progress = float(cum[right - 1]) + ratio * (float(cum[right]) - float(cum[right - 1]))
+        index = right - 1 if ratio < 0.5 else right
+        if math.isfinite(offroute) and (best is None or offroute < best[2]):
+            best = (index, progress, offroute)
+    return best
 
 
 def _nearby_stays(v3, anchor: dict, category: str, radius_km: float):
@@ -1116,8 +1289,13 @@ def _roundtrip_stage_distances(coords, boundaries, stays, days: int, route_dista
         return [total / days] * days
 
     measured = v3._stage_distances(coords, boundaries, legacy_main, total)
-    if len(measured) != days and total > 0:
-        return [total / max(days, 1)] * max(days, 1)
+    if len(measured) != days:
+        # Real overnight detours require real boundary measurements. A uniform
+        # arithmetic split would conceal an overlong stage or the wrong stay.
+        raise HTTPException(status_code=422, detail=(
+            "Les distances des étapes vers les nuitées n'ont pas pu être mesurées correctement. "
+            "Recalcule le parcours ou augmente la durée avant de retenir ces hébergements."
+        ))
     return measured
 
 
@@ -1201,18 +1379,23 @@ def _roundtrip_geocode(v3, query: str, *, nominatim_retries: int = 1):
         return geocode(query)
 
 
-def _build_roundtrip(data, legacy_main, v3):
+def _build_roundtrip(data, legacy_main, v3, *, route_candidate=None, route_start=None):
     intent = v3._parse_intent(data)
     if v3._fold(intent.get("route_type") or "") != "boucle":
         raise HTTPException(status_code=422, detail="Le mode de secours round-trip ne s'applique qu'aux boucles.")
 
     location = v3._location(data)
-    geo = _roundtrip_geocode(v3, f"{location}, France", nominatim_retries=1)
-    if not geo:
-        geo = _roundtrip_geocode(v3, location, nominatim_retries=0)
-    if not geo:
-        raise HTTPException(status_code=422, detail=f"Impossible de localiser « {location} ».")
-    center = geo[0]
+    if route_candidate is not None and route_start is not None:
+        # A generic route is being compared before logistics. Its start is
+        # already known; repeating geocoding could select another homonym.
+        center = route_start
+    else:
+        geo = _roundtrip_geocode(v3, f"{location}, France", nominatim_retries=1)
+        if not geo:
+            geo = _roundtrip_geocode(v3, location, nominatim_retries=0)
+        if not geo:
+            raise HTTPException(status_code=422, detail=f"Impossible de localiser « {location} ».")
+        center = geo[0]
     start = {
         "name": str(center.get("name") or center.get("short_name") or location or "Départ"),
         "lat": float(center["lat"]),
@@ -1240,10 +1423,23 @@ def _build_roundtrip(data, legacy_main, v3):
     daily_min = float(intent.get("daily_min") or data.daily_km * 0.75)
     daily_max = float(intent.get("daily_max") or data.daily_km * 1.25)
     target_km = float(intent.get("total_target") or daily_target * days)
-    route = _best_roundtrip(start, target_km, daily_min, daily_max, days, v3)
-    route = _recover_unranked_oversized_roundtrip(
-        route, start, target_km, daily_min, daily_max, days, v3
+    if route_candidate is None:
+        route = _best_roundtrip(start, target_km, daily_min, daily_max, days, v3)
+        route = _recover_unranked_oversized_roundtrip(
+            route, start, target_km, daily_min, daily_max, days, v3
+        )
+    else:
+        route = dict(route_candidate)
+    precision_intent = dict(intent)
+    # Redundant parser-generated via/end places were checked against the start
+    # above. Only those may be ignored by the generic candidate comparison.
+    if not forced:
+        precision_intent["via_query"] = ""
+        precision_intent["end_query"] = ""
+    route = _optimize_target_roundtrip(
+        route, start, target_km, daily_min, daily_max, days, v3, precision_intent
     )
+    distance_search = dict(route.get("distance_search") or {})
     roundtrip_diag = {
         "attempt_count": route.get("round_trip_attempt_count"),
         "attempts": list(route.get("round_trip_attempts") or []),
@@ -1303,13 +1499,22 @@ def _build_roundtrip(data, legacy_main, v3):
         v3,
     )
 
-    stage_slack = 0.75 if intent.get("distance_tolerance") == "soft-25pct" else 0.35
-    if any(d > daily_max + stage_slack for d in stage_distances):
+    declared_min, declared_max = intent_daily_bounds(intent)
+    if declared_min is not None and any(d < declared_min - 1e-6 for d in stage_distances):
+        raise HTTPException(status_code=422, detail=(
+            f"Une journée atteint seulement {min(stage_distances):.1f} km, "
+            f"en dessous du minimum explicite de {declared_min:.1f} km. "
+            "Demande un autre tracé ou réduis le nombre de jours avant de retenir cet itinéraire."
+        ))
+    stage_slack = (0.0 if declared_max is not None else
+                   0.75 if intent.get("distance_tolerance") == "soft-25pct" else 0.35)
+    maximum = declared_max if declared_max is not None else daily_max
+    if any(d > maximum + stage_slack + 1e-6 for d in stage_distances):
         raise HTTPException(
             status_code=422,
             detail=(
                 "Une boucle pédestre a bien été calculée, mais au moins une journée reste trop longue "
-                f"({max(stage_distances):.1f} km pour une limite de {daily_max:.1f} km). "
+                f"({max(stage_distances):.1f} km pour une limite de {maximum:.1f} km). "
                 f"Meilleur secours: {route.get('routing_mode') or 'inconnu'}, "
                 f"{float(route.get('distance') or 0):.1f} km au total. "
                 f"Candidats: {route.get('candidate_summary') or []}."
@@ -1333,6 +1538,10 @@ def _build_roundtrip(data, legacy_main, v3):
             "distance_km": round(float(distance), 1),
             "elevation_gain_m": round(total_elevation * float(distance) / max(float(route.get("distance") or 1), 1)),
             "overnight": overnight,
+            "stage_anchor": {
+                "lat": float(boundaries[i + 1]["lat"]),
+                "lon": float(boundaries[i + 1]["lon"]),
+            } if i < days - 1 else None,
             "water_notes": "Disponibilité de l'eau à vérifier sur la carte et sur place." if getattr(data, "require_water", False) else "",
             "highlights": [],
         })
@@ -1354,6 +1563,13 @@ def _build_roundtrip(data, legacy_main, v3):
         notes.append(
             "Les fins d'étape ont été adaptées aux campings réellement trouvés le long de la boucle, puis tous les détours ont été revalidés par ORS."
         )
+    if distance_search.get("status") == "closer_route_selected":
+        notes.append(
+            f"Une autre boucle pédestre validée a été retenue pour rapprocher le trajet "
+            f"de {target_km:.1f} km demandés : {float(route.get('distance') or 0):.1f} km réels."
+        )
+    if distance_search:
+        distance_search["final_routed_total_km"] = round(float(route.get("distance") or 0), 2)
 
     return {
         "name": f"Boucle randonnée autour de {location}",
@@ -1399,6 +1615,7 @@ def _build_roundtrip(data, legacy_main, v3):
             "candidate_first": True,
             "selected_evidence": "hiking-relation" if relation_geometry else "pedestrian-network",
             "fast_roundtrip": roundtrip_diag,
+            **({"distance_search": distance_search} if distance_search else {}),
         },
     }
 
@@ -1436,6 +1653,7 @@ __all__ = [
     "_best_roundtrip",
     "_matrix_subloop_candidates",
     "_recover_unranked_oversized_roundtrip",
+    "_optimize_target_roundtrip",
     "_constraint_near_start",
     "_balanced_corridor_stays",
     "_route_points_with_stays",

@@ -2,7 +2,8 @@
 
 The production benchmark uses a temporary authenticated user, preserves raw
 quality/latency/resource counts, and cleans the account in a finally block.
-It intentionally does not require every rural location to contain a shop.
+A valid route and a fully prepared trip are reported separately. Requested
+water, lodging or resupply cannot silently become optional in rural locations.
 """
 from __future__ import annotations
 import json

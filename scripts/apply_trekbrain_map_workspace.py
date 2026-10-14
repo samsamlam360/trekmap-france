@@ -100,6 +100,9 @@ body.tm-brain-route-mode #tm-brain-route-panel {
 }
 #tm-brain-route-panel .tm-brain-alert b {font-weight:850}
 #tm-brain-route-panel .tm-brain-alert p {margin:5px 0 0}
+#tm-brain-route-panel>.tm-v9-readiness {margin:0 17px 12px;flex:none;font-size:12px;padding:10px 12px}
+#tm-brain-route-panel>.tm-v9-readiness h3 {font-size:16px}
+#tm-brain-route-panel>.tm-v9-readiness li {margin:5px 0}
 #tm-brain-route-panel .tm-brain-safe {
   padding:9px 12px;border-radius:11px;margin:1px 17px 12px;
   background:#eff7f3;border:1px solid #d8e9df;
@@ -191,6 +194,7 @@ body.tm-brain-route-mode.tm-brain-show-resources .tm-v91-legend {display:block!i
   #tm-brain-route-panel .tm-brain-metric b {font-size:15px}
   #tm-brain-route-panel .tm-brain-alert,
   #tm-brain-route-panel .tm-brain-safe {margin:0 13px 9px;padding:8px 10px}
+  #tm-brain-route-panel>.tm-v9-readiness {margin:0 13px 9px;padding:8px 10px}
   #tm-brain-route-panel .tm-brain-tools {padding:0 13px 9px;gap:6px}
   #tm-brain-route-panel .tm-brain-tools button {min-height:40px;padding:7px 9px}
   #tm-brain-route-panel .tm-brain-actions {
@@ -398,17 +402,18 @@ body.tm-brain-route-mode.tm-brain-show-resources .tm-v91-legend {display:block!i
       '<span class="tm-brain-kicker">✦ TrekBrain · mon itinéraire</span>'+
       '<h2>'+escapeText(p.title||'Trek proposé')+'</h2></div>'+
       '<button type="button" class="tm-brain-exit" data-workspace-action="exit" aria-label="Quitter le trek proposé et revenir à Explorer">✕ Explorer</button></div>');
+    if(window.TrekMapTripReadiness)parts.push(window.TrekMapTripReadiness.html(p));
     parts.push('<div class="tm-brain-overview"><p class="tm-brain-location">'+
       escapeText(location)+'</p><div class="tm-brain-metrics">'+
       '<div class="tm-brain-metric"><b>'+escapeText(days?formatSteps(days):'—')+'</b><span>Durée</span></div>'+
       '<div class="tm-brain-metric"><b>'+escapeText(total==='—'?'—':total+' km')+'</b><span>Distance totale</span></div>'+
       '<div class="tm-brain-metric"><b>'+escapeText(perDay==='—'?'—':perDay+' km')+'</b><span>Par jour</span></div></div></div>');
-    if(warnings.length){
+    if(warnings.length&&!window.TrekMapTripReadiness){
       parts.push('<div class="tm-brain-alert" role="note">'+
         '<b>⚠️ '+warnings.length+' point'+(warnings.length>1?'s':'')+' à vérifier</b>'+
         '<p>'+escapeText(warnings[0])+'</p>'+
         (warnings.length>1?'<small>Autres précautions dans les détails du trek.</small>':'')+'</div>');
-    }else{
+    }else if(!window.TrekMapTripReadiness){
       parts.push('<div class="tm-brain-safe">Itinéraire à confirmer sur le terrain : météo, horaires et accès peuvent changer.</div>');
     }
     parts.push('<div class="tm-brain-tools">'+
@@ -437,16 +442,18 @@ body.tm-brain-route-mode.tm-brain-show-resources .tm-v91-legend {display:block!i
       '<p>💧 '+escapeText(statuses[0])+'</p>'+
       '<p>🥖 '+escapeText(statuses[1])+'</p>'+
       '<p>🛏️ '+escapeText(statuses[2])+'</p></div>');
-    if(warnings.length>1){
+    var extraWarnings=window.TrekMapTripReadiness?warnings:warnings.slice(1);
+    if(extraWarnings.length){
       parts.push('<div class="tm-brain-extra"><b>Autres précautions</b>'+
-        warnings.slice(1,15).map(function(note){return '<p>⚠️ '+escapeText(note)+'</p>';}).join('')+
-        (warnings.length>15?'<p>Consulter l’analyse détaillée pour toutes les limites.</p>':'')+
+        extraWarnings.slice(0,15).map(function(note){return '<p>⚠️ '+escapeText(note)+'</p>';}).join('')+
+        (extraWarnings.length>15?'<p>Consulter l’analyse détaillée pour toutes les limites.</p>':'')+
         '</div>');
     }
     parts.push('</div><div class="tm-brain-actions">'+
       '<button type="button" data-workspace-action="modify">✏️ Modifier</button>'+
       '<button type="button" class="tm-brain-primary" data-workspace-action="save">✓ Enregistrer</button></div>');
     panel.innerHTML=parts.join('');
+    window.TrekMapTripReadiness?.bind(panel,p);
     syncExpanded();
   }
   function recenter(){
@@ -534,7 +541,10 @@ body.tm-brain-route-mode.tm-brain-show-resources .tm-v91-legend {display:block!i
       body.classList.toggle('tm-brain-show-resources',show);
       button.setAttribute('aria-pressed',String(show));
     }
-    else if(action==='modify')window.TrekMapOpenAI?.();
+    else if(action==='modify'){
+      if(window.TrekMapTripReadiness)window.TrekMapTripReadiness.edit(plan);
+      else window.TrekMapOpenAI?.();
+    }
     else if(action==='save'){
       var original=document.getElementById('tm-ai-save');
       if(original){

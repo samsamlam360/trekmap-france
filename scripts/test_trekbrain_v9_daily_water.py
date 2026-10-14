@@ -8,7 +8,7 @@ from backend import trekbrain_resources_v9 as resources
 plan = {"duration_days": 3, "stages": [{"day": d} for d in (1, 2, 3)],
         "route_preview": {"coords": [[45+i*.05, 5] for i in range(4)]}, "water": []}
 def point(i):
-    return {"lat": 45.025+i*.05, "lon": 5, "category": "water",
+    return {"lat": 45.025+i*.05, "lon": 5, "category": "water", "water_status": "potable_referenced",
             "source_url": f"https://www.openstreetmap.org/node/{i+1}"}
 for count in range(4):
     plan["water"] = [point(i) for i in range(count)]

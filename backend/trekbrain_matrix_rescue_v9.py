@@ -128,6 +128,9 @@ def _recover_without_matrix(data, legacy_main, v3, roundtrip, ors, campsite_loop
         )
 
     errors = []
+    validated = []
+    candidate_summary = []
+    stage_slack = 0.0 if intent.get("distance_tolerance") == "explicit" else 0.35
     for _score, selected, _estimated_legs, _shape in solutions[:3]:
         route_points = [start] + selected + [start]
         routed = ors.get_route(
@@ -145,11 +148,23 @@ def _recover_without_matrix(data, legacy_main, v3, roundtrip, ors, campsite_loop
         )
         if len(stage_distances) != days:
             continue
-        if any(float(d) > high + 0.35 for d in stage_distances):
+        if any(not math.isfinite(float(d)) or float(d) <= 0 for d in stage_distances):
+            continue
+        candidate_summary.append({"stage_km": [round(float(d), 2) for d in stage_distances]})
+        if any(float(d) > high + stage_slack + 1e-6 for d in stage_distances):
             errors.append(f"étape finale {max(stage_distances):.1f} km > {high:.1f} km")
             continue
-
         routed["routing_mode"] = "ors-camping-directions-loop"
+        # Matrix's air-distance ranking is only a prescreen. Compare the few
+        # final routed candidates using their real days, not the first feasible
+        # cycle or a guessed total. Keep the existing three-Directions budget.
+        deviation = sum(abs(float(d) - target) for d in stage_distances)
+        validated.append((deviation, max(stage_distances), routed, selected, stage_distances))
+        if all(abs(float(d) - target) <= max(1.0, target * 0.10) for d in stage_distances):
+            break
+
+    if validated:
+        _deviation, _longest, routed, selected, stage_distances = min(validated, key=lambda row: row[:2])
         result = campsite_loop._render_result(
             data, legacy_main, v3, ors, intent, location,
             start, routed, selected, stage_distances,
@@ -160,6 +175,14 @@ def _recover_without_matrix(data, legacy_main, v3, roundtrip, ors, campsite_loop
         notes.insert(0, "ORS Matrix était indisponible ; les campings ont été présélectionnés localement puis chaque distance finale a été validée par ORS Directions.")
         if matrix_warning:
             result.setdefault("confidence", {}).setdefault("limitations", []).append(matrix_warning[:180])
+        result.setdefault("planner", {})["distance_selection"] = {
+            "requested_days": days,
+            "daily_target_km": target,
+            "candidates": candidate_summary,
+            "selected_stage_km": [round(float(d), 2) for d in stage_distances],
+            "selected_before_logistics": True,
+            "max_directions_calls": 3,
+        }
         return result
 
     detail = " ; ".join(errors[:2])

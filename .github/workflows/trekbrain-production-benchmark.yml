@@ -1,7 +1,7 @@
 name: TrekBrain production benchmark
 
 on:
-  # The full push suite is now run by trekbrain-production-suite.yml.
+  # The weekly serial suite is run by trekbrain-production-suite.yml.
   # Manual runs remain available for an isolated 6-trek investigation.
   workflow_dispatch:
 
@@ -56,18 +56,29 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          result=0
           for pass in 1 2 3; do
-            echo "=== TrekBrain production pass $pass/3 ==="
-            TREKBRAIN_BENCHMARK_OUT="benchmark-results/pass-$pass" \
-            GITHUB_RUN_ID="${GITHUB_RUN_ID}-$pass" \
-            python scripts/benchmark_trekbrain_v9_production.py
+            if TREKBRAIN_BENCHMARK_OUT="benchmark-results/pass-$pass" \
+              GITHUB_RUN_ID="${GITHUB_RUN_ID}-$pass" \
+              python scripts/benchmark_trekbrain_v9_production.py; then
+              :
+            else
+              result=1
+            fi
           done
+          exit "$result"
 
       - name: Show benchmark reports
         if: always()
-        shell: bash
+        shell: python
         run: |
-          find benchmark-results -name 'trekbrain-production-benchmark.md' -print -exec cat {} \; 2>/dev/null || true
+          import os
+          from pathlib import Path
+          reports=sorted(Path('benchmark-results').glob('**/trekbrain-production-benchmark.md'))
+          text='\n\n'.join(path.read_text(encoding='utf-8') for path in reports) or 'Audit non exécuté : consulter les étapes en échec.\n'
+          print(text)
+          with open(os.environ['GITHUB_STEP_SUMMARY'],'a',encoding='utf-8') as summary:
+              summary.write(text)
 
       - name: Upload benchmark report
         if: always()

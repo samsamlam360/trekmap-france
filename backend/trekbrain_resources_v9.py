@@ -19,6 +19,9 @@ from pydantic import BaseModel, Field, ConfigDict
 from sqlalchemy import text
 
 from . import smart_planner_v7 as v7
+from .trekbrain_water_evidence_v9 import (
+    confirmed_water_reference, has_osm_identity, water_evidence_status,
+)
 from .trekbrain_geo_safety_v9 import (
     _filter_active,
     activate_region,
@@ -67,6 +70,20 @@ RESOURCE_LIMITS = {
     "transport": 8.0,
     "trail": 2.2,
 }
+FOOD_SHOPS = {"supermarket", "convenience", "bakery", "general", "grocery",
+              "deli", "greengrocer", "food"}
+
+
+def _confirmed_food_reference(item: dict[str, Any]) -> bool:
+    if not has_osm_identity(item):
+        return False
+    tags = item.get("osm_tags") or {}
+    if not isinstance(tags, dict):
+        return False
+    return (not tags or tags.get("shop") in FOOD_SHOPS) and (
+        str(tags.get("access") or "").casefold() not in {"private", "no"}
+        and str(tags.get("disused") or "").casefold() != "yes"
+    )
 
 
 class AIRedrawPayload(BaseModel):
@@ -174,17 +191,12 @@ def _route_day_from_progress(progress: float, boundaries: list[float]) -> int:
 
 
 def _sourced_water_coverage(points: list[dict[str, Any]]) -> tuple[list[int], int]:
-    """OSM water coverage, never counting a point explicitly marked undrinkable.
-
-    Unknown potability is still shown with a warning. A mapped spring is
-    not a guarantee of drinking water.
-    """
+    """Referenced drinking water; unknown springs remain display-only context."""
     usable = [
         point for point in points or []
         if isinstance(point, dict)
         and point.get("kind") == "water"
-        and str(point.get("status") or point.get("water_status") or "") != "not_potable"
-        and str(point.get("source_url") or "").startswith("https://www.openstreetmap.org/")
+        and confirmed_water_reference(point)
     ]
     days = sorted({
         int(point["route_day"]) for point in usable
@@ -352,9 +364,11 @@ def _candidate_resources(result: dict[str, Any]) -> list[dict[str, Any]]:
     items: list[dict[str, Any]] = []
     for w in result.get("water") or []:
         if isinstance(w, dict):
-            unsafe = str(w.get("water_status") or w.get("status") or "") == "not_potable"
+            status = water_evidence_status(w)
+            unsafe = status == "not_potable"
             items.append({
                 **w, "kind": "water", "type": "Point d'eau",
+                "status": status, "water_status": status,
                 "notes": (
                     "Eau signalée non potable : ne pas boire."
                     if unsafe else w.get("notes") or "Potabilité à vérifier."
@@ -389,7 +403,10 @@ def enrich_resources(result: dict[str, Any]) -> dict[str, Any]:
     prepared, seen = [], set()
     route_profile = _route_distance_profile(coords)
     day_boundaries = _stage_progress_breaks(result, days)
-    for item in _candidate_resources(result):
+    candidates = sorted(_candidate_resources(result), key=lambda item: (
+        0 if item.get("kind") == "water" and water_evidence_status(item) == "not_potable" else 1
+    ))
+    for item in candidates:
         point = _point(item)
         if not point:
             continue
@@ -401,7 +418,9 @@ def enrich_resources(result: dict[str, Any]) -> dict[str, Any]:
         limit = RESOURCE_LIMITS.get(kind, 4.0)
         if distance > limit:
             continue
-        key = (kind, round(point[0], 5), round(point[1], 5), str(item.get("name") or "").casefold())
+        key = ((kind, item["source_url"]) if has_osm_identity(item) else (
+            kind, round(point[0], 5), round(point[1], 5), str(item.get("name") or "").casefold()
+        ))
         if key in seen:
             continue
         seen.add(key)
@@ -417,15 +436,32 @@ def enrich_resources(result: dict[str, Any]) -> dict[str, Any]:
             "status": str(item.get("status") or (item.get("water_status") if kind == "water" else "") or "")[:80],
             "notes": str(item.get("notes") or "")[:500],
             "source_url": str(item.get("source_url") or "")[:1000],
+            "osm_tags": dict(item.get("osm_tags") or {})
+            if isinstance(item.get("osm_tags"), dict) else {},
         })
 
     priority = {"water": 0, "food": 1, "camping": 2, "refuge": 3, "lodging": 4, "station": 5, "transport": 6, "trail": 7}
-    prepared.sort(key=lambda x: (x["route_day"], priority.get(x["kind"], 9), x["distance_to_route_km"], x["name"]))
+    prepared.sort(key=lambda x: (
+        x["route_day"], priority.get(x["kind"], 9),
+        0 if (confirmed_water_reference(x) if x["kind"] == "water" else has_osm_identity(x)) else 1,
+        x["distance_to_route_km"], x["name"],
+    ))
 
     # Avoid a carpet of icons: keep the closest few of each category per day.
     limited, buckets = [], {}
     per_day_caps = {"water": 3, "food": 3, "camping": 2, "refuge": 2, "lodging": 2, "station": 2, "transport": 3, "trail": 2}
-    for item in prepared:
+    # Round-robin days before filling extra icons on early stages. A 48-icon
+    # display cap must not erase every source on the last day of a long trek.
+    display_rows = []
+    for rank in range(max(per_day_caps.values())):
+        for kind in priority:
+            groups = {}
+            for item in prepared:
+                if item["kind"] == kind:
+                    groups.setdefault(item["route_day"], []).append(item)
+            if rank < per_day_caps.get(kind, 2):
+                display_rows.extend(rows[rank] for rows in groups.values() if len(rows) > rank)
+    for item in display_rows:
         bucket = (item["route_day"], item["kind"])
         count = buckets.get(bucket, 0)
         if count >= per_day_caps.get(item["kind"], 2):
@@ -459,6 +495,8 @@ def enrich_resources(result: dict[str, Any]) -> dict[str, Any]:
         "counts": counts,
         "route_filtered": True,
         "meaning": "Points cartographiques proches d'un tracé pédestre validé. Horaires, ouverture, débit et disponibilité restent à vérifier avant le départ.",
+        # Readiness uses all valid references, independently of icon limits.
+        "evidence_points": prepared,
     }
     return result
 
@@ -539,11 +577,18 @@ def _merge_supplemented_resources(result: dict[str, Any], rows: list[dict[str, A
         def preserve_newer_unsafe_status(existing):
             if (
                 target is water
-                and str(item.get("status") or item.get("water_status") or "") == "not_potable"
+                and water_evidence_status(item) == "not_potable"
             ):
                 existing["status"] = "not_potable"
                 existing["water_status"] = "not_potable"
                 existing["notes"] = "Eau signalée non potable : ne pas boire."
+                if isinstance(item.get("osm_tags"), dict):
+                    existing["osm_tags"] = dict(item["osm_tags"])
+            elif (target is water and water_evidence_status(existing) == "unverified"
+                  and water_evidence_status(item) == "potable_referenced"):
+                existing.update({name: item[name] for name in (
+                    "status", "water_status", "osm_tags", "notes", "source_url",
+                ) if name in item})
 
         key = str(item.get("source_url") or "")
         try:
@@ -556,6 +601,10 @@ def _merge_supplemented_resources(result: dict[str, Any], rows: list[dict[str, A
             if key and str(existing.get("source_url") or "") == key:
                 preserve_newer_unsafe_status(existing)
                 return
+            if key and existing.get("source_url"):
+                # Separate OSM sources can share a coordinate. In particular,
+                # a condemned fountain cannot poison a neighbouring tap.
+                continue
             if coords_key is not None:
                 try:
                     if (
@@ -573,16 +622,19 @@ def _merge_supplemented_resources(result: dict[str, Any], rows: list[dict[str, A
             continue
         category = str(row.get("category") or "")
         if category == "water":
+            status = water_evidence_status(row)
             add_unique(water, {
                 "name": row.get("name") or "Point d'eau",
                 "lat": row.get("lat"), "lon": row.get("lon"),
-                "status": row.get("water_status") or "unverified",
+                "status": status,
+                "water_status": status,
                 "notes": (
                     "Eau signalée non potable : ne pas boire."
-                    if row.get("water_status") == "not_potable"
+                    if status == "not_potable"
                     else "Repère cartographique proche du tracé ; disponibilité et potabilité à vérifier."
                 ),
                 "source_url": row.get("source_url") or "",
+                "osm_tags": row.get("osm_tags") or {},
             })
         elif category == "food":
             add_unique(food, {
@@ -591,6 +643,7 @@ def _merge_supplemented_resources(result: dict[str, Any], rows: list[dict[str, A
                 "lat": row.get("lat"), "lon": row.get("lon"),
                 "notes": "Commerce proche du tracé ; horaires et disponibilité à vérifier.",
                 "source_url": row.get("source_url") or "",
+                "osm_tags": row.get("osm_tags") or {},
             }, category="food")
         elif category in {"camping", "refuge", "lodging"}:
             type_label = (
@@ -671,69 +724,74 @@ def _bbox_route_water_food(
 
     from . import free_planner_v2 as free
 
-    min_lat, max_lat = min(x[0] for x in valid), max(x[0] for x in valid)
-    min_lon, max_lon = min(x[1] for x in valid), max(x[1] for x in valid)
-    mid_lat = (min_lat + max_lat) / 2.0
-    pad_lat = 0.045
-    pad_lon = max(0.045, 5.0 / max(35.0, 111.0 * math.cos(math.radians(mid_lat))))
-    south, north = min_lat - pad_lat, max_lat + pad_lat
-    west, east = min_lon - pad_lon, max_lon + pad_lon
+    days = max(1, int(result.get("duration_days") or len(result.get("stages") or []) or 1))
+    breaks = _stage_progress_breaks(result, days)
+    cumulative, length = _route_distance_profile([list(point) for point in valid])
+    if length <= 0:
+        return []
+    missing = _missing_terrain_intent(result, intent)
+
+    def at_fraction(fraction: float) -> tuple[float, float]:
+        target = length * max(0.0, min(1.0, fraction))
+        for index in range(1, len(cumulative)):
+            if cumulative[index] >= target:
+                span = cumulative[index] - cumulative[index - 1]
+                ratio = (target - cumulative[index - 1]) / span if span > 0 else 0.0
+                a, b = valid[index - 1], valid[index]
+                return a[0] + (b[0] - a[0]) * ratio, a[1] + (b[1] - a[1]) * ratio
+        return valid[-1]
 
     statements = []
-    if intent.get("water"):
-        # Keep the established water lookup unchanged. The independent quotas
-        # ensure that fountains cannot displace grocery shops in the response.
-        filters = (
-            '["amenity"="drinking_water"]',
-            '["man_made"="water_tap"]',
-            '["natural"="spring"]',
-        )
-        clauses = "".join(
-            f"nwr{flt}({south:.6f},{west:.6f},{north:.6f},{east:.6f});"
-            for flt in filters
-        )
-        statements.append(f"({clauses});out center tags 90;")
+    for kind in ("water", "food"):
+        if not intent.get(kind):
+            continue
+        missing_days = missing.get(f"missing_{kind}_days") or []
+        # A caller may already have narrowed the wave to particular stages.
+        if f"missing_{kind}_days" in intent:
+            missing_days = [day for day in missing_days if day in intent[f"missing_{kind}_days"]]
+        if not missing_days:
+            continue
+        # Eight stage-local quotas retain the established food budget. For
+        # longer trips, spread this wave across missing days and disclose the
+        # unsearched days instead of pretending they were checked.
+        if len(missing_days) > 8:
+            selected_days = [missing_days[round(index * (len(missing_days) - 1) / 7)]
+                             for index in range(8)]
+        else:
+            selected_days = missing_days
+        if diagnostics is not None:
+            diagnostics[f"{kind}_days_searched"] = list(selected_days)
+            diagnostics[f"{kind}_days_not_searched"] = [
+                day for day in missing_days if day not in selected_days
+            ]
 
-    if intent.get("food"):
-        cumulative = [0.0]
-        for a, b in zip(valid, valid[1:]):
-            cumulative.append(cumulative[-1] + _distance_km(a, b))
-        length = cumulative[-1]
-        if length > 0:
-            days = max(1, int(result.get("duration_days") or len(result.get("stages") or []) or 1))
-            # At most eight searches and 22 rows per piece, even for a very
-            # long trek. Sample by walked distance, never router point index.
-            pieces = min(8, max(2, days, int(math.ceil(length / 24.0))))
-            shop_filter = '["shop"~"^(supermarket|convenience|bakery|general|grocery|deli|greengrocer|food)$"]'
-
-            def at_fraction(fraction: float) -> tuple[float, float]:
-                target = length * max(0.0, min(1.0, fraction))
-                for j in range(1, len(cumulative)):
-                    if cumulative[j] >= target:
-                        delta = cumulative[j] - cumulative[j - 1]
-                        fraction_in_edge = (target - cumulative[j - 1]) / delta if delta > 0 else 0.0
-                        return (
-                            valid[j - 1][0] + (valid[j][0] - valid[j - 1][0]) * fraction_in_edge,
-                            valid[j - 1][1] + (valid[j][1] - valid[j - 1][1]) * fraction_in_edge,
-                        )
-                return valid[-1]
-
-            for piece in range(pieces):
-                vertices = []
-                for subdivision in range(6):
-                    point = at_fraction((piece + subdivision / 5) / pieces)
-                    if not vertices or _distance_km(vertices[-1], point) >= 0.03:
-                        vertices.append(point)
-                if len(vertices) < 2:
-                    continue
-                line = ",".join(f"{lat:.6f},{lon:.6f}" for lat, lon in vertices)
-                # Overpass 'around' accepts a polyline, not just one location.
-                # Each segment has its own output quota to protect rural days.
-                statements.append(
-                    f"nwr{shop_filter}(around:4500,{line});out center tags 22;"
+        sections = [(day, breaks[day - 1], breaks[day]) for day in selected_days]
+        # Keep two independently limited pieces on a single food stage, as
+        # before: shops in the start town cannot exhaust the finish quota.
+        if kind == "food" and len(sections) == 1:
+            day, lower, upper = sections[0]
+            midpoint = (lower + upper) / 2.0
+            sections = [(day, midpoint, upper), (day, lower, midpoint)]
+        water_quota = max(1, 90 // len(sections))
+        for day, lower, upper in sections:
+            # Finish first: this is where supplies for the overnight and next
+            # morning are most useful. Interpolation samples the authoritative
+            # walked line; no resource becomes a router waypoint.
+            fractions = [upper] + [upper - (upper - lower) * index / 11 for index in range(1, 12)]
+            vertices = [at_fraction(fraction) for fraction in fractions]
+            line = ",".join(f"{lat:.6f},{lon:.6f}" for lat, lon in vertices)
+            if kind == "water":
+                clauses = "".join(
+                    f'nwr(around:2800,{line}){flt};'
+                    for flt in ('["amenity"="drinking_water"]',
+                                '["man_made"="water_tap"]', '["natural"="spring"]')
                 )
-                if diagnostics is not None:
-                    diagnostics["food_segments"] += 1
+                statements.append(f"({clauses});out center tags {water_quota};")
+            else:
+                shop_filter = '["shop"~"^(supermarket|convenience|bakery|general|grocery|deli|greengrocer|food)$"]'
+                statements.append(f"nwr{shop_filter}(around:4500,{line});out center tags 22;")
+            if diagnostics is not None:
+                diagnostics[f"{kind}_segments"] = diagnostics.get(f"{kind}_segments", 0) + 1
 
     if not statements:
         return []
@@ -741,12 +799,18 @@ def _bbox_route_water_food(
         if diagnostics is not None:
             diagnostics["status"] = "unavailable"
             diagnostics["errors"].append("circuit_open")
+            for kind in ("water", "food"):
+                targeted = diagnostics.get(f"{kind}_days_searched", [])
+                diagnostics[f"{kind}_days_not_searched"] = sorted(set(
+                    targeted + diagnostics.get(f"{kind}_days_not_searched", [])
+                ))
+                diagnostics[f"{kind}_days_searched"] = []
         return []
     query = "[out:json][timeout:8];" + "".join(statements)
     urls = list(free.OVERPASS_URLS)
     mirrors = [urls[0], urls[-1]] if len(urls) >= 4 else urls[:2]
     found: list[dict[str, Any]] = []
-    seen: set[str] = set()
+    seen: dict[str, dict[str, Any]] = {}
     any_elements = False
     provider_responded = False
     route_profile = _route_distance_profile(coords)
@@ -772,7 +836,9 @@ def _bbox_route_water_food(
                         else "provider_error")
                 diagnostics["errors"].append(kind)
             continue
-        if not isinstance(payload, dict):
+        if not isinstance(payload, dict) or not isinstance(payload.get("elements"), list) or payload.get("remark"):
+            if diagnostics is not None:
+                diagnostics["errors"].append("incomplete_response")
             continue
         provider_responded = True
         if diagnostics is not None:
@@ -783,6 +849,8 @@ def _bbox_route_water_food(
             if not isinstance(element, dict):
                 continue
             tags = element.get("tags") or {}
+            if not isinstance(tags, dict):
+                continue
             lat, lon = element.get("lat"), element.get("lon")
             if lat is None or lon is None:
                 center = element.get("center") or {}
@@ -805,7 +873,7 @@ def _bbox_route_water_food(
                     "supermarket", "convenience", "bakery", "general",
                     "grocery", "deli", "greengrocer", "food",
                 }
-                and tags.get("access") != "private"
+                and tags.get("access") not in {"private", "no"}
                 and tags.get("disused") != "yes"
                 and tags.get("shop") != "vacant"
             ):
@@ -813,10 +881,14 @@ def _bbox_route_water_food(
             if category is None:
                 continue
             osm_type, osm_id = str(element.get("type") or ""), element.get("id")
-            if osm_type not in {"node", "way", "relation"} or osm_id is None:
+            if (osm_type not in {"node", "way", "relation"}
+                    or not isinstance(osm_id, int) or isinstance(osm_id, bool) or osm_id <= 0):
                 continue
             source = f"https://www.openstreetmap.org/{osm_type}/{osm_id}"
             if source in seen:
+                if category == "water" and water_status == "not_potable":
+                    seen[source]["water_status"] = "not_potable"
+                    seen[source]["osm_tags"] = dict(tags)
                 continue
             row = {
                 "name": str(
@@ -832,11 +904,14 @@ def _bbox_route_water_food(
             if not matched:
                 continue
             if matched[0] <= RESOURCE_LIMITS["water" if category == "water" else "food"]:
-                seen.add(source)
+                seen[source] = row
                 found.append(row)
-        # A water-only response is not a successful food lookup. An
-        # independent mirror should still get a chance at grocery coverage.
-        if any(row["category"] == "food" for row in found) if intent.get("food") else bool(found):
+        # A point on day 1 cannot resolve the unsearched days. Give the second
+        # bounded mirror a chance until requested daily evidence is complete.
+        remaining = _missing_terrain_intent(
+            _merge_supplemented_resources(deepcopy(result), found), intent,
+        )
+        if not remaining.get("water") and not remaining.get("food"):
             break
 
     _overpass_circuit_report(provider_responded)
@@ -853,77 +928,30 @@ def _bbox_route_water_food(
 
 
 def _missing_terrain_intent(result: dict[str, Any], intent: dict[str, Any]) -> dict[str, Any]:
-    """Look for *usable* supplies on the walked line, not any remote POI.
+    """Missing supplies by actual walking day, with traceable evidence only.
 
-    A geocoded shop several kilometres outside the itinerary previously
-    short-circuited every independent food lookup even though map_resources
-    filtered the same shop out. Only route-relative evidence may satisfy the
-    terrain requirement.
+    A mapped spring of unknown potability does not resolve drinking water.
+    A shop or fountain on one day does not cover the rest of the itinerary.
     """
     adjusted = dict(intent or {})
     coords = ((result.get("route_preview") or {}).get("coords") or [])
-    profile = _route_distance_profile(coords) if len(coords) >= 2 else None
-
-    def located_near_route(items, kind: str) -> bool:
-        limit = RESOURCE_LIMITS.get(kind, 4.5)
-        for item in items or []:
-            if not isinstance(item, dict) or _point(item) is None:
-                continue
-            # A guessed shop position without a traceable source must not
-            # suppress genuine OSM/Photon discovery. This is also the evidence
-            # standard used by production food benchmarks and the UI popups.
-            if kind == "food" and not str(item.get("source_url") or "").strip().startswith(
-                ("https://", "http://")
-            ):
-                continue
-            if profile:
-                matched = _route_match(coords, item, profile)
-                if matched is None or matched[0] > limit:
-                    continue
-            return True
-        return False
-
-    water_rows = result.get("water") or []
-    food_rows = _food_candidates(result)
-    # V3 sometimes supplies a correctly tagged shop only in POIs. These
-    # objects are real OSM points and must not silently disappear on the map.
-    food_rows.extend(
-        item for item in (result.get("points_of_interest") or [])
-        if isinstance(item, dict) and _resource_kind(item) == "food"
-    )
-    # One supermarket at the trailhead does not cover every day of a long
-    # trek. Check evidence day by day before deciding to skip OSM discovery.
     days = max(1, int(result.get("duration_days") or len(result.get("stages") or []) or 1))
-    progress_breaks = _stage_progress_breaks(result, days)
-    # A single water point cannot cover a multi-day trek. Only source-linked,
-    # route-close points can suppress discovery for their own walking day.
-    covered_water_days: set[int] = set()
-    for item in water_rows:
-        if not isinstance(item, dict) or _point(item) is None or not profile:
+    profile = _route_distance_profile(coords)
+    breaks = _stage_progress_breaks(result, days)
+    covered = {"water": set(), "food": set()}
+    for item in _candidate_resources(result):
+        kind = item.get("kind")
+        if kind not in covered or _point(item) is None:
             continue
-        if str(item.get("water_status") or item.get("status") or "") == "not_potable":
-            continue
-        if not str(item.get("source_url") or "").startswith(("https://", "http://")):
+        if not (confirmed_water_reference(item) if kind == "water" else _confirmed_food_reference(item)):
             continue
         match = _route_match(coords, item, profile)
-        if match and match[0] <= RESOURCE_LIMITS["water"]:
-            covered_water_days.add(_route_day_from_progress(match[1], progress_breaks))
-    adjusted["water"] = bool((intent or {}).get("water") and len(covered_water_days) < days)
-    covered_food_days: set[int] = set()
-    for item in food_rows:
-        if not isinstance(item, dict) or _point(item) is None:
-            continue
-        source = str(item.get("source_url") or "")
-        if not source.startswith(("https://", "http://")) or not profile:
-            continue
-        match = _route_match(coords, item, profile)
-        if match and match[0] <= RESOURCE_LIMITS["food"]:
-            route_day = _route_day_from_progress(match[1], progress_breaks)
-            covered_food_days.add(route_day)
-    adjusted["food"] = bool(
-        (intent or {}).get("food")
-        and (not located_near_route(food_rows, "food") or len(covered_food_days) < days)
-    )
+        if match and match[0] <= RESOURCE_LIMITS[kind]:
+            covered[kind].add(_route_day_from_progress(match[1], breaks))
+    for kind in covered:
+        missing_days = [day for day in range(1, days + 1) if day not in covered[kind]]
+        adjusted[kind] = bool((intent or {}).get(kind) and missing_days)
+        adjusted[f"missing_{kind}_days"] = missing_days if (intent or {}).get(kind) else []
     return adjusted
 
 
@@ -939,7 +967,7 @@ def _supplement_route_resources(result: dict[str, Any], data) -> dict[str, Any]:
 
         existing = []
         for item in result.get("water") or []:
-            if isinstance(item, dict):
+            if isinstance(item, dict) and confirmed_water_reference(item):
                 existing.append({**item, "category": "water"})
         for item in _food_candidates(result):
             if isinstance(item, dict):
@@ -1014,9 +1042,89 @@ def _supplement_route_resources(result: dict[str, Any], data) -> dict[str, Any]:
         return result
 
 
+def _resource_coverage(
+    result: dict[str, Any], intent: dict[str, Any],
+    terrain_diagnostics: dict[str, Any] | None = None,
+    reverse_diagnostics: dict[str, Any] | None = None,
+    cache_diagnostics: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Daily preparation evidence; a failed lookup never means absence."""
+    mapped = result.get("map_resources") or {}
+    points = mapped.get("evidence_points", mapped.get("points") or [])
+    terrain = terrain_diagnostics or {}
+    reverse = reverse_diagnostics or {}
+    cache = cache_diagnostics or {}
+    days = max(1, len(result.get("stages") or []) or int(result.get("duration_days") or 1))
+    valid_water = [point for point in points if isinstance(point, dict)
+                   and point.get("kind") == "water" and has_osm_identity(point)]
+    potable = [point for point in valid_water if confirmed_water_reference(point)]
+    food = [point for point in points if isinstance(point, dict)
+            and point.get("kind") == "food" and _confirmed_food_reference(point)]
+
+    def point_days(rows):
+        return sorted({point["route_day"] for point in rows
+                       if isinstance(point.get("route_day"), int)
+                       and 1 <= point["route_day"] <= days})
+
+    verified = {"water": potable, "food": food}
+    covered = {kind: point_days(rows) for kind, rows in verified.items()}
+    # A failed Overpass wave leaves water unknown. Food additionally has an
+    # independent reverse-shop provider, so either valid response can verify
+    # its own lookup even when the other provider was down.
+    unavailable = {
+        "water": terrain.get("status") == "unavailable",
+        "food": terrain.get("status") == "unavailable"
+                and reverse.get("status") in {"unavailable", "not_attempted", None},
+    }
+    coverage = {}
+    for kind in ("water", "food"):
+        missing = [day for day in range(1, days + 1) if day not in covered[kind]]
+        requested = bool(intent.get(kind))
+        coverage[kind] = (
+            "not_requested" if not requested
+            else "verified" if not missing
+            else "partial" if covered[kind]
+            else "providers_unavailable" if unavailable[kind]
+            else "not_verified"
+        )
+        coverage[f"verified_{kind}_points"] = len(verified[kind])
+        coverage[f"days_with_{kind}"] = covered[kind]
+        coverage[f"days_without_{kind}"] = missing if requested else []
+    coverage.update({
+        "mapped_water_points": len(valid_water),
+        "days_with_unverified_water": point_days([
+            point for point in valid_water if water_evidence_status(point) == "unverified"
+        ]),
+        "cache": {"status": cache.get("status"), "hits": cache.get("count", 0)},
+        "terrain_provider": terrain.get("status"),
+        "reverse_provider": reverse.get("status"),
+        "searched_water_days": terrain.get("water_days_searched", []),
+        "searched_food_days": terrain.get("food_days_searched", []),
+        "daily": [
+            {"day": day, **{
+                kind: {
+                    "status": (
+                        "not_requested" if not intent.get(kind)
+                        else "verified" if day in covered[kind]
+                        else "providers_unavailable" if unavailable[kind]
+                        else "not_verified"
+                    ),
+                    "verified_points": sum(point.get("route_day") == day for point in verified[kind]),
+                    "mapped_points": sum(point.get("route_day") == day for point in (
+                        valid_water if kind == "water" else food
+                    )),
+                } for kind in ("water", "food")
+            }} for day in range(1, days + 1)
+        ],
+        "meaning": "Eau potable référencée dans OSM et commerces cartographiés proches du tracé ; débit, potabilité actuelle, horaires et disponibilité à vérifier avant le départ.",
+    })
+    return coverage
+
+
 def _annotate_stage_resources(result: dict[str, Any]) -> dict[str, Any]:
     """Project final route-relative resources back onto the daily stage cards."""
-    points = ((result.get("map_resources") or {}).get("points") or [])
+    mapped = result.get("map_resources") or {}
+    points = mapped.get("evidence_points", mapped.get("points") or [])
     stages = result.get("stages") or []
     if not isinstance(stages, list):
         return result
@@ -1027,6 +1135,8 @@ def _annotate_stage_resources(result: dict[str, Any]) -> dict[str, Any]:
             continue
         kind = str(item.get("kind") or "")
         if kind not in {"water", "food"}:
+            continue
+        if not has_osm_identity(item) or (kind == "food" and not _confirmed_food_reference(item)):
             continue
         try:
             day = max(1, int(item.get("route_day") or 1))
@@ -1040,6 +1150,16 @@ def _annotate_stage_resources(result: dict[str, Any]) -> dict[str, Any]:
         resources = by_day.get(index) or {}
         water = resources.get("water") or []
         food = resources.get("food") or []
+        daily = next((entry for entry in ((mapped.get("coverage") or {}).get("daily") or [])
+                      if entry.get("day") == index), {})
+        for kind, items in (("water", water), ("food", food)):
+            details = daily.get(kind) or {}
+            verified = (any(confirmed_water_reference(item) for item in items)
+                        if kind == "water" else bool(items))
+            stage[f"{kind}_verification"] = {
+                "status": details.get("status") or ("verified" if verified else "not_verified"),
+                "source_urls": [item["source_url"] for item in items],
+            }
         if water:
             stage["water_notes"] = " · ".join(
                 f"{item.get('name') or 'Point d’eau'}"
@@ -1052,11 +1172,17 @@ def _annotate_stage_resources(result: dict[str, Any]) -> dict[str, Any]:
                 )
                 for item in water[:3]
             )
-            if all(str(item.get("status") or "") == "not_potable" for item in water):
+            if not any(confirmed_water_reference(item) for item in water):
                 stage["water_notes"] += (
                     " · Aucune eau potable identifiée pour cette étape : "
                     "prévoir une réserve suffisante."
                 )
+        elif ((daily.get("water") or {}).get("status") == "providers_unavailable"
+              or ((mapped.get("coverage") or {}).get("water") == "providers_unavailable")):
+            stage["water_notes"] = (
+                "Eau non vérifiée : services cartographiques indisponibles. "
+                "Prévoir une réserve suffisante et vérifier les points d'eau avant le départ."
+            )
         else:  # Route-wide coverage cannot guarantee water on this particular day.
             stage["water_notes"] = (
                 "Aucun point d'eau OSM confirmé pour cette étape ; "
@@ -1067,7 +1193,8 @@ def _annotate_stage_resources(result: dict[str, Any]) -> dict[str, Any]:
                 str(item.get("name") or "Ravitaillement")
                 for item in food[:3]
             )
-        elif ((result.get("map_resources") or {}).get("coverage") or {}).get("food") == "providers_unavailable":
+        elif ((daily.get("food") or {}).get("status") == "providers_unavailable"
+              or ((result.get("map_resources") or {}).get("coverage") or {}).get("food") == "providers_unavailable"):
             stage["food_notes"] = (
                 "Ravitaillement non vérifié : services cartographiques indisponibles. "
                 "Prévoir ses provisions avant le départ."
@@ -1313,66 +1440,14 @@ def _install_plan_overlay(app, legacy_main):
             # A provider outage is not evidence that a region has no shops.
             # Return the evidence status with the itinerary and show it on
             # individual stage cards. No POIs are invented to hide outages.
-            points = ((result.get("map_resources") or {}).get("points") or [])
-            food_markers = sum(
-                1 for point in points
-                if isinstance(point, dict) and point.get("kind") == "food"
-                and point.get("source_url")
+            coverage = _resource_coverage(
+                result, intent, terrain_diagnostics, reverse_diagnostics, cache_diagnostics,
             )
-            water_requested = bool(intent.get("water"))
-            water_days, water_markers = _sourced_water_coverage(points)
-            food_requested = bool(intent.get("food"))
-            stage_count = max(1, len(result.get("stages") or [])
-                              or int(result.get("duration_days") or 1))
-            food_days = sorted({
-                int(point.get("route_day"))
-                for point in points
-                if isinstance(point, dict) and point.get("kind") == "food"
-                and str(point.get("source_url") or "").startswith(
-                    "https://www.openstreetmap.org/"
-                )
-                and isinstance(point.get("route_day"), int)
-            })
-            missing_food_days = [
-                day for day in range(1, stage_count + 1) if day not in food_days
-            ]
-            unavailable = (
-                terrain_lookup_needed
-                and terrain_diagnostics.get("status") == "unavailable"
-                and reverse_diagnostics.get("status") == "unavailable"
-            )
-            food_status = (
-                "not_requested" if not food_requested
-                else "verified" if food_markers and not missing_food_days
-                else "partial" if food_markers
-                else "providers_unavailable" if unavailable
-                else "not_verified"
-            )
-            missing_water_days = [
-                day for day in range(1, stage_count + 1) if day not in water_days
-            ]
-            water_status = (
-                "not_requested" if not water_requested
-                else "verified" if water_markers and not missing_water_days
-                else "partial" if water_markers
-                else "not_verified"
-            )
-            result.setdefault("map_resources", {})["coverage"] = {
-                "food": food_status,
-                "water": water_status,
-                "verified_water_points": water_markers,
-                "days_with_water": water_days,
-                "days_without_water": missing_water_days if water_requested else [],
-                "verified_food_points": food_markers,
-                "days_with_food": food_days,
-                "days_without_food": missing_food_days if food_requested else [],
-                "cache": {
-                    "status": cache_diagnostics.get("status"),
-                    "hits": cache_diagnostics.get("count", 0),
-                },
-                "terrain_provider": terrain_diagnostics.get("status"),
-                "reverse_provider": reverse_diagnostics.get("status"),
-            }
+            result.setdefault("map_resources", {})["coverage"] = coverage
+            food_status, water_status = coverage["food"], coverage["water"]
+            water_days, food_days = coverage["days_with_water"], coverage["days_with_food"]
+            missing_water_days, missing_food_days = coverage["days_without_water"], coverage["days_without_food"]
+            water_requested, food_requested = bool(intent.get("water")), bool(intent.get("food"))
 
             annotate_started = time.monotonic()
             result = _annotate_stage_resources(result)

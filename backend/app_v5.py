@@ -161,6 +161,8 @@ if TREKBRAIN_VERSION == "v9":
     install_water_display_only(_planner_v7.v5.v3, _resources_v9)
     install_resource_overlay(app, legacy_main)
     install_request_overlay(app, legacy_main)
+    from .trekbrain_readiness_v9 import install_preparation_overlay
+    install_preparation_overlay(app, legacy_main)
 
 app.router.routes = [
     route for route in app.router.routes

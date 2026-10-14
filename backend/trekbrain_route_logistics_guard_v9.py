@@ -49,14 +49,28 @@ def _mark_degraded(result: dict[str, Any], data, v3, category: str, exc: Excepti
     except Exception:
         intent = {}
     days = max(1, int(intent.get("days") or getattr(data, "days", 1) or 1))
+    required = max(0, days - 1)
+    nights = [{
+        "night": night, "status": "unresolved", "access_mode": "to_arrange",
+        "reason": "lodging_discovery_failed", "transfer_confirmed": False,
+        "note": "La recherche a échoué ; aucune nuitée ni liaison pédestre n'est confirmée.",
+        "action": "Relancer la recherche de nuitées et vérifier leur accès avant le départ.",
+    } for night in range(1, days)]
 
     result["logistics"] = {
         "mode": "route-first",
         "category": category,
         "status": "degraded",
         "route_immutable": True,
-        "nights_required": max(0, days - 1),
+        "nights_required": required,
         "nights_resolved": 0,
+        "nights_walk_confirmed": 0,
+        "nights_transfer_required": 0,
+        "nights_missing": required,
+        "walking_readiness": "missing_nights" if required else "ready_on_foot",
+        "ready_without_transfer": required == 0,
+        "nights": nights,
+        "alternatives": [],
         "error_code": "TB-LOGISTICS-DEGRADED",
         "error_class": exc.__class__.__name__,
         "principle": (
@@ -87,9 +101,9 @@ def _mark_degraded(result: dict[str, Any], data, v3, category: str, exc: Excepti
         for index, stage in enumerate(stages):
             if not isinstance(stage, dict) or index >= len(stages) - 1:
                 continue
-            overnight = str(stage.get("overnight") or "").strip()
-            if not overnight or overnight.casefold() in {"étape intermédiaire", "etape intermediaire"}:
-                stage["overnight"] = "Nuitée à organiser sans modifier le tracé principal"
+            stage["overnight"] = "Nuitée à organiser sans modifier le tracé principal"
+            if index < len(nights):
+                stage["overnight_logistics"] = nights[index]
 
     return result
 

@@ -89,13 +89,47 @@ def _element_point(element: dict[str, Any]):
     return lat, lon
 
 
+def _missing_day_samples(result: dict[str, Any], coords: list[list[float]], days: int) -> list[list[float]]:
+    """Spend the existing 16-anchor budget on stages still missing drinking water."""
+    from . import trekbrain_resources_v9 as resources
+    missing = resources._missing_terrain_intent(result, {"water": True})["missing_water_days"]
+    if not missing:
+        return []
+    breaks = resources._stage_progress_breaks(result, days)
+    cumulative, total = resources._route_distance_profile(coords)
+    if total <= 0:
+        return [coords[0]]
+    selected = (missing if len(missing) <= 8 else
+                [missing[round(index * (len(missing) - 1) / 7)] for index in range(8)])
+    per_day = min(6, max(2, 16 // len(selected)))
+    samples, seen = [], set()
+    for day in selected:
+        lower, upper = breaks[day - 1], breaks[day]
+        # Finish first, then cover the whole day's walked corridor.
+        for index in range(per_day):
+            fraction = upper - (upper - lower) * index / (per_day - 1)
+            target = total * fraction
+            segment = 1
+            while segment < len(coords) - 1 and cumulative[segment] < target:
+                segment += 1
+            span = cumulative[segment] - cumulative[segment - 1]
+            ratio = (target - cumulative[segment - 1]) / span if span > 0 else 0.0
+            a, b = coords[segment - 1], coords[segment]
+            point = (round(a[0] + (b[0] - a[0]) * ratio, 6),
+                     round(a[1] + (b[1] - a[1]) * ratio, 6))
+            if point not in seen:
+                seen.add(point)
+                samples.append(list(point))
+    return samples[:16]
+
+
 def discover_water_points(v3, result: dict[str, Any]) -> list[dict[str, Any]]:
     route = result.get("route_preview") or {}
     coords = _valid_coords(route.get("coords") or [])
     if len(coords) < 2:
         return []
     days = max(1, int(result.get("duration_days") or len(result.get("stages") or []) or 1))
-    samples = _sample_route(coords, days)
+    samples = _missing_day_samples(result, coords, days)
     if not samples:
         return []
 
@@ -121,8 +155,11 @@ def discover_water_points(v3, result: dict[str, Any]) -> list[dict[str, Any]]:
             ttl=3600,
             service="Overpass water display",
             retries=1,
+            cache_empty=False,
         )
     except Exception:
+        return []
+    if not isinstance(payload, dict) or not isinstance(payload.get("elements"), list) or payload.get("remark"):
         return []
 
     out = []
@@ -133,6 +170,8 @@ def discover_water_points(v3, result: dict[str, Any]) -> list[dict[str, Any]]:
             continue
         lat, lon = point
         tags = element.get("tags") or {}
+        if not isinstance(tags, dict):
+            continue
         # Explicit negative OSM tags override amenity=drinking_water.
         # A spring/water_tap is never guaranteed potable without evidence.
         from .trekbrain_water_evidence_v9 import potability_status
@@ -147,7 +186,7 @@ def discover_water_points(v3, result: dict[str, Any]) -> list[dict[str, Any]]:
         source_url = (
             f"https://www.openstreetmap.org/{element_type}/{element_id}"
             if element_type in {"node", "way", "relation"}
-            and isinstance(element_id, int) and element_id > 0 else ""
+            and isinstance(element_id, int) and not isinstance(element_id, bool) and element_id > 0 else ""
         )
         key = source_url or (round(lat, 5), round(lon, 5))
         if key in seen:
@@ -174,6 +213,7 @@ def discover_water_points(v3, result: dict[str, Any]) -> list[dict[str, Any]]:
                 "Point d'eau cartographié ; potabilité inconnue, ne pas supposer l'eau potable."
             ),
             "source_url": source_url,
+            "osm_tags": dict(tags),
             "display_only": True,
         }
         out.append(item)
@@ -197,7 +237,9 @@ def install_water_discovery(v3, resources) -> None:
         seen = {}
         for item in existing + discovered:
             try:
-                key = (round(float(item.get("lat")), 5), round(float(item.get("lon")), 5))
+                from .trekbrain_water_evidence_v9 import has_osm_identity
+                key = (item["source_url"] if has_osm_identity(item) else
+                       (round(float(item.get("lat")), 5), round(float(item.get("lon")), 5)))
             except (TypeError, ValueError):
                 continue
             if key in seen:
