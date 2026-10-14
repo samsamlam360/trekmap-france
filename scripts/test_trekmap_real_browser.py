@@ -195,7 +195,19 @@ try:
         driver.save_screenshot(str(OUT / (label + ".png")))
         return panel
 
-    open_and_check("desktop-1440", 1440, 900)
+    panel = open_and_check("desktop-1440", 1440, 900)
+    # Every existing day can open the *same* editing dialog, preserving the
+    # original map, data and save/export controls until regeneration.
+    edit_day = wait.until(lambda d: d.find_element(
+        By.CSS_SELECTOR, '#tm-brain-route-panel [data-tm-adjust-day="1"]'
+    ))
+    edit_day.click()
+    wait.until(lambda d: d.find_element(By.ID, "tm-ai-overlay").is_displayed())
+    assert "étape 1" in driver.find_element(By.ID, "tm-ai-prompt").get_attribute("value"), (
+        "Day edit did not prepare an editable TrekBrain request"
+    )
+    driver.find_element(By.ID, "tm-ai-close").click()
+    wait.until(lambda d: not d.find_element(By.ID, "tm-ai-overlay").is_displayed())
     driver.execute_script("window.TrekBrainMapWorkspace.exit();")
     assert not driver.execute_script(
         "return document.body.classList.contains('tm-brain-route-mode');"
