@@ -139,7 +139,10 @@ def _explicit_endpoint_pair(prompt: str) -> tuple[str, str] | None:
 
 def _clean_place(value: str) -> str:
     value = re.sub(r"\s+", " ", str(value or "")).strip(" ,.;:-")
-    value = re.sub(r"^(?:le|la|les|l['’])\s*", "", value, flags=re.I)
+    # Match whole standalone articles, not the first two letters of a town.
+    # The previous optional whitespace silently changed "Lac des Settons"
+    # into "c des Settons", a real production geocoding regression.
+    value = re.sub(r"^(?:(?:le|la|les)\s+|l['’]\s*)", "", value, flags=re.I)
     # Route instructions are not parts of a toponym. Keeping phrases like
     # "sans marcher dans l'eau" inside the geocoder input makes otherwise
     # unambiguous coastal villages impossible to find when Photon is down.
