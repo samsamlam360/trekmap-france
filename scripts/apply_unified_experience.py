@@ -246,6 +246,16 @@ body.tm-filters-collapsed #tm-unified-drawer{left:14px!important}
     const numeric=Number(id);if(!Number.isFinite(numeric))return;const t=await fetchTrek(numeric);if(!t){typeof toast==='function'&&toast('Trek introuvable.');return}selectedId=numeric;const coords=coordsOf(t);try{map.invalidateSize();if(coords.length>1){const b=L.latLngBounds(coords);map.fitBounds(b.pad(.08),{paddingTopLeft:window.innerWidth>820?[filters?.classList.contains('tm-collapsed')?40:390,55]:[25,55],paddingBottomRight:window.innerWidth>820?[60,215]:[25,190],maxZoom:15,animate:true})}}catch(_){}applyUnifiedFilters();setTimeout(()=>{try{window.openDetail(numeric)}catch(e){console.error(e)}},100)
   }
   window.TrekMapOpenTrek=openTrek;
+  document.addEventListener('trekmap:detail-opened',e=>{
+    const id=Number(e.detail?.id);if(!Number.isFinite(id))return;
+    selectedId=id;
+    renderInfo(allTreksSafe().find(t=>Number(t.id)===id));
+    const previous=track.scrollLeft;
+    track.querySelectorAll('.tm-trek-tile').forEach(card=>{
+      card.classList.toggle('selected',Number(card.dataset.id)===id);
+    });
+    track.scrollLeft=previous;
+  });
 
   // Keep native touch scrolling. Mouse drags scroll cards; hover movement never
   // disables clicks (old code flagged every mouse move as a drag).
