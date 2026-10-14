@@ -211,4 +211,4 @@ def NumberSafe(value):
 # Install optional personal profile endpoints only after the TrekBrain route
 # replacement pipeline: earlier router entries disrupt route replacement.
 from . import profile_v2
-app.include_router(profile_v2.router)
+app.router.routes.extend(profile_v2.router.routes)
