@@ -14,6 +14,7 @@ import json
 import math
 import os
 from pathlib import Path
+import re
 import secrets
 import statistics
 import time
@@ -133,6 +134,110 @@ def valid_coords(result):
     return out
 
 
+def _resource_days(points, kind, days):
+    """Count route-local evidence, never generic stage advice or map counts."""
+    found = set()
+    for row in points:
+        if not isinstance(row, dict) or row.get("kind") != kind:
+            continue
+        if not re.fullmatch(r"https://(?:www\.)?openstreetmap\.org/(?:node|way|relation)/[1-9]\d*", str(row.get("source_url") or "")):
+            continue
+        if kind == "water" and row.get("status") != "potable_referenced":
+            continue
+        if isinstance(row.get("route_day"), bool):
+            continue
+        try:
+            day = int(row.get("route_day"))
+            lat, lon = float(row["lat"]), float(row["lon"])
+        except (KeyError, TypeError, ValueError, OverflowError):
+            continue
+        if 1 <= day <= days and math.isfinite(lat) and math.isfinite(lon) and -90 <= lat <= 90 and -180 <= lon <= 180:
+            found.add(day)
+    return found
+
+
+def preparation_issues(case, result, distance_excess):
+    """Verify required needs independently of a reassuring quality score."""
+    days = int(case["days"])
+    issues = []
+
+    def add(code, requirement, missing, detail):
+        issues.append({"code": code, "requirement": requirement, "days": missing, "detail": detail})
+
+    readiness = result.get("trip_readiness") or {}
+    if readiness.get("version") == 1:
+        issues.extend(row for row in readiness.get("issues") or [] if isinstance(row, dict))
+        requirements = readiness.get("requirements") or {}
+        effective = result.get("effective_request") or {}
+        mandatory = ["route", "distance"] + [name for name, flag in (
+            ("water", "require_water"), ("food", "require_food"),
+            ("accommodation", "require_accommodation"), ("transit", "require_transit"),
+        ) if effective.get(flag, case.get(flag)) and (name != "accommodation" or days > 1)]
+        for name in mandatory:
+            requirement = requirements.get(name)
+            if not isinstance(requirement, dict) or requirement.get("required") is not True:
+                add("requirement_telemetry_missing", name, [], f"Besoin obligatoire {name} absent du verdict")
+        for name, requirement in requirements.items():
+            if isinstance(requirement, dict) and requirement.get("required") is True and requirement.get("status") != "confirmed":
+                add("requirement_unconfirmed", name, requirement.get("missing_days") or [], str(requirement.get("detail") or f"{name}: non confirmé"))
+        if readiness.get("status") != "ready" and not issues:
+            add("readiness_incomplete", "readiness", [], str(readiness.get("label") or readiness.get("status") or "Verdict absent"))
+        if distance_excess:
+            add("distance_exceeded", "distance", [row["day"] for row in distance_excess], "Distance au-dessus de la demande")
+        for blocker in ((result.get("trekbrain") or {}).get("quality") or {}).get("blockers") or []:
+            add("quality_blocker", "quality", [], str(blocker))
+        return issues
+
+    resources = result.get("map_resources") or {}
+    points = resources.get("evidence_points") if isinstance(resources.get("evidence_points"), list) else resources.get("points") or []
+    for flag, kind, detail in (
+        ("require_water", "water", "Eau potable référencée manquante"),
+        ("require_food", "food", "Ravitaillement sourcé manquant"),
+    ):
+        if case.get(flag):
+            covered = _resource_days(points, kind, days)
+            missing = [day for day in range(1, days + 1) if day not in covered]
+            if missing:
+                add(f"{kind}_missing", kind, missing, detail)
+
+    if case.get("require_accommodation"):
+        nights = [row for row in ((result.get("logistics") or {}).get("nights") or []) if isinstance(row, dict)]
+        confirmed = {
+            row.get("night") for row in nights
+            if row.get("status") == "confirmed" and row.get("access_mode") == "walk"
+        }
+        confirmed.update(
+            row.get("night") for row in nights
+            if row.get("status") == "usable_with_transfer" and row.get("transfer_confirmed") is True
+        )
+        missing = [night for night in range(1, days) if night not in confirmed]
+        if missing:
+            add("accommodation_missing", "accommodation", missing, "Nuitée ou transfert restant à confirmer")
+
+    if case.get("require_transit"):
+        transport = result.get("transport") or {}
+        for field, endpoint in (("outbound_point", "start"), ("return_point", "end")):
+            point = transport.get(field) or {}
+            gap = haversine(point, result.get(endpoint))
+            if not str(point.get("source_url") or "").startswith("https://") or gap is None or not math.isfinite(gap) or gap > 8.0:
+                add("transit_unverified", "transit", [], f"Accès transport {endpoint} sans point sourcé proche")
+
+    if distance_excess:
+        add("distance_exceeded", "distance", [row["day"] for row in distance_excess], "Distance au-dessus de la demande")
+
+    quality = ((result.get("trekbrain") or {}).get("quality") or {})
+    for blocker in quality.get("blockers") or []:
+        add("quality_blocker", "quality", [], str(blocker))
+
+    if readiness.get("status") in {"incomplete", "refused"}:
+        for issue in readiness.get("issues") or []:
+            if isinstance(issue, dict) and issue not in issues:
+                issues.append(issue)
+        if not readiness.get("issues"):
+            add("readiness_incomplete", "readiness", [], str(readiness.get("label") or readiness["status"]))
+    return issues
+
+
 class Client:
     def __init__(self, base):
         self.base = base
@@ -182,6 +287,8 @@ def evaluate(case, result, elapsed_s, clarify):
 
     if len(coords) < 2:
         hard.append("géométrie absente ou invalide")
+    elif len(coords) != len(route.get("coords") or []):
+        hard.append("géométrie contenant des coordonnées invalides")
     if route.get("fallback") is not False:
         hard.append("routage pédestre en fallback")
     if len(stages) != int(case["days"]):
@@ -202,13 +309,13 @@ def evaluate(case, result, elapsed_s, clarify):
             d = float(stage.get("distance_km") or 0)
         except (TypeError, ValueError):
             d = 0
-        if d > 0:
+        if math.isfinite(d) and d > 0 and not isinstance(stage.get("distance_km"), bool):
             distances.append(d)
     target = float(case["daily_km"])
     mean_dev = statistics.fmean(abs(x - target) / target for x in distances) if distances else 1.0
     worst_dev = max((abs(x - target) / target for x in distances), default=1.0)
-    if not distances:
-        hard.append("aucune distance d'étape exploitable")
+    if len(distances) != len(stages) or not distances:
+        hard.append("distances d'étape manquantes ou invalides")
     elif mean_dev > 0.35:
         warnings.append(f"écart moyen aux km/jour élevé: {mean_dev*100:.0f}%")
     if worst_dev > 0.55:
@@ -281,7 +388,7 @@ def evaluate(case, result, elapsed_s, clarify):
             warnings.append("nuitées non renseignées")
 
     food_markers = sum(
-        1 for item in ((result.get("map_resources") or {}).get("points") or [])
+        1 for item in ((result.get("map_resources") or {}).get("evidence_points") or (result.get("map_resources") or {}).get("points") or [])
         if isinstance(item, dict) and item.get("kind") == "food"
         and item.get("source_url") and item.get("lat") is not None and item.get("lon") is not None
     )
@@ -310,7 +417,7 @@ def evaluate(case, result, elapsed_s, clarify):
     required_nights = max(0, int(case["days"]) - 1)
     unresolved_nights = max(0, required_nights - walk_nights - transfer_nights)
     source_water = [
-        row for row in ((result.get("map_resources") or {}).get("points") or [])
+        row for row in ((result.get("map_resources") or {}).get("evidence_points") or (result.get("map_resources") or {}).get("points") or [])
         if isinstance(row, dict) and row.get("kind") == "water"
         and str(row.get("source_url") or "").startswith(
             "https://www.openstreetmap.org/"
@@ -363,6 +470,9 @@ def evaluate(case, result, elapsed_s, clarify):
     else:
         try:
             q = float(quality)
+            if isinstance(quality, bool) or not math.isfinite(q):
+                raise ValueError("invalid quality score")
+            quality = q
             # This score is explicitly heuristic, not a success probability.
             # Structural invariants above are the hard gate.
             if q < 40:
@@ -373,13 +483,30 @@ def evaluate(case, result, elapsed_s, clarify):
                 warnings.append(f"score TrekBrain à vérifier: {q:.1f}/100")
         except (TypeError, ValueError):
             warnings.append("score TrekBrain illisible")
+            quality = None
 
     if elapsed_s > 90:
         warnings.append(f"latence élevée: {elapsed_s:.1f}s")
 
+    issues = preparation_issues(case, result, distance_excess)
+    if quality is not None and quality < 60 and not any(issue.get("code") == "audit_fragile" for issue in issues):
+        issues.append({"code": "audit_fragile", "requirement": "audit", "days": [], "detail": f"Audit fragile ({quality:.1f}/100)"})
+    structure_ok = not hard
+    preparation_ok = not issues
+    published = result.get("trip_readiness") or {}
+    category = "refused" if not structure_ok or published.get("status") == "refused" else "ready" if preparation_ok else "incomplete"
+    if published.get("status") == "ready" and not (structure_ok and preparation_ok):
+        warnings.append("verdict prêt à partir contredit par les preuves du benchmark")
+
     return {
         "id": case["id"],
-        "ok": not hard,
+        "ok": structure_ok and preparation_ok,
+        "structure_ok": structure_ok,
+        "preparation_ok": preparation_ok,
+        "status": category,
+        "preparation_issues": issues,
+        "trip_readiness": published,
+        "geocoding": ((result.get("request_resolution") or {}).get("geocoding") or {}),
         "hard_failures": hard,
         "warnings": warnings,
         "elapsed_s": elapsed_s,
@@ -452,22 +579,24 @@ def write_reports(meta, rows):
     elapsed = [float(x["elapsed_s"]) for x in rows]
     qualities = [float(x["quality"]) for x in rows if isinstance(x.get("quality"), (int, float))]
     ok = sum(1 for x in rows if x["ok"])
+    structural = sum(1 for x in rows if x.get("structure_ok"))
     warnings = sum(len(x["warnings"]) for x in rows)
     # Cold-cache means a confirmed zero-hit DB lookup, not a cache provider
     # outage or a failed HTTP request with no telemetry.
     cold_rows = [x for x in rows if x.get("cold_cache") is True]
     cold_food = [x for x in cold_rows if x.get("food_coverage") != "not_requested"]
     lines = [
-        "# TrekBrain v9 — benchmark production",
+        f"# TrekBrain v9 — benchmark {meta.get('suite') or 'production'}",
         "",
-        f"- Build: `{meta.get('build_commit','')[:12]}`",
-        f"- Scénarios structurellement valides: **{ok}/{len(rows)}**",
+        f"- Build: `{str(meta.get('build_commit') or 'non renseigné')[:12]}`",
+        f"- Scénarios structurellement valides: **{structural}/{len(rows)}**",
+        f"- Scénarios avec préparation complète: **{ok}/{len(rows)}**",
         f"- Routes réellement sans cache OSM: **{len(cold_rows)}/{len(rows)}**",
         f"- Ravitaillements sourcés sans cache OSM: **{sum(int(x.get('food_markers') or 0) for x in cold_food)}**",
         f"- Journées sans ravitaillement sur routes sans cache: **{sum(len(x.get('food_days_missing') or []) for x in cold_food)}**",
         f"- Qualité moyenne TrekBrain: **{statistics.fmean(qualities):.1f}/100**" if qualities else "- Qualité moyenne: n/a",
-        f"- Latence moyenne: **{statistics.fmean(elapsed):.1f} s**",
-        f"- Latence max: **{max(elapsed):.1f} s**",
+        f"- Latence moyenne: **{statistics.fmean(elapsed):.1f} s**" if elapsed else "- Latence moyenne: n/a",
+        f"- Latence max: **{max(elapsed):.1f} s**" if elapsed else "- Latence max: n/a",
         f"- Nuitées accessibles à pied avec liaison validée: **{sum(int(x.get('nights_walk_confirmed') or 0) for x in rows)}**",
         f"- Nuitées nécessitant un transfert: **{sum(int(x.get('nights_transfer_only') or 0) for x in rows)}**",
         f"- Nuitées non résolues: **{sum(int(x.get('nights_unresolved') or 0) for x in rows)}**",
@@ -475,11 +604,14 @@ def write_reports(meta, rows):
         f"- Points d'eau explicitement non potables: **{sum(int(x.get('water_explicitly_nonpotable') or 0) for x in rows)}**",
         f"- Avertissements terrain: **{warnings}**",
         "",
-        "| Scénario | Statut | Qualité | Temps | Commerces sourcés | Recherche | Moteur | Distance | Écart/jour | Alertes |",
-        "|---|---:|---:|---:|---:|---|---|---:|---:|---|",
+        "| Scénario | Tracé | Préparation | Qualité | Temps | Commerces sourcés | Recherche | Moteur | Distance | Écart/jour | Alertes |",
+        "|---|---:|---|---:|---:|---:|---|---|---:|---:|---|",
     ]
+    if meta.get("error"):
+        lines[4:4] = [f"- Erreur d'exécution: **{str(meta['error']).replace('|', '/')}**"]
     for row in rows:
-        alerts = "; ".join(row["hard_failures"] + row["warnings"]) or "aucune"
+        issues = [str(issue.get("detail") or issue.get("code")) for issue in row.get("preparation_issues") or [] if isinstance(issue, dict)]
+        alerts = "; ".join(dict.fromkeys(row["hard_failures"] + issues + row["warnings"])) or "aucune"
         quality = "n/a" if row["quality"] is None else f"{float(row['quality']):.1f}"
         distance = row["route_distance_km"]
         distance = "n/a" if distance is None else f"{float(distance):.1f} km"
@@ -487,11 +619,27 @@ def write_reports(meta, rows):
         if row.get("fast_roundtrip"):
             routing += " · fast"
         lines.append(
-            f"| {row['id']} | {'✅' if row['ok'] else '❌'} | {quality} | {row['elapsed_s']:.1f}s | "
+            f"| {row['id']} | {'✅' if row.get('structure_ok') else '❌'} | {row.get('status', 'refused')} | {quality} | {row['elapsed_s']:.1f}s | "
             f"{row.get('food_markers', 0)} | {row.get('food_coverage') or 'inconnue'} | {routing.replace('|','/')} | {distance} | {row['mean_daily_deviation_pct']:.1f}% | "
             f"{alerts.replace('|','/')} |"
         )
     (OUT_DIR / "trekbrain-production-benchmark.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+def failure_row(case_id, error, elapsed=0.0, *, status="refused", http_status=None):
+    """Keep failures in the report even when no planner payload exists."""
+    row = {
+        "id": case_id, "ok": False, "structure_ok": False,
+        "preparation_ok": False, "status": status,
+        "hard_failures": [str(error)], "preparation_issues": [], "warnings": [],
+        "elapsed_s": round(elapsed, 3), "error": str(error), "quality": None,
+        "route_distance_km": None, "mean_daily_deviation_pct": 100.0,
+        "worst_daily_deviation_pct": 100.0, "stage_distances_km": [],
+        "cold_cache": None, "coords": 0,
+    }
+    if http_status is not None:
+        row["http_status"] = http_status
+    return row
 
 
 def main():
@@ -503,6 +651,7 @@ def main():
     registered = False
     rows = []
     status_payload = {}
+    suite_error = None
 
     try:
         # A successful deployment of /ai/status does not imply PostgreSQL is
@@ -555,38 +704,51 @@ def main():
                 "prompt", "region", "days", "daily_km", "difficulty", "route_type",
                 "require_transit", "require_water", "require_accommodation", "require_food",
             }}
-            ccode, clarify, clarify_s = client.json("POST", "/ai/clarify", payload, timeout=90)
-            if ccode != 200:
-                clarify = {"needs_clarification": None, "error": clarify, "http": ccode}
+            clarify_started = time.perf_counter()
+            try:
+                ccode, clarify, clarify_s = client.json("POST", "/ai/clarify", payload, timeout=90)
+                if ccode != 200 or not isinstance(clarify, dict):
+                    clarify = {"needs_clarification": None, "error": clarify, "http": ccode}
+            except Exception as exc:
+                clarify_s = round(time.perf_counter() - clarify_started, 3)
+                clarify = {"needs_clarification": None, "error": type(exc).__name__}
 
-            pcode, plan, plan_s = client.json("POST", "/ai/plan", payload, timeout=180)
+            plan_started = time.perf_counter()
+            try:
+                pcode, plan, plan_s = client.json("POST", "/ai/plan", payload, timeout=180)
+            except Exception as exc:
+                rows.append(failure_row(case["id"], type(exc).__name__, time.perf_counter() - plan_started))
+                print(f"[{case['id']}] refused (request failed)", flush=True)
+                continue
             if pcode != 200:
-                rows.append({
-                    "id": case["id"], "ok": False,
-                    "hard_failures": [f"/ai/plan HTTP {pcode}: {plan.get('detail', plan)}"],
-                    "warnings": [],
-                    "elapsed_s": plan_s,
-                    "planner_ms": None, "quality": None, "grade": None, "decision_grade": None,
-                    "route_type": None, "route_distance_km": None, "stage_distances_km": [],
-                    "mean_daily_deviation_pct": 100.0, "worst_daily_deviation_pct": 100.0,
-                    "closing_gap_km": None, "coords": 0, "water_markers": 0,
-                    "food_markers": 0, "food_coverage": "request_failed",
-                    "accommodations": 0, "web_sources": 0,
-                    "clarification_needed": clarify.get("needs_clarification"),
-                    "clarification_questions": clarify.get("questions") or [],
-                    "strategy": None, "blockers": [],
-                })
+                detail = plan.get("detail", plan) if isinstance(plan, dict) else plan
+                rows.append(failure_row(case["id"], f"/ai/plan HTTP {pcode}: {detail}", plan_s, http_status=pcode))
                 continue
 
-            row = evaluate(case, plan, plan_s, clarify)
+            try:
+                if not isinstance(plan, dict):
+                    raise TypeError("unexpected planner response")
+                row = evaluate(case, plan, plan_s, clarify)
+            except (TypeError, ValueError, KeyError, AttributeError) as exc:
+                row = failure_row(case["id"], f"response_contract_error: {type(exc).__name__}", plan_s, status="runtime_error")
             row["clarify_elapsed_s"] = clarify_s
             rows.append(row)
             print(
-                f"[{case['id']}] {'OK' if row['ok'] else 'FAIL'} "
+                f"[{case['id']}] {row['status']} structure={row['structure_ok']} "
                 f"quality={row['quality']} time={row['elapsed_s']}s "
-                f"warnings={len(row['warnings'])}"
+                f"warnings={len(row['warnings'])}", flush=True,
             )
 
+        failed = [row for row in rows if not row["ok"]]
+        if failed:
+            for row in failed:
+                details = row["hard_failures"] + [str(issue.get("detail") or issue.get("code")) for issue in row.get("preparation_issues") or []]
+                print("-", row["id"], ":", " | ".join(details))
+            raise SystemExit(f"{len(failed)}/{len(rows)} benchmark scenarios refused or incomplete")
+    except Exception as exc:
+        suite_error = f"{type(exc).__name__}: {exc}"
+        raise
+    finally:
         meta = {
             "base_url": BASE_URL,
             "expected_sha": EXPECTED_SHA,
@@ -595,24 +757,20 @@ def main():
             "release_channel": status_payload.get("release_channel"),
             "scenario_count": len(SCENARIOS),
             "generated_at_epoch": int(time.time()),
+            "error": suite_error,
         }
         write_reports(meta, rows)
-
-        hard = [x for x in rows if not x["ok"]]
-        if hard:
-            print("\nHard benchmark failures:")
-            for row in hard:
-                print("-", row["id"], ":", " | ".join(row["hard_failures"]))
-            raise SystemExit(f"{len(hard)}/{len(rows)} benchmark scenarios failed structurally")
-    finally:
         if registered:
-            code, deleted, _ = client.json("DELETE", "/auth/account", {
-                "password": password, "confirmation": "SUPPRIMER",
-            })
-            if code != 200 or deleted.get("deleted") is not True:
-                print(f"WARNING: benchmark account cleanup failed HTTP {code}: {deleted}")
-            else:
-                print("Disposable benchmark account removed.")
+            try:
+                code, deleted, _ = client.json("DELETE", "/auth/account", {
+                    "password": password, "confirmation": "SUPPRIMER",
+                })
+                if code != 200 or deleted.get("deleted") is not True:
+                    print(f"WARNING: benchmark account cleanup failed HTTP {code}")
+                else:
+                    print("Disposable benchmark account removed.")
+            except Exception as exc:
+                print(f"WARNING: benchmark account cleanup failed: {type(exc).__name__}")
 
 if __name__ == "__main__":
     main()

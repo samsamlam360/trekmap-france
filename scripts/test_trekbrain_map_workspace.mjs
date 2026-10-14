@@ -13,10 +13,12 @@ assert.ok(css.includes('body.tm-brain-route-mode #tm-unified-drawer'),'popular t
 assert.ok(css.includes('body.tm-brain-route-mode .tm-route-day-legend'),'duplicate route legend hidden');
 assert.ok(css.includes('@media(max-width:820px)'),'phone has a real adapted route sheet');
 assert.ok(css.includes('env(safe-area-inset-bottom,0px)'),'respect mobile system navigation');
-assert.ok(css.includes('position:sticky;bottom:0;z-index:2'),'save and modify remain usable on short phones');
+assert.ok(css.includes('.tm-brain-content {\n  min-height:0;flex:1 1 auto;overflow-y:auto;'),
+  'long preparation needs and stages scroll inside the available panel space');
+assert.ok(!css.includes('position:sticky'), 'footer must not overlap buttons in the scrollable content');
 assert.ok(css.includes('.tm-brain-actions'),'save and modify remain accessible');
 assert.ok(css.includes('.tm-brain-alert'),'safety warnings are visibly surfaced');
-assert.ok(css.includes('.tm-brain-detail'),'one scrollable stage list');
+assert.ok(css.includes('.tm-brain-detail'),'stages use the shared scrollable content');
 assert.ok(css.includes('focus-visible'),'keyboard focus remains obvious');
 assert.ok(script.includes("data-workspace-action=\"fit\""),'recenter action');
 assert.ok(script.includes("data-workspace-action=\"save\""),'save action');
@@ -176,6 +178,8 @@ assert.ok(panel.innerHTML.includes('Ravitaillement non vérifié pour les jours 
 assert.ok(panel.innerHTML.includes('1 nuitée(s) restent sans hébergement identifié'));
 assert.ok(panel.innerHTML.includes('Jour 1'));
 assert.ok(panel.innerHTML.includes('Jour 3'));
+assert.ok(panel.innerHTML.includes('<div class="tm-brain-content">'), 'route needs, overview and tools belong to the scrollable body');
+assert.ok(panel.innerHTML.includes('</div></div><div class="tm-brain-actions">'), 'footer follows the closed details and scrollable body');
 assert.ok(fitted>=1,'new view should fit the real route');
 assert.ok(topPadding>350,'desktop recenter clears the sidebar');
 assert.equal(typeof mapEvents.movestart,'function');

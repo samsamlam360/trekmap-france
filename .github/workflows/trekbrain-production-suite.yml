@@ -19,6 +19,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Wait for exact production commit
+        id: production-build
         shell: python
         env:
           EXPECTED_SHA: ${{ github.sha }}
@@ -37,24 +38,36 @@ jobs:
           else:
               raise SystemExit('Render has not deployed the expected commit')
       - name: Historic six treks, three separate passes
+        id: historic
+        continue-on-error: true
         env:
           EXPECTED_SHA: ${{ github.sha }}
           TREKBRAIN_BENCHMARK_URL: https://trekmap-france.onrender.com
         shell: bash
         run: |
           set -euo pipefail
+          result=0
           for pass in 1 2 3; do
-            TREKBRAIN_BENCHMARK_OUT="benchmark-results/historic/pass-$pass" \
-            GITHUB_RUN_ID="${GITHUB_RUN_ID}-historic-$pass" \
-            python scripts/benchmark_trekbrain_v9_production.py
+            if TREKBRAIN_BENCHMARK_OUT="benchmark-results/historic/pass-$pass" \
+              GITHUB_RUN_ID="${GITHUB_RUN_ID}-historic-$pass" \
+              python scripts/benchmark_trekbrain_v9_production.py; then
+              :
+            else
+              result=1
+            fi
           done
+          exit "$result"
       - name: Nine extended real treks
+        id: extended
+        continue-on-error: true
         env:
           EXPECTED_SHA: ${{ github.sha }}
           TREKBRAIN_BENCHMARK_URL: https://trekmap-france.onrender.com
           TREKBRAIN_BENCHMARK_OUT: benchmark-results/extended
         run: python scripts/benchmark_trekbrain_v9_extended.py
       - name: Twenty new regional treks
+        id: unseen20
+        continue-on-error: true
         env:
           EXPECTED_SHA: ${{ github.sha }}
           TREKBRAIN_BENCHMARK_URL: https://trekmap-france.onrender.com
@@ -64,25 +77,45 @@ jobs:
         if: always()
         shell: python
         run: |
-          import glob, json, os, statistics
-          summary=['# TrekBrain: production benchmarks run serially','','| Suite | Valid | Quality | Mean latency | Food markers | Food days missing | Water days missing | Walk nights | Transfer nights | Missing nights | Cached POIs |','|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|']
-          for filename in sorted(glob.glob('benchmark-results/**/trekbrain-production-benchmark.json',recursive=True)):
-              rows=json.load(open(filename,encoding='utf-8'))['scenarios']
+          import json, os, statistics
+          from pathlib import Path
+          summary=[
+              '# TrekBrain : 47 scénarios exécutés en série', '',
+              'Tracé = critères structurels ; besoins confirmés = préparation vérifiée ; complet = les deux. Une préparation incomplète fait échouer le bilan, sans interrompre les suites suivantes.', '',
+              '| Suite | Rapports | Tracés valides | Besoins confirmés | Complets | Qualité | Temps moyen | Jours sans nourriture | Jours sans eau | Nuits à pied | Nuits avec transfert | Nuits manquantes | Jours trop longs | POI en cache |',
+              '|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|',
+          ]
+          suites=[(f'historic/pass-{i}',6) for i in (1,2,3)]+[('extended',9),('unseen20',20)]
+          for name, expected_count in suites:
+              report=Path('benchmark-results')/name/'trekbrain-production-benchmark.json'
+              if not report.exists():
+                  summary.append(f'| {name} | 0/{expected_count} | non exécuté | non exécuté | non exécuté | — | — | — | — | — | — | — | — | — |')
+                  continue
+              try:
+                  payload=json.loads(report.read_text(encoding='utf-8'))
+                  rows=payload['scenarios']
+              except (ValueError, KeyError):
+                  summary.append(f'| {name} | rapport illisible | — | — | — | — | — | — | — | — | — | — | — | — |')
+                  continue
               scores=[float(x['quality']) for x in rows if isinstance(x.get('quality'),(int,float))]
               times=[float(x['elapsed_s']) for x in rows if isinstance(x.get('elapsed_s'),(int,float))]
-              name=filename.removeprefix('benchmark-results/').removesuffix('/trekbrain-production-benchmark.json')
+              quality=f'{statistics.fmean(scores):.1f}' if scores else 'n/a'
+              latency=f'{statistics.fmean(times):.1f}s' if times else 'n/a'
               summary.append(
-                  f"| {name} | {sum(bool(x['ok']) for x in rows)}/{len(rows)} | "
-                  f"{statistics.fmean(scores):.1f} | {statistics.fmean(times):.1f}s | "
-                  f"{sum(int(x.get('food_markers') or 0) for x in rows)} | "
+                  f"| {name} | {len(rows)}/{expected_count} | "
+                  f"{sum(x.get('structure_ok') is True for x in rows)}/{expected_count} | "
+                  f"{sum(x.get('preparation_ok') is True for x in rows)}/{expected_count} | "
+                  f"{sum(x.get('ok') is True for x in rows)}/{expected_count} | {quality} | {latency} | "
                   f"{sum(len(x.get('food_days_missing') or []) for x in rows)} | "
                   f"{sum(len(x.get('water_days_missing') or []) for x in rows)} | "
                   f"{sum(int(x.get('nights_walk_confirmed') or 0) for x in rows)} | "
                   f"{sum(int(x.get('nights_transfer_only') or 0) for x in rows)} | "
                   f"{sum(int(x.get('nights_unresolved') or 0) for x in rows)} | "
+                  f"{sum(len(x.get('distance_days_above_target') or []) for x in rows)} | "
                   f"{sum(int(x.get('osm_cache_hits') or 0) for x in rows)} |"
-                  if scores and times else f"| {name} | n/a | n/a | n/a | n/a | n/a | n/a | n/a | n/a | n/a | n/a |"
               )
+              if (payload.get('meta') or {}).get('error'):
+                  summary.extend(['',f"Erreur {name} : {str(payload['meta']['error']).replace('|','/')}",''])
           report='\n'.join(summary)+'\n'
           print(report)
           with open(os.environ['GITHUB_STEP_SUMMARY'],'a',encoding='utf-8') as f:f.write(report)
@@ -94,3 +127,18 @@ jobs:
           path: benchmark-results/
           if-no-files-found: ignore
           retention-days: 21
+      - name: Fail when a suite is refused, incomplete or not executed
+        if: always()
+        shell: python
+        env:
+          BUILD_OUTCOME: ${{ steps.production-build.outcome }}
+          HISTORIC_OUTCOME: ${{ steps.historic.outcome }}
+          EXTENDED_OUTCOME: ${{ steps.extended.outcome }}
+          UNSEEN20_OUTCOME: ${{ steps.unseen20.outcome }}
+        run: |
+          import os
+          outcomes={name:os.environ[name] for name in ('BUILD_OUTCOME','HISTORIC_OUTCOME','EXTENDED_OUTCOME','UNSEEN20_OUTCOME')}
+          for name, outcome in outcomes.items():
+              print(f'{name}: {outcome}')
+          if any(outcome != 'success' for outcome in outcomes.values()):
+              raise SystemExit('Production audit refused, incomplete or not executed; see preserved reports.')

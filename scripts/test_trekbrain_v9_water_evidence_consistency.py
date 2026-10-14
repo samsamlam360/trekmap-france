@@ -71,7 +71,7 @@ try:
     bbox_rows = resources._bbox_route_water_food(
         plan, {"water": True, "food": False}
     )
-    assert len(calls) == 1, calls
+    assert len(calls) == 2, "Incomplete daily coverage may try the second bounded mirror"
     assert len(bbox_rows) == len(tag_cases), (len(bbox_rows), bbox_rows)
     actual_bbox = {
         row["source_url"].rsplit("/", 1)[-1]: row["water_status"]

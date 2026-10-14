@@ -194,9 +194,9 @@ actual_stages = {
     "end": {"lat": 45.2, "lon": 5.0, "name": "End"},
     "stages": [{"day": 1, "distance_km": 4.0}, {"day": 2, "distance_km": 16.0}],
     "water": [
-        {"name": "Start water", "lat": 45.02, "lon": 5.0,
+        {"name": "Start water", "lat": 45.02, "lon": 5.0, "water_status": "potable_referenced",
          "source_url": "https://www.openstreetmap.org/node/7001"},
-        {"name": "Later water", "lat": 45.06, "lon": 5.0,
+        {"name": "Later water", "lat": 45.06, "lon": 5.0, "water_status": "potable_referenced",
          "source_url": "https://www.openstreetmap.org/node/7002"},
     ],
     "resources": [

@@ -73,6 +73,18 @@ jobs:
         run: python scripts/test_trekbrain_v9_belle_ile_canonical.py
       - name: Route-first lodging logistics regression
         run: python scripts/test_trekbrain_v9_route_logistics.py
+      - name: Requested needs, precise locations and bounded first-visit audits
+        run: |
+          python scripts/test_trekbrain_v9_readiness.py
+          python scripts/test_trekbrain_v9_logistics_assignment.py
+          python scripts/test_trekbrain_v9_connector_budget.py
+          python scripts/test_trekbrain_v9_distance_selection.py
+          python scripts/test_trekbrain_v9_explicit_bounds.py
+          python scripts/test_trekbrain_v9_daily_resource_readiness.py
+          python scripts/test_trekbrain_v9_geocode_trace.py
+          python scripts/test_benchmark_readiness.py
+          python scripts/test_benchmark_cold_contract.py
+          node scripts/test_trekbrain_trip_readiness_ui.mjs
       - name: TrekBrain authenticated save and in-place route geometry
         run: python scripts/test_trekbrain_route_persistence.py
       - name: GR backbone campsite stitch regression

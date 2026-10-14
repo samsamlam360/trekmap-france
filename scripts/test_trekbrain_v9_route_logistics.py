@@ -86,6 +86,13 @@ class FakeStayRescue:
 
 class FakeORS:
     @staticmethod
+    def get_distance_matrix(points):
+        # Both directed access legs are routable in this synthetic network.
+        return {"distances": [[
+            (abs(float(a[0]) - float(b[0])) + abs(float(a[1]) - float(b[1]))) * 100.0
+            for b in points] for a in points], "fallback": False, "profile": "foot-hiking"}
+
+    @staticmethod
     def get_route(coords, distance_func):
         # Every short connector is validated. Its distance is roughly the
         # vertical synthetic offset in this test.

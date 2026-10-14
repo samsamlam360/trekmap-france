@@ -1,12 +1,8 @@
 name: TrekBrain 20 unseen regions audit
 
 on:
-  # A deliberate marker commit runs this once against the exact deployed SHA.
-  # Ordinary application pushes must NOT trigger twenty public routing requests.
-  push:
-    branches: [main]
-    paths:
-      - .github/benchmark-requests/unseen20.txt
+  # Live routing is manual; the weekly serial suite also includes these cases.
+  # Application pushes must not trigger twenty public routing requests.
   workflow_dispatch:
 
 permissions:
@@ -33,8 +29,7 @@ jobs:
           assert len({x['region'] for x in unseen.SCENARIOS}) == 20
           print('20 novel, distinct-region test prompts: OK')
           PY
-      - name: Wait for exact deployed commit after main update
-        if: github.event_name == 'push'
+      - name: Wait for exact deployed commit
         shell: python
         env:
           EXPECTED_SHA: ${{ github.sha }}
@@ -57,13 +52,21 @@ jobs:
               raise SystemExit('Render did not deploy the expected commit')
       - name: Benchmark twenty independent real production requests
         env:
-          EXPECTED_SHA: ${{ github.event_name == 'push' && github.sha || '' }}
+          EXPECTED_SHA: ${{ github.sha }}
           TREKBRAIN_BENCHMARK_URL: https://trekmap-france.onrender.com
           TREKBRAIN_BENCHMARK_OUT: benchmark-results-20
         run: python scripts/benchmark_trekbrain_v9_unseen20.py
       - name: Publish all successes and failures
         if: always()
-        run: cat benchmark-results-20/trekbrain-production-benchmark.md 2>/dev/null || true
+        shell: python
+        run: |
+          import os
+          from pathlib import Path
+          report=Path('benchmark-results-20/trekbrain-production-benchmark.md')
+          text=report.read_text(encoding='utf-8') if report.exists() else 'Audit non exécuté : consulter les étapes en échec.\n'
+          print(text)
+          with open(os.environ['GITHUB_STEP_SUMMARY'],'a',encoding='utf-8') as summary:
+              summary.write(text)
       - name: Preserve full audit report
         if: always()
         uses: actions/upload-artifact@v4

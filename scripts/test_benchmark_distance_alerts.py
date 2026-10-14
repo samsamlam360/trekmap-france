@@ -42,7 +42,9 @@ def sample(kms, *, contract=True):
     return result
 
 hike = bench.evaluate(CASE, sample(["18.1",18.1]), 8.0, {})
-assert hike["ok"], hike["hard_failures"]
+assert hike["structure_ok"], hike["hard_failures"]
+assert not hike["preparation_ok"] and not hike["ok"], hike
+assert hike["status"] == "incomplete", hike
 assert [x["day"] for x in hike["distance_days_above_target"]] == [1,2], hike
 assert hike["distance_days_missing_warning"] == [], hike
 assert any("J1 18.1 km (+21%)" in x and "J2 18.1 km (+21%)" in x for x in hike["warnings"]), hike

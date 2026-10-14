@@ -11,6 +11,9 @@ from . import smart_planner_v7 as v7
 from .trekbrain_request_v9 import reconcile_request
 from .trekbrain_failed_preview_v9 import clear_failed_preview, get_failed_preview
 from .trekbrain_error_codes_v9 import classify_failure
+from .trekbrain_geo_fallback_v9 import (
+    begin_geocode_trace, end_geocode_trace, geocode_trace_snapshot,
+)
 
 
 def _effective_payload(data):
@@ -87,15 +90,13 @@ def _wrap_post(app, path: str, legacy_main, *, add_note: bool):
     endpoint = original.endpoint
     app.router.routes = [r for r in app.router.routes if r is not original]
 
-    @app.post(path)
-    def reconciled(
-        data: v7.v5.v3.AIPlanRequest = Body(...),
-        user=Depends(legacy_main.current_user),
-    ):
-        effective, meta = _effective_payload(data)
+    def invoke(data, user):
+        effective = data
+        meta = {"original_region": str(data.region or "")}
         if path == "/ai/plan":
             clear_failed_preview()
         try:
+            effective, meta = _effective_payload(data)
             result = endpoint(effective, user)
         except HTTPException as exc:
             if path != "/ai/plan":
@@ -105,6 +106,7 @@ def _wrap_post(app, path: str, legacy_main, *, add_note: bool):
             # provisional geometry. Previously the most frustrating failures
             # were exactly the ones that fell back to a bare "HTTP 500" string.
             preview = get_failed_preview()
+            meta["geocoding"] = geocode_trace_snapshot()
             raise HTTPException(
                 status_code=exc.status_code,
                 detail=_failure_detail(exc, effective, meta, preview),
@@ -113,6 +115,7 @@ def _wrap_post(app, path: str, legacy_main, *, add_note: bool):
 
         if not isinstance(result, dict):
             return result
+        meta["geocoding"] = geocode_trace_snapshot()
         result["effective_request"] = _public_effective(effective)
         result["request_resolution"] = meta
         if add_note:
@@ -146,6 +149,19 @@ def _wrap_post(app, path: str, legacy_main, *, add_note: bool):
                 if note not in notes:
                     notes.insert(0, note)
         return result
+
+    @app.post(path)
+    def reconciled(
+        data: v7.v5.v3.AIPlanRequest = Body(...),
+        user=Depends(legacy_main.current_user),
+    ):
+        token = begin_geocode_trace()
+        try:
+            return invoke(data, user)
+        finally:
+            # FastAPI may reuse worker threads. Reset even for reconciliation
+            # errors, failed routes and non-dictionary endpoint responses.
+            end_geocode_trace(token)
 
 
 def install_request_overlay(app, legacy_main):

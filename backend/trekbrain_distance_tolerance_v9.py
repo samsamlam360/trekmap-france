@@ -17,18 +17,37 @@ def _fold(value: str) -> str:
     return "".join(c for c in text if not unicodedata.combining(c)).casefold()
 
 
-def _has_explicit_bounds(prompt: str) -> bool:
+def explicit_daily_bounds(prompt: str) -> tuple[float | None, float | None]:
+    """Return only kilometre bounds actually stated, never inferred limits."""
     text = _fold(prompt)
     number = r"\d{1,2}(?:[.,]\d+)?"
-    # Explicit ranges remain authoritative: "18 à 22 km/jour", "18-22 km".
-    if re.search(rf"\b{number}\s*(?:a|-|jusqu[' ]?a)\s*{number}\s*km", text):
-        return True
-    # Explicit upper/lower limits must not be relaxed.
-    if re.search(rf"(?:max(?:imum)?|pas\s+plus\s+de|moins\s+de)\s*{number}\s*km", text):
-        return True
-    if re.search(rf"(?:au\s+moins|min(?:imum)?)\s*{number}\s*km", text):
-        return True
-    return False
+    value = lambda match: float(match.replace(",", "."))
+    minimum = maximum = None
+    interval = re.search(
+        rf"\b(?:entre\s+)?({number})\s*(?:a|-|jusqu[' ]?a|et)\s*({number})\s*km", text,
+    )
+    if interval:
+        minimum, maximum = sorted((value(interval.group(1)), value(interval.group(2))))
+    upper = re.search(rf"(?:max(?:imum)?|pas\s+plus\s+de|moins\s+de)\s*({number})\s*km", text)
+    lower = re.search(rf"(?:au\s+moins|min(?:imum)?)\s*({number})\s*km", text)
+    if upper:
+        maximum = value(upper.group(1))
+    if lower:
+        minimum = value(lower.group(1))
+    return minimum, maximum
+
+
+def _has_explicit_bounds(prompt: str) -> bool:
+    return any(bound is not None for bound in explicit_daily_bounds(prompt))
+
+
+def intent_daily_bounds(intent) -> tuple[float | None, float | None]:
+    """Read declared bounds from parsed intent or its original request text."""
+    intent = intent or {}
+    parsed = explicit_daily_bounds(intent.get("raw") or "")
+    return tuple(intent.get(key, bound) for key, bound in zip(
+        ("explicit_daily_min", "explicit_daily_max"), parsed,
+    ))
 
 
 def install_distance_tolerance(v3) -> None:
@@ -41,7 +60,10 @@ def install_distance_tolerance(v3) -> None:
 
     def parse_intent(data):
         intent = original_parse(data)
-        if _has_explicit_bounds(getattr(data, "prompt", "")):
+        minimum, maximum = explicit_daily_bounds(getattr(data, "prompt", ""))
+        intent["explicit_daily_min"] = minimum
+        intent["explicit_daily_max"] = maximum
+        if minimum is not None or maximum is not None:
             intent["distance_tolerance"] = "explicit"
             return intent
 
@@ -58,4 +80,4 @@ def install_distance_tolerance(v3) -> None:
     v3._parse_intent = parse_intent
 
 
-__all__ = ["install_distance_tolerance", "_has_explicit_bounds"]
+__all__ = ["install_distance_tolerance", "_has_explicit_bounds", "explicit_daily_bounds", "intent_daily_bounds"]

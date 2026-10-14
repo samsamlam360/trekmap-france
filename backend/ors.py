@@ -11,6 +11,7 @@ calls.  V9 now plans on network distances first and renders geometry second.
 """
 
 import os
+import math
 import time
 from copy import deepcopy
 from typing import Any
@@ -111,7 +112,7 @@ def _matrix_key(coords):
     return tuple((round(float(p[0]), 5), round(float(p[1]), 5)) for p in coords)
 
 
-def get_distance_matrix(coords):
+def _distance_matrix(coords, *, timeout=15):
     """Return a real pedestrian distance matrix in kilometres.
 
     ``coords`` are ``[lat, lon]`` pairs. Null ORS cells remain ``None`` and are
@@ -128,7 +129,7 @@ def get_distance_matrix(coords):
     key = _matrix_key(coords)
     now = time.monotonic()
     cached = _MATRIX_CACHE.get(key)
-    if cached and now - cached[0] < _MATRIX_TTL:
+    if cached and now - cached[0] < _MATRIX_TTL and cached[1].get("profile", ORS_PROFILE) == ORS_PROFILE:
         return deepcopy(cached[1])
 
     payload = {
@@ -142,7 +143,7 @@ def get_distance_matrix(coords):
             ORS_MATRIX_URL,
             json=payload,
             headers={"Authorization": ORS_API_KEY, "Content-Type": "application/json"},
-            timeout=15,
+            timeout=timeout,
         )
     except requests.Timeout:
         return {"distances": None, "fallback": True, "warning": "OpenRouteService Matrix : délai dépassé."}
@@ -181,6 +182,120 @@ def get_distance_matrix(coords):
     _MATRIX_CACHE[key] = (now, deepcopy(result))
     while len(_MATRIX_CACHE) > 80:
         _MATRIX_CACHE.pop(next(iter(_MATRIX_CACHE)))
+    return result
+
+
+def get_distance_matrix(coords):
+    """Keep the general planner's existing Matrix timeout and cache behavior."""
+    return _distance_matrix(coords)
+
+
+def _bounded_http_timeout(timeout_s):
+    """Share the remaining budget between connection and response reads.
+
+    A scalar requests timeout applies separately to both phases, so it can
+    spend twice the caller's remaining time. These phase caps sum to at most
+    the remaining budget; no worker continues requesting after we return.
+    """
+    try:
+        remaining = float(timeout_s)
+    except (TypeError, ValueError):
+        return None
+    if not math.isfinite(remaining) or remaining <= 0:
+        return None
+    phase = remaining / 2.0
+    return phase, phase
+
+
+def _bounded_provider_warning(provider):
+    """Observe existing process-wide circuits instead of bypassing an outage."""
+    from . import trekbrain_circuit_breaker_v9 as breaker
+    if breaker._INSTALLED:
+        if breaker._rate_limited(provider):
+            return "OpenRouteService HTTP 429 : pause temporaire des appels."
+        if not breaker._closed(provider):
+            return "OpenRouteService ignoré après un timeout récent."
+    if provider == "matrix":
+        from . import trekbrain_speed_v9 as speed
+        if speed._INSTALLED:
+            status = speed._matrix_auth_cooldown_status()
+            if status is not None:
+                return f"OpenRouteService Matrix HTTP {status} : pause temporaire des appels."
+    return None
+
+
+def _bounded_provider_result(provider, warning, status=None):
+    from . import trekbrain_circuit_breaker_v9 as breaker
+    if breaker._INSTALLED:
+        breaker._report_rate_limit(provider, warning or "", status)
+        if breaker._network_failure(warning or ""):
+            breaker._open(provider)
+    if provider == "matrix":
+        from . import trekbrain_speed_v9 as speed
+        if speed._INSTALLED:
+            for denied in (401, 403):
+                if f"HTTP {denied}" in str(warning or ""):
+                    speed._open_matrix_auth_cooldown(denied)
+                    break
+
+
+def get_distance_matrix_bounded(coords, *, timeout_s):
+    """One synchronous HTTP Matrix call, sharing the regular positive cache."""
+    timeout = _bounded_http_timeout(timeout_s)
+    warning = _bounded_provider_warning("matrix") if timeout else "Budget Matrix épuisé."
+    if warning:
+        return {"distances": None, "fallback": True, "warning": warning}
+    result = _distance_matrix(coords, timeout=timeout)
+    _bounded_provider_result("matrix", result.get("warning"))
+    return result
+
+
+def get_route_direct_bounded(coords, distance_gps, *, timeout_s):
+    """One Directions request, with no snap, segmentation or provider recovery.
+
+    Lodging connectors cannot enter the general get_route/_request_route
+    wrappers: those deliberately retry or switch providers for a whole trek.
+    Existing successful Directions cache entries and provider cooldowns remain
+    shared with that general planner.
+    """
+    fallback = _fallback(coords, distance_gps)
+    timeout = _bounded_http_timeout(timeout_s)
+    if timeout is None:
+        return {**fallback, "warning": "Budget Directions épuisé."}
+    if not ORS_API_KEY or len(coords) < 2:
+        return {**fallback, "warning": "ORS_API_KEY absente ou points insuffisants."}
+    warning = _bounded_provider_warning("ors")
+    if warning:
+        return {**fallback, "warning": warning}
+    from . import trekbrain_ors_resilience_v9 as resilience
+    if resilience._INSTALLED:
+        cached = resilience._cached(coords)
+        if cached is not None and cached.get("profile", ORS_PROFILE) == ORS_PROFILE:
+            return cached
+    payload = {
+        "coordinates": [[float(p[1]), float(p[0])] for p in coords],
+        "instructions": False,
+    }
+    result = None
+    status = None
+    try:
+        response = requests.post(
+            ORS_URL, json=payload,
+            headers={"Authorization": ORS_API_KEY, "Content-Type": "application/json"},
+            timeout=timeout,
+        )
+        result, warning, status = _parse_response(response, coords, distance_gps)
+    except requests.Timeout:
+        warning = "OpenRouteService : délai de liaison dépassé."
+    except requests.RequestException as exc:
+        warning = f"OpenRouteService inaccessible ({exc.__class__.__name__})."
+    except Exception:
+        warning = "Erreur inattendue avec OpenRouteService."
+    _bounded_provider_result("ors", warning, status)
+    if result is None:
+        return {**fallback, "warning": warning or "Liaison pédestre non vérifiée."}
+    if resilience._INSTALLED:
+        resilience._remember(coords, None, result)
     return result
 
 

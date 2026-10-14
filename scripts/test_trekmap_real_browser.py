@@ -34,6 +34,28 @@ PLAN = {
     "logistics": {"nights_missing": 1, "nights_transfer_required": 0},
     "map_resources": {"coverage": {"water": "partial", "days_without_water": [2]}},
 }
+LONG_PREPARATION_PLAN = {
+    **PLAN,
+    "trip_readiness": {
+        "version": 1, "status": "incomplete", "route_validated": True,
+        "issues": [
+            {"requirement": "water", "days": [1, 2],
+             "detail": "Points d'eau potable encore à confirmer pour chaque journée de marche."},
+            {"requirement": "food", "days": [1, 2],
+             "detail": "Ravitaillement à organiser et horaires des commerces à vérifier avant le départ."},
+            {"requirement": "accommodation", "days": [1],
+             "detail": "Hébergement sans accès pédestre aller et retour confirmé depuis la fin d'étape."},
+            {"requirement": "distance", "days": [2],
+             "detail": "Distance de marche avec les accès à ajuster à l'objectif journalier demandé."},
+            {"requirement": "objective", "days": [2],
+             "detail": "Point de passage obligatoire encore absent du tracé proposé pour ce trek."},
+            {"requirement": "transit", "days": [1, 2],
+             "detail": "Accès en transport au départ et retour à confirmer avant de réserver."},
+        ],
+        "actions": [{"type": "edit_request", "label": "Modifier la requête",
+                     "detail": "Adapter la durée et les étapes dans le formulaire de préparation."}],
+    },
+}
 
 options = Options()
 options.add_argument("--headless=new")
@@ -66,10 +88,10 @@ try:
     assert not home.is_displayed(), "Explorer navigation did not close homepage"
     assert driver.find_element(By.ID, "map").is_displayed(), "Main hiking map is hidden"
 
-    def open_and_check(label: str, width: int, height: int):
+    def open_and_check(label: str, width: int, height: int, plan=PLAN):
         driver.set_window_size(width, height)
         opened = driver.execute_script(
-            "return window.TrekBrainMapWorkspace.open(arguments[0]);", PLAN
+            "return window.TrekBrainMapWorkspace.open(arguments[0]);", plan
         )
         assert opened is True, f"{label}: valid synthetic hike rejected"
         active = driver.execute_script(
@@ -108,7 +130,39 @@ try:
         "return window.TrekBrainMapWorkspace.isActive();"
     ), "Phone exit left route mode active"
     assert not panel.is_displayed(), "Route panel remains on phone after exit"
-    print("REAL CHROME: desktop 1440x900 and mobile 390x844; "
-          "route/map, stages, expand, exit, explorer restore PASS")
+
+    # Many unmet needs must remain readable on a short phone, without the
+    # always-visible action footer covering the native expand click target.
+    for width in (390, 320):
+        label = f"mobile-long-preparation-{width}"
+        panel = open_and_check(label, width, 640, LONG_PREPARATION_PLAN)
+        layout = driver.execute_script(
+            "const p=document.getElementById('tm-brain-route-panel');"
+            "const c=p.querySelector('.tm-brain-content');"
+            "const a=p.querySelector('.tm-brain-actions');"
+            "const pr=p.getBoundingClientRect(), cr=c.getBoundingClientRect(), ar=a.getBoundingClientRect();"
+            "return {scrolls:c.scrollHeight>c.clientHeight, overlap:cr.bottom>ar.top+1,"
+            "footerInside:ar.bottom<=pr.bottom+1, separate:!c.contains(a)};"
+        )
+        assert layout["scrolls"], f"{label}: long preparation does not have a scrollable body"
+        assert layout["separate"] and not layout["overlap"] and layout["footerInside"], (
+            f"{label}: footer overlaps or leaves the available route panel: {layout}"
+        )
+        expand = panel.find_element(By.CSS_SELECTOR, '[data-workspace-action="expand"]')
+        expand.click()
+        assert "expanded" in panel.get_attribute("class").split(), (
+            f"{label}: native expand click cannot reveal the stage list"
+        )
+        assert panel.find_element(By.ID, "tm-brain-route-detail").is_displayed(), (
+            f"{label}: expanded stage list is hidden"
+        )
+        expand.click()
+        assert "expanded" not in panel.get_attribute("class").split(), (
+            f"{label}: native collapse click cannot fold the stage list"
+        )
+        driver.save_screenshot(str(OUT / (label + "-after-click.png")))
+        driver.execute_script("window.TrekBrainMapWorkspace.exit();")
+    print("REAL CHROME: desktop 1440x900, mobile 390x844 and short phones 390/320x640; "
+          "route/map, long preparation scroll, native expand/collapse, exit, explorer restore PASS")
 finally:
     driver.quit()

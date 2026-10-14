@@ -14,6 +14,7 @@ import unicodedata
 from typing import Any
 
 from . import free_planner_v2 as geo
+from .trekbrain_geo_fallback_v9 import query_parts
 
 
 def _fold(value: str) -> str:
@@ -155,6 +156,36 @@ def _clean_place(value: str) -> str:
     return value[:100]
 
 
+def _following_qualifier(text: str, offset: int) -> str | None:
+    """Retain a short explicit locality/department after a place-name comma."""
+    match = re.match(
+        r"\s*,\s*([a-zA-ZÀ-ÿ0-9'’ -]{2,45}?)(?=\s+(?:avec|sans|pour|environ|en|et)\b|[,.;!?]|$)",
+        text[offset:], flags=re.I,
+    )
+    if not match:
+        return None
+    value = match.group(1).strip()
+    terms = set(re.findall(r"[a-z0-9]+", _fold(value)))
+    prose = {"avec", "sans", "pour", "environ", "jour", "jours", "km", "eau", "camping",
+             "refuge", "boucle", "randonnee", "je", "nous", "soir", "matin", "hebergement"}
+    if not value or terms & prose or _fold(value) == "france":
+        return None
+    if any(char.isdigit() for char in value) and not re.fullmatch(r"(?:[0-9]{2,3}|2[abAB])", value):
+        return None
+    return value
+
+
+def _qualified_anchor_name(point: dict[str, Any], place: str, form_region: str) -> str:
+    """A provider's short/web title must not erase the user's disambiguator."""
+    landmark, qualifier = query_parts(place)
+    form_place, form_qualifier = query_parts(form_region)
+    if not qualifier and form_qualifier and _same_place_hint(landmark, form_place):
+        qualifier = form_qualifier
+    if qualifier:
+        return f"{landmark}, {qualifier}"[:120]
+    return str(point.get("short_name") or landmark).strip()[:120]
+
+
 def _extract_prompt_places(prompt: str) -> list[dict[str, Any]]:
     """Return likely geographic anchors in strongest-to-weakest order.
 
@@ -173,10 +204,11 @@ def _extract_prompt_places(prompt: str) -> list[dict[str, Any]]:
         r"|\s+et\s+(?:je|nous|on)\b"
         r"|\s+avec\b|\s+pour\b|[,.;!?]|$)"
     )
+    preposition = r"(?:(?:des|du|de)\s+|d['’]\s*)"
     patterns = [
-        ("route_area", rf"(?:faire\s+)?(?:le\s+)?tour\s+(?:de|du|des|d['’])\s*(.+?){stop}"),
+        ("route_area", rf"(?:faire\s+)?(?:le\s+)?tour\s+{preposition}(.+?){stop}"),
         ("route_area", rf"(?:trek|rando|randonn[eé]e)\s+(?:a|à|au|aux|dans|autour\s+de|pres\s+de|près\s+de)\s+(.+?){stop}"),
-        ("route_area", rf"(?:autour|pres|près|a\s+proximite|à\s+proximité)\s+(?:de|du|des|d['’])\s*(.+?){stop}"),
+        ("route_area", rf"(?:autour|pres|près|a\s+proximite|à\s+proximité)\s+{preposition}(.+?){stop}"),
         ("visit", rf"(?:visiter|voir|decouvrir|découvrir|passer\s+par|aller\s+(?:a|à|au|aux))\s+(.+?){stop}"),
     ]
 
@@ -192,6 +224,9 @@ def _extract_prompt_places(prompt: str) -> list[dict[str, Any]]:
     for kind, pattern in patterns:
         for match in re.finditer(pattern, text, flags=re.I):
             place = _clean_place(match.group(1))
+            qualifier = _following_qualifier(text, match.end())
+            if qualifier:
+                place = f"{place}, {qualifier}"[:120]
             key = _fold(place)
             if len(place) < 3 or key in seen:
                 continue
@@ -314,9 +349,14 @@ def reconcile_request(data):
         selected = None
 
     if selected:
-        anchor_point = _geocode_one(selected["place"])
+        chosen_place = selected["place"]
+        place_name, qualifier = query_parts(chosen_place)
+        form_place, form_qualifier = query_parts(form_region)
+        if not qualifier and form_qualifier and _same_place_hint(place_name, form_place):
+            chosen_place = f"{place_name}, {form_qualifier}"
+        anchor_point = _geocode_one(chosen_place)
         if anchor_point:
-            anchor_name = str(anchor_point.get("short_name") or selected["place"]).strip()[:120]
+            anchor_name = _qualified_anchor_name(anchor_point, chosen_place, form_region)
             if selected["kind"] == "route_area":
                 effective_region = anchor_name
                 region_overridden = _fold(effective_region) != _fold(form_region)
@@ -340,6 +380,14 @@ def reconcile_request(data):
                     forced_waypoint = anchor_name
                 else:
                     reason = reason + "+visit-near-region"
+        elif selected["kind"] == "route_area" and query_parts(chosen_place)[1]:
+            # A provider outage must not revert an explicit qualified request
+            # to a stale form value in another department. The route planner
+            # still has to resolve this exact anchor before drawing anything.
+            effective_region = chosen_place[:120]
+            anchor_name = effective_region
+            region_overridden = _fold(effective_region) != _fold(form_region)
+            reason = "explicit-qualified-area-deferred-geocode"
 
     explicit_route_type = _route_type_from_prompt(prompt)
     if endpoint_pair and explicit_route_type is None:
@@ -406,6 +454,7 @@ def reconcile_request(data):
         "trail_access_mode": "canonical-tmb-start" if tmb_tour and reason == "tour-du-mont-blanc-canonical-start" else None,
         "preferred_trail": "GR 340" if belle_ile_tour else "TMB" if tmb_tour else None,
         "endpoint_pair": list(endpoint_pair) if endpoint_pair else None,
+        "geographic_qualifier": query_parts(effective_region)[1],
     }
     return effective, meta
 

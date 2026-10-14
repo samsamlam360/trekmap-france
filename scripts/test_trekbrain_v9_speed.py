@@ -671,15 +671,16 @@ assert float(meta.get("elapsed_ms") or 0) < 500, meta
 # Walking connectors for several nights must be validated with one ORS Matrix
 # batch, not one Directions request per night.
 matrix_calls = {"count": 0}
-real_matrix = ors.get_distance_matrix
+real_matrix = ors.get_distance_matrix_bounded
 
-def fake_connector_matrix(points):
+def fake_connector_matrix(points, *, timeout_s):
+    assert 0 < timeout_s <= logistics._CONNECTOR_BUDGET_SECONDS
     matrix_calls["count"] += 1
     n = len(points)
     matrix = [[0.0 if i == j else 1.2 for j in range(n)] for i in range(n)]
     return {"distances": matrix, "fallback": False, "routing_mode": "ors-matrix"}
 
-ors.get_distance_matrix = fake_connector_matrix
+ors.get_distance_matrix_bounded = fake_connector_matrix
 try:
     connector_rows = logistics._matrix_connectors(
         ors,
@@ -690,7 +691,7 @@ try:
         ],
     )
 finally:
-    ors.get_distance_matrix = real_matrix
+    ors.get_distance_matrix_bounded = real_matrix
 assert matrix_calls["count"] == 1, matrix_calls
 assert len(connector_rows) == 2, connector_rows
 assert all(row.get("routing_mode") == "ors-matrix" for row in connector_rows.values())

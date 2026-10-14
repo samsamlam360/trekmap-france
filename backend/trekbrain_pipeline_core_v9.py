@@ -30,6 +30,7 @@ from fastapi import HTTPException
 
 from . import trekbrain_perf_profile_v9 as perf
 from .trekbrain_distance_contract_v9 import annotate_daily_distance
+from .trekbrain_distance_tolerance_v9 import intent_daily_bounds
 
 _INSTALLED = False
 PIPELINE_VERSION = "v9-explicit-1"
@@ -183,6 +184,126 @@ def _haversine(a, b) -> float:
     dlat, dlon = lat2 - lat1, lon2 - lon1
     h = math.sin(dlat / 2) ** 2 + math.cos(lat1) * math.cos(lat2) * math.sin(dlon / 2) ** 2
     return 6371.0088 * 2 * math.asin(min(1.0, math.sqrt(max(0.0, h))))
+
+
+def _improve_backbone_distance(result, state, legacy_main, *, v3, roundtrip):
+    """Compare real distances before lodging commits to stage boundaries.
+
+    Legacy routes use the same two-call budget as round-trip routes. Canonical
+    and GR routes, and requests with mandatory places, keep their backbone.
+    """
+    intent = state.intent
+    route = result.get("route_preview") or {}
+    planner = result.get("planner") or {}
+    if _fold(intent.get("route_type") or "") != "boucle":
+        return result
+    if result.get("canonical_route") or route.get("relation_geometry") or route.get("relation_ref"):
+        return result
+    if planner.get("distance_search") is not None or planner.get("selected_evidence") == "hiking-relation":
+        return result
+    if any(intent.get(key) for key in ("start_query", "end_query", "via_query", "avoid", "max_dplus_day")):
+        return result
+    if re.search(r"\b(?:gr\s*\d+|grp\b|pr\s*\d+)\b", _fold(intent.get("raw") or "")):
+        return result
+    if not hasattr(roundtrip, "_optimize_target_roundtrip"):
+        return result
+    try:
+        days = max(1, int(intent.get("days") or 1))
+        target_day = float(intent.get("daily_target") or 0)
+        target_total = float(intent.get("total_target") or target_day * days)
+        high = float(intent.get("daily_max") or target_day * 1.25)
+        low = float(intent.get("daily_min") or target_day * 0.75)
+        stages = result.get("stages") or []
+        actual = [float(stage.get("distance_km") or 0) for stage in stages]
+        total = float(route.get("distance_km") or route.get("distance") or result.get("distance_km") or 0)
+    except (TypeError, ValueError, AttributeError):
+        return result
+    coords = route.get("coords") or []
+    if (route.get("fallback") is not False or len(coords) < 4 or len(actual) != days
+            or target_day <= 0 or not (3.0 <= target_total <= 99.0)
+            or not math.isfinite(total) or total <= 0
+            or any(not math.isfinite(km) or km <= 0 for km in actual)):
+        return result
+    significant = any(km > target_day * 1.18 and km - target_day >= 2.0 for km in actual)
+    declared_min, declared_max = intent_daily_bounds(intent)
+    outside_limit = (max(actual) > (declared_max if declared_max is not None else high) + 1e-6
+                     or declared_min is not None and min(actual) < declared_min - 1e-6)
+    if not significant and not outside_limit:
+        return result
+    start = dict(result.get("start") or {})
+    if "lat" not in start or "lon" not in start:
+        start.update({"lat": float(coords[0][0]), "lon": float(coords[0][1]), "name": "Départ"})
+    source = dict(route, distance=total)
+    selected = roundtrip._optimize_target_roundtrip(
+        source, start, target_total, low, high, days, v3, intent,
+    )
+    search = selected.get("distance_search") or {}
+    if search:
+        result.setdefault("planner", {})["distance_search"] = dict(search)
+        state.phases.append("route:distance-comparison")
+    balanced_average = total / days
+    can_rebalance = (outside_limit or significant) and low <= balanced_average <= high
+    if search.get("status") != "closer_route_selected" and not can_rebalance:
+        return result
+    try:
+        candidate = roundtrip._build_roundtrip(
+            state.route_data, legacy_main, v3,
+            route_candidate=selected, route_start=start,
+        )
+    except HTTPException:
+        return result
+    candidate_stages = candidate.get("stages") or []
+    try:
+        candidate_actual = [float(stage["distance_km"]) for stage in candidate_stages]
+    except (TypeError, ValueError, KeyError):
+        return result
+    if len(candidate_actual) != days or any(not math.isfinite(km) or km <= 0 for km in candidate_actual):
+        return result
+    declared_min, declared_max = intent_daily_bounds(intent)
+    if declared_min is not None and min(candidate_actual) < declared_min - 1e-6:
+        return result
+    ceiling = declared_max if declared_max is not None else high + 0.75
+    if max(candidate_actual) > ceiling + 1e-6:
+        return result
+
+    def rank(distances):
+        return (max(0.0, max(distances) - high),
+                sum(abs(km - target_day) for km in distances), max(distances))
+
+    if rank(candidate_actual) >= rank(actual):
+        return result
+    candidate.setdefault("planner", {})["distance_selection"] = {
+        "requested_days": days,
+        "original_stage_km": actual,
+        "selected_stage_km": candidate_actual,
+        "selected_before_logistics": True,
+    }
+    state.phases.append("route:distance-alternative")
+    return candidate
+
+
+def _enforce_explicit_distance_limit(result, intent):
+    """Enforce declared bounds without treating inferred partner limits as exact."""
+    minimum, maximum = intent_daily_bounds(intent)
+    if minimum is None and maximum is None:
+        return result
+    try:
+        distances = [float(stage["distance_km"]) for stage in result.get("stages") or []]
+    except (TypeError, ValueError, KeyError):
+        return result
+    if maximum is not None and any(km > maximum + 1e-6 for km in distances):
+        raise HTTPException(status_code=422, detail=(
+            f"Le tracé calculé atteint {max(distances):.1f} km sur une journée, "
+            f"au-delà du maximum explicite de {maximum:.1f} km. "
+            "Augmente le nombre de jours ou demande un autre parcours pour recalculer des étapes compatibles."
+        ))
+    if minimum is not None and any(km < minimum - 1e-6 for km in distances):
+        raise HTTPException(status_code=422, detail=(
+            f"Le tracé calculé atteint seulement {min(distances):.1f} km sur une journée, "
+            f"en dessous du minimum explicite de {minimum:.1f} km. "
+            "Demande un autre tracé ou réduis le nombre de jours pour recalculer des étapes compatibles."
+        ))
+    return result
 
 
 def _rebalance_stage_count(result: dict[str, Any], intent: dict[str, Any]) -> dict[str, Any]:
@@ -547,6 +668,11 @@ def install_planning_pipeline(
 
         if not isinstance(result, dict):
             return result
+        result = _improve_backbone_distance(result, state, legacy_main, v3=v3, roundtrip=roundtrip)
+        result = _rebalance_stage_count(result, state.intent)
+        result = _enforce_explicit_distance_limit(result, state.intent)
+        if (result.get("planner") or {}).get("stage_rebalanced"):
+            state.phases.append("stages:rebalanced")
         state.route_result = result
 
         if category is not None:
@@ -598,10 +724,7 @@ def install_planning_pipeline(
                     exc,
                 )
 
-        result = _rebalance_stage_count(result, state.intent)
         result = annotate_daily_distance(result, state.intent)
-        if (result.get("planner") or {}).get("stage_rebalanced"):
-            state.phases.append("stages:rebalanced")
         state.phases.append("finalize")
         return _mark_pipeline(result, state)
 
@@ -616,4 +739,6 @@ __all__ = [
     "_preload_canonical_stays",
     "_rebalance_stage_count",
     "_relation_candidate_loop_allowed",
+    "_improve_backbone_distance",
+    "_enforce_explicit_distance_limit",
 ]

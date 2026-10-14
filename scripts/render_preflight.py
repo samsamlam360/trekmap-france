@@ -97,6 +97,15 @@ def main() -> None:
         root / "scripts" / "test_trekbrain_v9_cold_water_distribution.py",
         root / "scripts" / "test_trekbrain_v9_distance_contract.py",
         root / "scripts" / "test_benchmark_distance_alerts.py",
+        root / "scripts" / "test_benchmark_readiness.py",
+        root / "scripts" / "test_benchmark_cold_contract.py",
+        root / "scripts" / "test_trekbrain_v9_readiness.py",
+        root / "scripts" / "test_trekbrain_v9_logistics_assignment.py",
+        root / "scripts" / "test_trekbrain_v9_connector_budget.py",
+        root / "scripts" / "test_trekbrain_v9_distance_selection.py",
+        root / "scripts" / "test_trekbrain_v9_explicit_bounds.py",
+        root / "scripts" / "test_trekbrain_v9_daily_resource_readiness.py",
+        root / "scripts" / "test_trekbrain_v9_geocode_trace.py",
         root / "scripts" / "test_trekbrain_v9_cold_stage_anchors.py",
         root / "scripts" / "test_trekbrain_v9_water_evidence_consistency.py",
         root / "scripts" / "test_trekbrain_v9_oversize_waypoint_rescue.py",
@@ -128,24 +137,7 @@ def main() -> None:
         except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as exc:
             fail(f"régression TrekBrain détectée dans {script.name}: {exc}")
 
-    if os.getenv("TREKBRAIN_RUN_BENCHMARK", "").strip().casefold() in {"1", "true", "yes", "on"}:
-        benchmark = root / "scripts" / "benchmark_trekbrain_v9_render.py"
-        try:
-            subprocess.run(
-                [sys.executable, str(benchmark)],
-                cwd=root,
-                check=True,
-                timeout=180,
-            )
-        except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as exc:
-            fail(f"benchmark TrekBrain Render interrompu: {exc}")
-
-    if os.getenv("TREKBRAIN_RUN_BENCHMARK", "").strip().casefold() in {"1", "true", "yes", "on"}:
-        try:
-            subprocess.run([sys.executable, str(root / "scripts" / "benchmark_trekbrain_v9_cold.py")],
-                           cwd=root, check=True, timeout=380)
-        except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as exc:
-            fail(f"audit à froid interrompu: {exc}")
+    # Live audits belong to the manual benchmark workflows, never a build.
 
     import backend.app_v5 as app_v5
 

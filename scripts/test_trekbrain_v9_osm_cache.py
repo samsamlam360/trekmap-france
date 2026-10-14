@@ -184,6 +184,7 @@ partial_map = {
     "stages": [{"day": 1}, {"day": 2}],
     "map_resources": {"points": [{
         "kind": "food", "route_day": 1, "name": "Épicerie du départ",
+        "source_url": "https://www.openstreetmap.org/node/900201",
     }], "coverage": {"food": "partial", "days_without_food": [2]}}
 }
 resources._annotate_stage_resources(partial_map)
@@ -194,6 +195,7 @@ water_gap = {
     "map_resources": {"points": [{
         "kind": "water", "route_day": 1, "name": "Fontaine du départ",
         "status": "potable_referenced",
+        "source_url": "https://www.openstreetmap.org/node/900202",
     }], "coverage": {"water": "partial", "days_without_water": [2]}}
 }
 resources._annotate_stage_resources(water_gap)

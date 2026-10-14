@@ -154,7 +154,7 @@ block = r'''<!-- TREKMAP_AI_EXPERIENCE_START -->
       <div class="tm-ai-grid">
         <div class="tm-ai-field"><label>Région / massif</label><input id="tm-ai-region" placeholder="Pyrénées, Vercors..."></div>
         <div class="tm-ai-field"><label>Jours</label><input id="tm-ai-days" type="number" min="1" max="21" value="3"></div>
-        <div class="tm-ai-field"><label>Km / jour cible</label><input id="tm-ai-km" type="number" min="3" max="40" step="1" value="18"></div>
+        <div class="tm-ai-field"><label>Km / jour cible</label><input id="tm-ai-km" type="number" min="3" max="40" step="0.1" value="18"></div>
         <div class="tm-ai-field"><label>Difficulté</label><select id="tm-ai-difficulty"><option value="easy">Facile</option><option value="medium" selected>Moyen</option><option value="hard">Difficile</option></select></div>
         <div class="tm-ai-field" style="grid-column:1/-1"><label>Type</label><select id="tm-ai-route-type"><option>Boucle</option><option>Traversée</option><option>Itinérance</option><option>Aller-retour</option></select></div>
       </div>
@@ -292,8 +292,9 @@ block = r'''<!-- TREKMAP_AI_EXPERIENCE_START -->
     const waterInfo=cover.water==='complete'?'Sources cartographiées · potabilité à vérifier':waterMissing.length?'Jours '+waterMissing.join(', ')+' non couverts':'Disponibilité à vérifier';
     const foodInfo=cover.food==='complete'?'Commerces cartographiés':foodMissing.length?'Jours '+foodMissing.join(', ')+' non couverts':'Disponibilité à vérifier';
     const lodgingInfo=missing?'Nuitées manquantes : '+missing:transfers?'Transferts nécessaires : '+transfers:log.walking_readiness==='ready_on_foot'?'Accès pédestre repéré':'Nuitées à confirmer';
+    const readiness=typeof window!=='undefined'&&window.TrekMapTripReadiness?window.TrekMapTripReadiness.html(p):'<h3>À vérifier avant de partir</h3>';
     return `<section class="tm-ux-essentials" aria-label="Informations essentielles du trek">
-      <h3>L’essentiel avant de partir</h3><div class="tm-ux-status-grid">
+      ${readiness}<div class="tm-ux-status-grid">
       ${pill('Parcours',status)}${pill('Eau',waterInfo)}${pill('Ravitaillement',foodInfo)}${pill('Nuitées',lodgingInfo)}
       </div>${unique.length?`<div class="tm-ux-safety" role="note"><b>⚠️ À prévoir avant le départ</b>${unique.map(x=>`<p>${esc(x)}</p>`).join('')}</div>`:''}
       <small>Les ressources sont cartographiées, pas réservées ni garanties disponibles.</small>
@@ -340,6 +341,7 @@ block = r'''<!-- TREKMAP_AI_EXPERIENCE_START -->
     const limitations=p.confidence?.limitations||[];
     $('tm-ai-content').innerHTML=`
       <div class="tm-ai-titlebar"><div><h2>${esc(p.title||'Trek proposé')}</h2><p>${esc(p.start?.name&&p.end?.name?(p.start.name===p.end.name?'Boucle au départ de '+p.start.name:p.start.name+' → '+p.end.name):'Parcours proposé · informations de terrain à vérifier')}</p></div><button class="tm-ai-map-btn" id="tm-ai-back" type="button">← Modifier</button></div>
+      ${essentialChecks(p)}
       <div class="tm-ai-badges"><span class="tm-ai-badge">${esc(p.region||'France')}</span><span class="tm-ai-badge">${esc(difficultyLabel[p.difficulty]||p.difficulty||'Moyen')}</span><span class="tm-ai-badge">${esc(p.route_type||'Trek')}</span><span class="tm-ai-badge">${esc(p.best_season||'Saison à vérifier')}</span></div>
       <div class="tm-ai-stats">
         <div class="tm-ai-stat"><small>Distance vérifiée</small><b>${Number(route.distance_km||0).toFixed(1)} km</b></div>
@@ -347,7 +349,6 @@ block = r'''<!-- TREKMAP_AI_EXPERIENCE_START -->
         <div class="tm-ai-stat"><small>Durée</small><b>${Number(p.duration_days||stages.length||0)} j</b></div>
         <div class="tm-ai-stat"><small>Confiance</small><b>${esc(p.confidence?.overall||'—')}</b></div>
       </div>
-      ${essentialChecks(p)}
       <section class="tm-ai-section"><h3>Étapes</h3>${stages.map(s=>`<article class="tm-ai-stage"><div class="tm-ai-stage-head"><b>Jour ${Number(s.day||0)} · ${esc(s.title||'Étape')}</b><span>${Number(s.distance_km||0).toFixed(1)} km · +${Math.round(s.elevation_gain_m||0)} m</span></div><p><b>${esc(s.from_name||'')}</b> → <b>${esc(s.to_name||'')}</b></p><p>🌙 ${esc(s.overnight||'À vérifier')}</p><p>🚰 ${esc(s.water_notes||'')}</p><p>🥖 ${esc(s.food_notes||'')}</p>${s.highlights?.length?`<p>🌄 ${s.highlights.map(esc).join(' · ')}</p>`:''}${s.safety_notes?`<p>⚠️ ${esc(s.safety_notes)}</p>`:''}</article>`).join('')}</section>
       ${water.length?`<section class="tm-ai-section"><h3>Eau</h3><div class="tm-ai-list">${water.map(w=>{const z=waterLabel(w.status);return `<div class="tm-ai-item"><b>${esc(w.name)}</b> · <span class="${z[1]}">${z[0]}</span><small>${esc(w.notes||'')}</small></div>`}).join('')}</div></section>`:''}
       ${accom.length?`<section class="tm-ai-section"><h3>Nuitées</h3><div class="tm-ai-list">${accom.map(a=>`<div class="tm-ai-item"><b>${esc(a.name)}</b> · ${esc(a.type)}<small>${esc(a.notes||'')}</small></div>`).join('')}</div></section>`:''}
@@ -358,7 +359,8 @@ block = r'''<!-- TREKMAP_AI_EXPERIENCE_START -->
       ${sources.length?`<details class="tm-ai-section tm-ux-other-pois"><summary>Sources du trek (${sources.length})</summary>${sources.map(sourceLink).join('')}</details>`:''}
       <div class="tm-ai-refine-box"><b style="font-size:12px">Modifier avec l'IA</b><textarea id="tm-ai-refine-text" placeholder="Ex. raccourcis le jour 2, trouve une arrivée avec une gare, privilégie les campings..."></textarea><div class="tm-ai-refine-actions"><button id="tm-ai-refine" type="button">✨ Recalculer</button></div></div>
       <div class="tm-ai-actions"><button class="tm-ai-map-btn" id="tm-ai-preview" type="button">🗺️ Voir sur la carte</button><button id="tm-ai-save" type="button">Enregistrer dans TrekMap</button></div>`;
-    $('tm-ai-back').onclick=()=>shell.classList.remove('has-result');
+    window.TrekMapTripReadiness?.bind($('tm-ai-content'),p);
+    $('tm-ai-back').onclick=()=>window.TrekMapTripReadiness?window.TrekMapTripReadiness.edit(p):shell.classList.remove('has-result');
     $('tm-ai-preview').onclick=()=>{previewPlan(p,true);closeAI();window.TrekBrainMapWorkspace?.open(p)};
     $('tm-ai-refine').onclick=()=>{const txt=String($('tm-ai-refine-text').value||'').trim();if(txt.length<5){typeof toast==='function'&&toast('Indique la modification souhaitée.');return}generate(requestPayload(txt))};
     $('tm-ai-save').onclick=savePlan;

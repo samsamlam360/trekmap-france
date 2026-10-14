@@ -263,15 +263,20 @@ def install_fast_planning(v3, v5, v9) -> None:
         errors = []
         nom_rows = []
         photon_rows = []
+        photon_attempted = False
 
         # The parent planner already owns the second spelling variant. Respect
         # its Nominatim=0 control as well as our shared rate-limit cooldown.
         if retry_budget <= 0 or _nominatim_limited():
+            ign.record_geocode(query, "nominatim", accepted=False,
+                               reason="retry_disabled" if retry_budget <= 0 else "provider_cooldown")
             try:
+                photon_attempted = True
                 photon_rows = list(
                     free._geocode_photon(query, timeout=geocode_timeout, retries=1) or []
                 )
             except Exception as exc:
+                ign.record_geocode(query, "photon", accepted=False, reason="provider_error")
                 errors.append(str(exc))
         else:
             with ThreadPoolExecutor(max_workers=2) as pool:
@@ -279,6 +284,7 @@ def install_fast_planning(v3, v5, v9) -> None:
                 try:
                     nom_rows = list(nom_future.result(timeout=0.45) or [])
                 except FutureTimeoutError:
+                    photon_attempted = True
                     photon_future = pool.submit(
                         free._geocode_photon,
                         query,
@@ -289,31 +295,60 @@ def install_fast_planning(v3, v5, v9) -> None:
                         nom_rows = list(nom_future.result() or [])
                     except Exception as exc:
                         _record_nominatim_failure(exc)
+                        ign.record_geocode(query, "nominatim", accepted=False, reason="provider_error")
                         errors.append(str(exc))
                     try:
                         photon_rows = list(photon_future.result() or [])
                     except Exception as exc:
+                        ign.record_geocode(query, "photon", accepted=False, reason="provider_error")
                         errors.append(str(exc))
                 except Exception as exc:
                     _record_nominatim_failure(exc)
+                    ign.record_geocode(query, "nominatim", accepted=False, reason="provider_error")
                     errors.append(str(exc))
                     try:
+                        photon_attempted = True
                         photon_rows = list(
                             free._geocode_photon(
                                 query, timeout=geocode_timeout, retries=1
                             ) or []
                         )
                     except Exception as photon_exc:
+                        ign.record_geocode(query, "photon", accepted=False, reason="provider_error")
                         errors.append(str(photon_exc))
 
+        nom_rows = ign.filter_provider_places(query, nom_rows, "nominatim")
+        photon_rows = ign.filter_provider_places(query, photon_rows, "photon") if photon_rows else []
         if nom_rows:
             return nom_rows
+        # A quick successful HTTP response is not sufficient when its records
+        # contradict the explicit department or expose separate homonyms.
+        if not photon_attempted:
+            try:
+                photon_rows = ign.filter_provider_places(
+                    query,
+                    list(free._geocode_photon(query, timeout=geocode_timeout, retries=1) or []),
+                    "photon",
+                )
+            except Exception as exc:
+                ign.record_geocode(query, "photon", accepted=False, reason="provider_error")
+                errors.append(str(exc))
         if photon_rows:
             return photon_rows
         # Existing recorded regional centres remain a fast emergency fallback.
         local = free._local_geocode(query)
         if local:
-            return local
+            landmark, qualifier = ign.query_parts(query)
+            regional_terms = {"massif", "region", "parc", "naturel", "regional", "national"}
+            wanted_local = ign._words(landmark) - regional_terms
+            precise_local = [row for row in local if not qualifier and wanted_local == ign._words(row.get("short_name") or row.get("name") or "")]
+            if precise_local:
+                return ign.filter_provider_places(query, precise_local, "known-region-centre")
+            # A landmark in the Jura is not the Jura's regional centre. Such a
+            # shortcut used to prevent the exact IGN POI fallback from running.
+            for row in local:
+                ign.record_geocode(query, "known-region-centre", accepted=False,
+                                   reason="regional_centre_is_not_requested_place", point=row)
 
         # IGN is a genuinely independent public France-wide geocoder, not a
         # fabricated route or a hardcoded benchmark-specific place.
@@ -325,6 +360,7 @@ def install_fast_planning(v3, v5, v9) -> None:
                 return ign_rows
         except Exception as exc:
             outcome = "error"
+            ign.record_geocode(query, "ign-geoplateforme", accepted=False, reason="provider_error")
             errors.append(str(exc))
         finally:
             perf.record(
@@ -341,9 +377,14 @@ def install_fast_planning(v3, v5, v9) -> None:
         try:
             commune_rows = communes.geocode_commune(query, timeout=2.5)
             if commune_rows:
+                for row in commune_rows:
+                    ign.record_geocode(query, "geo-api-gouv-communes", accepted=True,
+                                       reason="official_commune_match", point=row)
                 return commune_rows
+            ign.record_geocode(query, "geo-api-gouv-communes", accepted=False, reason="empty_result")
         except Exception as exc:
             commune_outcome = "error"
+            ign.record_geocode(query, "geo-api-gouv-communes", accepted=False, reason="provider_error")
             errors.append(str(exc))
         finally:
             perf.record(
@@ -363,6 +404,7 @@ def install_fast_planning(v3, v5, v9) -> None:
                 return poi_rows
         except Exception as exc:
             poi_outcome = "error"
+            ign.record_geocode(query, "ign-bdtopo-poi", accepted=False, reason="provider_error")
             errors.append(str(exc))
         finally:
             perf.record(
@@ -382,11 +424,19 @@ def install_fast_planning(v3, v5, v9) -> None:
     # so Beaufort/Savoie was sent back to the throttled public providers.
     from . import trekbrain_place_guard_v9 as place_guard
     guarded_fast_geocode = place_guard.guarded_geocode_factory(fast_geocode)
-    v3._geocode = guarded_fast_geocode
+    def traced_geocode(query: str, **kwargs):
+        from . import trekbrain_geo_fallback_v9 as geocoding
+        rows = guarded_fast_geocode(query, **kwargs)
+        if rows:
+            first = rows[0]
+            provider = first.get("geocode_provider") or ("place-guard" if first.get("geocode_guard") else "unknown")
+            geocoding.record_geocode(query, provider, accepted=True, reason="resolved", point=first, selected=True)
+        return rows
+    v3._geocode = traced_geocode
     # Request reconciliation imports the same v2 geocoder dynamically. Keep it
     # on the identical guarded, rate-limit-aware path rather than allowing a
     # second slower serial Nominatim/Photon stack before route computation.
-    free._geocode = guarded_fast_geocode
+    free._geocode = traced_geocode
 
     def fast_overpass(query: str, *, max_mirrors: int | None = None):
         deadline = time.monotonic() + overpass_budget
