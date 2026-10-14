@@ -23,6 +23,8 @@ def feature(name, lon, lat, code="39", score=.9):
 
 class GeocodeEvidenceTests(unittest.TestCase):
     def test_geocoder_query_excludes_trail_instructions_not_area_qualifiers(self):
+        self.assertEqual(request._clean_place("Lac des Settons"), "Lac des Settons")
+        self.assertEqual(request._clean_place("Laval"), "Laval")
         self.assertEqual(
             request._clean_place("Saintes-Maries-de-la-Mer sans marcher dans l'eau"),
             "Saintes-Maries-de-la-Mer",
