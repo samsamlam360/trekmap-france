@@ -236,3 +236,6 @@ assert.equal(resourcesCleared,3);
 assert.equal(body.classList.contains('tm-brain-route-mode'),false,'opening a saved trek must restore Explorer');
 
 console.log('TrekBrain responsive map workspace: PC/mobile, security alerts, editor/save, recenter, explorer restore PASS');
+
+// All CI pipelines exercising the TrekBrain map also guard the complete site.
+await import('./test_sitewide_ux.mjs');
