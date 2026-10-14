@@ -185,13 +185,34 @@ body.tm-filters-collapsed #tm-unified-drawer{left:14px!important}
   function sortData(data){const s=$('sort-filter')?.value||'relevance';return data.sort((a,b)=>s==='distance'?Number(a.distance||0)-Number(b.distance||0):s==='elevation'?Number(a.elevation||0)-Number(b.elevation||0):s==='duration'?Number(a.duration_days||999)-Number(b.duration_days||999):s==='name'?String(a.name||'').localeCompare(String(b.name||''),'fr'):Number(b.view_count||0)-Number(a.view_count||0)||Number(extra(b.id).rating_average||0)-Number(extra(a.id).rating_average||0))}
   function resultTitle(){const m=currentMode();if(query()||['tm-route-filter','tm-season-filter','tm-rating-filter','tm-photo-filter','tm-place-filter'].some(id=>String($(id)?.value||'')&&!['0'].includes(String($(id)?.value))))return'Résultats de recherche';return({favorites:'Mes favoris',mine:'Mes treks',private:'Mes treks privés'})[m]||'Treks populaires'}
 
+  // Draw a truthful thumbnail from the trek's route, not a stock illustration.
+  function routePreview(t){
+    const c=coordsOf(t);
+    if(c.length<2)return '<span class="tm-route-preview-placeholder" aria-label="Tracé non disponible">⌁ <small>Tracé à consulter</small></span>';
+    const stride=Math.max(1,Math.ceil(c.length/85));
+    const p=c.filter((_,i)=>i%stride===0);
+    if(p[p.length-1]!==c[c.length-1])p.push(c[c.length-1]);
+    const lat=(p.reduce((s,v)=>s+v[0],0)/p.length)*Math.PI/180;
+    const cosine=Math.max(.12,Math.cos(lat));
+    const x=p.map(v=>v[1]*cosine),y=p.map(v=>v[0]);
+    const x0=Math.min(...x),x1=Math.max(...x),y0=Math.min(...y),y1=Math.max(...y);
+    const sx=(x1-x0)||.001,sy=(y1-y0)||.001,scale=Math.min(168/sx,51/sy);
+    const dx=(184-sx*scale)/2,dy=(67-sy*scale)/2;
+    const pt=i=>[(dx+(x[i]-x0)*scale).toFixed(1),(dy+(y1-y[i])*scale).toFixed(1)];
+    const d=p.map((_,i)=>(i?'L':'M')+pt(i).join(' ')).join(' ');
+    const a=pt(0),z=pt(p.length-1);
+    return '<svg class="tm-mini-route" viewBox="0 0 184 67" role="img" aria-label="Aperçu du véritable tracé">'+
+      '<path d="'+d+'" fill="none" stroke="#147350" stroke-width="3.3" stroke-linecap="round" stroke-linejoin="round"/>'+
+      '<circle cx="'+a[0]+'" cy="'+a[1]+'" r="4.4" fill="#ffffff" stroke="#075c42" stroke-width="2"/>'+
+      '<circle cx="'+z[0]+'" cy="'+z[1]+'" r="3.4" fill="#e7af4c" stroke="#144f3c" stroke-width="1.3"/></svg>';
+  }
   function renderDrawer(data){
     const previousScroll=track.scrollLeft;
     $('tm-drawer-title').textContent=resultTitle();$('tm-drawer-count').textContent=data.length;
     $('tm-info-result-count').textContent=String(data.length);
     renderInfo(selectedId==null?null:allTreksSafe().find(t=>Number(t.id)===selectedId));
     if(!data.length){track.innerHTML='<div class="tm-drawer-empty">Aucun trek ne correspond aux critères.</div>';return}
-    track.innerHTML=data.map(t=>{const x=extra(t.id),chips=[difficultyName[t.difficulty]||'Moyen'];if(x.route_type)chips.push(x.route_type);if(Number(x.rating_count||0)>0)chips.push('★ '+Number(x.rating_average||0).toFixed(1));return `<article class="tm-trek-tile ${Number(t.id)===selectedId?'selected':''}" data-id="${Number(t.id)}" tabindex="0" role="button" aria-label="Ouvrir le trek ${esc(t.name||'Trek')}"><div class="tm-tile-landscape tm-tile-landscape-${Number(t.id)%5}" aria-hidden="true"></div><strong>${esc(t.name||'Trek')}</strong><div class="region">${esc(t.region||'France')}</div><div class="tm-tile-chips">${chips.slice(0,3).map(c=>`<span class="tm-chip">${esc(c)}</span>`).join('')}</div><div class="tm-tile-meta"><span>📏 ${Number(t.distance||0).toFixed(1)} km</span><span>↗ ${Math.round(t.elevation||0)} m</span></div><span class="tm-tile-open">Ouvrir le trek ↗</span></article>`}).join('');
+    track.innerHTML=data.map(t=>{const x=extra(t.id),chips=[difficultyName[t.difficulty]||'Moyen'];if(x.route_type)chips.push(x.route_type);if(Number(x.rating_count||0)>0)chips.push('★ '+Number(x.rating_average||0).toFixed(1));return `<article class="tm-trek-tile ${Number(t.id)===selectedId?'selected':''}" data-id="${Number(t.id)}" tabindex="0" role="button" aria-label="Ouvrir le trek ${esc(t.name||'Trek')}"><div class="tm-tile-landscape" data-trek-preview="route">${routePreview(t)}</div><strong>${esc(t.name||'Trek')}</strong><div class="region">${esc(t.region||'France')}</div><div class="tm-tile-chips">${chips.slice(0,3).map(c=>`<span class="tm-chip">${esc(c)}</span>`).join('')}</div><div class="tm-tile-meta"><span>📏 ${Number(t.distance||0).toFixed(1)} km</span><span>↗ ${Math.round(t.elevation||0)} m</span></div><span class="tm-tile-open">Ouvrir le trek ↗</span></article>`}).join('');
     // Re-rendering cards on selection must NOT reset the horizontal position.
     track.scrollLeft=Math.min(previousScroll,Math.max(0,track.scrollWidth-track.clientWidth));
     syncDrawerArrows();
@@ -230,6 +251,7 @@ body.tm-filters-collapsed #tm-unified-drawer{left:14px!important}
   function renderInfo(t){
     const content=$('tm-info-selected-content'),actions=$('tm-info-controls');
     if(!content||!actions)return;
+    infoPanel.classList.toggle('has-selection',!!t);
     if(!t){
       content.innerHTML='<div class="tm-info-empty"><span aria-hidden="true">⌖</span><b>Aucun trek sélectionné</b><p>Clique sur une fiche en bas de l’écran pour voir son parcours.</p></div>';
       actions.hidden=true;return;

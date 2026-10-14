@@ -112,7 +112,7 @@ try:
         "return {filtersH:f.height,filtersRight:f.right,drawerLeft:d.left,"
         "panelLeft:p.left,panelRight:p.right,viewport:innerWidth};"
     )
-    assert layout["filtersH"] >= 450, f"Desktop filters are still a collapsed floating stub: {layout}"
+    assert 300 <= layout["filtersH"] <= 540, f"Desktop filters must be readable yet compact: {layout}"
     assert layout["drawerLeft"] >= layout["filtersRight"] - 12, (
         f"Carousel overlaps full-height filters: {layout}"
     )
@@ -185,9 +185,12 @@ try:
     assert len(scenic) >= 14 and scenic[0].is_displayed(), (
         "Desktop trek cards should display landscape previews"
     )
-    assert driver.execute_script(
-        "return getComputedStyle(document.querySelector('#tm-drawer-track .tm-tile-landscape')).backgroundImage"
-    ).find('trek-scenery.svg')>=0, "Local scenery asset missing on cards"
+    previews=driver.find_elements(By.CSS_SELECTOR, "#tm-drawer-track .tm-mini-route")
+    assert len(previews)>=14, "Each trek with valid geometry needs a route preview"
+    actual_path=driver.execute_script(
+        "return document.querySelector('#tm-drawer-track .tm-mini-route path').getAttribute('d')"
+    )
+    assert actual_path.startswith("M") and "L" in actual_path, "Route preview should use route geometry"
     logo=driver.find_element(By.CSS_SELECTOR, '#tm-brand .tm-brand-mark img')
     wait.until(lambda d: d.execute_script(
         "return document.querySelector('#tm-brand .tm-brand-mark img').naturalWidth>0"))

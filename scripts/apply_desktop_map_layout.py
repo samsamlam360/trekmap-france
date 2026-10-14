@@ -172,6 +172,97 @@ block=r'''<!-- TREKMAP_DESKTOP_MAP_2026_START -->
 @media(max-width:1239px){
   #tm-drawer-track .tm-tile-landscape{display:none}
 }
+
+/* V3: actual visual hierarchy, not another full-height dashboard above a map. */
+@media(min-width:1240px){
+  :root{--tm-panel:282px;--tm-drawer:179px}
+  #tm-unified-topbar{grid-template-columns:235px minmax(260px,500px) minmax(0,1fr)!important;gap:12px!important}
+  #sidebar{width:var(--tm-panel)!important;min-width:var(--tm-panel)!important;left:15px!important}
+  #sidebar .filters:not(.tm-collapsed){
+    width:100%!important;
+    height:min(495px,calc(100dvh - var(--tm-top) - var(--tm-drawer) - 31px))!important;
+    max-height:min(495px,calc(100dvh - var(--tm-top) - var(--tm-drawer) - 31px))!important;
+    overflow-y:auto!important;
+    border-radius:16px!important;padding:55px 12px 12px!important;
+    box-shadow:0 10px 30px rgba(13,60,38,.12)!important
+  }
+  #sidebar .filters .filter-row{padding:7px!important;gap:7px!important;margin-bottom:6px!important}
+  #sidebar .filters .tm-filter-section{margin:8px 0 6px!important}
+  #sidebar .filters :is(.field input,.field select,.tm-criterion select){min-height:34px!important;font-size:12px!important}
+  #sidebar .filters :is(.field label,.tm-criterion label){font-size:10px!important}
+  .leaflet-left{left:calc(var(--tm-panel) + 22px)!important}
+  #tm-unified-drawer,body.tm-filters-collapsed #tm-unified-drawer{
+    left:calc(var(--tm-panel) + 32px)!important;right:15px!important;
+    bottom:12px!important;height:var(--tm-drawer)!important;
+  }
+  #tm-drawer-head{height:41px!important;font-size:12px!important}
+  #tm-drawer-track{height:calc(var(--tm-drawer) - 43px)!important;padding:3px 11px 8px!important;gap:11px!important}
+  #tm-drawer-track .tm-trek-tile{
+    height:126px!important;flex:0 0 202px!important;padding:7px 9px!important;
+    box-shadow:none!important;transform:none!important;
+  }
+  #tm-drawer-track .tm-trek-tile.selected{
+    border-width:2px!important;background:#f2faf4!important
+  }
+  #tm-drawer-track .tm-tile-landscape{
+    height:39px!important;min-height:39px!important;
+    border:1px solid #dcece1!important;
+    border-radius:8px!important;
+    background-image:
+      radial-gradient(ellipse at 25% 90%,rgba(126,193,150,.22),transparent 62%),
+      repeating-linear-gradient(155deg,transparent 0 16px,rgba(17,101,62,.045) 17px,transparent 18px)!important;
+    background-color:#f1f8f2!important;
+    display:grid!important;place-items:center!important;
+    overflow:hidden!important;
+    filter:none!important
+  }
+  #tm-drawer-track .tm-mini-route{width:100%;height:100%;display:block;max-height:39px}
+  #tm-drawer-track .tm-route-preview-placeholder{
+    display:flex;gap:6px;align-items:center;color:#54836a;font-size:23px;line-height:1
+  }
+  #tm-drawer-track .tm-route-preview-placeholder small{font-size:10px}
+  #tm-drawer-track .tm-trek-tile strong{font-size:12px!important;margin-top:5px!important}
+  #tm-drawer-track .tm-trek-tile .region{font-size:10px!important;margin-top:2px!important}
+  #tm-drawer-track .tm-tile-chips{margin:4px 0 2px!important}
+  #tm-drawer-track .tm-tile-meta{font-size:10px!important;gap:6px!important}
+  #tm-drawer-track .tm-tile-open{font-size:9px!important;right:9px!important;bottom:3px!important}
+  .tm-drawer-nav{top:2px!important}
+  .tm-drawer-nav button{height:34px!important;min-height:34px!important;width:34px!important}
+  #tm-desktop-info{
+    top:calc(var(--tm-top) + 16px)!important;right:15px!important;
+    bottom:auto!important;max-height:calc(100dvh - var(--tm-top) - var(--tm-drawer) - 36px)!important;
+    width:246px!important;gap:9px!important;overflow:visible!important
+  }
+  .tm-info-overview,.tm-info-selected{
+    padding:12px!important;border:1px solid #d9e8df!important;
+    box-shadow:0 10px 28px rgba(16,57,36,.11)!important;
+  }
+  .tm-info-landscape{height:58px!important;min-height:58px!important}
+  .tm-info-landscape span{font-size:25px!important}
+  .tm-info-landscape b{font-size:11px!important}
+  .tm-info-overview h2{font-size:17px!important;margin:3px 0 4px!important}
+  .tm-info-overview p{font-size:11px!important;line-height:1.4!important;margin-bottom:8px!important}
+  .tm-info-count strong{font-size:22px!important}
+  .tm-info-selected{
+    flex:0 0 auto!important;min-height:128px!important;
+    max-height:240px!important;overflow-y:auto!important
+  }
+  #tm-desktop-info.has-selection .tm-info-overview{padding-block:8px!important}
+  #tm-desktop-info.has-selection .tm-info-overview .tm-info-landscape,
+  #tm-desktop-info.has-selection .tm-info-overview p{display:none!important}
+  .tm-info-empty{padding:11px 2px!important}
+  .tm-info-empty>span{font-size:24px!important;margin-bottom:4px!important}
+  .tm-info-empty p{font-size:11px!important}
+  .tm-info-kpis strong{font-size:11px!important}
+  .map-tools{right:276px!important;top:14px!important}
+  body.tm-brain-route-mode .map-tools{right:16px!important}
+}
+@media(min-width:1240px) and (max-height:720px){
+  #tm-desktop-info{width:226px!important}
+  .map-tools{right:257px!important}
+  .tm-info-overview p{display:none!important}
+  .tm-info-landscape{height:48px!important;min-height:48px!important}
+}
 </style>
 <!-- TREKMAP_DESKTOP_MAP_2026_END -->'''
 if html.count("</body>") != 1:
