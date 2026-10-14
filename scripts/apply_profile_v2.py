@@ -304,7 +304,10 @@ async function open(){
  if(typeof closeModal==='function')closeModal();
  root.hidden=false;root.setAttribute('role','dialog');root.setAttribute('aria-modal','true');
  document.body.style.overflow='hidden';tab='home';selected=null;model=null;render();
- root.querySelector('#tm-p-exit').focus();
+ const profileNav=root.querySelector('.tm-p-nav');
+ if(profileNav)profileNav.scrollLeft=0;
+ const firstTab=root.querySelector('[data-p-tab="home"]');
+ if(firstTab)firstTab.focus({preventScroll:true});
  try{await load();render()}catch(err){content.innerHTML='<div class="tm-p-card"><h2>Profil temporairement inaccessible</h2><p>'+e(err.message)+'</p><button class="tm-p-btn" data-p-retry="1">Réessayer</button></div>'}
 }
 window.openProfile=open;
