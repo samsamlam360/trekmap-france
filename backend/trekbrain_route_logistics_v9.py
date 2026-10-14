@@ -464,23 +464,7 @@ def _bbox_route_query(
     for element in (data.get("elements") or [])[: (290 if include_terrain else 160)]:
         tags = element.get("tags") or {}
 
-        stay_match = False
-        if category == "camping":
-            stay_match = tags.get("tourism") in {"camp_site", "caravan_site"}
-        elif category == "refuge":
-            stay_match = (
-                tags.get("tourism") in {"alpine_hut", "wilderness_hut"}
-                or (tags.get("amenity") == "shelter" and tags.get("shelter_type") == "basic_hut")
-            )
-        else:
-            stay_match = (
-                tags.get("tourism") in {
-                    "hotel", "hostel", "guest_house", "chalet", "apartment",
-                    "camp_site", "alpine_hut", "wilderness_hut",
-                }
-                or (tags.get("amenity") == "shelter" and tags.get("shelter_type") == "basic_hut")
-            )
-        if stay_match:
+        if _is_requested_stay(element, category):
             stay = _normalise_stay(element, category)
             if stay:
                 stays.append(stay)
