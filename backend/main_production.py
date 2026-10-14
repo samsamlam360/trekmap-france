@@ -214,3 +214,7 @@ def production_logo():
 def production_brand_pin():
     return FileResponse(FRONTEND_DIR / "brand-pin.svg", media_type="image/svg+xml")
 
+@app.get("/trek-scenery.svg", include_in_schema=False)
+def production_trek_scenery():
+    return FileResponse(FRONTEND_DIR / "trek-scenery.svg", media_type="image/svg+xml")
+
