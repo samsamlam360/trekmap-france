@@ -606,3 +606,7 @@ if html.count("</body>") != 1:
 html=html.replace("</body>",block+"\n</body>",1)
 path.write_text(html,encoding="utf-8")
 print("TrekBrain map workspace: desktop sidebar and mobile expandable sheet installed")
+
+# Installed last by every Render/CI build; preserves existing TrekBrain map logic.
+from runpy import run_path
+run_path(str(Path(__file__).with_name("apply_sitewide_ux.py")))
