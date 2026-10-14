@@ -39,7 +39,11 @@ from fastapi import HTTPException
 _INSTALLED = False
 _SAFETY_INSTALLED = False
 _MAX_OFFROUTE_KM = 6.0
-_WALK_CONNECTOR_LIMIT_KM = 2.8
+# Candidate-only crow-flight radius; real walking distance still must be
+# verified both ways by the bounded ORS matrix and remain <= 4 km.
+# 2.8 km rejected legitimate near-threshold candidates on new-region treks
+# before the walking router could even evaluate them. No route is assumed.
+_WALK_CONNECTOR_LIMIT_KM = 3.2
 _MAX_DISCOVERED = 80
 _MAX_CONNECTOR_OPTIONS = 12  # One ORS Matrix, at most 24 locations.
 _CONNECTOR_BUDGET_SECONDS = 4.0
