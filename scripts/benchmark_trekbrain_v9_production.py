@@ -9,6 +9,7 @@ No repository or Render secret is required.
 """
 from __future__ import annotations
 
+from collections import Counter
 import http.cookiejar
 import json
 import math
@@ -566,6 +567,7 @@ def evaluate(case, result, elapsed_s, clarify):
             "status": (result.get("logistics") or {}).get("status"),
             "discovered_candidates": (result.get("logistics") or {}).get("discovered_candidates"),
             "nights_resolved": (result.get("logistics") or {}).get("nights_resolved"),
+            "night_diagnostics": (result.get("logistics") or {}).get("night_diagnostics") or [],
             "timing": (result.get("logistics") or {}).get("timing") or {},
         },
     }
@@ -600,6 +602,15 @@ def write_reports(meta, rows):
         f"- Nuitées accessibles à pied avec liaison validée: **{sum(int(x.get('nights_walk_confirmed') or 0) for x in rows)}**",
         f"- Nuitées nécessitant un transfert: **{sum(int(x.get('nights_transfer_only') or 0) for x in rows)}**",
         f"- Nuitées non résolues: **{sum(int(x.get('nights_unresolved') or 0) for x in rows)}**",
+        "- Raisons des nuitées non préparées : "
+        + (", ".join(
+            f"{reason}={count}"
+            for reason, count in sorted(Counter(
+                item.get("reason") for row in rows
+                for item in (row.get("logistics_diagnostics") or {}).get("night_diagnostics", [])
+                if item.get("reason") != "walk_verified"
+            ).items())
+        ) or "aucune donnée"),
         f"- Points d'eau avec potabilité référencée: **{sum(int(x.get('water_potable_referenced') or 0) for x in rows)}**",
         f"- Points d'eau explicitement non potables: **{sum(int(x.get('water_explicitly_nonpotable') or 0) for x in rows)}**",
         f"- Avertissements terrain: **{warnings}**",

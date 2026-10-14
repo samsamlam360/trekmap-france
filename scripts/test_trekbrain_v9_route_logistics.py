@@ -970,3 +970,52 @@ preloaded_shelter = {"name": "Ancien abri", "lat": 0.01, "lon": 0.20,
                      "osm_tags": {"amenity": "shelter"}}
 assert logistics._project_stays(FakeRoundtrip, coords, [preloaded_shelter], "refuge", 8) == []
 print("Preloaded shelter evidence gate: OK")
+
+
+# Diagnostic-only classification must distinguish absent OSM evidence, a
+# distant stage candidate, and a pedestrian connector outage without ever
+# claiming straight-line distance is a verified walking route.
+anchors = [
+    {"night": i, "lat": 0.0, "lon": i * 0.2, "route_progress_km": float(i*20)}
+    for i in range(1, 6)
+]
+mapped = [
+    {"name": "Gîte du départ", "lat": 0.005, "lon": 0.201,
+     "_route_progress_km": 20.0, "source_url": "https://www.openstreetmap.org/node/301"},
+    {"name": "Camping éloigné", "lat": 0.04, "lon": 0.400,
+     "_route_progress_km": 40.0, "source_url": "https://www.openstreetmap.org/node/302"},
+]
+valid = {**mapped[0], "_night": 1, "_anchor_distance_km": 0.5}
+far = {**mapped[1], "_night": 2, "_anchor_distance_km": 4.4}
+unverified = {**mapped[0], "_night": 3, "_anchor_distance_km": 1.3}
+distance_limited = {**mapped[0], "_night": 4, "_anchor_distance_km": 1.2}
+opts = {1: [valid], 2: [far], 3: [unverified], 4: [distance_limited], 5: []}
+verified_connectors = {
+    logistics._connector_key(valid): {"validated": True, "return_validated": True},
+    logistics._connector_key(distance_limited): {"validated": True, "return_validated": True},
+}
+# Fake local OSM identities repeat across nights but the diagnostic does not
+# certify availability, reservation, or deduplicated assignment.
+report = logistics._night_access_diagnostics(
+    anchors, mapped, opts, verified_connectors,
+    [{**valid, "_access_mode": "walk"}, {**far, "_access_mode": "transfer"},
+     None, None, None],
+)
+assert [x["reason"] for x in report] == [
+    "walk_verified", "candidates_too_far_for_connector_check",
+    "walking_connector_unverified", "candidate_not_compatible_with_daily_limits",
+    "no_accommodation_near_stage",
+], report
+assert all(not x["distance_is_walking_route"] for x in report)
+assert report[0]["night_walk_confirmed"] is True
+assert report[1]["within_walk_check_radius"] == 0
+assert report[2]["walking_connectors_verified_both_directions"] == 0
+assert report[3]["walking_connectors_verified_both_directions"] == 1
+assert logistics._night_access_diagnostics(anchors[:1], [], {1: []}, {}, [None])[0]["reason"] == "no_sourced_accommodation"
+# A one-way Matrix result does NOT qualify an alternative as a validated walk.
+assert logistics._night_access_diagnostics(
+    anchors[:1], mapped, {1: [valid]},
+    {logistics._connector_key(valid): {"validated": True, "return_validated": False}},
+    [None],
+)[0]["reason"] == "walking_connector_unverified"
+print("Night-stage candidate diagnostics distinguish unsearched, distant and unverified walk: OK")
