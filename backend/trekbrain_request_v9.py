@@ -140,6 +140,22 @@ def _explicit_endpoint_pair(prompt: str) -> tuple[str, str] | None:
 def _clean_place(value: str) -> str:
     value = re.sub(r"\s+", " ", str(value or "")).strip(" ,.;:-")
     value = re.sub(r"^(?:le|la|les|l['’])\s*", "", value, flags=re.I)
+    # Route instructions are not parts of a toponym. Keeping phrases like
+    # "sans marcher dans l'eau" inside the geocoder input makes otherwise
+    # unambiguous coastal villages impossible to find when Photon is down.
+    # The full original prompt still carries the avoidance requirement.
+    value = re.sub(
+        r"\s+(?:sans|avec)\s+(?:marcher|traverser|passer)\b.*$",
+        "", value, flags=re.I,
+    )
+    value = re.sub(
+        r"\s+et\s+(?:des?|les)\s+(?:gorges|lacs|monts|massifs|vallees|vallées)\b.*$",
+        "", value, flags=re.I,
+    )
+    value = re.sub(
+        r"\s+dans\s+(?:le|la|les)\s+[^,.;]+$",
+        "", value, flags=re.I,
+    )
     value = re.sub(
         r"\s+(?:un|le)\s+(?:soir|matin|apres-midi|après-midi)(?:\b.*)?$",
         "",
