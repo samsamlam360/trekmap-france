@@ -4,7 +4,7 @@ import vm from 'node:vm';
 
 const ui=fs.readFileSync('scripts/apply_profile_v2.py','utf8');
 const api=fs.readFileSync('backend/profile_v2.py','utf8');
-const entry=fs.readFileSync('backend/main_production.py','utf8');
+const entry=fs.readFileSync('backend/app_v5.py','utf8');
 const site=fs.readFileSync('scripts/apply_sitewide_ux.py','utf8');
 const html=fs.readFileSync('frontend/index.html','utf8');
 
