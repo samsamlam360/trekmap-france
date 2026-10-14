@@ -147,7 +147,13 @@ def discover_water_points(v3, result: dict[str, Any]) -> list[dict[str, Any]]:
         # One short mirror attempt is enough; failing fast is preferable to
         # delaying the whole itinerary by the full generic Overpass budget.
         from . import free_planner_v2 as free
-        url = list(free.OVERPASS_URLS)[0]
+        # When the primary route-first Overpass mirrors failed, try one
+        # independent existing mirror rather than immediately retrying one
+        # which just timed out. Normally keep the historical first mirror.
+        mirrors = list(free.OVERPASS_URLS)
+        requested = result.get("_water_rescue_mirror_index")
+        mirror_index = 2 if requested == 2 and len(mirrors) >= 3 else 0
+        url = mirrors[mirror_index]
         payload = free._request_json(
             url,
             data={"data": query},
