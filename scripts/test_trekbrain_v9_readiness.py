@@ -111,6 +111,50 @@ class ReadinessTests(unittest.TestCase):
             plan["logistics"]["nights"][0]["walking_connector"].update(update)
             self.assertEqual(preparation_report(plan)["requirements"]["accommodation"]["missing_days"], [1])
 
+    def test_missing_night_explains_daily_limit_without_approving_transfer(self):
+        plan = sample()
+        before = deepcopy(plan["route_preview"])
+        plan["logistics"]["nights"][0].update(
+            status="usable_with_transfer", access_mode="transfer", transfer_confirmed=False,
+        )
+        plan["logistics"]["night_diagnostics"] = [
+            {"night": 1, "reason": "candidate_not_compatible_with_daily_limits"},
+        ]
+        result = preparation_report(plan)
+        self.assertEqual(result["status"], "incomplete")
+        self.assertTrue(result["route_validated"])
+        self.assertEqual(result["requirements"]["accommodation"]["missing_days"], [1])
+        self.assertIn("incompatible avec la distance quotidienne",
+                      result["requirements"]["accommodation"]["detail"])
+        self.assertTrue(any(
+            entry["code"] == "overnight_unresolved"
+            and "incompatible" in entry["detail"] for entry in result["issues"]
+        ))
+        self.assertEqual(plan["route_preview"], before)
+        self.assertEqual(plan["trekbrain"]["quality"]["score"], 95)
+
+        # An optional explanation must disappear when the underlying status
+        # becomes confirmed by actual provider-backed transfer evidence.
+        plan["logistics"]["nights"][0]["transfer_confirmed"] = True
+        ready = preparation_report(plan)
+        self.assertEqual(ready["status"], "ready")
+        self.assertNotIn("Causes identifiées", ready["requirements"]["accommodation"]["detail"])
+
+    def test_missing_night_diagnostics_never_invent_a_walk_or_explain_wrong_day(self):
+        plan = sample()
+        plan["logistics"]["nights"] = []
+        plan["logistics"]["night_diagnostics"] = [
+            {"night": 1, "reason": "walking_connector_unverified"},
+            {"night": 2, "reason": "candidate_not_compatible_with_daily_limits"},
+            {"night": 1, "reason": "unknown_future_code"},
+        ]
+        report = preparation_report(plan)
+        detail = report["requirements"]["accommodation"]["detail"]
+        self.assertIn("liaison pédestre aller-retour non vérifiée", detail)
+        self.assertNotIn("incompatible avec la distance quotidienne", detail)
+        self.assertEqual(report["status"], "incomplete")
+        self.assertEqual(report["requirements"]["accommodation"]["missing_days"], [1])
+
     def test_transfer_is_incomplete_until_explicitly_confirmed(self):
         plan = sample()
         night = plan["logistics"]["nights"][0]
