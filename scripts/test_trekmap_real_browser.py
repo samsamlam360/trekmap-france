@@ -221,6 +221,9 @@ try:
     panel_open=driver.find_element(By.ID,'tm-info-open-detail')
     panel_open.click()
     wait.until(lambda d: d.find_element(By.ID,'modal-backdrop').is_displayed())
+    # Wait for the existing asynchronous detail enrichment before closing.
+    # A delayed replacement could otherwise race the click on an old close node.
+    wait.until(lambda d: d.find_elements(By.CSS_SELECTOR, '#modal .tm-detail-extra'))
     driver.find_element(By.ID,'modal-close').click()
     wait.until(lambda d: not d.find_element(By.ID,'modal-backdrop').is_displayed())
     # Actual pointer hover without a button pressed must not deactivate clicks.
