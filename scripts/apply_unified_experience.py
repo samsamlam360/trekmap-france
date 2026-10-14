@@ -99,7 +99,7 @@ body.tm-filters-collapsed #tm-unified-drawer{left:14px!important}
   const normText=v=>String(v??'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]+/g,' ').trim();
   const difficultyName={easy:'Facile',medium:'Moyen',hard:'Difficile',extreme:'Extrême'};
   const criteria=new Map();
-  let selectedId=null,drawerDragging=false,dragX=0,dragY=0,criteriaReady=false,searchTimer=null;
+  let selectedId=null,drawerDragging=false,dragX=0,dragY=0,criteriaReady=false,searchTimer=null,legacyListObserver=null;
 
   // Un seul ensemble de contrôles. Les anciennes créations runtime sont supprimées.
   ['tm-stable-topbar','tm-stable-drawer','tm-stable-side','tm-results-drawer','tm-side-actions'].forEach(id=>$(id)?.remove());
@@ -197,7 +197,17 @@ body.tm-filters-collapsed #tm-unified-drawer{left:14px!important}
   function renderSuggestions(data){if(!suggestions)return;if(!query()){suggestions.classList.remove('show');suggestions.innerHTML='';return}const rows=data.slice(0,6);suggestions.innerHTML=rows.map(t=>`<button class="tm-suggest" type="button" data-id="${Number(t.id)}"><b>${esc(t.name)}</b><small>${esc(t.region||'France')} · ${Number(t.distance||0).toFixed(1)} km</small></button>`).join('');suggestions.classList.toggle('show',!!rows.length)}
   function applyUnifiedFilters(){
     const data=sortData(allTreksSafe().filter(matches));
-    try{filteredTreks=data.slice();if(typeof renderList==='function')renderList();if(typeof refreshTraceStyles==='function')refreshTraceStyles()}catch(_){}
+    try{
+      filteredTreks=data.slice();
+      // renderList() writes to the observed legacy list. Disconnect during our
+      // own render or its MutationObserver would enqueue endless refreshes,
+      // resetting the carousel while the user is clicking/scrolling.
+      if(legacyListObserver)legacyListObserver.disconnect();
+      try{if(typeof renderList==='function')renderList()}finally{
+        if(legacyListObserver&&oldList)legacyListObserver.observe(oldList,{childList:true,subtree:true});
+      }
+      if(typeof refreshTraceStyles==='function')refreshTraceStyles();
+    }catch(e){console.warn('TrekMap: catalogue refresh',e)}
     renderDrawer(data);renderSuggestions(data);return data;
   }
 
@@ -299,7 +309,12 @@ body.tm-filters-collapsed #tm-unified-drawer{left:14px!important}
   }
   drawerNav.addEventListener('click',e=>{
     const b=e.target.closest('[data-scroll-dir]');if(!b)return;
-    track.scrollBy({left:Number(b.dataset.scrollDir)*Math.max(210,track.clientWidth*.75),behavior:'smooth'});
+    const delta=Number(b.dataset.scrollDir)*Math.max(210,Math.round(track.clientWidth*.75));
+    // Direct scroll avoids CSS smooth/snap fighting a rebuilt card list.
+    track.style.scrollBehavior='auto';
+    track.scrollLeft=Math.max(0,Math.min(track.scrollWidth-track.clientWidth,track.scrollLeft+delta));
+    syncDrawerArrows();
+    requestAnimationFrame(()=>track.style.removeProperty('scroll-behavior'));
   });
   track?.addEventListener('scroll',syncDrawerArrows,{passive:true});
   window.addEventListener('resize',syncDrawerArrows,{passive:true});
@@ -359,7 +374,13 @@ body.tm-filters-collapsed #tm-unified-drawer{left:14px!important}
 
   // Quand les traces sont rechargees, toute l'interface se resynchronise.
   const legacyLoadTraces=window.loadTraces;if(typeof legacyLoadTraces==='function')window.loadTraces=async function(){const r=await legacyLoadTraces.apply(this,arguments);criteriaReady=false;await loadCriteria(true);applyUnifiedFilters();return r};
-  const oldList=$('trek-list');if(oldList)new MutationObserver(()=>requestAnimationFrame(()=>{if(criteriaReady)applyUnifiedFilters()})).observe(oldList,{childList:true,subtree:true});
+  const oldList=$('trek-list');
+  if(oldList){
+    legacyListObserver=new MutationObserver(()=>{
+      if(criteriaReady)requestAnimationFrame(applyUnifiedFilters);
+    });
+    legacyListObserver.observe(oldList,{childList:true,subtree:true});
+  }
   window.addEventListener('resize',()=>{try{map.invalidateSize()}catch(_){}});
 
   (async()=>{await loadCriteria();applyUnifiedFilters();homeData();syncAccount();setTimeout(()=>{try{map.invalidateSize()}catch(_){}},120)})();
