@@ -95,6 +95,13 @@ def filter_provider_places(query: str, rows: list[dict], provider: str) -> list[
     """
     landmark, qualifier = query_parts(query)
     wanted = _words(landmark)
+    # These are *regions*, never departments. Their existing reference centres
+    # are used only to reject far-away provider points, NEVER as hiking starts.
+    # Jura/Vosges/Cantal deliberately stay subject to department validation.
+    area_names = {"morvan", "cevennes", "queyras", "vercors", "chartreuse",
+                  "beaufortain", "sancy", "mercantour", "ecrins", "bauges",
+                  "aravis", "belledonne", "vanoise", "aubrac", "verdon"}
+    region_hint = geo.KNOWN_CENTRES.get(_fold(qualifier)) if qualifier and _fold(qualifier) in area_names else None
     accepted = []
     for raw in rows or []:
         if not isinstance(raw, dict):
@@ -110,16 +117,31 @@ def filter_provider_places(query: str, rows: list[dict], provider: str) -> list[
             reason = "invalid_coordinates"
         label = str(point.get("name") or point.get("short_name") or "")
         if qualifier and not reason:
-            if re.fullmatch(r"(?:[0-9]{2,3}|2[abAB])", qualifier):
-                matches_department = str(point.get("department_code") or "").upper() == qualifier.upper()
+            if region_hint is not None:
+                # A provider's named, located feature must be inside the
+                # supplied massif, not merely in France. The centre never
+                # substitutes for missing provider evidence.
+                reference = {"lat": region_hint[0], "lon": region_hint[1]}
+                if geo._dist(reference, point) > 75.0:
+                    reason = "outside_named_region"
+                elif wanted and not wanted.issubset(_words(label)):
+                    reason = "name_mismatch"
+                elif (provider == "ign-geoplateforme"
+                      and not _fold(point.get("short_name") or "").startswith(_fold(landmark))):
+                    # The IGN address index often responds with an unrelated
+                    # street *in* the requested village, not the village itself.
+                    reason = "name_mismatch"
             else:
-                labels = {_fold(part) for part in label.split(",")}
-                labels.add(_fold(point.get("geocode_department") or ""))
-                matches_department = _fold(qualifier) in labels
-            if not matches_department:
-                reason = "department_not_confirmed"
-            elif wanted and not wanted.issubset(_words(label)):
-                reason = "name_mismatch"
+                if re.fullmatch(r"(?:[0-9]{2,3}|2[abAB])", qualifier):
+                    matches_department = str(point.get("department_code") or "").upper() == qualifier.upper()
+                else:
+                    labels = {_fold(part) for part in label.split(",")}
+                    labels.add(_fold(point.get("geocode_department") or ""))
+                    matches_department = _fold(qualifier) in labels
+                if not matches_department:
+                    reason = "department_not_confirmed"
+                elif wanted and not wanted.issubset(_words(label)):
+                    reason = "name_mismatch"
         if reason:
             record_geocode(query, provider, accepted=False, reason=reason, point=point)
             continue
@@ -128,9 +150,27 @@ def filter_provider_places(query: str, rows: list[dict], provider: str) -> list[
     matching_names = [p for p in accepted if wanted and wanted.issubset(
         _words(p.get("short_name") or str(p.get("name") or "").split(",")[0]))]
     if not _same_area(matching_names):
-        for point in accepted:
-            record_geocode(query, provider, accepted=False, reason="ambiguous_homonyms", point=point)
-        return []
+        # Discard roads whose names merely contain the requested landmark.
+        exact = [p for p in matching_names
+                 if _fold(p.get("short_name") or "") == _fold(landmark)]
+        if exact:
+            matching_names = exact
+        if not _same_area(matching_names) and provider == "nominatim":
+            # Nominatim frequently returns both a named city place node and
+            # a distant administrative polygon centroid. The place node is
+            # a real, provider-referenced geographic feature, not a guess.
+            places = [p for p in matching_names
+                      if p.get("geocode_osm_type") == "node"
+                      and p.get("geocode_osm_class") == "place"
+                      and p.get("geocode_osm_subtype") in
+                      {"city", "town", "village", "hamlet", "locality"}]
+            if len(places) == 1:
+                matching_names = places
+        if not matching_names or not _same_area(matching_names):
+            for point in accepted:
+                record_geocode(query, provider, accepted=False, reason="ambiguous_homonyms", point=point)
+            return []
+        accepted = matching_names
     for point in accepted:
         record_geocode(query, provider, accepted=True, reason="provider_match", point=point)
     if not rows:
