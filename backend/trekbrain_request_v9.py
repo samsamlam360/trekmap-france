@@ -153,10 +153,6 @@ def _clean_place(value: str) -> str:
         "", value, flags=re.I,
     )
     value = re.sub(
-        r"\s+dans\s+(?:le|la|les)\s+[^,.;]+$",
-        "", value, flags=re.I,
-    )
-    value = re.sub(
         r"\s+(?:un|le)\s+(?:soir|matin|apres-midi|après-midi)(?:\b.*)?$",
         "",
         value,
