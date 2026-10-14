@@ -1033,11 +1033,10 @@ try:
     calls.clear()
     private_camp = {**verified_camp, "id": 7004,
                     "tags": {"tourism": "camp_site", "access": "private"}}
-    free._request_json = lambda url, **kw: (
-        calls.append(url) or
-        {"elements": primary_resources + [private_camp]} if "primary.test" in url
-        else {"elements": []}
-    )
+    def private_stay_provider(url, **kw):
+        calls.append(url)
+        return {"elements": primary_resources + [private_camp]} if "primary.test" in url else {"elements": []}
+    free._request_json = private_stay_provider
     blocked_stays, blocked_terrain, blocked_flag = logistics._bbox_route_bundle(
         coords, "camping"
     )
