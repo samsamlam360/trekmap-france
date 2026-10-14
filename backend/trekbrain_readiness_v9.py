@@ -211,6 +211,30 @@ def preparation_report(result: dict[str, Any], data=None) -> dict[str, Any]:
                 transfers.append(day)
     sleep_status = "confirmed" if not missing_nights else "partial" if len(missing_nights) < days-1 else "missing"
     sleep_detail = "Hébergements sourcés et accès aller-retour validés pour chaque nuit." if not missing_nights else "Nuitées ou accès non confirmés aux soirs " + ", ".join(map(str, missing_nights)) + "."
+    if missing_nights:
+        # Diagnostics are derived from the existing validated route, OSM
+        # candidates and connector evidence. Never infer a walkable night from
+        # proximity or accidentally change the readiness status.
+        labels = {
+            "no_sourced_accommodation": "aucun hébergement cartographié et sourcé",
+            "no_accommodation_near_stage": "aucun hébergement près de la fin d'étape",
+            "candidates_too_far_for_connector_check": "hébergements trop éloignés pour une liaison pédestre courte",
+            "walking_connector_unverified": "liaison pédestre aller-retour non vérifiée",
+            "candidate_not_compatible_with_daily_limits": "liaison étudiée, mais incompatible avec la distance quotidienne",
+        }
+        causes = {}
+        for row in _rows(_dict(result.get("logistics")).get("night_diagnostics")):
+            night_day = _day(row.get("night"), days - 1)
+            reason = row.get("reason")
+            if night_day in missing_nights and reason in labels:
+                causes.setdefault(reason, set()).add(night_day)
+        if causes:
+            details = [
+                labels[reason] + " (soir" + ("s " if len(causes[reason]) > 1 else " ")
+                + ", ".join(map(str, sorted(causes[reason]))) + ")"
+                for reason in labels if reason in causes
+            ]
+            sleep_detail += " Causes identifiées : " + " ; ".join(details) + "."
     requirements["accommodation"] = _requirement(sleep, sleep_status, sleep_detail, missing_nights)
     if missing_nights:
         issue("overnight_unresolved", "accommodation", sleep_detail, missing_nights)
