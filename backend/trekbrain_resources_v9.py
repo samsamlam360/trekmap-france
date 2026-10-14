@@ -1433,6 +1433,7 @@ def _install_plan_overlay(app, legacy_main):
             result = enrich_resources(result)
             enrich_ms = round((time.monotonic() - enrich_started) * 1000)
             result.pop("_terrain_osm_preloaded", None)
+            result.pop("_water_rescue_mirror_index", None)
 
             # Store positively identified OSM objects from fresh providers,
             # never empty results or records that were merely read from cache.
