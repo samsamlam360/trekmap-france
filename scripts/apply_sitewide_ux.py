@@ -337,3 +337,7 @@ if html.count("</body>") != 1:
 html = html.replace("</body>", block + "\n</body>", 1)
 path.write_text(html, encoding="utf-8")
 print("TrekMap sitewide UX: preserved original controls and installed responsive/a11y layer")
+
+# Last responsive layer; this site-wide style is intentionally applied before it.
+from runpy import run_path
+run_path(str(Path(__file__).with_name("apply_desktop_map_layout.py")))
