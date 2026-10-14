@@ -9,6 +9,7 @@ No repository or Render secret is required.
 """
 from __future__ import annotations
 
+from collections import Counter
 import http.cookiejar
 import json
 import math
@@ -604,7 +605,7 @@ def write_reports(meta, rows):
         "- Raisons des nuitées non préparées : "
         + (", ".join(
             f"{reason}={count}"
-            for reason, count in sorted(__import__("collections").Counter(
+            for reason, count in sorted(Counter(
                 item.get("reason") for row in rows
                 for item in (row.get("logistics_diagnostics") or {}).get("night_diagnostics", [])
                 if item.get("reason") != "walk_verified"
