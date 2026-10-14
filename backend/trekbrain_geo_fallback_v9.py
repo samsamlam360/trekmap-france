@@ -166,6 +166,21 @@ def filter_provider_places(query: str, rows: list[dict], provider: str) -> list[
                       {"city", "town", "village", "hamlet", "locality"}]
             if len(places) == 1:
                 matching_names = places
+            elif len(matching_names) == 2:
+                # Some Nominatim city responses lack a unique place node:
+                # one is the settled postcode point, the other a boundary
+                # centroid. Only use this distinction if their complete
+                # published locality/context labels are otherwise identical.
+                def stable_label(row):
+                    segments = [_fold(part) for part in str(row.get("name") or "").split(",")]
+                    return tuple(part for part in segments if not re.fullmatch(r"\d{5}", part))
+                postcoded = [p for p in matching_names if any(
+                    re.fullmatch(r"\d{5}", _fold(part)) for part in str(p.get("name") or "").split(",")
+                )]
+                if (len(postcoded) == 1
+                        and stable_label(matching_names[0]) == stable_label(matching_names[1])
+                        and geo._dist(matching_names[0], matching_names[1]) <= 15.0):
+                    matching_names = postcoded
         if not matching_names or not _same_area(matching_names):
             for point in accepted:
                 record_geocode(query, provider, accepted=False, reason="ambiguous_homonyms", point=point)
