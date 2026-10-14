@@ -210,3 +210,7 @@ def production_remodel_css():
 def production_logo():
     return FileResponse(FRONTEND_DIR / "logo-trekmap.svg", media_type="image/svg+xml")
 
+@app.get("/brand-pin.svg", include_in_schema=False)
+def production_brand_pin():
+    return FileResponse(FRONTEND_DIR / "brand-pin.svg", media_type="image/svg+xml")
+

@@ -479,7 +479,7 @@ body.tm-brain-route-mode.tm-brain-show-resources .tm-v91-legend {display:block!i
   }
   function enter(p){
     if(!p||typeof p!=='object'||!validCoords(p))return false;
-    plan=p;active=true;expanded=!mobile();
+    plan=p;active=true;expanded=!mobile();previousMobile=mobile();
     body.classList.remove('tm-mobile-filters-open');
     body.classList.remove('tm-brain-show-resources');
     panel.hidden=false;
@@ -581,12 +581,17 @@ body.tm-brain-route-mode.tm-brain-show-resources .tm-v91-legend {display:block!i
     window.TrekMapOpenTrek=function(){exit();return oldOpen.apply(this,arguments)};
     window.TrekMapOpenTrek._brainWorkspaceWrapped=true;
   }
-  var resizeTimer;
+  var resizeTimer,previousMobile=mobile();
   window.addEventListener('resize',function(){
     if(!active)return;
     clearTimeout(resizeTimer);
     resizeTimer=setTimeout(function(){
-      expanded=!mobile();syncExpanded();recenter();
+      // A small viewport resize (browser chrome, scrollbars, keyboard) must
+      // never overwrite the user's expanded/collapsed stage preference.
+      var nowMobile=mobile();
+      if(nowMobile!==previousMobile)expanded=!nowMobile;
+      previousMobile=nowMobile;
+      syncExpanded();recenter();
     },120);
   },{passive:true});
   if(typeof ResizeObserver==='function'){

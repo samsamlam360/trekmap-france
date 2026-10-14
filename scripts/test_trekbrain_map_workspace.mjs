@@ -239,3 +239,4 @@ console.log('TrekBrain responsive map workspace: PC/mobile, security alerts, edi
 
 // All CI pipelines exercising the TrekBrain map also guard the complete site.
 await import('./test_sitewide_ux.mjs');
+await import('./test_desktop_map_layout.mjs');
