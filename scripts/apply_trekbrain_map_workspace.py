@@ -479,7 +479,7 @@ body.tm-brain-route-mode.tm-brain-show-resources .tm-v91-legend {display:block!i
   }
   function enter(p){
     if(!p||typeof p!=='object'||!validCoords(p))return false;
-    plan=p;active=true;expanded=!mobile();
+    plan=p;active=true;expanded=!mobile();previousMobile=mobile();
     body.classList.remove('tm-mobile-filters-open');
     body.classList.remove('tm-brain-show-resources');
     panel.hidden=false;
