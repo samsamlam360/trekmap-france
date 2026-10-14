@@ -297,10 +297,13 @@ button:disabled { cursor:not-allowed;opacity:.60 }
       var t=e.target.closest&&e.target.closest('button,[role="button"]');
       if(!t)return;
       var day=t.getAttribute('data-tm-adjust-day');
-      if(day&&window.TrekBrainMapWorkspace?.isActive?.()&&window.TrekMapTripReadiness?.edit){
-        // Use the existing edit route, never generate a second route silently.
+      if(day&&window.TrekBrainMapWorkspace?.isActive?.()){
+        // Activate the existing Modify action with its original, real plan.
         e.preventDefault();
-        window.TrekMapTripReadiness.edit({effective_request:{}});
+        var panel=document.getElementById('tm-brain-route-panel');
+        var modify=panel&&panel.querySelector('[data-workspace-action="modify"]');
+        if(!modify)return;
+        modify.click();
         var prompt=document.getElementById('tm-ai-prompt');
         if(prompt){
           var note='Réévalue prioritairement l’étape '+day+' et conserve autant que possible les autres journées.';
