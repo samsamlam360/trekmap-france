@@ -150,6 +150,13 @@ button:disabled { cursor:not-allowed;opacity:.60 }
 #tm-brain-route-panel .tm-brain-content { scrollbar-gutter:stable }
 #tm-brain-route-panel .tm-brain-actions { gap:8px }
 #tm-brain-route-panel .tm-brain-detail { line-height:1.54 }
+#tm-brain-route-panel .tm-ux-adjust-day {
+  display:inline-flex;align-items:center;justify-content:center;
+  min-height:40px;margin:9px 0 3px;padding:7px 12px;
+  border:1px solid #a9ceba;border-radius:10px;
+  background:#eaf5ee;color:#14583b;font-size:12px;font-weight:800
+}
+#tm-brain-route-panel .tm-ux-adjust-day:hover { background:#dcefe3 }
 @media(min-width:821px) and (max-width:1199px) {
   #tm-unified-topbar { gap:10px!important }
   #tm-top-actions button { padding-inline:10px!important }
@@ -246,6 +253,18 @@ button:disabled { cursor:not-allowed;opacity:.60 }
     });
     var mobile=document.getElementById('tm-mobile-nav');
     if(mobile&&!mobile.hasAttribute('aria-label'))mobile.setAttribute('aria-label','Navigation principale');
+    // Every displayed day can return to the existing TrekBrain editing form.
+    // The original route is untouched until the hiker deliberately regenerates.
+    document.querySelectorAll('#tm-brain-route-panel .tm-brain-stage').forEach(function(stage,i){
+      if(stage.querySelector('[data-tm-adjust-day]'))return;
+      var b=document.createElement('button');
+      b.type='button';
+      b.className='tm-ux-adjust-day';
+      b.setAttribute('data-tm-adjust-day',String(i+1));
+      b.setAttribute('aria-label','Adapter les consignes de l’étape '+(i+1));
+      b.textContent='✎ Ajuster cette étape';
+      stage.appendChild(b);
+    });
   }
   function sync(){
     var filters=document.querySelector('#sidebar .filters');
@@ -276,7 +295,22 @@ button:disabled { cursor:not-allowed;opacity:.60 }
     observer.observe(document.body,{childList:true,subtree:true});
     document.addEventListener('click',function(e){
       var t=e.target.closest&&e.target.closest('button,[role="button"]');
-      if(t) setTimeout(sync,0);
+      if(!t)return;
+      var day=t.getAttribute('data-tm-adjust-day');
+      if(day&&window.TrekBrainMapWorkspace?.isActive?.()&&window.TrekMapTripReadiness?.edit){
+        // Use the existing edit route, never generate a second route silently.
+        e.preventDefault();
+        window.TrekMapTripReadiness.edit({effective_request:{}});
+        var prompt=document.getElementById('tm-ai-prompt');
+        if(prompt){
+          var note='Réévalue prioritairement l’étape '+day+' et conserve autant que possible les autres journées.';
+          if(!prompt.value.includes(note)){
+            prompt.value=(prompt.value.trim()+'\n'+note).trim();
+            prompt.dispatchEvent(new Event('input',{bubbles:true}));
+          }
+        }
+      }
+      setTimeout(sync,0);
     },true);
     document.addEventListener('keydown',function(e){
       if(e.key!=='/'||e.ctrlKey||e.metaKey||e.altKey)return;
