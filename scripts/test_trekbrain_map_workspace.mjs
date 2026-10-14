@@ -240,3 +240,6 @@ console.log('TrekBrain responsive map workspace: PC/mobile, security alerts, edi
 // All CI pipelines exercising the TrekBrain map also guard the complete site.
 await import('./test_sitewide_ux.mjs');
 await import('./test_desktop_map_layout.mjs');
+
+// Reuse the existing mandatory UI checks for the optional personal hub.
+await import('./test_profile_v2.mjs');

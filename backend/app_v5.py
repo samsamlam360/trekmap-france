@@ -207,3 +207,8 @@ def NumberSafe(value):
         return int(value)
     except (TypeError, ValueError):
         return -1
+
+# Install optional personal profile endpoints only after the TrekBrain route
+# replacement pipeline: earlier router entries disrupt route replacement.
+from . import profile_v2
+app.router.routes.extend(profile_v2.router.routes)

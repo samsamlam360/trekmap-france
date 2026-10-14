@@ -218,3 +218,4 @@ def production_brand_pin():
 def production_trek_scenery():
     return FileResponse(FRONTEND_DIR / "trek-scenery.svg", media_type="image/svg+xml")
 
+
