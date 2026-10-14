@@ -16,6 +16,18 @@ from . import free_planner_v2 as geo
 
 IGN_GEOCODAGE_URL = "https://data.geopf.fr/geocodage/search"
 _IGN_STOPWORDS = {"france", "de", "du", "des", "le", "la", "les", "l", "d", "en", "au", "aux"}
+# A written massif is a locality hint, not a French administrative department.
+# Existing regional centres are distance guards only, NEVER returned as proof.
+_NAMED_MASSIFS = frozenset({
+    "morvan", "cevennes", "queyras", "vercors", "chartreuse",
+    "beaufortain", "sancy", "mercantour", "ecrins", "bauges",
+    "aravis", "belledonne", "vanoise", "aubrac", "verdon",
+})
+
+
+def named_massif_reference(qualifier: str | None) -> tuple[float, float] | None:
+    key = _fold(qualifier or "")
+    return geo.KNOWN_CENTRES.get(key) if key in _NAMED_MASSIFS else None
 _GEOCODE_TRACE: ContextVar[tuple[dict, ...] | None] = ContextVar("trekbrain_geocode_trace", default=None)
 _TRACE_LIMIT = 160
 
@@ -98,10 +110,7 @@ def filter_provider_places(query: str, rows: list[dict], provider: str) -> list[
     # These are *regions*, never departments. Their existing reference centres
     # are used only to reject far-away provider points, NEVER as hiking starts.
     # Jura/Vosges/Cantal deliberately stay subject to department validation.
-    area_names = {"morvan", "cevennes", "queyras", "vercors", "chartreuse",
-                  "beaufortain", "sancy", "mercantour", "ecrins", "bauges",
-                  "aravis", "belledonne", "vanoise", "aubrac", "verdon"}
-    region_hint = geo.KNOWN_CENTRES.get(_fold(qualifier)) if qualifier and _fold(qualifier) in area_names else None
+    region_hint = named_massif_reference(qualifier)
     accepted = []
     for raw in rows or []:
         if not isinstance(raw, dict):
@@ -235,13 +244,18 @@ def geocode_ign(query: str, *, timeout: float = 2.5) -> list[dict]:
     fallback must never quietly move a hike to another department.
     """
     query = str(query or "").strip()
-    words = _words(query)
+    landmark, qualifier = query_parts(query)
+    # BAN indexes municipalities, not names such as "Ceillac, Queyras".
+    # Search only the literal settlement name for a known massif qualifier,
+    # then verify the actual official result against the stated massif.
+    search_query = landmark if named_massif_reference(qualifier) else query
+    words = _words(search_query)
     if not query or not words:
         record_geocode(query, "ign-geoplateforme", accepted=False, reason="empty_query")
         return []
     payload = geo._request_json(
         IGN_GEOCODAGE_URL,
-        params={"q": query, "limit": 5},
+        params={"q": search_query, "limit": 5},
         timeout=min(4.0, max(0.8, float(timeout))),
         ttl=43200,
         service="IGN Géoplateforme",
@@ -272,6 +286,14 @@ def geocode_ign(query: str, *, timeout: float = 2.5) -> list[dict]:
             record_geocode(query, "ign-geoplateforme", accepted=False, reason="invalid_coordinates", point=evidence)
             continue
         context = " ".join(str(props.get(k) or "") for k in ("city", "context", "postcode"))
+        # "Dijon" as a street/hamlet inside Francescas is not Dijon city.
+        # Never resolve an unqualified city to a different municipality just
+        # because the user's exact word appears in an address label.
+        city = str(props.get("city") or "").strip()
+        if (not qualifier and city and _words(city) != _words(landmark)):
+            record_geocode(query, "ign-geoplateforme", accepted=False,
+                           reason="different_municipality", point=evidence)
+            continue
         matches = words & _words(label + " " + context)
         if len(matches) < max(1, math.ceil(len(words) * 0.70)):
             record_geocode(query, "ign-geoplateforme", accepted=False, reason="name_mismatch", point=evidence)
