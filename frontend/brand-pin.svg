@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 112" role="img" aria-labelledby="title">
+<title id="title">TrekMap France, montagnes et sentier</title>
+<defs>
+<linearGradient id="land" x1=".25" y1="0" x2=".85" y2="1"><stop stop-color="#0d7853"/><stop offset=".55" stop-color="#094d36"/><stop offset="1" stop-color="#063b2d"/></linearGradient>
+<linearGradient id="hills" x1=".5" y1="0" x2=".5" y2="1"><stop stop-color="#a6e7b9"/><stop offset="1" stop-color="#238357"/></linearGradient>
+<clipPath id="pin"><path d="M48 3C22 3 4 23 4 49c0 34 29 56 44 61 16-12 44-39 44-62C92 22 73 3 48 3Z"/></clipPath>
+</defs>
+<g clip-path="url(#pin)">
+<path fill="url(#land)" d="M4 3H92V112H4Z"/>
+<circle cx="36" cy="31" r="12" fill="#fff9e7"/>
+<path d="M-12 72 21 40 32 52 49 27 76 56 100 48 104 98H-12Z" fill="#e9f9f0"/>
+<path d="M-8 77 21 51 34 63 50 36 79 67 102 58 102 110H-8Z" fill="url(#hills)"/>
+<path d="m48 35 6 9-5-2-5 5-4-2zM21 51l6 8-6-2-4 3z" fill="#ffffff"/>
+<path d="M-6 96C24 68 43 76 55 85S69 99 42 117" fill="none" stroke="#fbf5de" stroke-width="13" stroke-linecap="round"/>
+<path d="M11 73 15 61l4 12h-3v6h-3v-6zM23 82l4-13 5 13h-3v6h-4v-6zM71 82l4-15 5 15h-3v7h-4v-7zM82 89l4-12 4 12h-3v6h-3v-6z" fill="#073e30"/>
+</g>
+<path d="M48 3C22 3 4 23 4 49c0 34 29 56 44 61 16-12 44-39 44-62C92 22 73 3 48 3Z" fill="none" stroke="#6edaab" stroke-width="1.5"/>
+</svg>
