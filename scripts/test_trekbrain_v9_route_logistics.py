@@ -970,3 +970,83 @@ preloaded_shelter = {"name": "Ancien abri", "lat": 0.01, "lon": 0.20,
                      "osm_tags": {"amenity": "shelter"}}
 assert logistics._project_stays(FakeRoundtrip, coords, [preloaded_shelter], "refuge", 8) == []
 print("Preloaded shelter evidence gate: OK")
+
+
+# Production regression: an Overpass response with water/food but no requested
+# lodging is NOT a successful lodging search. Independent mirrors remain
+# eligible, and the already-paid-for route water/food is not discarded.
+orig_request = free._request_json
+orig_mirrors = list(free.OVERPASS_URLS)
+try:
+    free.OVERPASS_URLS = [
+        "https://primary.test/api/interpreter",
+        "https://secondary.test/api/interpreter",
+        "https://tertiary.test/api/interpreter",
+        "https://independent.test/api/interpreter",
+    ]
+    primary_resources = [
+        {"type": "node", "id": 7001, "lat": 0.0, "lon": 0.20,
+         "tags": {"amenity": "drinking_water", "name": "Fontaine connue"}},
+        {"type": "node", "id": 7002, "lat": 0.0, "lon": 0.24,
+         "tags": {"shop": "bakery", "name": "Boulangerie connue"}},
+    ]
+    verified_camp = {"type": "node", "id": 7003, "lat": 0.0, "lon": 0.22,
+                     "tags": {"tourism": "camp_site", "name": "Camping secours"}}
+    calls = []
+
+    def partial_resource_reply(url, **kw):
+        calls.append((url, kw["timeout"]))
+        if "primary.test" in url:
+            return {"elements": primary_resources}
+        if "independent.test" in url:
+            return {"elements": [verified_camp]}
+        return {"elements": []}
+
+    free._request_json = partial_resource_reply
+    resolved_stays, retained_resources, retained_flag = logistics._bbox_route_bundle(
+        coords, "camping"
+    )
+    assert [x["name"] for x in resolved_stays] == ["Camping secours"], resolved_stays
+    assert {x["name"] for x in retained_resources} == {
+        "Fontaine connue", "Boulangerie connue",
+    }, retained_resources
+    assert retained_flag is True
+    # A fast successful backup can cancel the other before it starts.
+    # Both outcomes are correct and avoid unnecessary free-provider traffic.
+    assert 2 <= len(calls) <= 3 and calls[0][1] <= 1.81, calls
+    assert all(t <= 0.86 for _, t in calls[1:]), calls
+
+    # Primary already has a valid lodging; do not use backup providers or
+    # add latency just to chase redundant results.
+    calls.clear()
+    free._request_json = lambda url, **kw: (
+        calls.append(url) or {"elements": primary_resources + [verified_camp]}
+    )
+    existing_stays, existing_terrain, existing_flag = logistics._bbox_route_bundle(
+        coords, "camping"
+    )
+    assert len(calls) == 1 and len(existing_stays) == 1 and existing_flag
+    assert len(existing_terrain) == 2
+
+    # A private or wrong-type object cannot stop fallbacks or be promoted
+    # to a usable campsite.
+    calls.clear()
+    private_camp = {**verified_camp, "id": 7004,
+                    "tags": {"tourism": "camp_site", "access": "private"}}
+    def private_stay_provider(url, **kw):
+        calls.append(url)
+        return {"elements": primary_resources + [private_camp]} if "primary.test" in url else {"elements": []}
+    free._request_json = private_stay_provider
+    blocked_stays, blocked_terrain, blocked_flag = logistics._bbox_route_bundle(
+        coords, "camping"
+    )
+    assert len(calls) == 3, calls
+    assert blocked_stays == [], blocked_stays
+    assert {x["name"] for x in blocked_terrain} == {
+        "Fontaine connue", "Boulangerie connue",
+    }
+    assert blocked_flag is True
+finally:
+    free._request_json = orig_request
+    free.OVERPASS_URLS = orig_mirrors
+print("Partial Overpass terrain preserves water/food while independent lodging rescue is bounded: PASS")
