@@ -219,7 +219,3 @@ def production_trek_scenery():
     return FileResponse(FRONTEND_DIR / "trek-scenery.svg", media_type="image/svg+xml")
 
 
-# Optional personal hiking hub. Additive tables initialize on first profile request;
-# a profile migration failure must not affect existing login, treks or TrekBrain.
-from . import profile_v2
-app.include_router(profile_v2.router)
