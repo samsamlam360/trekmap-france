@@ -422,15 +422,19 @@ def _bbox_route_query(
                     break
 
         if selected is not None:
-            # Keep all already discovered water/food/transit evidence and
-            # prepend only genuinely matching, independently sourced stays.
-            # Do not discard primary data just because a backup has a bed.
+            # Keep already discovered water/food/transit from the primary,
+            # AND independent resources from the winning fallback mirror.
+            # Prioritize verifiable beds first, then primary evidence, then
+            # the remaining fallback objects. No unrelated provider output
+            # is mislabelled as a walking connector or potable water.
             previous = data.get("elements") or [] if isinstance(data, dict) else []
             rescued = [row for row in selected["elements"]
                        if _is_requested_stay(row, category)]
+            other_fallback = [row for row in selected["elements"]
+                              if not _is_requested_stay(row, category)]
             merged = []
             seen_osm = set()
-            for row in rescued + previous:
+            for row in rescued + previous + other_fallback:
                 if not isinstance(row, dict):
                     continue
                 key = (row.get("type"), row.get("id"))
