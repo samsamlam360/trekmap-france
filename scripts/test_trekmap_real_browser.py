@@ -346,6 +346,85 @@ try:
         )
         driver.save_screenshot(str(OUT / (label + "-after-click.png")))
         driver.execute_script("window.TrekBrainMapWorkspace.exit();")
+    # Profile v2 runs against an in-memory HTTP fixture, never a real user or Neon.
+    driver.set_window_size(1440, 900)
+    driver.execute_script("""
+      window.__profileCalls=[];
+      window.__profileFixture={
+        user:{id:999,username:'ChromeTest',email:'test@example.org',is_admin:false},
+        settings:{bio:'Marche en montagne',avatar:'compass',public_profile:false,share_completed:false,
+          preferences:{daily_km:17,difficulty:'medium',lodging:'camping',route_type:'Boucle',
+                       transit:true,water:true,food:true,sleep:true}},
+        stats:{total:1,public:1,private:0,favorites:1,completed:1,
+               actual_km:12.5,actual_ascent_m:450},
+        achievements:['Premier trek terminé'],
+        treks:[{id:910001,name:'Sentier test',region:'Alpes',distance:18,elevation:300,is_public:true}],
+        favorites:[{id:910001,name:'Sentier test',region:'Alpes',distance:18,elevation:300,is_public:true}],
+        journeys:[{trek_id:910001,status:'completed',name:'Sentier test',region:'Alpes',
+             distance:18,elevation:300,completed_on:'2026-08-09',actual_distance_km:12.5,
+             actual_ascent_m:450,rating:5,notes:'Belle sortie',photo_urls:[]}],
+        collections:[{id:1,name:'Montagnes',treks:[{id:910001,name:'Sentier test',region:'Alpes'}]}]
+      };
+      currentUser=window.__profileFixture.user;
+      window.__profileRealFetch=window.fetch;
+      window.fetch=function(url,init){
+        const u=String(url);
+        if(u.startsWith('/profile/')||u.endsWith('/treks/910001/plan')){
+          window.__profileCalls.push({url:u,method:(init&&init.method)||'GET'});
+          let body={};
+          if(u==='/profile/v2')body=window.__profileFixture;
+          if(u.indexOf('/profile/public/')===0)body={
+             username:'ChromeTest',avatar:'compass',bio:'Marche en montagne',
+             treks:window.__profileFixture.treks,completed:[]};
+          if(u.endsWith('/treks/910001/plan'))body={notes:'Préparation existante',
+             checklist:[{text:'Remplir gourde',done:false}]};
+          if(u==='/profile/v2/collections'&&init&&init.method==='POST')body={id:2};
+          return Promise.resolve(new Response(JSON.stringify(body),{
+            status:200,headers:{'Content-Type':'application/json'}}));
+        }
+        return window.__profileRealFetch(url,init);
+      };
+      window.openProfile();
+    """)
+    wait.until(lambda d: d.find_element(By.ID, "tm-profile-v2").is_displayed())
+    assert "12.5" in driver.find_element(By.ID, "tm-p-content").text, (
+        "Real completed hiking km missing from account dashboard"
+    )
+    driver.find_element(By.CSS_SELECTOR, '[data-p-tab="projects"]').click()
+    driver.find_element(By.CSS_SELECTOR, '[data-p-select="910001"]').click()
+    assert driver.find_element(By.ID, "tm-p-journey-form").is_displayed()
+    driver.find_element(By.CSS_SELECTOR, '[data-p-plan="910001"]').click()
+    wait.until(lambda d: d.find_element(By.ID, "tm-p-plan-editor").is_displayed())
+    assert "Remplir gourde" in driver.find_element(By.ID, "tm-p-plan-editor").text
+    driver.find_element(By.CSS_SELECTOR, '[data-p-checklist-save]').click()
+    wait.until(lambda d: d.execute_script(
+        "return window.__profileCalls.some(x=>x.url.endsWith('/treks/910001/plan')&&x.method==='PUT')"))
+    driver.find_element(By.CSS_SELECTOR, '[data-p-tab="preferences"]').click()
+    form=driver.find_element(By.ID, "tm-p-settings-form")
+    assert form.is_displayed()
+    assert form.find_element(By.NAME, "daily_km").get_attribute("value")=="17"
+    form.find_element(By.CSS_SELECTOR, 'button[type="submit"]').click()
+    wait.until(lambda d: d.execute_script(
+        "return window.__profileCalls.some(x=>x.url==='/profile/v2'&&x.method==='PUT')"))
+    driver.find_element(By.CSS_SELECTOR, '[data-p-tab="collections"]').click()
+    assert "Montagnes" in driver.find_element(By.ID, "tm-p-content").text
+    driver.save_screenshot(str(OUT / "profile-v2-desktop.png"))
+    driver.find_element(By.ID, "tm-p-exit").click()
+    assert not driver.find_element(By.ID, "tm-profile-v2").is_displayed()
+    driver.set_window_size(390, 844)
+    driver.execute_script("window.openProfile()")
+    wait.until(lambda d: d.find_element(By.ID,"tm-profile-v2").is_displayed())
+    assert driver.find_element(By.CSS_SELECTOR,'[data-p-tab="preferences"]').is_displayed()
+    layout=driver.execute_script(
+        "const r=document.querySelector('.tm-p-shell').getBoundingClientRect();"
+        "return {right:r.right,window:innerWidth};"
+    )
+    assert layout["right"]<=layout["window"]+2, (
+        f"Phone profile overflows horizontally: {layout}"
+    )
+    driver.save_screenshot(str(OUT / "profile-v2-mobile.png"))
+    driver.find_element(By.ID,"tm-p-exit").click()
+    driver.execute_script("window.fetch=window.__profileRealFetch;currentUser=null;")
     print("REAL CHROME: desktop 1440x900, mobile 390x844 and short phones 390/320x640; "
           "route/map, long preparation scroll, native expand/collapse, exit, explorer restore PASS")
 finally:
