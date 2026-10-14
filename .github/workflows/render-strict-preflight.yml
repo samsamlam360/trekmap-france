@@ -243,6 +243,10 @@ jobs:
           curl -fsS http://127.0.0.1:10000/statistics >/tmp/statistics.json
           python -m json.tool /tmp/statistics.json >/dev/null
 
+      - name: Verify profile privacy and persistence against isolated CI PostGIS
+        if: matrix.python-version == '3.11'
+        run: python scripts/test_profile_v2_integration.py
+
       - name: Install Chromium for real responsive smoke
         if: matrix.python-version == '3.11'
         uses: browser-actions/setup-chrome@v1
