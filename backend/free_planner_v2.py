@@ -261,7 +261,14 @@ def _geocode_nominatim(query: str, *, retries: int = 2):
             lat, lon = float(row["lat"]), float(row["lon"])
         except (KeyError, TypeError, ValueError):
             continue
-        out.append(_normalise_place(row.get("display_name") or query, lat, lon))
+        place = _normalise_place(row.get("display_name") or query, lat, lon)
+        # Preserve public OSM identity. A place node and a municipality's
+        # boundary centroid can share the same label yet be 5-10 km apart.
+        # Downstream matching must be able to distinguish them safely.
+        place["geocode_osm_type"] = str(row.get("osm_type") or "")
+        place["geocode_osm_class"] = str(row.get("class") or "")
+        place["geocode_osm_subtype"] = str(row.get("type") or "")
+        out.append(place)
     return out
 
 

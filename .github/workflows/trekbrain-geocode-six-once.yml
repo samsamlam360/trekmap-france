@@ -1,0 +1,100 @@
+name: TrekBrain six geocoding production regressions (one shot)
+# A bounded confirmation after merging a geocoding fix. Never scheduled.
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/benchmark-requests/geo6-20261014.txt
+permissions:
+  contents: read
+concurrency:
+  group: trekbrain-geocode-six-one-shot
+  cancel-in-progress: false
+jobs:
+  six-geocodes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 22
+    steps:
+      - uses: actions/checkout@v4
+      - name: Confirm exact deployed revision
+        shell: python
+        env:
+          EXPECTED_SHA: ${{ github.sha }}
+        run: |
+          import json, os, time, urllib.request
+          for _ in range(70):
+              try:
+                  req=urllib.request.Request('https://trekmap-france.onrender.com/ai/status',headers={'User-Agent':'TrekBrain-geo-six-audit'})
+                  with urllib.request.urlopen(req,timeout=10) as f:
+                      meta=json.load(f)
+                  if meta.get('build_commit') == os.environ['EXPECTED_SHA']:
+                      print('Verified exact production SHA:',meta['build_commit'])
+                      break
+              except Exception as exc:
+                  print(type(exc).__name__,str(exc)[:160])
+              time.sleep(8)
+          else:
+              raise SystemExit('The release was not verified on Render.')
+      - name: Run six fixed requests once, sequentially
+        shell: bash
+        env:
+          EXPECTED_SHA: ${{ github.sha }}
+          TREKBRAIN_BENCHMARK_URL: https://trekmap-france.onrender.com
+          TREKBRAIN_BENCHMARK_OUT: benchmark-results/geo6
+          TREKBRAIN_BENCHMARK_MIN_INTERVAL_SECONDS: '25'
+        run: |
+          mkdir -p "$TREKBRAIN_BENCHMARK_OUT"
+          python - <<'PY'
+          import sys
+          from pathlib import Path
+          sys.path.insert(0,'scripts')
+          import benchmark_trekbrain_v9_production as core
+          import benchmark_trekbrain_v9_extended as ext
+          import benchmark_trekbrain_v9_unseen20 as unseen
+          source=core.SCENARIOS + ext.EXTENDED_SCENARIOS + unseen.SCENARIOS
+          names=[
+              'morvan-settons-camping',
+              'dijon-beaune-traverse',
+              'nantua-bugey',
+              'gorges-tarn-sainte-enimie',
+              'sarlat-dordogne',
+              'queyras-named-trail-unseen-loop',
+          ]
+          core.SCENARIOS=[next(row for row in source if row['id']==name) for name in names]
+          core.OUT_DIR=Path('benchmark-results/geo6')
+          core.OUT_DIR.mkdir(parents=True,exist_ok=True)
+          core.main()
+          PY
+      - name: Always summarize geometry and preparation separately
+        if: always()
+        shell: python
+        run: |
+          import json,os
+          from pathlib import Path
+          path=Path('benchmark-results/geo6/trekbrain-production-benchmark.json')
+          lines=['# Six live TrekBrain geocoding regressions', '']
+          try:
+              payload=json.loads(path.read_text(encoding='utf-8'))
+              rows=payload.get('scenarios') or []
+              valid=sum(r.get('structure_ok') is True for r in rows)
+              prepared=sum(r.get('preparation_ok') is True for r in rows)
+              lines += [f'Tracés valides: **{valid}/6**',f'Préparations confirmées: **{prepared}/6**','']
+              for r in rows:
+                  lines.append(f"- {r.get('id')}: structure={r.get('structure_ok')} preparation={r.get('preparation_ok')} erreur={str(r.get('error') or '')[:240]}")
+          except (OSError,ValueError) as exc:
+              rows=[]
+              lines.append('Rapport non disponible: '+str(exc))
+          report='\n'.join(lines)+'\n'
+          print(report)
+          with open(os.environ['GITHUB_STEP_SUMMARY'],'a',encoding='utf-8') as out:
+              out.write(report)
+          if len(rows)!=6 or sum(r.get('structure_ok') is True for r in rows)!=6:
+              raise SystemExit('A real geometry regression remains; do not claim 6/6.')
+      - name: Preserve the actual complete report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: trekbrain-geo6-real
+          path: benchmark-results/geo6/
+          retention-days: 21
+          if-no-files-found: warn

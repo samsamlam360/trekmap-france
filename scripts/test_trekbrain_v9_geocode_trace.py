@@ -22,6 +22,75 @@ def feature(name, lon, lat, code="39", score=.9):
 
 
 class GeocodeEvidenceTests(unittest.TestCase):
+    def test_geocoder_query_excludes_trail_instructions_not_area_qualifiers(self):
+        self.assertEqual(request._clean_place("Lac des Settons"), "Lac des Settons")
+        self.assertEqual(request._clean_place("Laval"), "Laval")
+        self.assertEqual(
+            request._clean_place("Saintes-Maries-de-la-Mer sans marcher dans l'eau"),
+            "Saintes-Maries-de-la-Mer",
+        )
+        self.assertEqual(
+            request._clean_place("Sainte-Enimie et des gorges du Tarn"),
+            "Sainte-Enimie",
+        )
+        self.assertEqual(
+            request._clean_place("Lac Blanc dans les Vosges"),
+            "Lac Blanc dans les Vosges",
+            "Do not erase an explicitly written geographic disambiguator",
+        )
+
+    def test_provider_identity_prevents_town_centroid_ambiguity(self):
+        # A city place node must outrank its administrative boundary centroid
+        # without authorizing arbitrary similarly named roads or other towns.
+        raw = [
+            {"display_name": "Dijon, Côte-d'Or, Bourgogne-Franche-Comté, France",
+             "lat": "47.3215806", "lon": "5.0414701",
+             "osm_type": "node", "class": "place", "type": "city"},
+            {"display_name": "Dijon, Côte-d'Or, Bourgogne-Franche-Comté, France",
+             "lat": "47.408796", "lon": "5.0646164",
+             "osm_type": "relation", "class": "boundary", "type": "administrative"},
+        ]
+        with patch.object(geo, "_request_json", return_value=raw):
+            evidence = geo._geocode_nominatim("Dijon, France")
+        self.assertEqual(evidence[0]["geocode_osm_type"], "node")
+        selected = geocoding.filter_provider_places("Dijon, France", evidence, "nominatim")
+        self.assertEqual(len(selected), 1)
+        self.assertEqual(selected[0]["geocode_osm_type"], "node")
+        self.assertEqual(
+            geocoding.filter_provider_places("Dijon, France", [
+                {**row, "geocode_osm_type": "relation"} for row in evidence
+            ], "nominatim"), [], "No node means no arbitrary centroid choice"
+        )
+
+    def test_region_hint_filters_real_provider_evidence_not_fake_centres(self):
+        lake1 = geo._normalise_place("Lac des Settons, Nièvre, France", 47.1827, 4.0662)
+        lake2 = geo._normalise_place("Lac des Settons, Nièvre, France", 47.1748, 4.0741)
+        wrong = geo._normalise_place("Lac des Settons, Autre lieu, France", 48.1, 6.4)
+        chosen = geocoding.filter_provider_places(
+            "Lac des Settons, Morvan, France", [lake1, lake2, wrong], "nominatim"
+        )
+        self.assertEqual(len(chosen), 2)
+        self.assertTrue(all(abs(p["lat"] - 47.18) < .02 for p in chosen))
+        self.assertEqual(
+            geocoding.filter_provider_places(
+                "Lac des Settons, Haut-Rhin, France", [lake1, lake2], "nominatim"), []
+        )
+        self.assertEqual(
+            geocoding.filter_provider_places(
+                "Lac des Settons, Morvan, France", [wrong], "nominatim"), []
+        )
+
+    def test_two_real_distant_named_nodes_are_still_ambiguous(self):
+        def town(lat, lon):
+            return {**geo._normalise_place("Nantua, Ain, France", lat, lon),
+                    "geocode_osm_type": "node", "geocode_osm_class": "place",
+                    "geocode_osm_subtype": "town"}
+        self.assertEqual(
+            geocoding.filter_provider_places("Nantua, Ain, France",
+                                            [town(46.15, 5.60), town(46.24, 5.70)],
+                                            "nominatim"), []
+        )
+
     def test_explicit_qualifier_survives_provider_web_title(self):
         prompt = "Une boucle de randonnée autour des Cascades de la Rivière, Jura, avec un gîte."
         places = request._extract_prompt_places(prompt)
