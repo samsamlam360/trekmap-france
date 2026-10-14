@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="420" viewBox="0 0 960 420" role="img" aria-labelledby="title">
+<title id="title">Paysage stylisé de randonnée avec montagnes, forêt et lac</title>
+<defs>
+ <linearGradient id="sky" x2="0" y2="1"><stop stop-color="#a9d9ee"/><stop offset=".72" stop-color="#e9efe2"/><stop offset="1" stop-color="#f9e1b5"/></linearGradient>
+ <linearGradient id="peaks" x2="0" y2="1"><stop stop-color="#7189a0"/><stop offset="1" stop-color="#1b6a62"/></linearGradient>
+ <linearGradient id="grass" x2="0" y2="1"><stop stop-color="#699b75"/><stop offset="1" stop-color="#134c3e"/></linearGradient>
+ <linearGradient id="lake" x2="0" y2="1"><stop stop-color="#58b7bc"/><stop offset="1" stop-color="#145d6f"/></linearGradient>
+</defs>
+<path fill="url(#sky)" d="M0 0h960v420H0z"/>
+<circle cx="761" cy="76" r="55" fill="#fff7d5" opacity=".83"/>
+<g opacity=".32" fill="#fff"><ellipse cx="181" cy="91" rx="138" ry="27"/><ellipse cx="690" cy="143" rx="106" ry="19"/></g>
+<path fill="#a6b9bd" d="M0 265 150 111 260 210 375 48 510 210 610 110 760 246 875 145 960 236V420H0Z"/>
+<path fill="url(#peaks)" d="M0 293 140 126 260 241 377 59 509 219 610 113 768 270 865 164 960 247V420H0Z"/>
+<path fill="#edf8ef" d="m136 132 49 58-36-17-19 13-16-12zM378 62l76 92-57-34-27 16-25-20zM610 115l68 84-54-31-23 12-21-11zM863 171l55 68-46-23-15 10-20-11z"/>
+<path fill="#488875" d="M0 315q150-88 270-27t245-3q90-45 175 0t270-15V420H0Z"/>
+<path fill="url(#lake)" d="M0 349q190-63 379-20t581-8v99H0Z"/>
+<path d="M0 358q200-57 420-18t540-12" fill="none" stroke="#f7ffff" opacity=".38" stroke-width="5"/>
+<path fill="url(#grass)" d="M0 338q147-46 279 26t343 13q156-54 338 4v39H0Z"/>
+<g fill="#0c5144">
+<path d="m70 321 18-69 20 69h-12v22H81v-22zM134 343l18-66 17 66h-9v22h-18v-22zM744 326l17-69 20 69h-10v22h-16v-22zM840 343l19-79 21 79h-11v24h-18v-24zM918 325l14-54 17 54h-9v19h-13v-19z"/>
+</g>
+<path d="M365 418Q410 379 485 370T610 405" fill="none" stroke="#f4e4b7" stroke-width="19" opacity=".92"/>
+</svg>

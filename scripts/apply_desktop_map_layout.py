@@ -96,6 +96,82 @@ block=r'''<!-- TREKMAP_DESKTOP_MAP_2026_START -->
   #tm-desktop-info {display:none!important}
   #tm-drawer-track {scroll-behavior:auto}
 }
+
+/* V2 mockup fidelity: three clear zones with spacious central map. */
+@media(min-width:1240px){
+  :root{--tm-panel:335px;--tm-drawer:224px}
+  #tm-unified-topbar{grid-template-columns:245px minmax(275px,520px) minmax(0,1fr)!important;padding-inline:20px!important}
+  #sidebar{width:var(--tm-panel)!important;min-width:var(--tm-panel)!important;left:16px!important}
+  #sidebar .filters:not(.tm-collapsed){
+    max-height:calc(100dvh - var(--tm-top) - 26px)!important;
+    height:calc(100dvh - var(--tm-top) - 26px)!important;
+    background:rgba(255,255,255,.985)!important;
+    border:1px solid #d8e9df!important;
+    border-radius:17px!important;
+    box-shadow:0 12px 36px rgba(18,67,43,.13)!important;
+    padding-inline:16px!important
+  }
+  #sidebar .filter-row{padding:9px!important;border-color:#e2ece5!important}
+  #sidebar .tm-filter-section{font-size:10px!important;letter-spacing:.05em!important;margin-top:13px!important}
+  #sidebar .filters .field label,#sidebar .filters .tm-criterion label{font-size:11px!important}
+  .leaflet-left{left:calc(var(--tm-panel) + 23px)!important}
+  #tm-unified-drawer{
+    left:calc(var(--tm-panel) + 31px)!important;right:16px!important;bottom:12px!important;
+    height:var(--tm-drawer)!important;
+  }
+  body.tm-filters-collapsed #tm-unified-drawer{left:calc(var(--tm-panel) + 31px)!important}
+  #tm-unified-drawer .tm-drawer-shell{border-radius:16px!important;box-shadow:0 12px 34px rgba(17,56,39,.14)!important}
+  #tm-drawer-head{height:46px!important}
+  #tm-drawer-track{height:calc(var(--tm-drawer) - 49px)!important;padding:4px 12px 9px!important;gap:11px!important}
+  #tm-drawer-track .tm-trek-tile{
+    position:relative!important;flex:0 0 207px!important;height:164px!important;
+    padding:7px!important;border-radius:12px!important;
+    display:flex!important;flex-direction:column;align-items:stretch;overflow:hidden
+  }
+  #tm-drawer-track .tm-trek-tile strong{font-size:12px!important;margin:4px 1px 0!important;line-height:1.2}
+  #tm-drawer-track .tm-trek-tile .region{font-size:10px!important;margin:2px 1px!important}
+  #tm-drawer-track .tm-tile-chips{margin:4px 0!important;gap:4px}
+  #tm-drawer-track .tm-chip{font-size:9px!important;padding:2px 5px!important}
+  #tm-drawer-track .tm-tile-meta{font-size:10px!important;margin-top:1px!important}
+  #tm-drawer-track .tm-tile-open{bottom:5px!important;right:8px!important;font-size:9px!important}
+  #tm-drawer-track .tm-tile-landscape{
+    height:69px!important;min-height:69px!important;display:block!important;
+    border-radius:8px;background-image:url('/trek-scenery.svg');
+    background-size:cover;background-position:center 55%;
+    border:1px solid rgba(18,91,57,.10)
+  }
+  #tm-drawer-track .tm-tile-landscape-1{background-position:34% 38%;filter:hue-rotate(11deg)}
+  #tm-drawer-track .tm-tile-landscape-2{background-position:78% 44%;filter:hue-rotate(33deg) saturate(.89)}
+  #tm-drawer-track .tm-tile-landscape-3{background-position:57% 80%;filter:hue-rotate(-16deg)}
+  #tm-drawer-track .tm-tile-landscape-4{background-position:85% 30%;filter:hue-rotate(68deg) saturate(.7)}
+  #tm-desktop-info{
+    width:283px!important;right:16px!important;top:calc(var(--tm-top) + 16px)!important;
+    bottom:calc(var(--tm-drawer) + 25px)!important;gap:9px!important
+  }
+  .tm-info-overview,.tm-info-selected{border-radius:15px!important;padding:12px!important}
+  .tm-info-overview h2{font-size:18px!important}
+  .tm-info-overview p{font-size:11px!important;margin-bottom:6px!important}
+  .tm-info-landscape{
+    height:83px!important;background-image:linear-gradient(0deg,rgba(0,52,36,.55),transparent 72%),url('/trek-scenery.svg')!important;
+    background-size:cover!important;background-position:center 55%!important;border-radius:11px!important
+  }
+  .tm-info-landscape:before{display:none!important}
+  .tm-info-overview .tm-info-topline{margin-top:7px!important}
+  .tm-info-count{padding-top:7px!important}
+  .tm-info-count strong{font-size:24px!important}
+  .tm-info-selected{flex:1 1 auto!important;min-height:145px!important;overflow-y:auto!important}
+  .tm-info-selected .tm-info-topline{margin-bottom:1px!important}
+  .tm-info-trek-name{margin-top:5px!important;font-size:15px!important}
+  .tm-info-kpis{margin-top:8px!important}
+  .tm-info-kpis div{padding:7px 2px!important}
+  .tm-info-description{font-size:11px!important;line-height:1.45!important}
+  .map-tools{right:310px!important}
+  body.tm-brain-route-mode .map-tools{right:16px!important}
+}
+/* Preserve existing phone sheet, no extra desktop cards or panels on phones. */
+@media(max-width:1239px){
+  #tm-drawer-track .tm-tile-landscape{display:none}
+}
 </style>
 <!-- TREKMAP_DESKTOP_MAP_2026_END -->'''
 if html.count("</body>") != 1:
