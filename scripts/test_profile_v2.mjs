@@ -10,7 +10,7 @@ const html=fs.readFileSync('frontend/index.html','utf8');
 
 assert.ok(site.includes('run_path(str(Path(__file__).with_name("apply_profile_v2.py")))'),
  'profile is built into main page without modifying existing core HTML');
-assert.ok(entry.includes('app.include_router(profile_v2.router)'),
+assert.ok(entry.includes('app.router.routes.extend(profile_v2.router.routes)'),
  'profile backend registered in production');
 const js=ui.match(/<script id="tm-profile-v2-script">([\s\S]*?)<\/script>/)?.[1];
 const css=ui.match(/<style id="tm-profile-v2-style">([\s\S]*?)<\/style>/)?.[1];
