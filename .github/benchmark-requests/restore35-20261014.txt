@@ -1,0 +1,1 @@
+One-shot production benchmark: 6 historical, 9 extended, 20 unseen; preserve strict readiness and report real structural regression. Triggered once after PR #187 went LIVE. No secrets or paid providers.
