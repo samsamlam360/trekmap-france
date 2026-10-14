@@ -110,4 +110,31 @@ finally:
     geo._geocode_photon = original_photon
     ign.geocode_ign = original_ign
 
+# A single official municipality plus streets in the same commune must not
+# be rejected as two different towns just because their coordinates diverge.
+# The municipality MUST have a reliable INSEE identifier and correct department.
+saved_request = geo._request_json
+def municipality_sample(url, **kw):
+    assert url == ign.IGN_GEOCODAGE_URL
+    def row(label, kind, city, citycode, context, lon, lat):
+        return {"geometry":{"coordinates":[lon,lat]},
+                "properties":{"label":label,"type":kind,"city":city,
+                              "citycode":citycode,"context":context,"score":.9}}
+    return {"features":[
+        row("Sarlat-la-Canéda","municipality","Sarlat-la-Canéda","24520",
+            "24, Dordogne, Nouvelle-Aquitaine",1.216,44.889),
+        row("Sarlat-la-Canéda","street","Sarlat-la-Canéda","24520",
+            "24, Dordogne, Nouvelle-Aquitaine",1.145,44.948),
+    ]}
+try:
+    geo._request_json = municipality_sample
+    selected = ign.geocode_ign("Sarlat-la-Canéda, Dordogne, France")
+    assert len(selected) == 1 and selected[0]["commune_insee"] == "24520", selected
+    assert selected[0]["geocode_precision"] == "official-municipality", selected
+    assert abs(selected[0]["lon"] - 1.216) < 0.001
+    # Same name in the wrong department is NEVER a verified match.
+    assert ign.geocode_ign("Sarlat-la-Canéda, Haute-Savoie, France") == []
+finally:
+    geo._request_json = saved_request
+
 print("TrekBrain geo provider fallback and 429 cooldown: PASS")

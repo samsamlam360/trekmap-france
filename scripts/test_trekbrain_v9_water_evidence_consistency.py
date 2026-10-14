@@ -96,6 +96,17 @@ try:
             assert "ne pas boire" in row["notes"], row
         else:
             assert "vérifier" in row["notes"] or "potabilité inconnue" in row["notes"], row
+
+    # An unavailable primary terrain search gets exactly one bounded attempt
+    # on the already configured third, independent free Overpass endpoint.
+    calls.clear()
+    recovered = water.discover_water_points(None, {
+        **plan, "_water_rescue_mirror_index": 2,
+    })
+    assert len(calls) == 1 and calls[0][0] == free.OVERPASS_URLS[2], calls
+    assert calls[0][1]["timeout"] <= 1.6 and calls[0][1]["retries"] == 1
+    assert len(recovered) == len(tag_cases)
+    assert recovered[0]["status"] == "not_potable", recovered[0]
 finally:
     free._request_json = real_request
 

@@ -1,0 +1,102 @@
+name: TrekBrain restore 35 one-shot production comparison
+# Triggered ONLY by an explicit marker change on main; never by every push.
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/benchmark-requests/restore35-20261014.txt
+permissions:
+  contents: read
+concurrency:
+  group: trekbrain-restore35-once
+  cancel-in-progress: false
+jobs:
+  compare35:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - name: Require the exact production commit
+        shell: python
+        env:
+          EXPECTED_SHA: ${{ github.sha }}
+        run: |
+          import json, os, time, urllib.request
+          url='https://trekmap-france.onrender.com/ai/status'
+          for _ in range(75):
+              try:
+                  req=urllib.request.Request(url,headers={'User-Agent':'TrekBrain-regression-35'})
+                  with urllib.request.urlopen(req,timeout=10) as response:
+                      state=json.load(response)
+                  if str(state.get('build_commit') or '').lower()==os.environ['EXPECTED_SHA'].lower():
+                      print('Verified production commit:', state['build_commit'])
+                      break
+              except Exception as exc:
+                  print(type(exc).__name__,str(exc)[:160],flush=True)
+              time.sleep(8)
+          else:
+              raise SystemExit('Production has not reached the exact benchmark commit')
+      - name: Run exactly 35 distinct historical requests, one after another
+        shell: bash
+        env:
+          EXPECTED_SHA: ${{ github.sha }}
+          TREKBRAIN_BENCHMARK_URL: https://trekmap-france.onrender.com
+        run: |
+          set -uo pipefail
+          for section in historic extended unseen20; do
+            mkdir -p "benchmark-results/restore35/$section"
+            export TREKBRAIN_BENCHMARK_OUT="benchmark-results/restore35/$section"
+            if [[ "$section" == historic ]]; then
+              python scripts/benchmark_trekbrain_v9_production.py > "$TREKBRAIN_BENCHMARK_OUT/runner.log" 2>&1 || true
+            elif [[ "$section" == extended ]]; then
+              python scripts/benchmark_trekbrain_v9_extended.py > "$TREKBRAIN_BENCHMARK_OUT/runner.log" 2>&1 || true
+            else
+              python scripts/benchmark_trekbrain_v9_unseen20.py > "$TREKBRAIN_BENCHMARK_OUT/runner.log" 2>&1 || true
+            fi
+          done
+      - name: Compare structural regression separately from preparation evidence
+        if: always()
+        shell: python
+        run: |
+          import json,os,statistics
+          from pathlib import Path
+          root=Path('benchmark-results/restore35')
+          limits={'historic':6,'extended':9,'unseen20':20}
+          lines=['# Bilan comparable : 35 treks, ancienne référence 35/35', '',
+            'Une structure valide ne signifie pas eau, ravitaillement et nuitées confirmés.', '',
+            '| Suite | Tracés validés | Préparations confirmées | Durée moyenne |',
+            '|---|---:|---:|---:|']
+          failed=[]
+          for name,expected in limits.items():
+              path=root/name/'trekbrain-production-benchmark.json'
+              try:
+                  rows=json.loads(path.read_text(encoding='utf-8'))['scenarios']
+              except (OSError,ValueError,KeyError):
+                  rows=[]
+              valid=sum(row.get('structure_ok') is True for row in rows)
+              prepared=sum(row.get('preparation_ok') is True for row in rows)
+              durations=[row['elapsed_s'] for row in rows if isinstance(row.get('elapsed_s'),(float,int))]
+              duration=f'{statistics.fmean(durations):.1f}s' if durations else 'n/a'
+              lines.append(f'| {name} | {valid}/{expected} | {prepared}/{expected} | {duration} |')
+              if len(rows)!=expected or valid!=expected:
+                  failed.append(name)
+              for row in rows:
+                  if row.get('structure_ok') is not True:
+                      lines.append(f"- Echec de tracé {name}/{str(row.get('id') or '?')}: {str(row.get('error') or row.get('hard_failures') or '')[:300]}")
+              if len(rows)!=expected:
+                  lines.append(f'- {name}: nombre de rapports {len(rows)}/{expected}')
+          lines += ['', 'Règle de déploiement : ne pas masquer les échecs par une note ou une relance choisie.', '']
+          report='\n'.join(lines)
+          print(report)
+          with open(os.environ['GITHUB_STEP_SUMMARY'],'a',encoding='utf-8') as out:
+              out.write(report)
+          if failed:
+              raise SystemExit('Regression structurelle présente: '+', '.join(failed))
+      - name: Conserver les résultats, même lorsque la comparaison échoue
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: trekbrain-restore35-one-shot
+          path: benchmark-results/restore35
+          retention-days: 21
+          if-no-files-found: warn

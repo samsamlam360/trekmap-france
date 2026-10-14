@@ -237,7 +237,28 @@ def geocode_ign(query: str, *, timeout: float = 2.5) -> list[dict]:
         _, qualifier = query_parts(query)
         if qualifier and _fold(qualifier) in {_fold(x) for x in str(props.get("context") or "").split(",")}:
             point["geocode_department"] = qualifier
+        # A commune and several streets bearing its name may be kilometres
+        # apart. A street must not turn one verified municipality into a false
+        # "ambiguous homonyms" error. Only an explicitly typed municipality
+        # with the exact city name and official INSEE code gets this priority.
+        # It still passes the normal department and homonym safety checks.
+        landmark, _ = query_parts(query)
+        if (str(props.get("type") or "").casefold() == "municipality"
+                and _fold(props.get("city") or "") == _fold(landmark)
+                and str(props.get("citycode") or "").strip()):
+            point["geocode_precision"] = "official-municipality"
+            point["commune_insee"] = str(props["citycode"])
         rows.append(point)
+    municipalities = [point for point in rows
+                      if point.get("geocode_precision") == "official-municipality"]
+    if municipalities:
+        # A genuine municipality may coexist with multiple street matches.
+        # But two different official INSEE codes remain ambiguous.
+        codes = {point["commune_insee"] for point in municipalities}
+        if len(codes) == 1:
+            verified = filter_provider_places(query, municipalities, "ign-geoplateforme")
+            if verified:
+                return verified
     return filter_provider_places(query, rows, "ign-geoplateforme")
 
 
