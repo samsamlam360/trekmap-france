@@ -44,6 +44,26 @@ try:
 finally:
     geo._request_json = original_request
 
+# Real official municipality in the stated massif is admissible even if
+# the qualifier is a geographical region, not a French department.
+# A remote exact homonym and an unqualified ambiguous name remain unsafe.
+outside = [
+    {"code": "05026", "nom": "Ceillac", "departement": {"nom": "Hautes-Alpes", "code": "05"},
+     "centre": {"coordinates": [6.776, 44.670]}},
+    {"code": "12340", "nom": "Ceillac", "departement": {"nom": "Aveyron", "code": "12"},
+     "centre": {"coordinates": [2.3, 44.1]}},
+]
+geo._request_json = lambda *a, **kw: outside
+try:
+    queyras = communes.geocode_commune("Ceillac, Queyras, France")
+    assert len(queyras) == 1 and queyras[0]["commune_insee"] == "05026", queyras
+    assert communes.geocode_commune("Ceillac, France") == []
+    assert communes.geocode_commune("Ceillac, Hautes-Alpes")[0]["department_code"] == "05"
+    assert communes.geocode_commune("Ceillac, Savoie") == []
+    assert communes.geocode_commune("Ceillac, Vercors") == []
+finally:
+    geo._request_json = original_request
+
 # Reproduce the actual failure path: Nominatim 429, Photon timeout,
 # IGN no match, then exact municipality centre recovered. No network calls.
 from backend import smart_planner_v3 as v3

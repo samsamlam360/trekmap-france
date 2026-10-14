@@ -37,6 +37,14 @@ def geocode_commune(query: str, *, timeout: float = 2.5) -> list[dict]:
     city = pieces[0]
     wanted_city = _fold(city)
     wanted_department = _fold(pieces[1]) if len(pieces) == 2 else ""
+    from .trekbrain_geo_fallback_v9 import named_massif_reference
+    massif = named_massif_reference(pieces[1]) if len(pieces) == 2 else None
+    if massif is not None:
+        # Queyras, Morvan, Vercors etc. are not departments. The official
+        # commune may be used only after the INSEE name check AND a proximity
+        # check against the requested massif. No arbitrary region centre is
+        # ever returned as a walking origin.
+        wanted_department = ""
     if not wanted_city or len(wanted_city) < 2:
         return []
 
@@ -73,6 +81,10 @@ def geocode_commune(query: str, *, timeout: float = 2.5) -> list[dict]:
             continue
         if not (math.isfinite(lat) and math.isfinite(lon)
                 and 41.0 <= lat <= 51.6 and -5.6 <= lon <= 10.0):
+            continue
+        if massif is not None and geo._dist(
+            {"lat": lat, "lon": lon}, {"lat": massif[0], "lon": massif[1]}
+        ) > 75.0:
             continue
         code = str(entry.get("code") or "")
         if not code or not dept_code:

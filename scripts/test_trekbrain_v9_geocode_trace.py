@@ -22,6 +22,54 @@ def feature(name, lon, lat, code="39", score=.9):
 
 
 class GeocodeEvidenceTests(unittest.TestCase):
+    def test_nominatim_postcode_disambiguates_same_named_city_boundary(self):
+        # Exact anonymization-free labels of the observed Dijon failure:
+        # Nominatim's municipal centre may be 10 km away from its place node.
+        name = "Dijon, Côte-d'Or, Bourgogne-Franche-Comté, France métropolitaine"
+        city = geo._normalise_place(name + ", 21000, France", 47.3215806, 5.0414701)
+        boundary = geo._normalise_place(name + ", France", 47.408796, 5.0646164)
+        rows = geocoding.filter_provider_places("Dijon, France",
+                                                 [city, boundary], "nominatim")
+        self.assertEqual(len(rows), 1)
+        self.assertAlmostEqual(rows[0]["lat"], 47.3215806)
+        # Mere distance and a postcode are insufficient if the city context
+        # disagrees or if the two centres are too far apart.
+        other = geo._normalise_place("Dijon, Jura, 21000, France", 47.34, 5.04)
+        self.assertEqual(
+            geocoding.filter_provider_places("Dijon, France",
+                                            [boundary, other], "nominatim"), []
+        )
+
+    def test_named_massif_uses_actual_municipality_not_a_random_street(self):
+        calls = []
+        def ban(url, **kwargs):
+            calls.append(kwargs["params"]["q"])
+            return {"features": [
+                {"geometry": {"coordinates": [6.775, 44.669]},
+                 "properties": {"label": "Rue des Queyras 05600 Ceillac",
+                                "type": "street", "city": "Ceillac",
+                                "citycode": "05026", "score": 0.95,
+                                "context": "05, Hautes-Alpes"}},
+                {"geometry": {"coordinates": [6.779, 44.67]},
+                 "properties": {"label": "Ceillac", "type": "municipality",
+                                "city": "Ceillac", "citycode": "05026",
+                                "score": 0.9, "context": "05, Hautes-Alpes"}},
+            ]}
+        with patch.object(geo, "_request_json", side_effect=ban):
+            result = geocoding.geocode_ign("Ceillac, Queyras, France")
+        self.assertEqual(calls, ["Ceillac"])
+        self.assertEqual(len(result), 1)
+        self.assertEqual(result[0]["commune_insee"], "05026")
+        self.assertEqual(result[0]["geocode_precision"], "official-municipality")
+
+    def test_ign_never_confuses_homonymous_street_with_requested_city(self):
+        alien = {"features": [{"geometry": {"coordinates": [0.4027, 44.0667]},
+                 "properties": {"label": "Dijon 47600 Francescas",
+                                "city": "Francescas", "type": "street",
+                                "context": "47, Lot-et-Garonne", "score": 0.99}}]}
+        with patch.object(geo, "_request_json", return_value=alien):
+            self.assertEqual(geocoding.geocode_ign("Dijon, France"), [])
+
     def test_geocoder_query_excludes_trail_instructions_not_area_qualifiers(self):
         self.assertEqual(request._clean_place("Lac des Settons"), "Lac des Settons")
         self.assertEqual(request._clean_place("Laval"), "Laval")
