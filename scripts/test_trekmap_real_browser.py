@@ -430,6 +430,18 @@ try:
     )
     driver.save_screenshot(str(OUT / "profile-v2-mobile.png"))
     driver.find_element(By.ID,"tm-p-exit").click()
+    driver.set_window_size(1440,900)
+    driver.find_element(By.ID,"tm-ai-launch").click()
+    wait.until(lambda d: d.find_element(By.ID,"tm-ai-overlay").is_displayed())
+    pref_button=driver.find_element(By.ID,"tm-ai-profile-defaults")
+    pref_button.click()
+    wait.until(lambda d: d.find_element(By.ID,"tm-ai-km").get_attribute("value")=="17")
+    assert "Hébergement souhaité : camping" in driver.find_element(
+        By.ID, "tm-ai-prompt").get_attribute("value"), (
+        "Personal lodging preference did not reach TrekBrain's request"
+    )
+    driver.find_element(By.ID,"tm-ai-close").click()
+    wait.until(lambda d: not d.find_element(By.ID,"tm-ai-overlay").is_displayed())
     driver.execute_script("window.fetch=window.__profileRealFetch;currentUser=null;")
     print("REAL CHROME: desktop 1440x900, mobile 390x844 and short phones 390/320x640; "
           "route/map, long preparation scroll, native expand/collapse, exit, explorer restore PASS")
