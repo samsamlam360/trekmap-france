@@ -1,0 +1,1 @@
+Run exactly six geocoding regression cases after PR 188 is live. Keep strict preparation verdicts, never loosen route validity. Only this one push triggers this expensive audit.
