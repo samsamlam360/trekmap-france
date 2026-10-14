@@ -300,6 +300,7 @@ function close(){
 async function open(){
  if(typeof currentUser!=='undefined'&&!currentUser){if(typeof authModal==='function')authModal('login');return}
  previousFocus=document.activeElement;
+ root.querySelectorAll('[data-p-tab]').forEach(function(b){b.hidden=false});
  if(typeof closeModal==='function')closeModal();
  root.hidden=false;root.setAttribute('role','dialog');root.setAttribute('aria-modal','true');
  document.body.style.overflow='hidden';tab='home';selected=null;model=null;render();
