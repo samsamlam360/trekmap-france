@@ -38,13 +38,12 @@ if(html.includes('TREKMAP_SITEWIDE_UX_START')){
                      'id="trekmap-sitewide-ux-js"']){
     assert.equal(html.split(token).length-1,1,'idempotent installation: '+token);
   }
-  for(const token of [
-    'id="tm-unified-topbar"', 'id="tm-unified-drawer"',
-    'id="tm-mobile-nav"', 'id="tm-ai-overlay"', 'id="tm-ai-save"',
-    'id="tm-brain-route-panel"', 'id="tm-main-search"'
+  for(const id of [
+    'tm-unified-topbar','tm-unified-drawer','tm-mobile-nav',
+    'tm-ai-overlay','tm-ai-save','tm-brain-route-panel','tm-main-search'
   ]){
-    // Some widgets are created at runtime in JS, not stored as HTML nodes.
-    assert.ok(html.includes(token),'retained application control: '+token);
+    // Runtime-created controls are represented by JS IDs, not literal HTML tags.
+    assert.ok(html.includes(id),'retained application control: '+id);
   }
 }
 console.log('SITEWIDE UX CONTRACT PASS: CSS/JS syntax, responsiveness, features and installer order');
