@@ -1311,6 +1311,52 @@ def _validate_night_options(ors, legacy_main, roundtrip, coords, options):
     }
 
 
+def _night_access_diagnostics(anchors, projected, options, connectors, assigned):
+    """Explain missing walkable nights using existing evidence, no HTTP calls.
+
+    The closest straight-line distance is diagnostic ONLY. It is not a walking
+    connector, a suggested transfer, or a guaranteed usable accommodation.
+    """
+    diagnostics = []
+    for anchor in anchors:
+        night = int(anchor["night"])
+        available = options.get(night, [])
+        walk_range = [row for row in available
+                      if float(row.get("_anchor_distance_km") or 0) <= _WALK_CONNECTOR_LIMIT_KM]
+        verified = [row for row in walk_range
+                    if (connectors.get(_connector_key(row)) or {}).get("validated") is True
+                    and (connectors.get(_connector_key(row)) or {}).get("return_validated") is True]
+        chosen = assigned[night - 1] if night - 1 < len(assigned) else None
+        if not projected:
+            reason = "no_sourced_accommodation"
+        elif not available:
+            reason = "no_accommodation_near_stage"
+        elif not walk_range:
+            reason = "candidates_too_far_for_connector_check"
+        elif not verified:
+            reason = "walking_connector_unverified"
+        elif not chosen or chosen.get("_access_mode") != "walk":
+            reason = "candidate_not_compatible_with_daily_limits"
+        else:
+            reason = "walk_verified"
+        distances = [_geo_km(anchor, row) for row in projected]
+        nearest = min((distance for distance in distances if math.isfinite(distance)), default=None)
+        gaps = [abs(float(row.get("_route_progress_km") or 0)
+                    - float(anchor["route_progress_km"])) for row in projected]
+        diagnostics.append({
+            "night": night,
+            "reason": reason,
+            "candidate_options": len(available),
+            "within_walk_check_radius": len(walk_range),
+            "walking_connectors_verified_both_directions": len(verified),
+            "nearest_mapped_candidate_straight_km": round(nearest, 2) if nearest is not None else None,
+            "nearest_candidate_route_progress_gap_km": round(min(gaps), 2) if gaps else None,
+            "distance_is_walking_route": False,
+            "night_walk_confirmed": bool(chosen and chosen.get("_access_mode") == "walk"),
+        })
+    return diagnostics
+
+
 def _assign_verified_nights(options, connectors, stage_lengths, daily_max, strict_walk):
     """Globally prefer unique walkable stays over attractive unverified ones.
 
@@ -1572,6 +1618,7 @@ def _attach_logistics(result: dict[str, Any], data, legacy_main, v3, roundtrip, 
                              allow_distant_transfer=days == 2 and category == "lodging" and not strict_walk)
     connector_map, connector_meta = _validate_night_options(ors, legacy_main, roundtrip, coords, options)
     assigned = _assign_verified_nights(options, connector_map, stage_lengths, daily_max, strict_walk)
+    night_diagnostics = _night_access_diagnostics(anchors, pool, options, connector_map, assigned)
     by_night = {night: stay for night, stay in enumerate(assigned, 1) if stay is not None}
 
     logistics_rows = []
@@ -1731,11 +1778,13 @@ def _attach_logistics(result: dict[str, Any], data, legacy_main, v3, roundtrip, 
         "ready_without_transfer": walking_readiness == "ready_on_foot",
         "strict_walk": strict_walk,
         "nights": logistics_rows,
+        "night_diagnostics": night_diagnostics,
         "alternatives": [
             {"night": night, "name": row.get("name"), "lat": row.get("lat"), "lon": row.get("lon"),
              "source_url": row.get("source_url"), "route_anchor": dict(row["_anchor"]),
              "selected": _stay_key(row) == _stay_key(by_night[night]) if night in by_night else False,
-             "walking_access_validated": bool((connector_map.get(_connector_key(row)) or {}).get("validated")),
+             "walking_access_validated": bool((connector_map.get(_connector_key(row)) or {}).get("validated") is True
+                                              and (connector_map.get(_connector_key(row)) or {}).get("return_validated") is True),
              "walking_connector": dict(connector_map.get(_connector_key(row)) or {}),
              "booking_status": "to_check", "transfer_confirmed": False}
             for night in sorted(options) for row in options[night]
