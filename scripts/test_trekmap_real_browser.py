@@ -153,6 +153,63 @@ try:
     wait.until(lambda d: not d.find_element(By.ID, "tm-ai-overlay").is_displayed())
     driver.save_screenshot(str(OUT / "sitewide-desktop-actions.png"))
 
+    # Reproduce desktop carousel bugs without creating records in Neon or CI DB.
+    # Only in-memory browser data is used: original JS still opens the real modal.
+    driver.execute_script(
+        "for(let i=0;i<14;i++)allTreks.push({id:910000+i,"
+        "name:'Randonnée de contrôle '+i,region:'Auvergne',"
+        "description:'Circuit de contrôle sans écriture en base',"
+        "distance:12+i,elevation:320+i*10,difficulty:'easy',"
+        "duration_days:2,is_public:true,coords:[[45.1,3.0+i*.02],[45.13,3.05+i*.02]]});"
+        "document.getElementById('tm-main-search').dispatchEvent(new Event('input',{bubbles:true}));"
+    )
+    wait.until(lambda d: len(d.find_elements(
+        By.CSS_SELECTOR, '#tm-drawer-track .tm-trek-tile')) >= 14)
+    logo=driver.find_element(By.CSS_SELECTOR, '#tm-brand .tm-brand-mark img')
+    wait.until(lambda d: d.execute_script(
+        "return document.querySelector('#tm-brand .tm-brand-mark img').naturalWidth>0"))
+    assert logo.get_attribute('src').endswith('/brand-pin.svg'), "Wrong header logo"
+    info=driver.find_element(By.ID, 'tm-desktop-info')
+    assert info.is_displayed(), "Selected-trek information panel hidden on desktop"
+    right=driver.execute_script(
+        "return document.getElementById('tm-desktop-info').getBoundingClientRect().right")
+    assert right<=1440, "Information panel leaves screen"
+    next_button=driver.find_element(By.CSS_SELECTOR, '.tm-drawer-nav [data-scroll-dir="1"]')
+    assert next_button.is_enabled(), "Desktop carousel cannot move right"
+    next_button.click()
+    track=driver.find_element(By.ID,'tm-drawer-track')
+    wait.until(lambda d: d.execute_script(
+        "return document.getElementById('tm-drawer-track').scrollLeft>100"))
+    card=driver.find_element(By.CSS_SELECTOR, '#tm-drawer-track .tm-trek-tile:nth-child(5)')
+    name=card.find_element(By.TAG_NAME,'strong').text
+    card.click()
+    wait.until(lambda d: d.find_element(By.ID,'modal-backdrop').is_displayed())
+    assert name in driver.find_element(By.ID,'modal').text, "Card click opened the wrong trek"
+    assert name in info.text, "Side panel did not update to chosen trek"
+    assert 'selected' in driver.find_element(
+        By.CSS_SELECTOR, f'#tm-drawer-track .tm-trek-tile[data-id="{card.get_attribute("data-id")}"]'
+    ).get_attribute('class'), "Selected card lost its highlight"
+    driver.find_element(By.ID,'modal-close').click()
+    wait.until(lambda d: not d.find_element(By.ID,'modal-backdrop').is_displayed())
+    panel_open=driver.find_element(By.ID,'tm-info-open-detail')
+    panel_open.click()
+    wait.until(lambda d: d.find_element(By.ID,'modal-backdrop').is_displayed())
+    driver.find_element(By.ID,'modal-close').click()
+    wait.until(lambda d: not d.find_element(By.ID,'modal-backdrop').is_displayed())
+    # Actual pointer hover without a button pressed must not deactivate clicks.
+    driver.execute_script(
+        "let track=document.getElementById('tm-drawer-track');"
+        "track.dispatchEvent(new PointerEvent('pointermove',{bubbles:true,pointerType:'mouse',"
+        "clientX:880,clientY:750,buttons:0,pointerId:6}));")
+    card=driver.find_element(By.CSS_SELECTOR, '#tm-drawer-track .tm-trek-tile:nth-child(6)')
+    second=card.find_element(By.TAG_NAME,'strong').text
+    card.click()
+    wait.until(lambda d: d.find_element(By.ID,'modal-backdrop').is_displayed())
+    assert second in driver.find_element(By.ID,'modal').text, "Hover movement blocked second trek"
+    driver.find_element(By.ID,'modal-close').click()
+    wait.until(lambda d: not d.find_element(By.ID,'modal-backdrop').is_displayed())
+    driver.save_screenshot(str(OUT / "desktop-carrousel-and-selection.png"))
+    # Preserve the original mobile navigation and hide only desktop helper panel.
     driver.set_window_size(390, 844)
     mobile_navigation = driver.find_element(By.ID, "tm-mobile-nav")
     assert mobile_navigation.is_displayed(), "Mobile navigation is hidden"
