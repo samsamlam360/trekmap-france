@@ -37,4 +37,16 @@ assert.ok(css);
 assert.ok(!/\/\*\s*remove/.test(css));
 for(const target of ['#tm-desktop-info','#tm-unified-drawer','.map-tools','#sidebar',
                      '#tm-brand','#tm-main-search-wrap'])assert.ok(css.includes(target));
+assert.ok(fs.readFileSync('frontend/trek-scenery.svg','utf8').includes('<svg'),
+          'local trek scenic illustration must exist');
+assert.ok(server.includes('@app.get("/trek-scenery.svg"'),
+          'scenery image must be served locally without paid services');
+assert.ok(unified.includes('window.innerWidth<1240 && localStorage.getItem'),
+          'desktop explorer should expand filters by default regardless of stale mobile preference');
+assert.ok(unified.includes('tm-tile-landscape-'), 'route cards must include scenic previews');
+assert.ok(css.includes("left:calc(var(--tm-panel) + 31px)") &&
+          css.includes("height:calc(100dvh - var(--tm-top) - 26px)"),
+          'desktop map must keep sidebar and carousel in separate zones');
+assert.ok(css.includes("background-image:url('/trek-scenery.svg')"),
+          'trek cards should contain a landscape thumbnail');
 console.log('DESKTOP MAP CONTRACT PASS: brand, trek selection, scroll, information panel, responsive');
