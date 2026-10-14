@@ -106,12 +106,38 @@ body.tm-filters-collapsed #tm-unified-drawer{left:14px!important}
 
   const top=document.createElement('header');
   top.id='tm-unified-topbar';
-  top.innerHTML=`<button id="tm-brand" type="button" title="Accueil"><span class="tm-brand-mark">🥾</span><span class="tm-brand-copy"><strong>TrekMap <span>France</span></strong><small>Explorer · préparer · partir</small></span></button><div id="tm-main-search-wrap"><span>⌕</span><input id="tm-main-search" placeholder="Rechercher un trek, un lieu, une saison…" autocomplete="off"><button id="tm-main-search-clear" type="button" aria-label="Effacer">×</button><div id="tm-main-suggestions"></div></div><div id="tm-top-actions"><button id="tm-import-btn" type="button">⇧ <span class="label">Importer</span></button><button id="tm-create-btn" type="button">＋ <span class="label">Créer</span></button><button id="tm-favorites-btn" type="button">★ <span class="label">Favoris</span></button><button id="tm-account-btn" type="button"><span class="tm-account-dot" id="tm-account-dot">C</span><span class="label" id="tm-account-label">Connexion</span></button></div>`;
+  top.innerHTML=`<button id="tm-brand" type="button" title="Accueil"><span class="tm-brand-mark"><img src="/brand-pin.svg" alt="" width="42" height="49"></span><span class="tm-brand-copy"><strong>TrekMap <span>France</span></strong><small>Explorer · préparer · partir</small></span></button><div id="tm-main-search-wrap"><span>⌕</span><input id="tm-main-search" placeholder="Rechercher un trek, un lieu, une saison…" autocomplete="off"><button id="tm-main-search-clear" type="button" aria-label="Effacer">×</button><div id="tm-main-suggestions"></div></div><div id="tm-top-actions"><button id="tm-import-btn" type="button">⇧ <span class="label">Importer</span></button><button id="tm-create-btn" type="button">＋ <span class="label">Créer</span></button><button id="tm-favorites-btn" type="button">★ <span class="label">Favoris</span></button><button id="tm-account-btn" type="button"><span class="tm-account-dot" id="tm-account-dot">C</span><span class="label" id="tm-account-label">Connexion</span></button></div>`;
   app.appendChild(top);
 
   const drawer=document.createElement('section');drawer.id='tm-unified-drawer';
   drawer.innerHTML=`<div class="tm-drawer-shell"><button id="tm-drawer-head" type="button"><span class="tm-drawer-grip"></span><span class="tm-drawer-title" id="tm-drawer-title">Treks populaires</span><span class="tm-drawer-count" id="tm-drawer-count">0</span><span class="tm-drawer-caret">⌃</span></button><div id="tm-drawer-track"></div></div>`;
   app.appendChild(drawer);
+
+  // Read-only selected-trek companion to the map. Existing detail modal,
+  // map, filters, saved treks and mobile workflow stay authoritative.
+  const infoPanel=document.createElement('aside');
+  infoPanel.id='tm-desktop-info';
+  infoPanel.setAttribute('aria-label','Informations sur les randonnées');
+  infoPanel.innerHTML=`
+    <section class="tm-info-overview" aria-label="Découvrir TrekMap">
+      <div class="tm-info-landscape" aria-hidden="true"><span>⌁</span><b>Explorer les sentiers</b></div>
+      <div class="tm-info-topline">TREKMAP FRANCE</div>
+      <h2>La France à pied</h2>
+      <p>Choisis un itinéraire sur la carte ou dans les treks ci-dessous.</p>
+      <div class="tm-info-count"><strong id="tm-info-result-count">0</strong><span>treks à découvrir</span></div>
+    </section>
+    <section class="tm-info-selected" aria-label="Trek sélectionné">
+      <div class="tm-info-topline">MON ITINÉRAIRE</div>
+      <div id="tm-info-selected-content" aria-live="polite"><div class="tm-info-empty">
+        <span aria-hidden="true">⌖</span><b>Aucun trek sélectionné</b>
+        <p>Clique sur une fiche en bas de l’écran pour voir son parcours.</p>
+      </div></div>
+      <div class="tm-info-controls" id="tm-info-controls" hidden>
+        <button id="tm-info-recenter" type="button">⌖ Centrer</button>
+        <button id="tm-info-open-detail" type="button">Voir la fiche ↗</button>
+      </div>
+    </section>`;
+  app.appendChild(infoPanel);
 
   const filters=document.querySelector('#sidebar .filters');
   if(filters){
@@ -158,9 +184,15 @@ body.tm-filters-collapsed #tm-unified-drawer{left:14px!important}
   function resultTitle(){const m=currentMode();if(query()||['tm-route-filter','tm-season-filter','tm-rating-filter','tm-photo-filter','tm-place-filter'].some(id=>String($(id)?.value||'')&&!['0'].includes(String($(id)?.value))))return'Résultats de recherche';return({favorites:'Mes favoris',mine:'Mes treks',private:'Mes treks privés'})[m]||'Treks populaires'}
 
   function renderDrawer(data){
+    const previousScroll=track.scrollLeft;
     $('tm-drawer-title').textContent=resultTitle();$('tm-drawer-count').textContent=data.length;
+    $('tm-info-result-count').textContent=String(data.length);
+    renderInfo(selectedId==null?null:allTreksSafe().find(t=>Number(t.id)===selectedId));
     if(!data.length){track.innerHTML='<div class="tm-drawer-empty">Aucun trek ne correspond aux critères.</div>';return}
-    track.innerHTML=data.map(t=>{const x=extra(t.id),chips=[difficultyName[t.difficulty]||'Moyen'];if(x.route_type)chips.push(x.route_type);if(Number(x.rating_count||0)>0)chips.push('★ '+Number(x.rating_average||0).toFixed(1));return `<article class="tm-trek-tile ${Number(t.id)===selectedId?'selected':''}" data-id="${Number(t.id)}" tabindex="0" role="button"><strong>${esc(t.name||'Trek')}</strong><div class="region">${esc(t.region||'France')}</div><div class="tm-tile-chips">${chips.slice(0,3).map(c=>`<span class="tm-chip">${esc(c)}</span>`).join('')}</div><div class="tm-tile-meta"><span>📏 ${Number(t.distance||0).toFixed(1)} km</span><span>↗ ${Math.round(t.elevation||0)} m</span></div><span class="tm-tile-open">Ouvrir le trek ↗</span></article>`}).join('');
+    track.innerHTML=data.map(t=>{const x=extra(t.id),chips=[difficultyName[t.difficulty]||'Moyen'];if(x.route_type)chips.push(x.route_type);if(Number(x.rating_count||0)>0)chips.push('★ '+Number(x.rating_average||0).toFixed(1));return `<article class="tm-trek-tile ${Number(t.id)===selectedId?'selected':''}" data-id="${Number(t.id)}" tabindex="0" role="button" aria-label="Ouvrir le trek ${esc(t.name||'Trek')}"><strong>${esc(t.name||'Trek')}</strong><div class="region">${esc(t.region||'France')}</div><div class="tm-tile-chips">${chips.slice(0,3).map(c=>`<span class="tm-chip">${esc(c)}</span>`).join('')}</div><div class="tm-tile-meta"><span>📏 ${Number(t.distance||0).toFixed(1)} km</span><span>↗ ${Math.round(t.elevation||0)} m</span></div><span class="tm-tile-open">Ouvrir le trek ↗</span></article>`}).join('');
+    // Re-rendering cards on selection must NOT reset the horizontal position.
+    track.scrollLeft=Math.min(previousScroll,Math.max(0,track.scrollWidth-track.clientWidth));
+    syncDrawerArrows();
   }
   function renderSuggestions(data){if(!suggestions)return;if(!query()){suggestions.classList.remove('show');suggestions.innerHTML='';return}const rows=data.slice(0,6);suggestions.innerHTML=rows.map(t=>`<button class="tm-suggest" type="button" data-id="${Number(t.id)}"><b>${esc(t.name)}</b><small>${esc(t.region||'France')} · ${Number(t.distance||0).toFixed(1)} km</small></button>`).join('');suggestions.classList.toggle('show',!!rows.length)}
   function applyUnifiedFilters(){
@@ -183,16 +215,84 @@ body.tm-filters-collapsed #tm-unified-drawer{left:14px!important}
 
   async function fetchTrek(id){let t=allTreksSafe().find(x=>Number(x.id)===Number(id));if(t?.coords?.length)return t;try{const r=await fetch(api()+'/treks/'+Number(id),{headers:authHeaders(),cache:'no-store'});if(r.ok){const fresh=await r.json();if(t)Object.assign(t,fresh);else t=fresh}}catch(_){}return t}
   function coordsOf(t){if(Array.isArray(t?.coords))return t.coords.filter(p=>Array.isArray(p)&&p.length>=2&&Number.isFinite(Number(p[0]))&&Number.isFinite(Number(p[1]))).map(p=>[Number(p[0]),Number(p[1])]);const g=t?.geometry;if(!g||!Array.isArray(g.coordinates))return[];const raw=g.type==='MultiLineString'?g.coordinates.flat():g.coordinates;return raw.map(p=>[Number(p[1]),Number(p[0])]).filter(p=>p.every(Number.isFinite))}
+  function renderInfo(t){
+    const content=$('tm-info-selected-content'),actions=$('tm-info-controls');
+    if(!content||!actions)return;
+    if(!t){
+      content.innerHTML='<div class="tm-info-empty"><span aria-hidden="true">⌖</span><b>Aucun trek sélectionné</b><p>Clique sur une fiche en bas de l’écran pour voir son parcours.</p></div>';
+      actions.hidden=true;return;
+    }
+    const distance=Number(t.distance||0),climb=Number(t.elevation||0);
+    content.innerHTML=`<div class="tm-info-trek-name">${esc(t.name||'Trek')}</div>
+      <p class="tm-info-region">⌖ ${esc(t.region||'France')}</p>
+      <div class="tm-info-kpis"><div><strong>${distance.toFixed(1)} km</strong><span>Distance</span></div>
+      <div><strong>${Math.round(climb)} m</strong><span>Dénivelé +</span></div>
+      <div><strong>${esc(difficultyName[t.difficulty]||'Moyen')}</strong><span>Difficulté</span></div></div>
+      <p class="tm-info-description">${esc((t.description||'').slice(0,220))||'Parcours à découvrir sur la carte et dans sa fiche.'}</p>`;
+    actions.hidden=false;
+  }
+  infoPanel.addEventListener('click',e=>{
+    const btn=e.target.closest('button');if(!btn||selectedId==null)return;
+    if(btn.id==='tm-info-open-detail'){window.openDetail?.(selectedId);return}
+    if(btn.id==='tm-info-recenter'){
+      const t=allTreksSafe().find(x=>Number(x.id)===selectedId),coords=coordsOf(t);
+      if(coords.length>1&&typeof L!=='undefined'){
+        try{map.invalidateSize();map.fitBounds(L.latLngBounds(coords).pad(.07),{maxZoom:15,animate:true})}catch(_){}
+      }
+    }
+  });
+
   async function openTrek(id){
     const numeric=Number(id);if(!Number.isFinite(numeric))return;const t=await fetchTrek(numeric);if(!t){typeof toast==='function'&&toast('Trek introuvable.');return}selectedId=numeric;const coords=coordsOf(t);try{map.invalidateSize();if(coords.length>1){const b=L.latLngBounds(coords);map.fitBounds(b.pad(.08),{paddingTopLeft:window.innerWidth>820?[filters?.classList.contains('tm-collapsed')?40:390,55]:[25,55],paddingBottomRight:window.innerWidth>820?[60,215]:[25,190],maxZoom:15,animate:true})}}catch(_){}applyUnifiedFilters();setTimeout(()=>{try{window.openDetail(numeric)}catch(e){console.error(e)}},100)
   }
   window.TrekMapOpenTrek=openTrek;
 
-  track?.addEventListener('pointerdown',e=>{if(!e.target.closest('.tm-trek-tile'))return;drawerDragging=false;dragX=e.clientX;dragY=e.clientY},true);
-  track?.addEventListener('pointermove',e=>{if(Math.hypot(e.clientX-dragX,e.clientY-dragY)>8)drawerDragging=true},true);
-  track?.addEventListener('click',e=>{const card=e.target.closest('.tm-trek-tile');if(!card)return;e.preventDefault();e.stopImmediatePropagation();if(drawerDragging){drawerDragging=false;return}openTrek(Number(card.dataset.id))},true);
+  // Keep native touch scrolling. Mouse drags scroll cards; hover movement never
+  // disables clicks (old code flagged every mouse move as a drag).
+  let dragActive=false,dragScroll=0,dragPointer=null;
+  track?.addEventListener('pointerdown',e=>{
+    if(e.pointerType!=='mouse'||e.button!==0||!e.target.closest('.tm-trek-tile'))return;
+    dragActive=true;dragPointer=e.pointerId;drawerDragging=false;
+    dragX=e.clientX;dragY=e.clientY;dragScroll=track.scrollLeft;
+  },true);
+  track?.addEventListener('pointermove',e=>{
+    if(!dragActive||e.pointerId!==dragPointer||!(e.buttons&1))return;
+    if(Math.hypot(e.clientX-dragX,e.clientY-dragY)>7)drawerDragging=true;
+    if(drawerDragging)track.scrollLeft=dragScroll-(e.clientX-dragX);
+  },true);
+  document.addEventListener('pointerup',e=>{if(e.pointerId===dragPointer){dragActive=false;dragPointer=null}},true);
+  document.addEventListener('pointercancel',e=>{if(e.pointerId===dragPointer){dragActive=false;dragPointer=null;drawerDragging=false}},true);
+  track?.addEventListener('click',e=>{
+    const card=e.target.closest('.tm-trek-tile');if(!card)return;
+    e.preventDefault();e.stopImmediatePropagation();
+    const wasDragging=drawerDragging;drawerDragging=false;
+    if(wasDragging)return;
+    openTrek(Number(card.dataset.id));
+  },true);
   track?.addEventListener('keydown',e=>{const card=e.target.closest('.tm-trek-tile');if(card&&(e.key==='Enter'||e.key===' ')){e.preventDefault();openTrek(Number(card.dataset.id))}},true);
-  track?.addEventListener('wheel',e=>{if(track.scrollWidth<=track.clientWidth)return;const delta=Math.abs(e.deltaY)>=Math.abs(e.deltaX)?e.deltaY:e.deltaX;if(!delta)return;e.preventDefault();track.scrollLeft+=delta},{passive:false});
+  track?.addEventListener('wheel',e=>{
+    if(track.scrollWidth<=track.clientWidth)return;
+    if(e.ctrlKey||e.metaKey)return;
+    const delta=Math.abs(e.deltaY)>=Math.abs(e.deltaX)?e.deltaY:e.deltaX;
+    if(!delta)return;e.preventDefault();track.scrollLeft+=delta;
+  },{passive:false});
+  const drawerNav=document.createElement('div');drawerNav.className='tm-drawer-nav';
+  drawerNav.innerHTML='<button type="button" data-scroll-dir="-1" aria-label="Treks précédents">‹</button><button type="button" data-scroll-dir="1" aria-label="Treks suivants">›</button>';
+  $('tm-drawer-head').after(drawerNav);
+  function syncDrawerArrows(){
+    if(!track||!drawerNav)return;
+    const max=Math.max(0,track.scrollWidth-track.clientWidth);
+    const prev=drawerNav.querySelector('[data-scroll-dir="-1"]');
+    const next=drawerNav.querySelector('[data-scroll-dir="1"]');
+    if(prev)prev.disabled=track.scrollLeft<=2;
+    if(next)next.disabled=track.scrollLeft>=max-2;
+  }
+  drawerNav.addEventListener('click',e=>{
+    const b=e.target.closest('[data-scroll-dir]');if(!b)return;
+    track.scrollBy({left:Number(b.dataset.scrollDir)*Math.max(210,track.clientWidth*.75),behavior:'smooth'});
+  });
+  track?.addEventListener('scroll',syncDrawerArrows,{passive:true});
+  window.addEventListener('resize',syncDrawerArrows,{passive:true});
   $('tm-drawer-head').onclick=()=>drawer.classList.toggle('collapsed');
 
   // Un seul menu carte. Les boutons invisibles historiques servent seulement d'adaptateurs.
