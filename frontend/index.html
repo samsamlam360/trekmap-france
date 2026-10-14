@@ -152,7 +152,9 @@ async function deleteTrek(id){
   }catch(e){toast(e.message||'Impossible de supprimer ce trek.')}
 }
 function openDetail(id){
-  const t=allTreks.find(x=>x.id===id);if(!t)return;
+  const t=allTreks.find(x=>Number(x.id)===Number(id));if(!t)return;
+  // Inform optional map-side UI about every opening source: map, search, carrousel.
+  document.dispatchEvent(new CustomEvent('trekmap:detail-opened',{detail:{id:Number(id)}}));
   currentDetail=id;if(detailLayer)map.removeLayer(detailLayer);
   if(t.coords?.length>1){detailLayer=L.polyline(t.coords,{color:'#0e4e34',weight:7,opacity:.95}).addTo(map);map.fitBounds(detailLayer.getBounds().pad(.2),{maxZoom:15})}
   const canManage=!!(currentUser&&(currentUser.is_admin||t.owner_id==null||Number(t.owner_id)===Number(currentUser.id)));
