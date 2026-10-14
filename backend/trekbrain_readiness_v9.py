@@ -226,7 +226,7 @@ def preparation_report(result: dict[str, Any], data=None) -> dict[str, Any]:
         for row in _rows(_dict(result.get("logistics")).get("night_diagnostics")):
             night_day = _day(row.get("night"), days - 1)
             reason = row.get("reason")
-            if night_day in missing_nights and reason in labels:
+            if night_day in missing_nights and isinstance(reason, str) and reason in labels:
                 causes.setdefault(reason, set()).add(night_day)
         if causes:
             details = [
