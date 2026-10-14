@@ -126,7 +126,7 @@ def _prefs(raw):
         if not 3 <= p["daily_km"] <= 40:
             raise HTTPException(422, "Distance quotidienne hors limites.")
     for k, values in [("difficulty", _DIFFICULTIES), ("lodging", _LODGINGS), ("route_type", _ROUTES)]:
-        if k in p and p[k] not in values:
+        if k in p and (not isinstance(p[k], str) or p[k] not in values):
             raise HTTPException(422, "Préférence invalide : " + k)
     for k in ("transit", "water", "food", "sleep"):
         if k in p and type(p[k]) is not bool:
@@ -294,6 +294,7 @@ def save_journey(trek_id:int,payload: JourneyPayload,user=Depends(core.current_u
 
 @router.post("/v2/collections")
 def add_collection(payload:CollectionPayload,user=Depends(core.current_user)):
+    if not payload.name.strip(): raise HTTPException(422,"Nom vide.")
     db=_db()
     try:
         if int(db.execute(text("SELECT count(*) FROM trek_user_collections WHERE user_id=:u"),{"u":user["id"]}).scalar()) >= 25:
@@ -308,6 +309,7 @@ def add_collection(payload:CollectionPayload,user=Depends(core.current_user)):
 
 @router.put("/v2/collections/{collection_id}")
 def rename_collection(collection_id:int,payload:CollectionPayload,user=Depends(core.current_user)):
+    if not payload.name.strip(): raise HTTPException(422,"Nom vide.")
     db=_db()
     try:
         row=db.execute(text("UPDATE trek_user_collections SET name=:n WHERE id=:id AND user_id=:u RETURNING id"),
