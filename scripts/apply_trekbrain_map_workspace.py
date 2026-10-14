@@ -50,6 +50,11 @@ body.tm-brain-route-mode #tm-brain-route-panel {
   font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;
 }
 #tm-brain-route-panel * {box-sizing:border-box}
+/* Keep the footer outside the scrolling content so it cannot cover controls. */
+#tm-brain-route-panel .tm-brain-content {
+  min-height:0;flex:1 1 auto;overflow-y:auto;
+  overscroll-behavior:contain;scrollbar-width:thin;scroll-padding-block:12px;
+}
 #tm-brain-route-panel .tm-brain-head {
   flex:none;
   display:flex;
@@ -100,9 +105,9 @@ body.tm-brain-route-mode #tm-brain-route-panel {
 }
 #tm-brain-route-panel .tm-brain-alert b {font-weight:850}
 #tm-brain-route-panel .tm-brain-alert p {margin:5px 0 0}
-#tm-brain-route-panel>.tm-v9-readiness {margin:0 17px 12px;flex:none;font-size:12px;padding:10px 12px}
-#tm-brain-route-panel>.tm-v9-readiness h3 {font-size:16px}
-#tm-brain-route-panel>.tm-v9-readiness li {margin:5px 0}
+#tm-brain-route-panel .tm-brain-content>.tm-v9-readiness {margin:0 17px 12px;font-size:12px;padding:10px 12px}
+#tm-brain-route-panel .tm-brain-content>.tm-v9-readiness h3 {font-size:16px}
+#tm-brain-route-panel .tm-brain-content>.tm-v9-readiness li {margin:5px 0}
 #tm-brain-route-panel .tm-brain-safe {
   padding:9px 12px;border-radius:11px;margin:1px 17px 12px;
   background:#eff7f3;border:1px solid #d8e9df;
@@ -120,8 +125,6 @@ body.tm-brain-route-mode #tm-brain-route-panel {
   background:#dff0e5;border-color:#74b38b;
 }
 #tm-brain-route-panel .tm-brain-detail {
-  min-height:0;flex:1 1 auto;overflow-y:auto;
-  overscroll-behavior:contain;scrollbar-width:thin;
   padding:14px 17px 16px;
   border-top:1px solid #e0eae3;
 }
@@ -181,7 +184,6 @@ body.tm-brain-route-mode.tm-brain-show-resources .tm-v91-legend {display:block!i
     left:9px;right:9px;top:auto;
     bottom:calc(var(--tm-mobile-nav-h,74px) + 15px + env(safe-area-inset-bottom,0px));
     width:auto;max-height:min(58dvh,570px);
-    overflow-y:auto;overscroll-behavior:contain;
     border-radius:18px;
     box-shadow:0 10px 42px rgba(8,45,28,.22);
   }
@@ -194,20 +196,19 @@ body.tm-brain-route-mode.tm-brain-show-resources .tm-v91-legend {display:block!i
   #tm-brain-route-panel .tm-brain-metric b {font-size:15px}
   #tm-brain-route-panel .tm-brain-alert,
   #tm-brain-route-panel .tm-brain-safe {margin:0 13px 9px;padding:8px 10px}
-  #tm-brain-route-panel>.tm-v9-readiness {margin:0 13px 9px;padding:8px 10px}
+  #tm-brain-route-panel .tm-brain-content>.tm-v9-readiness {margin:0 13px 9px;padding:8px 10px}
   #tm-brain-route-panel .tm-brain-tools {padding:0 13px 9px;gap:6px}
   #tm-brain-route-panel .tm-brain-tools button {min-height:40px;padding:7px 9px}
   #tm-brain-route-panel .tm-brain-actions {
-    position:sticky;bottom:0;z-index:2;
     padding:9px 13px 12px;gap:8px;
     background:#fbfdfb;
   }
   #tm-brain-route-panel .tm-brain-actions button {min-height:46px}
-  #tm-brain-route-panel .tm-brain-detail {padding:10px 13px;max-height:35dvh}
+  #tm-brain-route-panel .tm-brain-detail {padding:10px 13px}
   #tm-brain-route-panel .tm-brain-expand {display:block!important;flex:1}
   body.tm-brain-route-mode #tm-brain-route-panel:not(.expanded) .tm-brain-detail {display:none}
   body.tm-brain-route-mode #tm-brain-route-panel.expanded .tm-brain-detail {
-    display:block;flex:1 1 auto;
+    display:block;
   }
   body.tm-brain-route-mode.tm-brain-show-resources .leaflet-bottom.leaflet-right .tm-v91-legend {
     margin-bottom:calc(var(--tm-brain-sheet-height,220px) + var(--tm-mobile-nav-h,74px) + 31px + env(safe-area-inset-bottom,0px))!important;
@@ -402,6 +403,7 @@ body.tm-brain-route-mode.tm-brain-show-resources .tm-v91-legend {display:block!i
       '<span class="tm-brain-kicker">✦ TrekBrain · mon itinéraire</span>'+
       '<h2>'+escapeText(p.title||'Trek proposé')+'</h2></div>'+
       '<button type="button" class="tm-brain-exit" data-workspace-action="exit" aria-label="Quitter le trek proposé et revenir à Explorer">✕ Explorer</button></div>');
+    parts.push('<div class="tm-brain-content">');
     if(window.TrekMapTripReadiness)parts.push(window.TrekMapTripReadiness.html(p));
     parts.push('<div class="tm-brain-overview"><p class="tm-brain-location">'+
       escapeText(location)+'</p><div class="tm-brain-metrics">'+
@@ -449,7 +451,7 @@ body.tm-brain-route-mode.tm-brain-show-resources .tm-v91-legend {display:block!i
         (extraWarnings.length>15?'<p>Consulter l’analyse détaillée pour toutes les limites.</p>':'')+
         '</div>');
     }
-    parts.push('</div><div class="tm-brain-actions">'+
+    parts.push('</div></div><div class="tm-brain-actions">'+
       '<button type="button" data-workspace-action="modify">✏️ Modifier</button>'+
       '<button type="button" class="tm-brain-primary" data-workspace-action="save">✓ Enregistrer</button></div>');
     panel.innerHTML=parts.join('');
