@@ -1011,7 +1011,9 @@ try:
         "Fontaine connue", "Boulangerie connue",
     }, retained_resources
     assert retained_flag is True
-    assert len(calls) == 3 and calls[0][1] <= 1.81, calls
+    # A fast successful backup can cancel the other before it starts.
+    # Both outcomes are correct and avoid unnecessary free-provider traffic.
+    assert 2 <= len(calls) <= 3 and calls[0][1] <= 1.81, calls
     assert all(t <= 0.86 for _, t in calls[1:]), calls
 
     # Primary already has a valid lodging; do not use backup providers or
