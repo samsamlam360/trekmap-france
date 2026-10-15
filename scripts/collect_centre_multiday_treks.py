@@ -28,7 +28,6 @@ RELATIONS=[
  (6439515,"GR 46 - De Tours à Toulouse (tronçon régional)"),
  (13046468,"GR 353 - De Vendôme à la Loire"),
  (13472159,"GR 413 - Du Cher à la Loire"),
- (13481848,"GR 32 - De la Seine à la Loire"),
  (16446658,"Chemin de Trèves - Vendôme à Tours"),
  (19417626,"Chemin de Trèves - Châteaudun à Vendôme"),
  (8415515,"Via Turonensis par Chartres - Vendôme à Lavardin"),
@@ -37,10 +36,21 @@ RELATIONS=[
  (13046467,"GR 353 - variante Chouzy-sur-Cisse"),
  (13457269,"GR 31 - Sologne Lamotte à La Ferté-Saint-Cyr"),
  (13468382,"GR 31 - Sologne La Ferté-Saint-Cyr à Blois"),
- (1562017,"GR 31 - Sologne Menetou à Lamotte"),
  (2704569,"GR 3 - La Loire sauvage à pied"),
 ]
 merc=(*TO_MERC.transform(BBOX[0],BBOX[1]),*TO_MERC.transform(BBOX[2],BBOX[3]))
+
+REGION_BOUNDARY=json.loads((ROOT/"data"/"centre_val_de_loire_region.geojson").read_text(encoding="utf-8"))["features"][0]["geometry"]["coordinates"][0]
+def in_centre(pt):
+  x,y=pt
+  inside=False
+  j=len(REGION_BOUNDARY)-1
+  for i in range(len(REGION_BOUNDARY)):
+    a,b=REGION_BOUNDARY[i],REGION_BOUNDARY[j]
+    if ((a[1]>y)!=(b[1]>y)) and x<(b[0]-a[0])*(y-a[1])/(b[1]-a[1])+a[0]:
+      inside=not inside
+    j=i
+  return inside
 
 def fetch(rid,title):
   result={"id":rid,"label":title}
@@ -81,6 +91,9 @@ def fetch(rid,title):
     actual=gps.distance(compact)
     if len(compact)<3 or abs(actual-length)/length>.04:
       result["rejected"]="Geometry simplification loses more than four percent";return result
+    if not all(in_centre([p[1],p[0]]) for p in compact):
+      result["rejected"]="Tracé sortant du contour administratif IGN Centre-Val de Loire"
+      return result
     steps=[gps.haversine(a,b) for a,b in zip(compact,compact[1:])]
     if max(steps)>2.5:
       result["rejected"]="Suspicious long jump after simplification";return result
