@@ -10,7 +10,7 @@ import os
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
-from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support.ui import WebDriverWait, Select
 
 BASE = os.environ.get("TREKMAP_BROWSER_BASE", "http://127.0.0.1:10000")
 OUT = Path("trekmap-browser-checks")
@@ -123,7 +123,6 @@ try:
     assert layout["drawerLeft"] < 40 and layout["zoomLeft"] < 55, layout
     assert layout["quickLeft"] > 150 and layout["quickTop"] > 70, layout
     # Real native quick select triggers the existing filter change handler.
-    from selenium.webdriver.support.ui import Select
     quick_region = driver.find_element(By.ID, "tm-inline-region")
     # CI PostGIS has no catalog regions: simulate the async option population
     # on the original select and verify that the quick mirror follows it.
