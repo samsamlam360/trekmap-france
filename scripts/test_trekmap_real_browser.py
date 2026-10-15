@@ -100,29 +100,54 @@ try:
     driver.find_element(By.ID, "tm-main-search-clear").click()
     assert search.get_attribute("value") == "", "Search clear action is broken"
 
-    filter_button = driver.find_element(By.ID, "tm-filter-toggle")
-    filters = driver.find_element(By.CSS_SELECTOR, "#sidebar .filters")
-    assert "tm-collapsed" not in filters.get_attribute("class").split(), (
-        "Desktop filters must start expanded, matching the design"
-    )
+    # Explorer 2026: map is full width; quick filters mirror the real controls.
+    bar = driver.find_element(By.ID, "tm-inline-filters")
+    advanced_button = driver.find_element(By.ID, "tm-inline-advanced")
+    assert bar.is_displayed(), "Quick filters must be visible beside the search"
+    assert not driver.find_element(By.ID, "sidebar").is_displayed(), (
+        "The old permanent left filter panel must be hidden")
     layout = driver.execute_script(
-        "const f=document.querySelector('#sidebar .filters').getBoundingClientRect();"
         "const d=document.getElementById('tm-unified-drawer').getBoundingClientRect();"
-        "const p=document.getElementById('tm-desktop-info').getBoundingClientRect();"
-        "return {filtersH:f.height,filtersRight:f.right,drawerLeft:d.left,"
-        "panelLeft:p.left,panelRight:p.right,viewport:innerWidth};"
+        "const z=document.querySelector('.leaflet-left').getBoundingClientRect();"
+        "const b=document.getElementById('tm-inline-filters').getBoundingClientRect();"
+        "return {drawerLeft:d.left,zoomLeft:z.left,quickLeft:b.left,quickTop:b.top,"
+        "viewport:innerWidth};"
     )
-    assert 300 <= layout["filtersH"] <= 540, f"Desktop filters must be readable yet compact: {layout}"
-    assert layout["drawerLeft"] >= layout["filtersRight"] - 12, (
-        f"Carousel overlaps full-height filters: {layout}"
-    )
-    assert layout["panelRight"] <= layout["viewport"] and (
-        layout["panelLeft"] >= layout["drawerLeft"]), f"Info panel layout invalid: {layout}"
-    was_collapsed = "tm-collapsed" in filters.get_attribute("class").split()
-    filter_button.click()
-    wait.until(lambda d: ("tm-collapsed" in filters.get_attribute("class").split()) != was_collapsed)
-    filter_button.click()
-    wait.until(lambda d: ("tm-collapsed" in filters.get_attribute("class").split()) == was_collapsed)
+    assert layout["drawerLeft"] < 40 and layout["zoomLeft"] < 55, layout
+    assert layout["quickLeft"] > 150 and layout["quickTop"] > 70, layout
+    # Real native quick select triggers the existing filter change handler.
+    from selenium.webdriver.support.ui import Select
+    quick_region = driver.find_element(By.ID, "tm-inline-region")
+    # CI PostGIS has no catalog regions: simulate the async option population
+    # on the original select and verify that the quick mirror follows it.
+    if len(Select(quick_region).options) <= 1:
+        driver.execute_script(
+            "document.getElementById('region-filter').add("
+            "new Option('Région test CI','region-test-ci'))"
+        )
+    wait.until(lambda d: len(Select(quick_region).options) > 1)
+    first_region = next((o.get_attribute("value") for o in Select(quick_region).options
+                         if o.get_attribute("value")), None)
+    assert first_region, "No region option loaded into quick filter"
+    Select(quick_region).select_by_value(first_region)
+    wait.until(lambda d: d.find_element(By.ID, "region-filter").get_attribute("value")
+               == first_region)
+    assert driver.find_element(By.CSS_SELECTOR, "#tm-inline-advanced .tm-active-count").text == "1"
+    advanced_button.click()
+    wait.until(lambda d: "tm-inline-filters-open" in
+               d.find_element(By.TAG_NAME, "body").get_attribute("class").split())
+    assert driver.find_element(By.ID, "sidebar").is_displayed(), "Advanced popup missing"
+    driver.find_element(By.ID, "reset-filters").click()
+    wait.until(lambda d: d.find_element(By.ID, "tm-inline-region").get_attribute("value") == "")
+    driver.find_element(By.ID, "tm-filter-toggle").click()
+    wait.until(lambda d: "tm-inline-filters-open" not in
+               d.find_element(By.TAG_NAME, "body").get_attribute("class").split())
+    assert not driver.find_element(By.ID, "sidebar").is_displayed(), "Popup did not close"
+    # Quick buttons open the existing advanced control instead of duplicated fields.
+    driver.find_element(By.CSS_SELECTOR, '[data-filter-target="distance-range"]').click()
+    wait.until(lambda d: d.find_element(By.ID, "sidebar").is_displayed())
+    driver.find_element(By.ID, "tm-inline-advanced").click()
+    assert not driver.find_element(By.ID, "sidebar").is_displayed()
 
     drawer_button = driver.find_element(By.ID, "tm-drawer-head")
     drawer = driver.find_element(By.ID, "tm-unified-drawer")
@@ -209,6 +234,15 @@ try:
     card=driver.find_element(By.CSS_SELECTOR, '#tm-drawer-track .tm-trek-tile:nth-child(5)')
     name=card.find_element(By.TAG_NAME,'strong').text
     card_id=card.get_attribute('data-id')
+    # Ensure the target is fully visible within the horizontal carousel.
+    # Selenium's default click scrolling may otherwise target a clipped
+    # fragment outside the full-width drawer and hit the Leaflet canvas.
+    driver.execute_script(
+        "arguments[0].scrollIntoView({block:'nearest',inline:'center',behavior:'instant'})", card)
+    wait.until(lambda d: d.execute_script(
+        "const a=arguments[0].getBoundingClientRect();"
+        "const b=document.getElementById('tm-drawer-track').getBoundingClientRect();"
+        "return a.left>=b.left-1 && a.right<=b.right+1;", card))
     card.click()
     wait.until(lambda d: d.find_element(By.ID,'modal-backdrop').is_displayed())
     assert name in driver.find_element(By.ID,'modal').text, "Card click opened the wrong trek"
@@ -233,6 +267,15 @@ try:
         "clientX:880,clientY:750,buttons:0,pointerId:6}));")
     card=driver.find_element(By.CSS_SELECTOR, '#tm-drawer-track .tm-trek-tile:nth-child(6)')
     second=card.find_element(By.TAG_NAME,'strong').text
+    # Ensure the target is fully visible within the horizontal carousel.
+    # Selenium's default click scrolling may otherwise target a clipped
+    # fragment outside the full-width drawer and hit the Leaflet canvas.
+    driver.execute_script(
+        "arguments[0].scrollIntoView({block:'nearest',inline:'center',behavior:'instant'})", card)
+    wait.until(lambda d: d.execute_script(
+        "const a=arguments[0].getBoundingClientRect();"
+        "const b=document.getElementById('tm-drawer-track').getBoundingClientRect();"
+        "return a.left>=b.left-1 && a.right<=b.right+1;", card))
     card.click()
     wait.until(lambda d: d.find_element(By.ID,'modal-backdrop').is_displayed())
     assert second in driver.find_element(By.ID,'modal').text, "Hover movement blocked second trek"
