@@ -404,7 +404,10 @@ try:
     discover=driver.find_element(By.CSS_SELECTOR, '[data-p-select="910002"]')
     assert "À découvrir" in discover.text
     driver.execute_script(
-        "window.__profileErrors=[];"
+        "window.__profileErrors=[]; window.__profileClicks=[];"
+        "let r=document.getElementById('tm-profile-v2');"
+        "r.addEventListener('click',e=>__profileClicks.push({phase:'capture',target:e.target.tagName,value:e.target.closest('button')?.dataset.pSelect}),true);"
+        "r.addEventListener('click',e=>__profileClicks.push({phase:'bubble',target:e.target.tagName,value:e.target.closest('button')?.dataset.pSelect}));"
         "window.addEventListener('error',e=>__profileErrors.push(String(e.message)));"
         "window.addEventListener('unhandledrejection',e=>__profileErrors.push(String(e.reason)));"
     )
@@ -413,7 +416,7 @@ try:
         "return {view:document.getElementById('tm-p-content').innerText.slice(0,1000),"
         "editor:!!document.getElementById('tm-p-journey-card'),"
         "button:!!document.querySelector('[data-p-select=\\\"910002\\\"]'),"
-        "focus:document.activeElement?.id,errors:window.__profileErrors};"
+        "focus:document.activeElement?.id,clicks:window.__profileClicks,errors:window.__profileErrors};"
     )
     print('PROFILE DISCOVER DIAGNOSTIC:',diagnostic,flush=True)
     wait.until(lambda d: d.find_element(By.ID, "tm-p-journey-card").is_displayed(),
