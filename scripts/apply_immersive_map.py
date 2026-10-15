@@ -80,6 +80,7 @@ body.tm-map-immersive #tm-map-immersive-actions{display:flex}
   box-shadow:0 7px 23px rgba(5,48,27,.17);padding:0 14px;
   font:800 12px/1.2 Inter,system-ui,sans-serif;cursor:pointer
 }
+#tm-map-immersive-actions #tm-map-immersive-detail[hidden]{display:none!important}
 #tm-map-immersive-exit{background:#0b8058!important;border-color:#0b8058!important;
   color:white!important}
 #tm-map-immersive-actions button:hover{filter:brightness(.96)}
@@ -116,11 +117,33 @@ body.tm-map-immersive #tm-map-immersive-actions{display:flex}
   buttons.innerHTML=
     '<button type="button" id="tm-map-immersive-list" aria-pressed="false"'+
     ' aria-controls="tm-unified-drawer">☷ Treks</button>'+
+    '<button type="button" id="tm-map-immersive-detail" hidden'+
+    ' aria-label="Ouvrir la fiche complète du trek sélectionné">↗ Fiche</button>'+
     '<button type="button" id="tm-map-immersive-exit" aria-label="Quitter le mode carte">✕ Quitter</button>';
   app.appendChild(buttons);
   var exit=buttons.querySelector('#tm-map-immersive-exit');
   var list=buttons.querySelector('#tm-map-immersive-list');
+  var detail=buttons.querySelector('#tm-map-immersive-detail');
   var hadCollapsed=false,requestedNative=false;
+  function selectedTrekId(){
+    var focus=window.TrekMapExplorerFocus;
+    var id=focus&&typeof focus.getSelected==='function'?focus.getSelected():null;
+    if(id==null){
+      var card=document.querySelector('#tm-drawer-track .tm-trek-tile.selected');
+      id=card?card.dataset.id:null;
+    }
+    var num=Number(id);
+    return id!=null&&Number.isFinite(num)?num:null;
+  }
+  function syncDetail(){
+    detail.hidden=selectedTrekId()===null;
+  }
+  detail.addEventListener('click',function(){
+    var id=selectedTrekId();
+    if(id!==null&&typeof window.openDetail==='function')window.openDetail(id);
+  });
+  document.addEventListener('trekmap:detail-opened',syncDetail);
+  document.addEventListener('trekmap:detail-cleared',syncDetail);
   menuButton.textContent='⛶ Mode carte immersif';
   menuButton.setAttribute('aria-label','Afficher la carte sans les panneaux, avec accès aux treks');
   nativeButton.setAttribute('aria-label','Activer ou quitter le mode carte immersif');
@@ -161,7 +184,7 @@ body.tm-map-immersive #tm-map-immersive-actions{display:flex}
     hadCollapsed=!!(drawer&&drawer.classList.contains('collapsed'));
     root.classList.remove('tm-immersive-list-open');
     root.classList.add('tm-map-immersive');
-    reflect();closeMenu();invalidate();
+    syncDetail();reflect();closeMenu();invalidate();
     // Use the DOCUMENT root as native fullscreen target. Modal dialogs and
     // toast messages are siblings of #app; fullscreening only #app made the
     // "Voir la fiche" dialog invisible despite its being open.
@@ -223,6 +246,7 @@ body.tm-map-immersive #tm-map-immersive-actions{display:flex}
     enter:enter,leave:leave,isActive:function(){return root.classList.contains('tm-map-immersive')},
     isListOpen:function(){return root.classList.contains('tm-immersive-list-open')}
   };
+  syncDetail();
   reflect();
 })();
 </script>
