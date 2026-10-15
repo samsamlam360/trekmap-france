@@ -170,8 +170,16 @@ block=r'''<!-- TREKMAP_EXPLORER_FINISH_START -->
       });
     });
     var target=id==null?null:lines.get(id);
-    if(!target||!target.getLatLngs)return;
-    var points=target.getLatLngs();
+    var points=target&&target.getLatLngs?target.getLatLngs():null;
+    if((!points||points.length<2)&&id!=null){
+      // The original detail/map renderer may remove the selected line from
+      // the catalog layer. Use the already loaded geometry instead.
+      var trek=typeof allTreks!=='undefined'&&Array.isArray(allTreks)?
+        allTreks.find(function(t){return Number(t.id)===id}):null;
+      if(trek&&Array.isArray(trek.coords)&&trek.coords.length>1)points=trek.coords;
+      else if(trek&&typeof geometryToLeaflet==='function')
+        points=geometryToLeaflet(trek.geometry);
+    }
     if(!points||points.length<2)return;
     // Two noninteractive strokes create a visible outline even with
     // Leaflet Canvas rendering and never steal a native route click.
