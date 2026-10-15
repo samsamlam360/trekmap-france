@@ -267,8 +267,16 @@ try:
     assert name in info.text, "Side panel did not update to chosen trek"
     wait.until(lambda d: d.execute_script(
         "return window.TrekMapExplorerFocus.getSelected()===Number(arguments[0])", card_id))
-    assert driver.execute_script("return window.TrekMapExplorerFocus.getGlowLayerCount()") == 2, (
-        "Selection should keep the active route highlighted")
+    focus_diagnostics = driver.execute_script(
+        "return {selected:window.TrekMapExplorerFocus.getSelected(),"
+        "focused:window.TrekMapExplorerFocus.getFocused(),"
+        "glow:window.TrekMapExplorerFocus.getGlowLayerCount(),"
+        "mapLines:window.TrekMapExplorerFocus.getLayerCount(),"
+        "allLayers:trekLayerGroup.getLayers().length,"
+        "ids:trekLayerGroup.getLayers().slice(0,20).map(x=>x._tmTrekId),"
+        "brain:document.body.classList.contains('tm-brain-route-mode')};")
+    assert focus_diagnostics["glow"] == 2, (
+        f"Selection should keep the active route highlighted: {focus_diagnostics}")
     assert not driver.find_element(By.CSS_SELECTOR, "#tm-desktop-info .tm-info-overview").is_displayed(), (
         "Redundant overview must disappear when a trek is selected")
     assert driver.find_element(By.CSS_SELECTOR, "#tm-desktop-info .tm-info-selected").is_displayed(), (
