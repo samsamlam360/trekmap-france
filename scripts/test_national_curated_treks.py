@@ -47,7 +47,7 @@ class NationalCuratedTest(unittest.TestCase):
                 self.assertIn(x["region"],REGIONS)
                 self.assertGreaterEqual(x["duration_days"],1)
                 self.assertGreaterEqual(x["distance"],20)
-                self.assertGreaterEqual(len(x["name"]),5)
+                self.assertGreaterEqual(len(x["name"]),4)  # GR34 is a legitimate four-character GR name
                 self.assertEqual(x["geometry"]["type"],"LineString")
                 points=x["geometry"]["coordinates"]
                 self.assertGreaterEqual(len(points),3)
