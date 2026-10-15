@@ -9,6 +9,8 @@ from pathlib import Path
 import os
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.common.action_chains import ActionChains
+from selenium.webdriver.common.actions.wheel_input import ScrollOrigin
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait, Select
 
@@ -370,6 +372,45 @@ try:
     right=driver.execute_script(
         "return document.getElementById('tm-desktop-info').getBoundingClientRect().right")
     assert right<=1440, "Information panel leaves screen"
+    # Exercise the REAL mouse wheel over the carousel, rather than just
+    # programmatically setting scrollLeft. A notched turn should move almost
+    # one entire card promptly, without zooming the underlying Leaflet map.
+    track=driver.find_element(By.ID, "tm-drawer-track")
+    driver.execute_script("arguments[0].scrollLeft=0",track)
+    wheel_before=driver.execute_script("return map.getZoom()")
+    ActionChains(driver).scroll_from_origin(
+        ScrollOrigin.from_element(track),0,120).perform()
+    wait.until(lambda d: d.execute_script(
+        "return document.getElementById('tm-drawer-track').scrollLeft>=190"))
+    assert driver.execute_script("return map.getZoom()")==wheel_before, (
+        "Wheel above the trek cards must not zoom the map")
+    # Horizontal trackpad deltas, line-mode wheels and reverse scrolling
+    # must also respond. Ctrl+wheel remains available for browser zoom.
+    result=driver.execute_script("""
+      const tr=document.getElementById('tm-drawer-track');
+      const details=[];
+      function turn(deltaX,deltaY,deltaMode,ctrl=false){
+        const start=tr.scrollLeft;
+        const ev=new WheelEvent('wheel',{
+          deltaX,deltaY,deltaMode,ctrlKey:ctrl,bubbles:true,cancelable:true
+        });
+        tr.querySelector('.tm-trek-tile').dispatchEvent(ev);
+        details.push({before:start,after:tr.scrollLeft,canceled:ev.defaultPrevented});
+      }
+      turn(40,0,0);     // horizontal precision trackpad
+      turn(0,3,1);      // mouse wheel reported in lines
+      turn(0,120,0,true); // leave Ctrl+wheel to the browser
+      turn(0,-120,0);   // reverse
+      return {details,behavior:getComputedStyle(tr).scrollBehavior,
+              snap:getComputedStyle(tr).scrollSnapType};
+    """)
+    h,lines,ctrl,reverse=result["details"]
+    assert h["canceled"] and h["after"]>h["before"]+30, result
+    assert lines["canceled"] and lines["after"]>lines["before"]+80, result
+    assert not ctrl["canceled"] and ctrl["after"]==ctrl["before"], result
+    assert reverse["canceled"] and reverse["after"]<reverse["before"]-160, result
+    assert result["behavior"]=="auto" and result["snap"]=="none", result
+    driver.execute_script("arguments[0].scrollLeft=0",track)
     next_button=driver.find_element(By.CSS_SELECTOR, '.tm-drawer-nav [data-scroll-dir="1"]')
     assert next_button.is_enabled(), "Desktop carousel cannot move right"
     next_button.click()
