@@ -46,6 +46,17 @@ block=r'''<!-- TREKMAP_PROFILE_V2_START -->
 .tm-p-item{width:100%;min-width:0;text-align:left;padding:12px;border-radius:12px;border:1px solid #dfece1;
   background:#fbfdfb;display:flex;align-items:center;justify-content:space-between;gap:12px}
 .tm-p-item:hover{background:#edf7f1;border-color:#7dbca0}
+.tm-p-item.is-selected,.tm-p-collection-entry[aria-pressed="true"]{
+  border-color:#148052;background:#e8f6ee;box-shadow:inset 3px 0 #148052
+}
+.tm-p-collection-entry{cursor:pointer;font:inherit}
+.tm-p-collection-entry:focus-visible{outline:3px solid #ecb747!important;outline-offset:2px}
+.tm-p-section-label{font-size:12px;font-weight:850;color:#245f42;margin:15px 0 9px}
+.tm-p-item .tm-p-inline{justify-content:flex-end;gap:6px}
+.tm-p-item .tm-p-inline .tm-p-btn{min-height:36px;padding:7px 9px}
+#tm-p-journey-card,#tm-p-collection-content{scroll-margin-top:85px}
+@media(max-width:780px){#tm-p-journey-card,#tm-p-collection-content{scroll-margin-top:72px}}
+
 .tm-p-item b{display:block;font-size:13px;color:#1b4a34}
 .tm-p-item small{font-size:11px;color:#668070;display:block;margin-top:3px}
 .tm-p-pill{background:#e6f4ec;border-radius:50px;color:#1b7551;padding:5px 8px;white-space:nowrap;font-size:10px}
@@ -141,7 +152,10 @@ async function request(path,method,body){
 const allTreks=function(){
   if(!model)return[];
   const m=new Map();
-  (model.treks||[]).concat(model.favorites||[]).concat((model.journeys||[]).map(function(j){return {id:j.trek_id,name:j.name,region:j.region,distance:j.distance,elevation:j.elevation,is_public:j.is_public}})).forEach(function(t){m.set(Number(t.id),t)});
+  (model.treks||[]).concat(model.favorites||[])
+    .concat((model.journeys||[]).map(function(j){return {id:j.trek_id,name:j.name,region:j.region,distance:j.distance,elevation:j.elevation,is_public:j.is_public}}))
+    .concat((model.collections||[]).flatMap(function(collection){return collection.treks||[]}))
+    .forEach(function(t){if(Number.isSafeInteger(Number(t.id))&&Number(t.id)>0)m.set(Number(t.id),t)});
   return [...m.values()];
 };
 function journey(id){return (model&&model.journeys||[]).find(function(j){return Number(j.trek_id)===Number(id)})}
@@ -186,7 +200,7 @@ function projects(){
   const st=j&&j.status||'planned';
   let panel='';
   if(current){
-    panel='<div class="tm-p-card"><h3>'+e(current.name)+'</h3>'+
+    panel='<div id="tm-p-journey-card" class="tm-p-card" tabindex="-1"><h3>'+e(current.name)+'</h3>'+
       '<div class="tm-p-muted">'+e(current.region)+' · '+num(current.distance).toFixed(1)+' km</div>'+
       '<form id="tm-p-journey-form" class="tm-p-form" style="margin-top:14px">'+
       '<label>État de cette aventure<select name="status"><option value="planned">À découvrir</option><option value="preparing">En préparation</option><option value="ready">Prêt</option><option value="completed">Terminé</option></select></label>'+
@@ -206,7 +220,9 @@ function projects(){
   return '<h2 class="tm-p-heading">Mes aventures</h2><div class="tm-p-cols"><div class="tm-p-card">'+
     '<h3>Tous mes treks et favoris</h3><div class="tm-p-list">'+(treks.length?treks.map(function(t){
        const j=journey(t.id),tag=statusNames[j&&j.status||'planned'];
-       return card(t,'<button class="tm-p-btn" data-p-select="'+Number(t.id)+'">'+e(tag)+'</button>');
+       return '<div class="tm-p-project-row'+(Number(selected)===Number(t.id)?' is-selected':'')+'">'+
+         card(t,'<button type="button" class="tm-p-btn" data-p-select="'+Number(t.id)+'" aria-pressed="'+
+         (Number(selected)===Number(t.id)?'true':'false')+'" aria-label="Ouvrir '+e(t.name)+' dans Mes aventures">'+e(tag)+' →</button>')+'</div>';
     }).join(''):'<p class="tm-p-muted">Crée un trek ou ajoute un itinéraire aux favoris pour le retrouver ici.</p>')+
     '</div></div>'+panel+'</div>';
 }
@@ -226,27 +242,49 @@ function journal(){
       '<span>Ton premier badge sera attribué après une sortie terminée.</span>')+'</div></div>';
 }
 function collections(){
- const c=model.collections||[], treks=allTreks();
- return '<h2 class="tm-p-heading">Mes collections</h2><div class="tm-p-cols"><div class="tm-p-card">'+
-  '<h3>Classer mes idées de randonnée</h3><form id="tm-p-collection-create" class="tm-p-inline">'+
-  '<input aria-label="Nom de la nouvelle collection" name="name" placeholder="Ex. Treks en montagne" maxlength="70" required>'+
-  '<button class="tm-p-btn primary" type="submit">Créer</button></form>'+
-  '<div class="tm-p-list" style="margin-top:14px">'+(c.length?c.map(function(x){return '<div class="tm-p-item"><div><b>'+e(x.name)+'</b><small>'+x.treks.length+' trek(s)</small></div>'+
-   '<button class="tm-p-btn" data-p-collection="'+x.id+'">Organiser</button></div>'}).join(''):
-   '<p class="tm-p-muted">Aucune collection enregistrée.</p>')+'</div></div>'+
-  '<div class="tm-p-card"><h3>Contenu de la collection</h3>'+(
-   selected!=null&&c.some(function(x){return x.id===Number(selected)})?(()=>{
-    const a=c.find(function(x){return x.id===Number(selected)});
-    return '<p><b>'+e(a.name)+'</b></p><div class="tm-p-inline" style="margin-bottom:12px">'+
-      '<button class="tm-p-btn" data-p-rename="'+a.id+'">Renommer</button>'+
-      '<button class="tm-p-btn danger" data-p-delete-collection="'+a.id+'">Supprimer</button></div>'+
-      '<div class="tm-p-list">'+treks.map(function(t){
-        const active=a.treks.some(function(x){return Number(x.id)===Number(t.id)});
-        return '<div class="tm-p-item"><div><b>'+e(t.name)+'</b><small>'+e(t.region)+'</small></div>'+
-          '<button class="tm-p-btn" data-p-toggle-collection="'+a.id+'" data-trek="'+Number(t.id)+'" data-in="'+(active?'1':'0')+'">'+(active?'Retirer':'Ajouter')+'</button></div>';
-      }).join('')+'</div>';
-   })():'<p class="tm-p-muted">Choisis une collection pour ajouter ou retirer les treks de ton compte et tes favoris.</p>')+
-  '</div></div>';
+  const collections=model.collections||[], available=allTreks();
+  const chosen=selected!=null?collections.find(function(x){return Number(x.id)===Number(selected)}):null;
+  const entries=collections.length?collections.map(function(item){
+    const active=chosen&&Number(chosen.id)===Number(item.id);
+    return '<button type="button" class="tm-p-item tm-p-collection-entry'+(active?' is-selected':'')+
+      '" aria-pressed="'+(active?'true':'false')+'" data-p-collection="'+Number(item.id)+'">'+
+      '<span><b>'+e(item.name)+'</b><small>'+(item.treks||[]).length+' trek(s)</small></span>'+
+      '<span class="tm-p-pill">Ouvrir →</span></button>';
+  }).join(''):'<p class="tm-p-muted">Aucune collection enregistrée.</p>';
+  let panel='<div id="tm-p-collection-content" class="tm-p-card" tabindex="-1"><h3>Contenu de la collection</h3>'+
+    '<p class="tm-p-muted">Choisis une collection pour consulter ses treks, ouvrir leurs fiches ou en ajouter de nouveaux.</p></div>';
+  if(chosen){
+    const stored=Array.isArray(chosen.treks)?chosen.treks:[];
+    const ids=new Set(stored.map(function(t){return Number(t.id)}));
+    const candidates=available.filter(function(t){return !ids.has(Number(t.id))});
+    const storedRows=stored.length?stored.map(function(t){
+      return '<div class="tm-p-item"><div><b>'+e(t.name)+'</b><small>'+e(t.region||'France')+'</small></div>'+
+        '<div class="tm-p-inline">'+
+          '<button type="button" class="tm-p-btn primary" data-p-open-trek="'+Number(t.id)+'">Voir le trek ↗</button>'+
+          '<button type="button" class="tm-p-btn" data-p-collection-manage="'+Number(t.id)+'">Préparer</button>'+
+          '<button type="button" class="tm-p-btn" data-p-toggle-collection="'+Number(chosen.id)+'" data-trek="'+Number(t.id)+'" data-in="1">Retirer</button>'+
+        '</div></div>';
+    }).join(''):'<p class="tm-p-muted">Cette collection est vide. Ajoute un trek ci-dessous pour le retrouver ici.</p>';
+    panel='<div id="tm-p-collection-content" class="tm-p-card" tabindex="-1">'+
+      '<h3>'+e(chosen.name)+'</h3><p class="tm-p-muted">'+stored.length+' trek(s) dans cette collection</p>'+
+      '<div class="tm-p-inline" style="margin:11px 0 15px">'+
+        '<button type="button" class="tm-p-btn" data-p-rename="'+Number(chosen.id)+'">Renommer</button>'+
+        '<button type="button" class="tm-p-btn danger" data-p-delete-collection="'+Number(chosen.id)+'">Supprimer la collection</button>'+
+      '</div><div class="tm-p-section-label">Mes treks enregistrés</div>'+
+      '<div class="tm-p-list">'+storedRows+'</div>'+
+      '<div class="tm-p-section-label">Ajouter un trek à cette collection</div>'+
+      '<div class="tm-p-list">'+(candidates.length?candidates.map(function(t){
+        return '<div class="tm-p-item"><div><b>'+e(t.name)+'</b><small>'+e(t.region||'France')+'</small></div>'+
+          '<button type="button" class="tm-p-btn" data-p-toggle-collection="'+Number(chosen.id)+'" data-trek="'+Number(t.id)+'" data-in="0">+ Ajouter</button></div>';
+      }).join(''):'<p class="tm-p-muted">Tous les treks disponibles sont déjà dans cette collection.</p>')+
+      '</div></div>';
+  }
+  return '<h2 class="tm-p-heading">Mes collections</h2><div class="tm-p-cols">'+
+    '<div class="tm-p-card"><h3>Classer mes idées de randonnée</h3>'+
+      '<form id="tm-p-collection-create" class="tm-p-inline">'+
+        '<input aria-label="Nom de la nouvelle collection" name="name" placeholder="Ex. Treks en montagne" maxlength="70" required>'+
+        '<button class="tm-p-btn primary" type="submit">Créer</button></form>'+
+      '<div class="tm-p-list" style="margin-top:14px">'+entries+'</div></div>'+panel+'</div>';
 }
 function preferences(){
  const s=model.settings||{},p=s.preferences||{},icons=Object.keys(avatarIcons);
@@ -294,6 +332,28 @@ function render(){
   }
  }
 }
+function revealPanel(id){
+  const target=el(id);
+  if(!target)return;
+  target.scrollIntoView({block:'start',behavior:'instant'});
+  target.focus({preventScroll:true});
+}
+async function openTrekFromProfile(value){
+  const id=Number(value);
+  if(!Number.isSafeInteger(id)||id<=0){announce('Identifiant de trek invalide.');return}
+  try{
+    // A collection may contain a public trek that is neither owned nor favorited.
+    // In that case the current map catalogue may not have it yet.
+    if(typeof allTreks!=='undefined'&&Array.isArray(allTreks)&&
+       !allTreks.some(function(t){return Number(t.id)===id})){
+      const detail=await request('/treks/'+id,'GET');
+      allTreks.push(detail);
+    }
+    if(typeof window.openDetail!=='function')throw Error('La fiche du trek est indisponible.');
+    close();
+    window.openDetail(id);
+  }catch(err){announce('Impossible d’ouvrir ce trek. '+(err.message||''))}
+}
 function close(){
  root.hidden=true;model=null;plan=null;document.body.style.removeProperty('overflow');
  if(previousFocus&&previousFocus.focus)previousFocus.focus();
@@ -320,9 +380,10 @@ root.addEventListener('click',async function(event){
  if(button.id==='tm-p-exit'){close();return}
  if(button.dataset.pGo){tab=button.dataset.pGo;selected=null;render();return}
  if(button.dataset.pRetry){await open();return}
- if(button.dataset.pSelect){selected=Number(button.dataset.pSelect);tab='projects';plan=null;render();return}
- if(button.dataset.pCollection){selected=Number(button.dataset.pCollection);tab='collections';render();return}
- if(button.dataset.pOpenTrek){close();if(typeof window.openDetail==='function')window.openDetail(Number(button.dataset.pOpenTrek));return}
+ if(button.dataset.pSelect){selected=Number(button.dataset.pSelect);tab='projects';plan=null;render();revealPanel('tm-p-journey-card');return}
+ if(button.dataset.pCollection){selected=Number(button.dataset.pCollection);tab='collections';render();revealPanel('tm-p-collection-content');return}
+ if(button.dataset.pCollectionManage){selected=Number(button.dataset.pCollectionManage);tab='projects';plan=null;render();revealPanel('tm-p-journey-card');return}
+ if(button.dataset.pOpenTrek){await openTrekFromProfile(button.dataset.pOpenTrek);return}
  if(button.dataset.pPassword){close();if(typeof window.openPassword==='function')window.openPassword();return}
  if(button.dataset.pLogout){close();if(typeof window.logout==='function')window.logout();return}
  if(button.dataset.pShare){
