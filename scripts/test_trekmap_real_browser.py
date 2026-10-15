@@ -218,6 +218,37 @@ try:
     map_options.click()
     wait.until(lambda d: "tm-show" not in options_panel.get_attribute("class").split())
 
+    # Fullscreen must be useful: a genuine focus mode with controls and a
+    # reversible trek drawer, not fullscreening the bare Leaflet canvas.
+    zoom_before = driver.execute_script("return map.getZoom()")
+    map_options.click()
+    fullscreen_option = driver.find_element(
+        By.CSS_SELECTOR, '[data-map-action="fullscreen"]')
+    assert "Mode carte" in fullscreen_option.text
+    fullscreen_option.click()
+    wait.until(lambda d: d.execute_script("return window.TrekMapImmersive.isActive()"))
+    assert not driver.find_element(By.ID, "tm-unified-topbar").is_displayed()
+    assert not driver.find_element(By.ID, "tm-unified-drawer").is_displayed()
+    assert driver.find_element(By.ID, "tm-map-control-dock").is_displayed()
+    assert driver.find_element(By.ID, "tm-map-immersive-exit").is_displayed()
+    immersive_geometry=driver.execute_script(
+        "const a=document.getElementById('map').getBoundingClientRect();"
+        "return {top:a.top,bottom:a.bottom,width:a.width,screen:innerHeight,"
+        "zoom:map.getZoom(),fullscreen:document.fullscreenElement?.id||null}")
+    assert immersive_geometry["top"] <= 1 and immersive_geometry["bottom"] >= immersive_geometry["screen"]-1, immersive_geometry
+    assert immersive_geometry["zoom"] == zoom_before, immersive_geometry
+    immersive_list=driver.find_element(By.ID, "tm-map-immersive-list")
+    immersive_list.click()
+    wait.until(lambda d: d.find_element(By.ID, "tm-unified-drawer").is_displayed())
+    assert driver.execute_script("return window.TrekMapImmersive.isListOpen()")
+    immersive_list.click()
+    wait.until(lambda d: not d.find_element(By.ID, "tm-unified-drawer").is_displayed())
+    driver.find_element(By.ID, "tm-map-immersive-exit").click()
+    wait.until(lambda d: not d.execute_script("return window.TrekMapImmersive.isActive()"))
+    assert driver.find_element(By.ID, "tm-unified-topbar").is_displayed()
+    assert driver.find_element(By.ID, "tm-unified-drawer").is_displayed()
+    assert driver.execute_script("return map.getZoom()") == zoom_before
+
     topbar_layout = driver.execute_script(
         "const s=document.getElementById('tm-main-search-wrap').getBoundingClientRect();"
         "const b=document.getElementById('tm-ai-launch').getBoundingClientRect();"
@@ -418,6 +449,19 @@ try:
     assert mobile_navigation.is_displayed(), "Mobile navigation is hidden"
     assert driver.find_element(By.ID, "tm-map-control-dock").is_displayed(), (
         "The same existing map controls must remain usable on mobile")
+    # Mobile focus must have a permanent exit and an optional trek drawer;
+    # the standard bottom navigation must come back afterwards.
+    driver.execute_script("window.TrekMapImmersive.enter()")
+    wait.until(lambda d: d.execute_script("return window.TrekMapImmersive.isActive()"))
+    assert driver.find_element(By.ID, "tm-map-immersive-exit").is_displayed()
+    assert not mobile_navigation.is_displayed()
+    driver.find_element(By.ID, "tm-map-immersive-list").click()
+    wait.until(lambda d: d.find_element(By.ID, "tm-unified-drawer").is_displayed())
+    driver.execute_script("document.dispatchEvent(new KeyboardEvent('keydown',"
+                          "{key:'Escape',bubbles:true}))")
+    wait.until(lambda d: not d.execute_script("return window.TrekMapImmersive.isActive()"))
+    assert mobile_navigation.is_displayed()
+    assert driver.find_element(By.ID, "tm-map-control-dock").is_displayed()
     mobile_filters = mobile_navigation.find_element(By.CSS_SELECTOR, '[data-mobile-action="filters"]')
     mobile_filters.click()
     wait.until(lambda d: "tm-mobile-filters-open" in
