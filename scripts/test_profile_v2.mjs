@@ -45,6 +45,20 @@ assert.ok(api.includes('CREATE TABLE IF NOT EXISTS')&&
  'profile schema must be purely additive');
 assert.ok(!/document\.querySelectorAll\(['"]\.tm-trek-tile/.test(js),
  'profile must not mutate existing map route cards');
+assert.ok(js.includes('j?.actual_distance_km==null')&&js.includes('j?.actual_ascent_m==null'),
+ 'new À découvrir trek without journey history must not crash the editor');
+assert.ok(js.includes("revealPanel('tm-p-journey-card')"),
+ 'the À découvrir button must reveal and focus its editor');
+assert.ok(js.includes("revealPanel('tm-p-collection-content')"),
+ 'opening a collection must bring its contents into view');
+assert.ok(js.includes('data-p-collection-manage') && js.includes('data-p-open-trek'),
+ 'collection members must have both prepare and open-detail actions');
+assert.ok(js.includes("request('/treks/'+id,'GET')"),
+ 'collection-only public treks must be loaded into the map catalogue');
+assert.ok(js.includes('const accountTreks=function()'),
+ 'profile helper cannot shadow explorer allTreks array');
+assert.ok(css.includes('tm-p-collection-entry') &&
+ css.includes('#tm-p-collection-content'),'collection must have interactive visual selection');
 assert.ok(js.includes('window.openProfile=open'),'existing account entrypoint retained');
 assert.ok(js.includes('typeof closeModal'),'legacy modal remains available');
 assert.ok(!/fetch\s*\(\s*['"]https?:\/\//.test(js),'no third-party service added');

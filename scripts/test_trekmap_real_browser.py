@@ -361,21 +361,27 @@ try:
         stats:{total:1,public:1,private:0,favorites:1,completed:1,
                actual_km:12.5,actual_ascent_m:450},
         achievements:['Premier trek terminé'],
-        treks:[{id:910001,name:'Sentier test',region:'Alpes',distance:18,elevation:300,is_public:true}],
+        treks:[{id:910001,name:'Sentier test',region:'Alpes',distance:18,elevation:300,is_public:true},
+           {id:910002,name:'Sentier à découvrir',region:'Massif central',distance:9,elevation:120,is_public:true}],
         favorites:[{id:910001,name:'Sentier test',region:'Alpes',distance:18,elevation:300,is_public:true}],
         journeys:[{trek_id:910001,status:'completed',name:'Sentier test',region:'Alpes',
              distance:18,elevation:300,completed_on:'2026-08-09',actual_distance_km:12.5,
              actual_ascent_m:450,rating:5,notes:'Belle sortie',photo_urls:[]}],
-        collections:[{id:1,name:'Montagnes',treks:[{id:910001,name:'Sentier test',region:'Alpes'}]}]
+        collections:[{id:1,name:'Montagnes',treks:[
+          {id:910001,name:'Sentier test',region:'Alpes'},
+          {id:910099,name:'Parcours de collection',region:'Vosges'}]}]
       };
       currentUser=window.__profileFixture.user;
       window.__profileRealFetch=window.fetch;
       window.fetch=function(url,init){
         const u=String(url);
-        if(u.startsWith('/profile/')||u.endsWith('/treks/910001/plan')){
+        if(u.startsWith('/profile/')||u.endsWith('/treks/910001/plan')||u==='/treks/910099'){
           window.__profileCalls.push({url:u,method:(init&&init.method)||'GET'});
           let body={};
           if(u==='/profile/v2')body=window.__profileFixture;
+          if(u==='/treks/910099')body={id:910099,name:'Parcours de collection',region:'Vosges',
+            difficulty:'easy',distance:14,elevation:220,is_public:true,owner_id:999,
+            coords:[[48.4,7.1],[48.41,7.11]]};
           if(u.indexOf('/profile/public/')===0)body={
              username:'ChromeTest',avatar:'compass',bio:'Marche en montagne',
              treks:window.__profileFixture.treks,completed:[]};
@@ -394,6 +400,31 @@ try:
         "Real completed hiking km missing from account dashboard"
     )
     driver.find_element(By.CSS_SELECTOR, '[data-p-tab="projects"]').click()
+    # Reproduce reported bug: "À découvrir" must expose and focus the actual editor.
+    discover=driver.find_element(By.CSS_SELECTOR, '[data-p-select="910002"]')
+    assert "À découvrir" in discover.text
+    driver.execute_script(
+        "window.__profileErrors=[];"
+        "window.addEventListener('error',e=>__profileErrors.push(String(e.message)));"
+        "window.addEventListener('unhandledrejection',e=>__profileErrors.push(String(e.reason)));"
+    )
+    discover.click()
+    wait.until(lambda d: d.find_element(By.ID, "tm-p-journey-card").is_displayed())
+    assert not driver.execute_script("return window.__profileErrors"), (
+        "The first-time adventure editor raised a JavaScript exception"
+    )
+    assert not driver.find_element(By.ID,"tm-p-completion").is_displayed(), (
+        "Completion-only metrics must stay hidden on an unstarted trek"
+    )
+    assert "18.0 km" in driver.find_element(By.CSS_SELECTOR,
+        '[data-p-select="910001"]').find_element(By.XPATH,"..").text, (
+        "Sparse collection membership must not overwrite the trek distance"
+    )
+    assert "Sentier à découvrir" in driver.find_element(By.ID, "tm-p-journey-card").text
+    assert driver.execute_script(
+        "return document.activeElement?.id==='tm-p-journey-card'"
+    ), "Adventure click did not bring its detail editor into focus"
+    assert driver.find_element(By.CSS_SELECTOR, '[data-p-select="910002"]').get_attribute("aria-pressed")=="true"
     driver.find_element(By.CSS_SELECTOR, '[data-p-select="910001"]').click()
     assert driver.find_element(By.ID, "tm-p-journey-form").is_displayed()
     driver.find_element(By.CSS_SELECTOR, '[data-p-plan="910001"]').click()
@@ -411,13 +442,50 @@ try:
         "return window.__profileCalls.some(x=>x.url==='/profile/v2'&&x.method==='PUT')"))
     driver.find_element(By.CSS_SELECTOR, '[data-p-tab="collections"]').click()
     assert "Montagnes" in driver.find_element(By.ID, "tm-p-content").text
-    driver.save_screenshot(str(OUT / "profile-v2-desktop.png"))
+    driver.find_element(By.CSS_SELECTOR, '[data-p-collection="1"]').click()
+    assert "Parcours de collection" in driver.find_element(By.ID,"tm-p-collection-content").text
+    assert driver.execute_script(
+        "return document.activeElement?.id==='tm-p-collection-content'"
+    ), "Collection did not visibly open when clicked"
+    # A collection can retain public treks not owned or favorited by this user.
+    driver.find_element(By.CSS_SELECTOR, '[data-p-open-trek="910099"]').click()
+    wait.until(lambda d: d.find_element(By.ID,"modal-backdrop").is_displayed())
+    assert "Parcours de collection" in driver.find_element(By.ID,"modal").text
+    assert driver.execute_script(
+        "return window.__profileCalls.some(c=>c.url==='/treks/910099'&&c.method==='GET')"
+    ), "Collection-only trek was not loaded before opening details"
+    driver.find_element(By.ID,"modal-close").click()
+    wait.until(lambda d: not d.find_element(By.ID,"modal-backdrop").is_displayed())
+    driver.execute_script("window.openProfile()")
+    wait.until(lambda d: d.find_element(By.ID,"tm-profile-v2").is_displayed())
+    driver.find_element(By.CSS_SELECTOR, '[data-p-tab="collections"]').click()
+    driver.find_element(By.CSS_SELECTOR, '[data-p-collection="1"]').click()
+    driver.find_element(By.CSS_SELECTOR, '[data-p-collection-manage="910001"]').click()
+    assert "Sentier test" in driver.find_element(By.ID,"tm-p-journey-card").text, (
+        "Collection's prepare button must open its journey editor"
+    )
+    driver.find_element(By.CSS_SELECTOR, '[data-p-tab="collections"]').click()
+    driver.find_element(By.CSS_SELECTOR, '[data-p-collection="1"]').click()
+    driver.save_screenshot(str(OUT / "profile-v2-desktop-collection-open.png"))
     driver.find_element(By.ID, "tm-p-exit").click()
     assert not driver.find_element(By.ID, "tm-profile-v2").is_displayed()
     driver.set_window_size(390, 844)
     driver.execute_script("window.openProfile()")
     wait.until(lambda d: d.find_element(By.ID,"tm-profile-v2").is_displayed())
     assert driver.find_element(By.CSS_SELECTOR,'[data-p-tab="preferences"]').is_displayed()
+    driver.find_element(By.CSS_SELECTOR,'[data-p-tab="projects"]').click()
+    driver.find_element(By.CSS_SELECTOR,'[data-p-select="910002"]').click()
+    assert driver.execute_script(
+        "const el=document.getElementById('tm-p-journey-card');"
+        "const r=el.getBoundingClientRect(); return r.top>=0&&r.top<innerHeight;"
+    ), "Mobile journey editor is still off-screen after clicking À découvrir"
+    driver.find_element(By.CSS_SELECTOR,'[data-p-tab="collections"]').click()
+    driver.find_element(By.CSS_SELECTOR,'[data-p-collection="1"]').click()
+    assert driver.execute_script(
+        "const r=document.getElementById('tm-p-collection-content').getBoundingClientRect();"
+        "return r.top>=0&&r.top<innerHeight;"
+    ), "Mobile collection contents are still off-screen after opening"
+    driver.find_element(By.CSS_SELECTOR,'[data-p-tab="home"]').click()
     assert driver.execute_script(
         "return document.querySelector('#tm-profile-v2 .tm-p-nav').scrollLeft<=2"
     ), "Mobile profile navigation must open at the dashboard tab"
