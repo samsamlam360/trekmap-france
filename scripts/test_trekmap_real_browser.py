@@ -440,7 +440,20 @@ try:
     wait.until(lambda d: "tm-show" in options_panel.get_attribute("class").split())
     driver.find_element(By.CSS_SELECTOR, '[data-map-action="fullscreen"]').click()
     wait.until(lambda d: d.execute_script("return window.TrekMapImmersive.isActive()"))
-    wait.until(lambda d: driver.find_element(By.ID, "tm-info-open-detail").is_displayed())
+    details_diagnostic=driver.execute_script(
+        "const a=document.getElementById('tm-desktop-info'),"
+        "b=document.getElementById('tm-info-open-detail'),"
+        "c=document.getElementById('tm-info-controls'),"
+        "d=document.querySelector('#tm-desktop-info .tm-info-selected');"
+        "const r=x=>{let z=x.getBoundingClientRect();return {left:z.left,top:z.top,"
+        "right:z.right,bottom:z.bottom,height:z.height,width:z.width,"
+        "display:getComputedStyle(x).display,visibility:getComputedStyle(x).visibility}};"
+        "return {selected:window.TrekMapExplorerFocus?.getSelected(),"
+        "infoClasses:a.className,drawerClasses:document.getElementById('tm-unified-drawer').className,"
+        "fullscreen:document.fullscreenElement?.tagName||null,info:r(a),selectedCard:r(d),"
+        "controls:r(c),hidden:c.hidden,button:r(b),viewport:innerWidth};")
+    wait.until(lambda d: d.find_element(By.ID, "tm-info-open-detail").is_displayed(),
+               message=f"Detail button hidden in immersive mode: {details_diagnostic}")
     driver.find_element(By.ID, "tm-info-open-detail").click()
     wait.until(lambda d: d.find_element(By.ID, "modal-backdrop").is_displayed())
     fullscreen_detail=driver.execute_script(
