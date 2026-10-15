@@ -331,12 +331,31 @@ body.tm-filters-collapsed #tm-unified-drawer{left:14px!important}
     openTrek(Number(card.dataset.id));
   },true);
   track?.addEventListener('keydown',e=>{const card=e.target.closest('.tm-trek-tile');if(card&&(e.key==='Enter'||e.key===' ')){e.preventDefault();openTrek(Number(card.dataset.id))}},true);
+  // Desktop: translate mouse-wheel movement into responsive HORIZONTAL
+  // browsing. The old handler fought scroll-behavior:smooth and snap points,
+  // delaying small steps and sometimes springing back to the previous card.
+  // Wheel event units differ between mice (lines) and trackpads (pixels).
   track?.addEventListener('wheel',e=>{
-    if(track.scrollWidth<=track.clientWidth)return;
-    if(e.ctrlKey||e.metaKey)return;
-    const delta=Math.abs(e.deltaY)>=Math.abs(e.deltaX)?e.deltaY:e.deltaX;
-    if(!delta)return;e.preventDefault();track.scrollLeft+=delta;
+    if(e.ctrlKey||e.metaKey||track.scrollWidth<=track.clientWidth+1)return;
+    const horizontal=Math.abs(e.deltaX)>Math.abs(e.deltaY);
+    const raw=horizontal?e.deltaX:e.deltaY;
+    if(!Number.isFinite(raw)||raw===0)return;
+    // Keep native precision for trackpads while scrolling roughly one tile
+    // for a standard notched desktop mouse wheel.
+    const pixels=e.deltaMode===1?raw*22:e.deltaMode===2?raw*track.clientWidth:raw;
+    const boost=horizontal?1.1:Math.abs(pixels)>=40?2:1.35;
+    const max=Math.max(0,track.scrollWidth-track.clientWidth);
+    e.preventDefault();
+    e.stopPropagation(); // Do not also zoom the underlying Leaflet map.
+    // Force an immediate, non-snapping scroll before changing scrollLeft.
+    // Unlike a hover/fine-pointer media query this works in browser fullscreen,
+    // hybrid touchscreen laptops, and headless Chrome.
+    track.classList.add('tm-wheel-direct');
+    track.scrollLeft=Math.max(0,Math.min(max,track.scrollLeft+pixels*boost));
+    syncDrawerArrows();
   },{passive:false});
+  // A finger gesture should use the original mobile snap/swipe semantics.
+  track?.addEventListener('touchstart',()=>track.classList.remove('tm-wheel-direct'),{passive:true});
   const drawerNav=document.createElement('div');drawerNav.className='tm-drawer-nav';
   drawerNav.innerHTML='<button type="button" data-scroll-dir="-1" aria-label="Treks précédents">‹</button><button type="button" data-scroll-dir="1" aria-label="Treks suivants">›</button>';
   $('tm-drawer-head').after(drawerNav);

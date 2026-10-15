@@ -129,6 +129,14 @@ block=r'''<!-- TREKMAP_EXPLORER_FINISH_START -->
 @media(max-width:820px){
   #tm-inline-filters{display:none!important}
 }
+/* Activate direct non-snapping movement ONLY after a real wheel event.
+   Chrome may report hover:none or a narrow viewport even on desktop
+   (fullscreen, emulation, touch-enabled laptops). Native touch stays untouched. */
+#tm-drawer-track.tm-wheel-direct{
+  scroll-behavior:auto!important;
+  scroll-snap-type:none!important;
+  overscroll-behavior-x:contain!important
+}
 </style>
 <script id="trekmap-explorer-finish-js">
 (function(){
