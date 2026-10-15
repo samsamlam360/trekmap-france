@@ -264,7 +264,7 @@ function projects(){
       '<label>Ajouter une photo depuis ton appareil<input type="file" name="local_photo" accept="image/jpeg,image/png,image/webp,image/heic,image/heif"></label>'+
       '<div class="tm-p-local-photo" id="tm-p-local-photo-preview">'+(localPhoto?'<img src="'+e(localPhoto)+'" alt="Photo enregistrée">':'<span>Aucune photo personnelle ajoutée.</span>')+'</div>'+
       (localPhoto?'<label class="tm-p-check"><input type="checkbox" name="remove_photo"> Supprimer cette photo</label>':'')+
-      '<label>Liens de photos facultatifs (HTTPS, maximum 5 au total)<textarea name="photos" placeholder="https://…" maxlength="2100">'+e(photoLinks.join('\\n'))+'</textarea></label>'+
+      '<label>Liens de photos facultatifs (HTTPS, maximum 5 au total)<textarea name="photos" placeholder="https://…" maxlength="2100">'+e(photoLinks.join('\n'))+'</textarea></label>'+
       '<div class="tm-p-inline"><button type="submit" class="tm-p-btn primary">Enregistrer mon aventure</button>'+
       '<button type="button" class="tm-p-btn" data-p-plan="'+Number(current.id)+'">Checklist et préparation</button>'+
       '<button type="button" class="tm-p-btn" data-p-open-trek="'+Number(current.id)+'">Voir la fiche du trek</button></div></form>'+
@@ -488,7 +488,7 @@ root.addEventListener('submit',async function(ev){
  try{
   if(f.id==='tm-p-journey-form'){
    const st=f.elements.status.value;
-   const urls=f.elements.photos.value.trim().split(/\\n+/).map(function(x){return x.trim()}).filter(Boolean);
+   const urls=f.elements.photos.value.trim().split(/\n+/).map(function(x){return x.trim()}).filter(Boolean);
    const chosen=f.elements.local_photo.files&&f.elements.local_photo.files[0];
    const saved=journey(selected)?.photo_urls||[];
    const previous=saved.find(function(x){return /^data:image\/(jpeg|webp);base64,/.test(x)});
