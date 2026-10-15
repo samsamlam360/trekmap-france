@@ -367,7 +367,20 @@ try:
     mobile_filters.click()
     wait.until(lambda d: "tm-mobile-filters-open" in
                d.find_element(By.TAG_NAME, "body").get_attribute("class").split())
-    driver.find_element(By.ID, "tm-filter-toggle").click()
+    mobile_close = driver.find_element(By.ID, "tm-filter-toggle")
+    mobile_info = driver.execute_script(
+        "const t=document.getElementById('tm-filter-toggle'),"
+        "s=document.getElementById('sidebar'),f=s.querySelector('.filters'),"
+        "h=document.getElementById('tm-filter-head');"
+        "const rect=t.getBoundingClientRect();"
+        "return {buttonDisplay:getComputedStyle(t).display,"
+        "buttonVisibility:getComputedStyle(t).visibility,"
+        "buttonRect:{top:rect.top,left:rect.left,width:rect.width,height:rect.height},"
+        "sidebarDisplay:getComputedStyle(s).display,sidebarVisibility:getComputedStyle(s).visibility,"
+        "panelHeight:f.getBoundingClientRect().height,headDisplay:getComputedStyle(h).display,"
+        "body:document.body.className};")
+    assert mobile_close.is_displayed(), f"Mobile filter close became hidden: {mobile_info}"
+    mobile_close.click()
     wait.until(lambda d: "tm-mobile-filters-open" not in
                d.find_element(By.TAG_NAME, "body").get_attribute("class").split())
     mobile_ai = mobile_navigation.find_element(By.CSS_SELECTOR, '[data-mobile-action="ai"]')
