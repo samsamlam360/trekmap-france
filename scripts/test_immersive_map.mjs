@@ -12,7 +12,7 @@ for(const element of ['tm-map-immersive','tm-immersive-list-open','tm-map-immers
   'tm-map-control-dock','tm-desktop-info','tm-mobile-nav','map.invalidateSize']){
   assert.ok(js.includes(element)||css.includes(element),element+' absent');
 }
-for(const control of ['app.requestFullscreen','document.exitFullscreen',
+for(const control of ['document.documentElement','document.exitFullscreen',
   'fullscreenchange','Escape','aria-pressed','document.fullscreenElement',
   'requestedNative','stopImmediatePropagation']){
   assert.ok(js.includes(control),'Fullscreen behavior missing '+control);
@@ -20,6 +20,13 @@ for(const control of ['app.requestFullscreen','document.exitFullscreen',
 assert.ok(css.includes('body.tm-map-immersive #map')&&
           css.includes('body.tm-map-immersive.tm-immersive-list-open #tm-unified-drawer'),
           'Mode should expand map and allow showing the original drawer');
+assert.ok(css.includes('#tm-unified-drawer.collapsed')&&css.includes('height:44px!important'),
+  'Immersive bottom chevron must collapse to the small header');
+assert.ok(js.includes('fullscreenRoot.requestFullscreen') &&
+          js.includes('document.documentElement'),
+  'Native fullscreen must include sibling detail modals, not only the map');
+assert.ok(!js.includes('app.requestFullscreen('),
+  'Fullscreening #app would hide the detail modal outside the fullscreen top layer');
 assert.ok(!/\bfetch\s*\(|XMLHttpRequest|DATABASE_URL|\/ai\/plan|\/treks\/|localStorage/.test(js),
           'Map immersion must never call network, write to Neon or change persisted state');
 const predecessor=fs.readFileSync('scripts/apply_explorer_map_tools.py','utf8');
