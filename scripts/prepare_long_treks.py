@@ -45,7 +45,7 @@ def select_resources(metadata,source_id,maximum):
     for resource in metadata.get("resources") or []:
         fmt=str(resource.get("format") or "").lower().strip(".")
         if fmt not in ("geojson","json"):continue
-        if resource.get("filesize",0) and int(resource["filesize"])>36_000_000:continue
+        if resource.get("filesize",0) and int(resource["filesize"])>70_000_000:continue
         if resource.get("type") in ("documentation","other"):continue
         item_id=str(resource.get("id") or "").strip()
         if not item_id:continue
@@ -66,7 +66,7 @@ def fetch_resource(rid):
     url="https://www.data.gouv.fr/api/1/datasets/r/"+rid
     r=requests.get(url,headers=HEADERS,timeout=(14,85))
     r.raise_for_status()
-    if len(r.content)>37_000_000:raise ValueError("resource too large")
+    if len(r.content)>72_000_000:raise ValueError("resource too large")
     try:content=r.json()
     except ValueError as err:raise ValueError("resource not JSON GeoJSON") from err
     if not isinstance(content,dict):raise ValueError("resource JSON is not an object")
@@ -179,7 +179,7 @@ def build():
             lic=meta.get("license") or ""
             d["license"]=lic
             # Reject records without explicit government Open Licence.
-            if not any(x in str(lic).lower() for x in ("fr-lo","licence ouverte","open licence")):
+            if not any(x in str(lic).lower() for x in ("fr-lo","lov2","licence ouverte","open licence")):
                 raise ValueError("License is not Open Licence: "+str(lic))
             src={"id":source_id,"producer":producer,"region":region,
                  "dataset":"https://www.data.gouv.fr/datasets/"+slug}
