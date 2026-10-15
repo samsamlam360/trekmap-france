@@ -45,6 +45,8 @@ assert.ok(api.includes('CREATE TABLE IF NOT EXISTS')&&
  'profile schema must be purely additive');
 assert.ok(!/document\.querySelectorAll\(['"]\.tm-trek-tile/.test(js),
  'profile must not mutate existing map route cards');
+assert.ok(js.includes('j?.actual_distance_km==null')&&js.includes('j?.actual_ascent_m==null'),
+ 'new À découvrir trek without journey history must not crash the editor');
 assert.ok(js.includes("revealPanel('tm-p-journey-card')"),
  'the À découvrir button must reveal and focus its editor');
 assert.ok(js.includes("revealPanel('tm-p-collection-content')"),
