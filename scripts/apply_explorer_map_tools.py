@@ -135,6 +135,19 @@ body.tm-brain-route-mode #tm-map-control-dock #tm-map-options-panel{
   #tm-map-control-dock #tm-map-options{height:36px!important}
   #tm-map-control-dock #tm-map-options-panel{width:min(230px,calc(100vw - 122px))!important}
 }
+/* Selected trek's daily stages panel belongs to the left map edge, not
+   to the old offset of the former sidebar. Keep it below the zoom/Carte dock
+   so none of its day buttons or scrollbar are hidden under map controls. */
+@media(min-width:821px){
+  body:not(.tm-brain-route-mode) .leaflet-top.leaflet-left{
+    left:18px!important
+  }
+  body:not(.tm-brain-route-mode) .leaflet-top.leaflet-left .tm-route-day-legend{
+    margin-left:0!important;
+    margin-top:100px!important;
+    max-width:min(268px,calc(100vw - 36px))!important
+  }
+}
 /* Numbered badges exist only for overlapping routes, never a lone trek. */
 .tm-trek-cluster-icon{background:transparent!important;border:0!important;pointer-events:auto}
 .tm-trek-cluster{

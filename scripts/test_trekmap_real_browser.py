@@ -341,6 +341,19 @@ try:
     wait.until(lambda d: d.find_element(By.ID,'modal-backdrop').is_displayed())
     assert name in driver.find_element(By.ID,'modal').text, "Card click opened the wrong trek"
     assert name in info.text, "Side panel did not update to chosen trek"
+    # The daily stages legend must sit at the left edge, BELOW the zoom/Carte
+    # dock; previously it floated ~80px into the map and overlapped controls.
+    wait.until(lambda d: d.find_elements(
+        By.CSS_SELECTOR, ".leaflet-top.leaflet-left .tm-route-day-legend"))
+    legend_layout = driver.execute_script(
+        "const l=document.querySelector('.leaflet-top.leaflet-left .tm-route-day-legend')"
+        ".getBoundingClientRect(),"
+        "d=document.getElementById('tm-map-control-dock').getBoundingClientRect();"
+        "return {left:l.left,top:l.top,right:l.right,dockBottom:d.bottom,"
+        "dockLeft:d.left,width:innerWidth};")
+    assert legend_layout["left"] < 35, legend_layout
+    assert legend_layout["top"] >= legend_layout["dockBottom"] + 8, legend_layout
+    assert legend_layout["right"] <= legend_layout["width"] - 10, legend_layout
     wait.until(lambda d: d.execute_script(
         "return window.TrekMapExplorerFocus.getSelected()===Number(arguments[0])", card_id))
     focus_diagnostics = driver.execute_script(
