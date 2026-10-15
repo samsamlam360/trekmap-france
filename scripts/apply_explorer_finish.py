@@ -236,8 +236,11 @@ block=r'''<!-- TREKMAP_EXPLORER_FINISH_START -->
   window.addEventListener('resize',function(){
     if(window.innerWidth<=820&&hovered!=null){hovered=null;focusRoute()}
   });
+  // Register traces that already existed before the last UI installer ran.
+  if(trekLayerGroup.getLayers().length)window.refreshTraceStyles();
   window.TrekMapExplorerFocus={getSelected:function(){return selected},
-    getFocused:function(){return focusId()},getLayerCount:function(){return lines.size}};
+    getFocused:function(){return focusId()},getLayerCount:function(){return lines.size},
+    getGlowLayerCount:function(){return glow.getLayers().length}};
 })();
 </script>
 <!-- TREKMAP_EXPLORER_FINISH_END -->'''
