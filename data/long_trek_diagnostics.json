@@ -1,0 +1,50 @@
+{
+  "cevennes-long": {
+    "license": "fr-lo",
+    "metadata_resources": 0,
+    "resources": [
+      {
+        "accepted": 0,
+        "error": "resource too large",
+        "id": "4eee2f30-32de-4900-9591-be5ee3003e4d"
+      }
+    ],
+    "slug": "itineraires-de-randonnee-du-parc-national-des-cevennes",
+    "status": "ok"
+  },
+  "ecrins-long": {
+    "error": "License is not Open Licence: lov2",
+    "license": "lov2",
+    "resources": [],
+    "slug": "randonnees-du-parc-national-des-ecrins",
+    "status": "error"
+  },
+  "gard-gr": {
+    "error": "License is not Open Licence: lov2",
+    "license": "lov2",
+    "resources": [],
+    "slug": "plan-departemental-des-itineraires-de-promenades-et-de-randonnees-pdipr-chemin-de-grande-randonnee",
+    "status": "error"
+  },
+  "gard-grp": {
+    "error": "License is not Open Licence: lov2",
+    "license": "lov2",
+    "resources": [],
+    "slug": "pdipr-chemin-de-grande-randonnee-de-pays-grp",
+    "status": "error"
+  },
+  "vercors-trails": {
+    "error": "License is not Open Licence: lov2",
+    "license": "lov2",
+    "resources": [],
+    "slug": "itineraires-de-randonnee-sur-le-parc-du-vercors",
+    "status": "error"
+  },
+  "via-garona": {
+    "error": "License is not Open Licence: lov2",
+    "license": "lov2",
+    "resources": [],
+    "slug": "via-garona-chemin-de-grande-randonnee-gr861",
+    "status": "error"
+  }
+}
