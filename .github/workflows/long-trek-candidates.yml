@@ -31,4 +31,6 @@ jobs:
           git add data/long_trek_candidates.json data/long_trek_diagnostics.json
           if git diff --cached --quiet; then exit 0; fi
           git commit -m "data: review multi-day official hiking route candidates"
+          # Other review-branch commits may land while data is downloaded.
+          git pull --rebase origin "${{ github.ref_name }}"
           git push origin HEAD:"${{ github.ref_name }}"
