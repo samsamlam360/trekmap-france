@@ -241,6 +241,26 @@ try:
     immersive_list.click()
     wait.until(lambda d: d.find_element(By.ID, "tm-unified-drawer").is_displayed())
     assert driver.execute_script("return window.TrekMapImmersive.isListOpen()")
+    # The bottom carrousel chevron must REALLY collapse to its 44px header,
+    # without moving the header away from the bottom edge.
+    immersive_head=driver.find_element(By.ID, "tm-drawer-head")
+    immersive_head.click()
+    wait.until(lambda d: "collapsed" in d.find_element(
+        By.ID, "tm-unified-drawer").get_attribute("class").split())
+    wait.until(lambda d: d.execute_script(
+        "return document.getElementById('tm-unified-drawer').getBoundingClientRect().height<=46"))
+    geometry=driver.execute_script(
+        "let r=document.getElementById('tm-unified-drawer').getBoundingClientRect();"
+        "return {top:r.top,bottom:r.bottom,height:r.height,viewport:innerHeight};")
+    assert geometry["bottom"]>=geometry["viewport"]-17, geometry
+    assert not driver.find_element(By.ID, "tm-drawer-track").is_displayed(), (
+        "The collapsed drawer must hide its card list")
+    immersive_head.click()
+    wait.until(lambda d: "collapsed" not in d.find_element(
+        By.ID, "tm-unified-drawer").get_attribute("class").split())
+    wait.until(lambda d: d.execute_script(
+        "return document.getElementById('tm-unified-drawer').getBoundingClientRect().height>100"))
+    assert driver.find_element(By.ID, "tm-drawer-track").is_displayed()
     immersive_list.click()
     wait.until(lambda d: not d.find_element(By.ID, "tm-unified-drawer").is_displayed())
     driver.find_element(By.ID, "tm-map-immersive-exit").click()
@@ -414,6 +434,43 @@ try:
     wait.until(lambda d: d.find_elements(By.CSS_SELECTOR, '#modal .tm-detail-extra'))
     driver.find_element(By.ID,'modal-close').click()
     wait.until(lambda d: not d.find_element(By.ID,'modal-backdrop').is_displayed())
+    # Regression: the detail modal is a sibling of #app. Native fullscreen of
+    # #app hid it completely; fullscreening the document root keeps it visible.
+    map_options.click()
+    wait.until(lambda d: "tm-show" in options_panel.get_attribute("class").split())
+    driver.find_element(By.CSS_SELECTOR, '[data-map-action="fullscreen"]').click()
+    wait.until(lambda d: d.execute_script("return window.TrekMapImmersive.isActive()"))
+    details_diagnostic=driver.execute_script(
+        "const a=document.getElementById('tm-desktop-info'),"
+        "b=document.getElementById('tm-info-open-detail'),"
+        "c=document.getElementById('tm-info-controls'),"
+        "d=document.querySelector('#tm-desktop-info .tm-info-selected');"
+        "const r=x=>{let z=x.getBoundingClientRect();return {left:z.left,top:z.top,"
+        "right:z.right,bottom:z.bottom,height:z.height,width:z.width,"
+        "display:getComputedStyle(x).display,visibility:getComputedStyle(x).visibility}};"
+        "return {selected:window.TrekMapExplorerFocus?.getSelected(),"
+        "infoClasses:a.className,drawerClasses:document.getElementById('tm-unified-drawer').className,"
+        "fullscreen:document.fullscreenElement?.tagName||null,info:r(a),selectedCard:r(d),"
+        "controls:r(c),hidden:c.hidden,button:r(b),viewport:innerWidth};")
+    # Native fullscreen may resize the viewport below the desktop info
+    # breakpoint. The toolbar must still provide a working Fiche action.
+    wait.until(lambda d: d.find_element(By.ID, "tm-map-immersive-detail").is_displayed(),
+               message=f"Immersive Fiche action unavailable: {details_diagnostic}")
+    driver.find_element(By.ID, "tm-map-immersive-detail").click()
+    wait.until(lambda d: d.find_element(By.ID, "modal-backdrop").is_displayed())
+    fullscreen_detail=driver.execute_script(
+        "const f=document.fullscreenElement,b=document.getElementById('modal-backdrop');"
+        "const r=b.getBoundingClientRect();"
+        "return {native:f&&f.tagName,modalInTopLayer:!f||f.contains(b),"
+        "modalVisible:getComputedStyle(b).display!=='none',height:r.height,"
+        "modalText:document.getElementById('modal').textContent.slice(0,300)}")
+    assert fullscreen_detail["modalInTopLayer"] and fullscreen_detail["modalVisible"] and (
+        fullscreen_detail["height"]>100), fullscreen_detail
+    assert name in fullscreen_detail["modalText"], fullscreen_detail
+    driver.find_element(By.ID, "modal-close").click()
+    wait.until(lambda d: not d.find_element(By.ID, "modal-backdrop").is_displayed())
+    driver.find_element(By.ID, "tm-map-immersive-exit").click()
+    wait.until(lambda d: not d.execute_script("return window.TrekMapImmersive.isActive()"))
     # Actual pointer hover without a button pressed must not deactivate clicks.
     driver.execute_script(
         "let track=document.getElementById('tm-drawer-track');"

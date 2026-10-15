@@ -43,8 +43,15 @@ body.tm-map-immersive.tm-immersive-list-open #tm-unified-drawer{
   bottom:12px!important;width:auto!important;height:var(--tm-drawer)!important;
   z-index:5300!important;visibility:visible!important;opacity:1!important
 }
-body.tm-map-immersive.tm-immersive-list-open #tm-drawer-track{
-  visibility:visible!important
+body.tm-map-immersive.tm-immersive-list-open #tm-unified-drawer.collapsed{
+  /* Keep the 44px header at the BOTTOM when its chevron is clicked. */
+  height:44px!important;min-height:0!important
+}
+body.tm-map-immersive.tm-immersive-list-open #tm-unified-drawer.collapsed #tm-drawer-track{
+  display:none!important;visibility:hidden!important;pointer-events:none!important
+}
+body.tm-map-immersive.tm-immersive-list-open #tm-unified-drawer:not(.collapsed) #tm-drawer-track{
+  display:flex!important;visibility:visible!important
 }
 body.tm-map-immersive #tm-map-control-dock{
   top:14px!important;left:14px!important;right:auto!important;z-index:6600!important
@@ -73,6 +80,7 @@ body.tm-map-immersive #tm-map-immersive-actions{display:flex}
   box-shadow:0 7px 23px rgba(5,48,27,.17);padding:0 14px;
   font:800 12px/1.2 Inter,system-ui,sans-serif;cursor:pointer
 }
+#tm-map-immersive-actions #tm-map-immersive-detail[hidden]{display:none!important}
 #tm-map-immersive-exit{background:#0b8058!important;border-color:#0b8058!important;
   color:white!important}
 #tm-map-immersive-actions button:hover{filter:brightness(.96)}
@@ -109,11 +117,33 @@ body.tm-map-immersive #tm-map-immersive-actions{display:flex}
   buttons.innerHTML=
     '<button type="button" id="tm-map-immersive-list" aria-pressed="false"'+
     ' aria-controls="tm-unified-drawer">☷ Treks</button>'+
+    '<button type="button" id="tm-map-immersive-detail" hidden'+
+    ' aria-label="Ouvrir la fiche complète du trek sélectionné">↗ Fiche</button>'+
     '<button type="button" id="tm-map-immersive-exit" aria-label="Quitter le mode carte">✕ Quitter</button>';
   app.appendChild(buttons);
   var exit=buttons.querySelector('#tm-map-immersive-exit');
   var list=buttons.querySelector('#tm-map-immersive-list');
+  var detail=buttons.querySelector('#tm-map-immersive-detail');
   var hadCollapsed=false,requestedNative=false;
+  function selectedTrekId(){
+    var focus=window.TrekMapExplorerFocus;
+    var id=focus&&typeof focus.getSelected==='function'?focus.getSelected():null;
+    if(id==null){
+      var card=document.querySelector('#tm-drawer-track .tm-trek-tile.selected');
+      id=card?card.dataset.id:null;
+    }
+    var num=Number(id);
+    return id!=null&&Number.isFinite(num)?num:null;
+  }
+  function syncDetail(){
+    detail.hidden=selectedTrekId()===null;
+  }
+  detail.addEventListener('click',function(){
+    var id=selectedTrekId();
+    if(id!==null&&typeof window.openDetail==='function')window.openDetail(id);
+  });
+  document.addEventListener('trekmap:detail-opened',syncDetail);
+  document.addEventListener('trekmap:detail-cleared',syncDetail);
   menuButton.textContent='⛶ Mode carte immersif';
   menuButton.setAttribute('aria-label','Afficher la carte sans les panneaux, avec accès aux treks');
   nativeButton.setAttribute('aria-label','Activer ou quitter le mode carte immersif');
@@ -133,7 +163,8 @@ body.tm-map-immersive #tm-map-immersive-actions{display:flex}
     var on=root.classList.contains('tm-map-immersive');
     menuButton.textContent=on?'⛶ Quitter le mode carte':'⛶ Mode carte immersif';
     menuButton.setAttribute('aria-pressed',String(on));
-    list.setAttribute('aria-pressed',String(root.classList.contains('tm-immersive-list-open')));
+    list.setAttribute('aria-pressed',String(root.classList.contains('tm-immersive-list-open')&&
+      drawer&&!drawer.classList.contains('collapsed')));
   }
   function leave(){
     if(!root.classList.contains('tm-map-immersive'))return;
@@ -153,11 +184,15 @@ body.tm-map-immersive #tm-map-immersive-actions{display:flex}
     hadCollapsed=!!(drawer&&drawer.classList.contains('collapsed'));
     root.classList.remove('tm-immersive-list-open');
     root.classList.add('tm-map-immersive');
-    reflect();closeMenu();invalidate();
-    // Browser full screen when permitted, useful CSS focus mode as fallback.
-    if(typeof app.requestFullscreen==='function'){
+    syncDetail();reflect();closeMenu();invalidate();
+    // Use the DOCUMENT root as native fullscreen target. Modal dialogs and
+    // toast messages are siblings of #app; fullscreening only #app made the
+    // "Voir la fiche" dialog invisible despite its being open.
+    // The CSS focus mode remains a fallback on restricted browsers.
+    var fullscreenRoot=document.documentElement;
+    if(typeof fullscreenRoot.requestFullscreen==='function'){
       try{
-        var response=app.requestFullscreen({navigationUI:'hide'});
+        var response=fullscreenRoot.requestFullscreen({navigationUI:'hide'});
         requestedNative=true;
         if(response&&response.then)response.then(invalidate).catch(function(){
           requestedNative=false;invalidate();
@@ -181,6 +216,18 @@ body.tm-map-immersive #tm-map-immersive-actions{display:flex}
     if(on&&drawer)drawer.classList.remove('collapsed');
     reflect();invalidate();
   });
+  var drawerHead=document.getElementById('tm-drawer-head');
+  if(drawerHead){
+    // The existing header already toggles .collapsed. Reflect that state in
+    // the immersive Treks button, without adding a duplicate click handler.
+    drawerHead.addEventListener('click',function(){
+      requestAnimationFrame(function(){
+        list.setAttribute('aria-pressed',String(
+          root.classList.contains('tm-immersive-list-open')&&
+          drawer&&!drawer.classList.contains('collapsed')));
+      });
+    });
+  }
   document.addEventListener('fullscreenchange',function(){
     // Esc leaves browser fullscreen: restore every part of the original UI.
     if(root.classList.contains('tm-map-immersive')&&requestedNative&&!document.fullscreenElement)leave();
@@ -199,6 +246,7 @@ body.tm-map-immersive #tm-map-immersive-actions{display:flex}
     enter:enter,leave:leave,isActive:function(){return root.classList.contains('tm-map-immersive')},
     isListOpen:function(){return root.classList.contains('tm-immersive-list-open')}
   };
+  syncDetail();
   reflect();
 })();
 </script>
