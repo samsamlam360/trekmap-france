@@ -160,7 +160,7 @@ def _photo_url(value):
             raise HTTPException(422, "Image locale illisible.")
         if not raw or len(raw) > 120 * 1024:
             raise HTTPException(422, "Image locale trop volumineuse (120 Ko max).")
-        jpeg = raw.startswith(b"\\xff\\xd8\\xff") and raw.endswith(b"\\xff\\xd9")
+        jpeg = raw.startswith(b"\xff\xd8\xff") and raw.endswith(b"\xff\xd9")
         webp = len(raw) >= 12 and raw[:4] == b"RIFF" and raw[8:12] == b"WEBP"
         if (match.group(1) == "jpeg" and not jpeg) or (match.group(1) == "webp" and not webp):
             raise HTTPException(422, "Le fichier n'est pas une image JPEG/WebP valide.")
