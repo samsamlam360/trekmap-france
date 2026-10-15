@@ -1,0 +1,32 @@
+name: Discover Centre-Val de Loire multi-day hiking relations
+on:
+  push:
+    branches: ["feat/centre-multiday-hikes-*"]
+    paths:
+      - "scripts/probe_centre_relations.py"
+      - ".github/workflows/centre-hiking-discovery.yml"
+permissions:
+  contents: write
+jobs:
+  discover:
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref_name }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: python -m pip install requests
+      - name: Fetch open hiking route relation metadata (no DB operations)
+        run: python scripts/probe_centre_relations.py
+      - name: Commit inspectable candidate metadata to review branch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/centre_relation_candidates.json
+          if git diff --cached --quiet; then exit 0; fi
+          git commit -m "research(Centre): traceable OSM multi-day route candidate IDs"
+          git pull --rebase origin "${{ github.ref_name }}"
+          git push origin HEAD:"${{ github.ref_name }}"
