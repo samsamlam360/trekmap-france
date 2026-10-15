@@ -9,6 +9,7 @@ import sys
 from collections import Counter
 from pathlib import Path
 import requests
+from pyproj import Transformer
 
 ROOT=Path(__file__).resolve().parents[1]
 sys.path.insert(0,str(ROOT/"scripts"))
@@ -39,6 +40,36 @@ KNOWN={
 }
 HEADERS={"User-Agent":"TrekMap-France/long-distance-open-data-review (attributed educational use)",
          "Accept":"application/json, application/geo+json;q=0.9,*/*;q=0.5"}
+
+LAMBERT93_TO_WGS84=Transformer.from_crs("EPSG:2154","EPSG:4326",always_xy=True)
+def wgs84_feature(feature):
+    # Some Gard "GeoJSON" files use Lambert-93 metres despite the GeoJSON
+    # name. Convert ONLY documented, plausible EPSG:2154 projected values.
+    geometry=feature.get("geometry") or {}
+    typ=geometry.get("type")
+    if typ not in ("LineString","MultiLineString"):return feature
+    lines=base.segments(geometry)
+    if not lines:return feature
+    first=next((p for line in lines for p in line if isinstance(p,list) and len(p)>=2),None)
+    if first is None:return feature
+    lon,lat=first[:2]
+    try:lon,lat=float(lon),float(lat)
+    except (TypeError,ValueError):return feature
+    if not (600000<=lon<=1200000 and 6100000<=lat<=7200000):
+        return feature  # Already geographic, or unknown projection: reject later.
+    converted=[]
+    for line in lines:
+        fresh=[]
+        for p in line:
+            try:x,y=float(p[0]),float(p[1])
+            except (IndexError,TypeError,ValueError):return feature
+            if not (600000<=x<=1200000 and 6100000<=y<=7200000):return feature
+            lon2,lat2=LAMBERT93_TO_WGS84.transform(x,y)
+            fresh.append([lon2,lat2])
+        converted.append(fresh)
+    clean=dict(feature)
+    clean["geometry"]={"type":typ,"coordinates":converted[0] if typ=="LineString" else converted}
+    return clean
 
 def select_resources(metadata,source_id,maximum):
     items=[]
@@ -201,7 +232,7 @@ def build():
                         record["samples"]=[]
                         for f in features[:8]:
                             segments=base.segments(f.get("geometry") or {})
-                            lines=[base.parse_line(l) for l in segments]
+                            lines=[base.parse_line(l) for l in base.segments(wgs84_feature(f).get("geometry") or {})]
                             record["samples"].append({
                                 "name":base.attrs(f.get("properties") or {},"name","nom","nom_itineraire"),
                                 "geometry_type":(f.get("geometry") or {}).get("type"),
@@ -220,7 +251,8 @@ def build():
                             })
                     candidates=[]
                     for f in features:
-                        t=make_route(f,src,rid)
+                        f_geo=wgs84_feature(f)
+                        t=make_route(f_geo,src,rid)
                         if t:candidates.append(t)
                     record["accepted"]=len(candidates)
                     record["preview"]=[{"name":x["name"],"km":x["distance"]}
