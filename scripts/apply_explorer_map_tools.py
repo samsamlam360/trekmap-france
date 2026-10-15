@@ -71,6 +71,15 @@ block=r'''<!-- TREKMAP_MAP_TOOLS_2026_START -->
 @media(max-width:820px){
   #tm-search-filter-toggle{display:none!important}
   #tm-map-filter-popover{display:none!important}
+  /* The existing bottom sheet must remain visible when its real mobile tab
+     opens. Override the desktop Explorer's hidden-sidebar cascade. */
+  body.tm-mobile-filters-open #sidebar{
+    display:flex!important;opacity:1!important;
+    visibility:visible!important;pointer-events:auto!important
+  }
+  body.tm-mobile-filters-open #sidebar .filters{
+    visibility:visible!important;pointer-events:auto!important
+  }
 }
 /* Clusters are view-only markers. The underlying authentic trekking lines remain intact. */
 .tm-trek-cluster-icon{background:none!important;border:0!important}
