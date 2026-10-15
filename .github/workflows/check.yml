@@ -88,6 +88,8 @@ jobs:
           python scripts/apply_trekbrain_ui.py
       - name: Tester les intervalles de durée du catalogue
         run: node scripts/test_duration_filter_ranges.mjs
+      - name: Vérifier les 9 itinérances en Centre-Val de Loire
+        run: python scripts/test_centre_multiday_treks.py
       - name: Vérifier le frontend construit
         shell: python
         run: |
