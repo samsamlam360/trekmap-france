@@ -100,29 +100,47 @@ try:
     driver.find_element(By.ID, "tm-main-search-clear").click()
     assert search.get_attribute("value") == "", "Search clear action is broken"
 
-    filter_button = driver.find_element(By.ID, "tm-filter-toggle")
-    filters = driver.find_element(By.CSS_SELECTOR, "#sidebar .filters")
-    assert "tm-collapsed" not in filters.get_attribute("class").split(), (
-        "Desktop filters must start expanded, matching the design"
-    )
+    # Explorer 2026: map is full width; quick filters mirror the real controls.
+    bar = driver.find_element(By.ID, "tm-inline-filters")
+    advanced_button = driver.find_element(By.ID, "tm-inline-advanced")
+    assert bar.is_displayed(), "Quick filters must be visible beside the search"
+    assert not driver.find_element(By.ID, "sidebar").is_displayed(), (
+        "The old permanent left filter panel must be hidden")
     layout = driver.execute_script(
-        "const f=document.querySelector('#sidebar .filters').getBoundingClientRect();"
         "const d=document.getElementById('tm-unified-drawer').getBoundingClientRect();"
-        "const p=document.getElementById('tm-desktop-info').getBoundingClientRect();"
-        "return {filtersH:f.height,filtersRight:f.right,drawerLeft:d.left,"
-        "panelLeft:p.left,panelRight:p.right,viewport:innerWidth};"
+        "const z=document.querySelector('.leaflet-left').getBoundingClientRect();"
+        "const b=document.getElementById('tm-inline-filters').getBoundingClientRect();"
+        "return {drawerLeft:d.left,zoomLeft:z.left,quickLeft:b.left,quickTop:b.top,"
+        "viewport:innerWidth};"
     )
-    assert 300 <= layout["filtersH"] <= 540, f"Desktop filters must be readable yet compact: {layout}"
-    assert layout["drawerLeft"] >= layout["filtersRight"] - 12, (
-        f"Carousel overlaps full-height filters: {layout}"
-    )
-    assert layout["panelRight"] <= layout["viewport"] and (
-        layout["panelLeft"] >= layout["drawerLeft"]), f"Info panel layout invalid: {layout}"
-    was_collapsed = "tm-collapsed" in filters.get_attribute("class").split()
-    filter_button.click()
-    wait.until(lambda d: ("tm-collapsed" in filters.get_attribute("class").split()) != was_collapsed)
-    filter_button.click()
-    wait.until(lambda d: ("tm-collapsed" in filters.get_attribute("class").split()) == was_collapsed)
+    assert layout["drawerLeft"] < 40 and layout["zoomLeft"] < 55, layout
+    assert layout["quickLeft"] > 150 and layout["quickTop"] > 70, layout
+    # Real native quick select triggers the existing filter change handler.
+    from selenium.webdriver.support.ui import Select
+    quick_region = driver.find_element(By.ID, "tm-inline-region")
+    wait.until(lambda d: len(Select(quick_region).options) > 1)
+    first_region = next((o.get_attribute("value") for o in Select(quick_region).options
+                         if o.get_attribute("value")), None)
+    assert first_region, "No region option loaded into quick filter"
+    Select(quick_region).select_by_value(first_region)
+    wait.until(lambda d: d.find_element(By.ID, "region-filter").get_attribute("value")
+               == first_region)
+    assert driver.find_element(By.CSS_SELECTOR, "#tm-inline-advanced .tm-active-count").text == "1"
+    advanced_button.click()
+    wait.until(lambda d: "tm-inline-filters-open" in
+               d.find_element(By.TAG_NAME, "body").get_attribute("class").split())
+    assert driver.find_element(By.ID, "sidebar").is_displayed(), "Advanced popup missing"
+    driver.find_element(By.ID, "reset-filters").click()
+    wait.until(lambda d: d.find_element(By.ID, "tm-inline-region").get_attribute("value") == "")
+    driver.find_element(By.ID, "tm-filter-toggle").click()
+    wait.until(lambda d: "tm-inline-filters-open" not in
+               d.find_element(By.TAG_NAME, "body").get_attribute("class").split())
+    assert not driver.find_element(By.ID, "sidebar").is_displayed(), "Popup did not close"
+    # Quick buttons open the existing advanced control instead of duplicated fields.
+    driver.find_element(By.CSS_SELECTOR, '[data-filter-target="distance-range"]').click()
+    wait.until(lambda d: d.find_element(By.ID, "sidebar").is_displayed())
+    driver.find_element(By.ID, "tm-inline-advanced").click()
+    assert not driver.find_element(By.ID, "sidebar").is_displayed()
 
     drawer_button = driver.find_element(By.ID, "tm-drawer-head")
     drawer = driver.find_element(By.ID, "tm-unified-drawer")
