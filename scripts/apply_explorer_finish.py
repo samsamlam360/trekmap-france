@@ -129,6 +129,15 @@ block=r'''<!-- TREKMAP_EXPLORER_FINISH_START -->
 @media(max-width:820px){
   #tm-inline-filters{display:none!important}
 }
+/* Desktop wheel input must not compete with smooth animation and scroll-snap.
+   Preserve native momentum/swipe snapping on phones and touch screens. */
+@media(min-width:821px) and (hover:hover) and (pointer:fine){
+  #tm-drawer-track{
+    scroll-behavior:auto!important;
+    scroll-snap-type:none!important;
+    overscroll-behavior-x:contain!important
+  }
+}
 </style>
 <script id="trekmap-explorer-finish-js">
 (function(){
