@@ -1,6 +1,6 @@
 # Itinéraires publics sous licence ouverte
 
-Le jeu `data/catalogue_open_treks.json` contient **140 tracés réels publiés par quatre organismes publics**, désormais enregistrés dans le catalogue TrekMap sur Neon. Les 12 treks préexistants ont été préservés.
+Le jeu source `data/catalogue_open_treks.json` conserve **140 tracés historiques** publiés par quatre organismes publics à des fins de provenance et de contrôle. Il ne reflète **pas** automatiquement les itinéraires actuellement affichés dans TrekMap : après la suppression demandée des 123 sorties de moins d’un jour, **17 parcours de cette première collecte restent publiés**. Les **35 longs treks** ajoutés ensuite restent disponibles et les deux petits treks personnels ont été préservés. La table `treks` de Neon est la référence du catalogue public.
 
 ## Sources et droits
 
@@ -27,6 +27,6 @@ Ce jeu est séparé des treks personnels des utilisateurs. Aucun itinéraire n'e
 
 `python scripts/prepare_open_treks.py` télécharge cinq fichiers de données ouvertes, produit localement un catalogue JSON contrôlé et **n'écrit jamais dans Neon**. Le workflow GitHub n'exécute cet import que sur une branche de revue. Les fichiers générés sont inclus dans GitHub avant diffusion ; aucun téléchargement supplémentaire n'est lancé au démarrage de Render.
 
-Pour publier dans la table `treks` de Neon : enregistrer uniquement les itinéraires validés, avec `owner_id` rattaché au compte administrateur et `is_public=true`. Les écrits sont additifs, idempotents et soumis aux contrôles de santé habituels. Chaque étape vérifie le nombre de lignes publiées et l'intégrité des géométries. Le processus ne modifie ni les comptes ni les parcours existants.
+Pour publier dans la table `treks` de Neon : enregistrer uniquement les itinéraires validés, avec `owner_id` rattaché au compte administrateur, `is_public=true` **et `duration_days >= 1`**. Les anciens itinéraires publics de moins d'un jour ne doivent **pas être réimportés** depuis le jeu historique. Les écrits sont additifs, idempotents et soumis aux contrôles de santé habituels. Chaque étape vérifie le nombre de lignes publiées et l'intégrité des géométries. Le processus ne modifie ni les comptes ni les parcours existants.
 
 Les voies et espaces naturels évoluent. La présence dans TrekMap n'est **pas une garantie de praticabilité**. Consultez les autorités locales, restrictions saisonnières et conditions météo avant de partir.
