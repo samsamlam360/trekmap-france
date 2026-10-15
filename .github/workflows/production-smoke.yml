@@ -97,3 +97,43 @@ jobs:
                   if kind == "json":
                       json.loads(body.decode("utf-8"))
                   print(f"{path}: HTTP 200, {len(body)} octets")
+
+      - name: Verify all 140 published open-license hikes reach the public map
+        shell: python
+        env:
+          BASE_URL: https://trekmap-france.onrender.com
+        run: |
+          from collections import Counter
+          import json, os, time, urllib.request
+
+          base = os.environ["BASE_URL"].rstrip("/")
+          def load(path):
+              started = time.monotonic()
+              request = urllib.request.Request(base + path,
+                  headers={"User-Agent":"TrekMap-catalog-smoke/1.0"})
+              with urllib.request.urlopen(request, timeout=45) as response:
+                  assert response.status == 200, (path,response.status)
+                  raw = response.read()
+                  data = json.loads(raw)
+              print(f"{path}: {len(raw)} bytes, {time.monotonic()-started:.2f}s")
+              return data
+
+          treks=load("/treks")
+          assert isinstance(treks,list) and len(treks)>=148, len(treks)
+          imported=[t for t in treks if "Licence Ouverte / Open Licence" in str(t.get("description",""))]
+          assert len(imported)==140, f"Expected 140 imported routes, got {len(imported)}"
+          assert len({t["id"] for t in treks})==len(treks), "Duplicated public ID"
+          region=Counter(t["region"] for t in imported)
+          for region_name in ("Bretagne","Auvergne-Rhône-Alpes","Occitanie",
+                              "Provence-Alpes-Côte d'Azur"):
+              assert region[region_name]==35, (region_name,region[region_name])
+          assert sum("Dénivelé non renseigné" in t["description"] for t in imported)==70
+          geo=load("/treks/geojson")
+          assert geo.get("type")=="FeatureCollection", geo.get("type")
+          feats=geo.get("features",[])
+          geo_ids={int(f.get("id", f.get("properties",{}).get("id"))) for f in feats}
+          missing=sorted({int(t["id"]) for t in imported}-geo_ids)
+          assert not missing, f"Imported routes missing from map: {missing[:10]}"
+          assert len(feats)>=140, len(feats)
+          print(f"Public catalog: {len(treks)} visible treks, 140 imported; "
+                f"{len(feats)} map traces, four verified regions.")

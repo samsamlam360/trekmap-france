@@ -127,6 +127,7 @@ jobs:
           node scripts/test_trekbrain_map_workspace.mjs
           node scripts/test_explorer_finish.mjs
           node scripts/test_map_filter_clusters.mjs
+          node scripts/test_open_trek_elevation_ui.mjs
           node scripts/test_immersive_map.mjs
           node scripts/test_trekbrain_v9_distance_contract_ui.mjs
           node scripts/test_trekbrain_close_save.mjs
