@@ -98,7 +98,7 @@ jobs:
                       json.loads(body.decode("utf-8"))
                   print(f"{path}: HTTP 200, {len(body)} octets")
 
-      - name: Verify all 140 published open-license hikes reach the public map
+      - name: Verify curated multi-day open-license hikes reach the public map
         shell: python
         env:
           BASE_URL: https://trekmap-france.onrender.com
@@ -119,30 +119,31 @@ jobs:
               return data
 
           treks=load("/treks")
-          assert isinstance(treks,list) and len(treks)>=148, len(treks)
+          assert isinstance(treks,list) and len(treks)>=52, len(treks)
           old_prefixes=("lannion-tregor:","metropole-lyon:","parc-cevennes:","parc-ecrins:")
           new_prefixes=("cevennes-long:","ecrins-long:","gard-gr:","gard-grp:")
           imported=[t for t in treks if any("Référence : "+key in str(t.get("description",""))
                                               for key in old_prefixes)]
           long_treks=[t for t in treks if any("Référence : "+key in str(t.get("description",""))
                                              for key in new_prefixes)]
-          assert len(imported)==140, f"Expected 140 original open routes, got {len(imported)}"
-          assert len(long_treks)==35, f"Expected 35 new multi-day treks, got {len(long_treks)}"
+          # 123 short open-data circuits were deliberately removed from Neon.
+          # Leave user-created treks untouched, even if they are under one day.
+          assert len(imported)==17, f"Expected 17 retained original open routes, got {len(imported)}"
+          assert len(long_treks)==35, f"Expected 35 multi-day treks, got {len(long_treks)}"
+          assert all(float(t.get("duration_days") or 0)>=1 for t in imported+long_treks), (
+              "A short official open-data walk was unexpectedly republished")
           assert all(float(t["distance"])>=45 and float(t.get("duration_days") or 0)>=2
                      for t in long_treks), "Invalid multi-day lengths / duration"
           assert len({t["id"] for t in treks})==len(treks), "Duplicated public ID"
           region=Counter(t["region"] for t in imported)
-          for region_name in ("Bretagne","Auvergne-Rhône-Alpes","Occitanie",
-                              "Provence-Alpes-Côte d'Azur"):
-              assert region[region_name]==35, (region_name,region[region_name])
-          assert sum("Dénivelé non renseigné" in t["description"] for t in imported)==70
+          assert region=={"Occitanie":9,"Provence-Alpes-Côte d'Azur":8},region
           geo=load("/treks/geojson")
           assert geo.get("type")=="FeatureCollection", geo.get("type")
           feats=geo.get("features",[])
           geo_ids={int(f.get("id", f.get("properties",{}).get("id"))) for f in feats}
           missing=sorted({int(t["id"]) for t in imported+long_treks}-geo_ids)
           assert not missing, f"Imported routes missing from map: {missing[:10]}"
-          assert len(feats)>=183, len(feats)
-          print(f"Public catalog: {len(treks)} visible treks; "
-                f"140 original open routes + 35 new long routes; "
-                f"{len(feats)} map traces validated.")
+          assert len(feats)>=52, len(feats)
+          print(f"Curated catalog: {len(treks)} visible treks; "
+                f"17 retained original open routes + 35 long routes; "
+                f"{len(feats)} map traces validated. User-created treks preserved.")
