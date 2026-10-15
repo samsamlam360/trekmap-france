@@ -118,6 +118,13 @@ try:
     # Real native quick select triggers the existing filter change handler.
     from selenium.webdriver.support.ui import Select
     quick_region = driver.find_element(By.ID, "tm-inline-region")
+    # CI PostGIS has no catalog regions: simulate the async option population
+    # on the original select and verify that the quick mirror follows it.
+    if len(Select(quick_region).options) <= 1:
+        driver.execute_script(
+            "document.getElementById('region-filter').add("
+            "new Option('Région test CI','region-test-ci'))"
+        )
     wait.until(lambda d: len(Select(quick_region).options) > 1)
     first_region = next((o.get_attribute("value") for o in Select(quick_region).options
                          if o.get_attribute("value")), None)
