@@ -279,6 +279,23 @@ body.tm-filters-collapsed #tm-unified-drawer{left:14px!important}
   async function openTrek(id){
     const numeric=Number(id);if(!Number.isFinite(numeric))return;const t=await fetchTrek(numeric);if(!t){typeof toast==='function'&&toast('Trek introuvable.');return}selectedId=numeric;const coords=coordsOf(t);try{map.invalidateSize();if(coords.length>1){const b=L.latLngBounds(coords);map.fitBounds(b.pad(.08),{paddingTopLeft:window.innerWidth>820?[filters?.classList.contains('tm-collapsed')?40:390,55]:[25,55],paddingBottomRight:window.innerWidth>820?[60,215]:[25,190],maxZoom:15,animate:true})}}catch(_){}applyUnifiedFilters();setTimeout(()=>{try{window.openDetail(numeric)}catch(e){console.error(e)}},100)
   }
+  // Clear the contextual selection without clearing filters, moving the map
+  // or mutating a trek. Called only for a click on the empty Leaflet map.
+  function clearSelectedTrek(){
+    if(selectedId===null)return;
+    selectedId=null;
+    renderInfo(null);
+    const previous=track.scrollLeft;
+    track.querySelectorAll('.tm-trek-tile.selected').forEach(card=>card.classList.remove('selected'));
+    track.scrollLeft=previous;
+    try{
+      if(typeof detailLayer!=='undefined'&&detailLayer&&map.hasLayer(detailLayer)){
+        map.removeLayer(detailLayer);detailLayer=null;
+      }
+    }catch(_){}
+    document.dispatchEvent(new CustomEvent('trekmap:detail-cleared'));
+  }
+  window.TrekMapClearSelectedTrek=clearSelectedTrek;
   window.TrekMapOpenTrek=openTrek;
   document.addEventListener('trekmap:detail-opened',e=>{
     const id=Number(e.detail?.id);if(!Number.isFinite(id))return;
