@@ -4,6 +4,9 @@ All tables are additive and scoped to the authenticated account. Schema
 initialization is lazy and isolated from the critical login/route pipeline.
 """
 import json
+import base64
+import binascii
+import re
 from datetime import date
 from urllib.parse import urlsplit
 
@@ -143,8 +146,27 @@ def _allowed(db, uid, tid):
 
 
 def _photo_url(value):
-    if not isinstance(value, str) or len(value) > 400:
-        raise HTTPException(422, "Lien de photo invalide.")
+    if not isinstance(value, str):
+        raise HTTPException(422, "Photo invalide.")
+    # Images issues du navigateur : enregistrées en base, non sur le disque éphémère de Render.
+    # SVG, HTML, URL data arbitraire et payload non-image sont explicitement interdits.
+    if value.startswith("data:"):
+        match = re.fullmatch(r"data:image/(jpeg|webp);base64,([A-Za-z0-9+/]+={0,2})", value)
+        if not match or len(match.group(2)) > 170000:
+            raise HTTPException(422, "Image locale invalide ou trop volumineuse (120 Ko max).")
+        try:
+            raw = base64.b64decode(match.group(2), validate=True)
+        except (ValueError, binascii.Error):
+            raise HTTPException(422, "Image locale illisible.")
+        if not raw or len(raw) > 120 * 1024:
+            raise HTTPException(422, "Image locale trop volumineuse (120 Ko max).")
+        jpeg = raw.startswith(b"\xff\xd8\xff") and raw.endswith(b"\xff\xd9")
+        webp = len(raw) >= 12 and raw[:4] == b"RIFF" and raw[8:12] == b"WEBP"
+        if (match.group(1) == "jpeg" and not jpeg) or (match.group(1) == "webp" and not webp):
+            raise HTTPException(422, "Le fichier n'est pas une image JPEG/WebP valide.")
+        return value
+    if len(value) > 400:
+        raise HTTPException(422, "Lien de photo trop long.")
     try:
         u = urlsplit(value)
         if u.scheme != "https" or not u.hostname or u.username or u.password or u.port not in (None, 443):
@@ -267,6 +289,8 @@ def save_journey(trek_id:int,payload: JourneyPayload,user=Depends(core.current_u
     if payload.completed_on and payload.completed_on > date.today():
         raise HTTPException(422, "La date de réalisation ne peut pas être future.")
     urls = [_photo_url(v) for v in payload.photo_urls]
+    if sum(u.startswith('data:image/') for u in urls) > 1:
+        raise HTTPException(422, 'Une seule photo locale par aventure.')
     db = _db()
     try:
         _allowed(db,user["id"],trek_id)

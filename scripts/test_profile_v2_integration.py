@@ -3,6 +3,7 @@
 Never executes on Neon/Render/production URLs, and cleans up every test row.
 """
 import os
+import base64
 from datetime import date
 from uuid import uuid4
 
@@ -54,16 +55,20 @@ try:
         preferences={"daily_km":19,"difficulty":"medium","lodging":"camping",
                      "route_type":"Boucle","transit":True,"water":True,"food":True,"sleep":True})
     profile_v2.save_settings(settings,user=user)
+    local_photo = "data:image/jpeg;base64," + base64.b64encode(
+        b"\xff\xd8\xff" + b"test-local-photo" + b"\xff\xd9"
+    ).decode("ascii")
     profile_v2.save_journey(trek_id,
         profile_v2.JourneyPayload(status="completed",completed_on=date(2026,8,12),
             actual_distance_km=21.7,actual_ascent_m=421,rating=4,
-            notes="Notes CI strictement privées",photo_urls=["https://example.org/photo.jpg"]),user=user)
+            notes="Notes CI strictement privées",photo_urls=["https://example.org/photo.jpg", local_photo]),user=user)
     changed=profile_v2.dashboard(user=user)
     assert changed["stats"]["completed"]==1
     assert changed["stats"]["actual_km"]==21.7
     assert changed["stats"]["actual_ascent_m"]==421
     assert changed["achievements"]==["Premier trek terminé"]
     assert changed["settings"]["preferences"]["daily_km"]==19
+    assert local_photo in changed["journeys"][0]["photo_urls"]
 
     collection_id=profile_v2.add_collection(profile_v2.CollectionPayload(name="Montagnes CI"),user=user)["id"]
     profile_v2.add_to_collection(collection_id,trek_id,user=user)
@@ -78,6 +83,7 @@ try:
     assert "email" not in shared
     assert "Notes CI strictement privées" not in str(shared)
     assert "https://example.org/photo.jpg" not in str(shared)
+    assert local_photo not in str(shared)
 
     settings.share_completed=True
     profile_v2.save_settings(settings,user=user)

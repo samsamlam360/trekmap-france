@@ -49,7 +49,13 @@ clarity_css = r'''
 .tm-route-day-details:not([open]) .tm-route-day-rows{display:none!important}
 .tm-route-day-tooltip{font-weight:800!important}
 @media(max-width:820px){
-  .leaflet-top.leaflet-left .tm-route-day-legend{margin-left:52px!important;margin-top:10px!important}
+  /* Même emplacement que l'ancien logo, à droite du dock de zoom. */
+  #map .leaflet-top.leaflet-right .tm-route-day-legend{
+    position:fixed!important;top:calc(var(--tm-top,64px) + 10px)!important;
+    right:10px!important;left:auto!important;margin:0!important;
+    z-index:1450!important;max-height:165px!important;overflow:auto!important;
+    border:1px solid #d5e7dd!important;box-shadow:0 8px 22px rgba(12,53,36,.16)!important
+  }
   .tm-route-day-legend{
     min-width:0!important;max-width:calc(100vw - 135px)!important;max-height:none!important;
     padding:8px!important;font-size:10px!important
@@ -101,14 +107,14 @@ legend_pattern = re.compile(
     flags=re.S,
 )
 legend_replacement = r'''  function makeLegend(segments,title){
-    const control=L.control({position:'topleft'});control.onAdd=()=>{
+    const control=L.control({position:window.matchMedia('(max-width:820px)').matches?'topright':'topleft'});control.onAdd=()=>{
       const div=L.DomUtil.create('div','tm-route-day-legend');
       const rows=segments.map((seg,i)=>{
         const distance=segmentDistance(seg),color=palette[i%palette.length];
         const kmText=distance>0?` · ${distance.toFixed(1)} km`:'';
         return `<div class="tm-route-day-row"><span class="tm-route-day-chip" style="background:${color}">J${i+1}</span><span class="tm-route-day-row-text">Jour ${i+1}${kmText}</span></div>`;
       }).join('');
-      div.innerHTML=`<details class="tm-route-day-details" ${window.innerWidth>=1500?'open':''}><summary>${title} · ${segments.length} jour${segments.length>1?'s':''}</summary><div class="tm-route-day-rows">${rows}</div>`+'<small><b style="display:inline;color:#166534">D</b> départ · <b style="display:inline;color:#b42318">A</b> arrivée</small></details>';
+      div.innerHTML=`<details class="tm-route-day-details" ${window.innerWidth<=820||window.innerWidth>=1500?'open':''}><summary>${title} · ${segments.length} jour${segments.length>1?'s':''}</summary><div class="tm-route-day-rows">${rows}</div>`+'<small><b style="display:inline;color:#166534">D</b> départ · <b style="display:inline;color:#b42318">A</b> arrivée</small></details>';
       L.DomEvent.disableClickPropagation(div);L.DomEvent.disableScrollPropagation(div);return div;
     };control.addTo(map);return control;
   }

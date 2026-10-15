@@ -86,6 +86,11 @@ block=r'''<!-- TREKMAP_PROFILE_V2_START -->
   padding:9px 12px;border-radius:10px;font-size:12px}
 .tm-p-photos{display:flex;flex-wrap:wrap;gap:7px}
 .tm-p-photos a{font-size:12px;color:#176c4d;text-decoration:underline}
+.tm-p-photos img{display:block;width:105px;height:80px;object-fit:cover;border-radius:10px;border:1px solid #c7ddcd}
+.tm-p-local-photo{display:flex;align-items:center;gap:10px;min-height:60px;padding:9px;border:1px dashed #a8cfb5;border-radius:12px;background:#f3f9f5;color:#557462;font-size:12px}
+.tm-p-local-photo img{width:108px;height:85px;object-fit:cover;border-radius:9px}
+.tm-p-form input[type=file]{padding:9px;background:#f8fbf9}
+.tm-p-form input[type=file]::file-selector-button{border:0;border-radius:8px;padding:8px;margin-right:10px;background:#e1f2e8;color:#176b45;font-weight:800}
 .tm-p-close-mobile{display:none}
 #tm-profile-v2 :is(button,input,textarea,select,a):focus-visible{outline:3px solid #ecb747!important;outline-offset:2px}
 @media(max-width:1050px){.tm-p-shell{grid-template-columns:200px 1fr;gap:12px;padding:12px}
@@ -169,6 +174,38 @@ const accountTreks=function(){
   return [...m.values()];
 };
 function journey(id){return (model&&model.journeys||[]).find(function(j){return Number(j.trek_id)===Number(id)})}
+/* Photo locale compressée sur le téléphone ou PC avant sauvegarde privée. */
+async function localPhotoData(file){
+ if(!file)throw Error('Choisis une image.');
+ if(!/^image\/(jpeg|png|webp|heic|heif)$/i.test(file.type))throw Error('Choisis une image JPG, PNG, WebP ou HEIC.');
+ if(file.size>12*1024*1024)throw Error('Photo trop volumineuse (12 Mo maximum avant compression).');
+ const objectUrl=URL.createObjectURL(file);
+ let image;
+ try{
+  image=await new Promise(function(resolve,reject){
+   const im=new Image();
+   im.onload=function(){resolve(im)};
+   im.onerror=function(){reject(Error('Ce format d’image n’est pas pris en charge par ton navigateur. Utilise JPG ou PNG.'))};
+   im.src=objectUrl;
+  });
+ }finally{URL.revokeObjectURL(objectUrl)}
+ if(!image.naturalWidth||!image.naturalHeight)throw Error('Image illisible.');
+ for(const limit of [960,800,680,540,420]){
+  const ratio=Math.min(1,limit/Math.max(image.naturalWidth,image.naturalHeight));
+  const canvas=document.createElement('canvas');
+  canvas.width=Math.max(1,Math.round(image.naturalWidth*ratio));
+  canvas.height=Math.max(1,Math.round(image.naturalHeight*ratio));
+  const ctx=canvas.getContext('2d');
+  if(!ctx)throw Error('Compression de la photo indisponible.');
+  ctx.fillStyle='#ffffff';ctx.fillRect(0,0,canvas.width,canvas.height);
+  ctx.drawImage(image,0,0,canvas.width,canvas.height);
+  for(const quality of [.8,.68,.54]){
+   const data=canvas.toDataURL('image/jpeg',quality);
+   if(data.startsWith('data:image/jpeg;base64,')&&data.length<=130000)return data;
+  }
+ }
+ throw Error('Photo trop détaillée pour le stockage gratuit. Essaie une autre image.');
+}
 function card(t,actions){
   return '<div class="tm-p-item"><div><b>'+e(t.name)+'</b><small>'+e(t.region||'France')+' · '+num(t.distance).toFixed(1)+' km</small></div>'+
     (actions||'<button class="tm-p-btn" data-p-select="'+Number(t.id)+'">Gérer</button>')+'</div>';
@@ -207,6 +244,9 @@ function projects(){
   const treks=accountTreks();
   const current=selected!=null?treks.find(function(t){return Number(t.id)===Number(selected)}):null;
   const j=current?journey(current.id):null;
+  const photos=j&&j.photo_urls||[];
+  const localPhoto=photos.find(function(u){return /^data:image\/(jpeg|webp);base64,/.test(u)})||'';
+  const photoLinks=photos.filter(function(u){return /^https:\/\//.test(u)});
   const st=j&&j.status||'planned';
   let panel='';
   if(current){
@@ -221,7 +261,10 @@ function projects(){
         '<label>Dénivelé réel (m)<input type="number" min="0" max="150000" name="actual_ascent_m" value="'+e(j?.actual_ascent_m==null?'':j.actual_ascent_m)+'"></label>'+
         '<label>Note de la sortie<select name="rating"><option value="">Sans note</option>'+
            [1,2,3,4,5].map(function(x){return '<option value="'+x+'">'+x+'/5</option>'}).join('')+'</select></label></div>'+
-      '<label>Liens de photos (un URL HTTPS par ligne, maximum 5)<textarea name="photos" placeholder="https://…" maxlength="2100">'+e((j&&j.photo_urls||[]).join('\n'))+'</textarea></label>'+
+      '<label>Ajouter une photo depuis ton appareil<input type="file" name="local_photo" accept="image/jpeg,image/png,image/webp,image/heic,image/heif"></label>'+
+      '<div class="tm-p-local-photo" id="tm-p-local-photo-preview">'+(localPhoto?'<img src="'+e(localPhoto)+'" alt="Photo enregistrée">':'<span>Aucune photo personnelle ajoutée.</span>')+'</div>'+
+      (localPhoto?'<label class="tm-p-check"><input type="checkbox" name="remove_photo"> Supprimer cette photo</label>':'')+
+      '<label>Liens de photos facultatifs (HTTPS, maximum 5 au total)<textarea name="photos" placeholder="https://…" maxlength="2100">'+e(photoLinks.join('\n'))+'</textarea></label>'+
       '<div class="tm-p-inline"><button type="submit" class="tm-p-btn primary">Enregistrer mon aventure</button>'+
       '<button type="button" class="tm-p-btn" data-p-plan="'+Number(current.id)+'">Checklist et préparation</button>'+
       '<button type="button" class="tm-p-btn" data-p-open-trek="'+Number(current.id)+'">Voir la fiche du trek</button></div></form>'+
@@ -244,7 +287,7 @@ function journal(){
       return '<div class="tm-p-item"><div><b>'+e(j.name)+'</b><small>'+e(j.region)+' · '+e(j.completed_on||'Date non indiquée')+' · '+
         (j.actual_distance_km==null?'Distance non renseignée':num(j.actual_distance_km).toFixed(1)+' km')+
         (j.rating?' · '+j.rating+'/5':'')+'</small><small>'+e(j.notes||'')+'</small>'+
-        '<div class="tm-p-photos">'+(j.photo_urls||[]).map(function(u,i){return '<a target="_blank" rel="noopener noreferrer nofollow" href="'+e(u)+'">Photo '+(i+1)+' ↗</a>'}).join('')+'</div></div>'+
+        '<div class="tm-p-photos">'+(j.photo_urls||[]).map(function(u,i){return /^data:image\/(jpeg|webp);base64,/.test(u)?'<img loading="lazy" src="'+e(u)+'" alt="Photo de randonnée '+(i+1)+'">':'<a target="_blank" rel="noopener noreferrer nofollow" href="'+e(u)+'">Photo '+(i+1)+' ↗</a>'}).join('')+'</div></div>'+
         '<button class="tm-p-btn" data-p-select="'+Number(j.trek_id)+'">Modifier</button></div>';
     }).join(''):'<p class="tm-p-muted">Aucune aventure terminée déclarée. Tu peux en marquer une dans « Mes aventures ».</p>')+
     '</div></div><div class="tm-p-card" style="margin-top:15px"><h3>Mes accomplissements</h3><div class="tm-p-badges">'+
@@ -424,6 +467,18 @@ root.addEventListener('click',async function(event){
 });
 root.addEventListener('change',function(ev){
  if(ev.target.name==='status'){const f=el('tm-p-journey-form'),d=el('tm-p-completion');if(f&&d)d.hidden=f.elements.status.value!=='completed'}
+ if(ev.target.name==='local_photo'){
+  const preview=el('tm-p-local-photo-preview'),file=ev.target.files&&ev.target.files[0];
+  if(!preview||!file)return;
+  if(!/^image\/(jpeg|png|webp|heic|heif)$/i.test(file.type)||file.size>12*1024*1024){
+   ev.target.value='';announce('Choisis une image JPG, PNG, WebP ou HEIC de moins de 12 Mo.');return;
+  }
+  const url=URL.createObjectURL(file),img=document.createElement('img');
+  img.alt='Aperçu de la photo choisie';
+  img.onload=function(){URL.revokeObjectURL(url)};
+  img.onerror=function(){URL.revokeObjectURL(url);preview.textContent='Impossible de prévisualiser ce format.'};
+  img.src=url;preview.replaceChildren(img);
+ }
  if(ev.target.matches('[data-p-checkindex]')&&plan){
    plan.checklist[Number(ev.target.dataset.pCheckindex)].done=ev.target.checked;
  }
@@ -434,6 +489,12 @@ root.addEventListener('submit',async function(ev){
   if(f.id==='tm-p-journey-form'){
    const st=f.elements.status.value;
    const urls=f.elements.photos.value.trim().split(/\n+/).map(function(x){return x.trim()}).filter(Boolean);
+   const chosen=f.elements.local_photo.files&&f.elements.local_photo.files[0];
+   const saved=journey(selected)?.photo_urls||[];
+   const previous=saved.find(function(x){return /^data:image\/(jpeg|webp);base64,/.test(x)});
+   if(chosen)urls.unshift(await localPhotoData(chosen));
+   else if(previous&&!f.elements.remove_photo?.checked)urls.unshift(previous);
+   if(urls.length>5)throw Error('Maximum 5 photos par aventure, liens compris.');
    const d={status:st,notes:f.elements.notes.value,completed_on:st==='completed'?(f.elements.completed_on.value||null):null,
     actual_distance_km:st==='completed'&&f.elements.actual_distance_km.value!==''?Number(f.elements.actual_distance_km.value):null,
     actual_ascent_m:st==='completed'&&f.elements.actual_ascent_m.value!==''?Number(f.elements.actual_ascent_m.value):null,
