@@ -379,7 +379,10 @@ try:
         "sidebarDisplay:getComputedStyle(s).display,sidebarVisibility:getComputedStyle(s).visibility,"
         "panelHeight:f.getBoundingClientRect().height,headDisplay:getComputedStyle(h).display,"
         "body:document.body.className};")
-    assert mobile_close.is_displayed(), f"Mobile filter close became hidden: {mobile_info}"
+    # CSS mobile bottom-sheet animates visibility for 180 ms; wait until it
+    # is actually interactable rather than checking immediately after class change.
+    wait.until(lambda d: mobile_close.is_displayed(),
+               message=f"Mobile filter close remained hidden: {mobile_info}")
     mobile_close.click()
     wait.until(lambda d: "tm-mobile-filters-open" not in
                d.find_element(By.TAG_NAME, "body").get_attribute("class").split())
