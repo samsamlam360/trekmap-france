@@ -134,6 +134,7 @@ jobs:
           python scripts/test_trekbrain_route_persistence.py
           node scripts/test_trekbrain_scenic_media.mjs
           python scripts/test_trekbrain_scenic_photo.py
+          python scripts/test_open_trek_catalog.py
 
       - name: Validate Render deployment configuration
         shell: python
