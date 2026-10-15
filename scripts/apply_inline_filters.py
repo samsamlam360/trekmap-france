@@ -213,3 +213,8 @@ if html.count("</body>") != 1:
 html = html.replace("</body>", block + "\n</body>", 1)
 path.write_text(html, encoding="utf-8")
 print("Explorer horizontal filters installed after all desktop/mobile/profile layers")
+
+# Visual polish must be the LAST Render/CI layer, after the existing map,
+# responsive UI and profile installers. No business logic or DB changes.
+from runpy import run_path
+run_path(str(Path(__file__).with_name("apply_explorer_finish.py")))
