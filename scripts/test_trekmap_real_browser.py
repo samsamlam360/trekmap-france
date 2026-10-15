@@ -203,11 +203,14 @@ try:
     assert 0 <= dock_geometry["left"] < 48 and dock_geometry["top"] > 75, dock_geometry
     assert dock_geometry["zoomBottom"] < dock_geometry["buttonTop"], dock_geometry
     assert dock_geometry["buttonRight"] <= dock_geometry["right"] + 1, dock_geometry
-    driver.execute_script("map.setZoom(7)")
+    driver.execute_script("map.setZoom(7, {animate:false})")
+    wait.until(lambda d: d.execute_script("return map.getZoom()===7 && !map._animatingZoom"))
     zoom_in.click()
-    wait.until(lambda d: d.execute_script("return map.getZoom()") == 8)
+    wait.until(lambda d: d.execute_script("return map.getZoom()===8 && !map._animatingZoom"),
+               message="Leaflet + did not zoom with the grouped native control")
     zoom_out.click()
-    wait.until(lambda d: d.execute_script("return map.getZoom()") == 7)
+    wait.until(lambda d: d.execute_script("return map.getZoom()===7 && !map._animatingZoom"),
+               message="Leaflet - did not zoom with the grouped native control")
     map_options = driver.find_element(By.ID, "tm-map-options")
     options_panel = driver.find_element(By.ID, "tm-map-options-panel")
     map_options.click()
