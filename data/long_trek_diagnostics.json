@@ -1,50 +1,247 @@
 {
   "cevennes-long": {
     "license": "fr-lo",
-    "metadata_resources": 0,
+    "metadata_resources": 1,
     "resources": [
       {
-        "accepted": 0,
-        "error": "resource too large",
-        "id": "4eee2f30-32de-4900-9591-be5ee3003e4d"
+        "accepted": 35,
+        "id": "4eee2f30-32de-4900-9591-be5ee3003e4d",
+        "preview": [
+          {
+            "km": 161.32,
+            "name": "Tour en Sud Cévennes"
+          },
+          {
+            "km": 122.45,
+            "name": "Boucle du Tour du Pic Cassini"
+          },
+          {
+            "km": 122.45,
+            "name": "Boucle du Tour du Pic Cassini"
+          },
+          {
+            "km": 122.45,
+            "name": "Boucle du Tour du Pic Cassini"
+          },
+          {
+            "km": 91.24,
+            "name": "Boucle du Goulet aux barrages"
+          },
+          {
+            "km": 91.24,
+            "name": "Boucle du Goulet aux barrages"
+          },
+          {
+            "km": 88.08,
+            "name": "Versant océanique de l'Aigoual"
+          },
+          {
+            "km": 86.08,
+            "name": "Boucle de la Borne au Goulet"
+          },
+          {
+            "km": 86.08,
+            "name": "Boucle de la Borne au Goulet"
+          },
+          {
+            "km": 86.08,
+            "name": "Boucle de la Borne au Goulet"
+          },
+          {
+            "km": 84.83,
+            "name": "En bordure des Causses"
+          },
+          {
+            "km": 80.84,
+            "name": "La Corniche des Cévennes"
+          }
+        ],
+        "raw_count": 1162,
+        "schema": [
+          "id_local",
+          "producteur",
+          "contact",
+          "uuid",
+          "url",
+          "id_osm",
+          "nom_itineraire",
+          "pratique",
+          "type_itineraire",
+          "communes_nom",
+          "communes_code",
+          "depart",
+          "arrivee",
+          "duree",
+          "balisage",
+          "longueur",
+          "difficulte"
+        ]
       }
     ],
     "slug": "itineraires-de-randonnee-du-parc-national-des-cevennes",
     "status": "ok"
   },
   "ecrins-long": {
-    "error": "License is not Open Licence: lov2",
     "license": "lov2",
-    "resources": [],
+    "metadata_resources": 2,
+    "resources": [
+      {
+        "accepted": 11,
+        "id": "0c62905f-a580-4cee-afc1-5feb9607160d",
+        "preview": [
+          {
+            "km": 92.29,
+            "name": "Tour du Vieux Chaillol"
+          },
+          {
+            "km": 91.85,
+            "name": "Tour du Vieux Chaillol en trail"
+          },
+          {
+            "km": 89.34,
+            "name": "Tour du Vieux Chaillol par le Tourond en 6 jours"
+          },
+          {
+            "km": 84.05,
+            "name": "Tour du Pays des Ecrins en 7 jours"
+          },
+          {
+            "km": 76.83,
+            "name": "Tour du Taillefer en 6 jours"
+          },
+          {
+            "km": 76.41,
+            "name": "Tour du Pays des Ecrins en 6 jours"
+          },
+          {
+            "km": 59.52,
+            "name": "De la Grave à l'Argentière-La Bessée sur le GR54 (sans voiture)"
+          },
+          {
+            "km": 56.9,
+            "name": "Tour entre Clarée et Écrins en 6 jours"
+          },
+          {
+            "km": 48.5,
+            "name": "Tour du Taillefer en 4 jours"
+          },
+          {
+            "km": 45.86,
+            "name": "Tour entre Cerces et Ecrins (sans voiture)"
+          },
+          {
+            "km": 45.2,
+            "name": "Tour des refuges en Vallouise en 5 jours"
+          }
+        ],
+        "raw_count": 205,
+        "schema": [
+          "id_local",
+          "producteur",
+          "contact",
+          "uuid",
+          "url",
+          "id_osm",
+          "nom_itineraire",
+          "pratique",
+          "type_itineraire",
+          "communes_nom",
+          "communes_code",
+          "depart",
+          "arrivee",
+          "duree",
+          "balisage",
+          "longueur",
+          "difficulte"
+        ]
+      }
+    ],
     "slug": "randonnees-du-parc-national-des-ecrins",
-    "status": "error"
+    "status": "ok"
   },
   "gard-gr": {
-    "error": "License is not Open Licence: lov2",
     "license": "lov2",
-    "resources": [],
+    "metadata_resources": 1,
+    "resources": [
+      {
+        "accepted": 0,
+        "id": "27092024-676b-4bdb-9236-6cd45af5ce45",
+        "preview": [],
+        "raw_count": 26,
+        "schema": [
+          "id",
+          "structure",
+          "city",
+          "district",
+          "name",
+          "departure",
+          "arrival",
+          "comments",
+          "minimum el",
+          "maximum el"
+        ]
+      }
+    ],
     "slug": "plan-departemental-des-itineraires-de-promenades-et-de-randonnees-pdipr-chemin-de-grande-randonnee",
-    "status": "error"
+    "status": "ok"
   },
   "gard-grp": {
-    "error": "License is not Open Licence: lov2",
     "license": "lov2",
-    "resources": [],
+    "metadata_resources": 1,
+    "resources": [
+      {
+        "accepted": 0,
+        "id": "4ede6499-b84a-4195-a9a9-f1e5b3258791",
+        "preview": [],
+        "raw_count": 6,
+        "schema": [
+          "id",
+          "structure",
+          "city",
+          "district",
+          "name",
+          "departure",
+          "arrival",
+          "comments",
+          "minimum el",
+          "maximum el"
+        ]
+      }
+    ],
     "slug": "pdipr-chemin-de-grande-randonnee-de-pays-grp",
-    "status": "error"
+    "status": "ok"
   },
   "vercors-trails": {
-    "error": "License is not Open Licence: lov2",
     "license": "lov2",
+    "metadata_resources": 0,
     "resources": [],
     "slug": "itineraires-de-randonnee-sur-le-parc-du-vercors",
-    "status": "error"
+    "status": "ok"
   },
   "via-garona": {
-    "error": "License is not Open Licence: lov2",
     "license": "lov2",
-    "resources": [],
+    "metadata_resources": 2,
+    "resources": [
+      {
+        "accepted": 0,
+        "id": "d8a8e1eb-92e9-4676-b1d6-575e323e9aa5",
+        "preview": [],
+        "raw_count": 1,
+        "schema": [
+          "nom_itineraire",
+          "id",
+          "longueur_iti",
+          "geo_point_2d",
+          "gml_id"
+        ]
+      },
+      {
+        "accepted": 0,
+        "error": "resource JSON is not an object",
+        "id": "702cbcf5-19b5-4217-8861-b014aef5f3ec"
+      }
+    ],
     "slug": "via-garona-chemin-de-grande-randonnee-gr861",
-    "status": "error"
+    "status": "ok"
   }
 }
