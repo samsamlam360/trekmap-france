@@ -1,83 +1,53 @@
 {
   "queries": {
-    "randonnée Normandie": {
-      "total": 0,
+    "randonnee": {
+      "total": 70,
+      "eligible": 30,
+      "error": ""
+    },
+    "randonnée": {
+      "total": 70,
+      "eligible": 31,
+      "error": ""
+    },
+    "randonnees": {
+      "total": 57,
+      "eligible": 27,
+      "error": ""
+    },
+    "sentiers de randonnée": {
+      "total": 9,
+      "eligible": 4,
+      "error": ""
+    },
+    "randonnées": {
+      "total": 57,
+      "eligible": 27,
+      "error": ""
+    },
+    "geotrek": {
+      "total": 3,
       "eligible": 0,
       "error": ""
     },
-    "randonnée Bretagne": {
-      "total": 0,
-      "eligible": 0,
+    "GR": {
+      "total": 5,
+      "eligible": 1,
       "error": ""
     },
-    "randonnée Bourgogne-Franche-Comté": {
-      "total": 0,
-      "eligible": 0,
+    "randonnée pédestre": {
+      "total": 10,
+      "eligible": 6,
       "error": ""
     },
-    "randonnée Nouvelle-Aquitaine": {
-      "total": 0,
-      "eligible": 0,
+    "itinéraires de randonnée": {
+      "total": 60,
+      "eligible": 24,
       "error": ""
     },
-    "randonnée Grand Est": {
-      "total": 1,
-      "eligible": 0,
-      "error": ""
-    },
-    "randonnée Auvergne-Rhône-Alpes": {
-      "total": 0,
-      "eligible": 0,
-      "error": ""
-    },
-    "randonnée Corse": {
-      "total": 0,
-      "eligible": 0,
-      "error": ""
-    },
-    "randonnée Occitanie": {
-      "total": 0,
-      "eligible": 0,
-      "error": ""
-    },
-    "randonnée Pays de la Loire": {
-      "total": 0,
-      "eligible": 0,
-      "error": ""
-    },
-    "randonnée Centre-Val de Loire": {
-      "total": 0,
-      "eligible": 0,
-      "error": ""
-    },
-    "randonnée Provence-Alpes-Côte d'Azur": {
-      "total": 0,
-      "eligible": 0,
-      "error": ""
-    },
-    "randonnée Île-de-France": {
-      "total": 0,
-      "eligible": 0,
-      "error": ""
-    },
-    "randonnée Hauts-de-France": {
-      "total": 0,
-      "eligible": 0,
-      "error": ""
-    },
-    "randonnées geotrek": {
-      "total": 0,
-      "eligible": 0,
-      "error": ""
-    },
-    "itinéraires randonnées pédestres": {
-      "total": 2,
-      "eligible": 0,
-      "error": ""
-    },
-    "GR itinéraire pédestre": {
-      "total": 0,
-      "eligible": 0,
+    "itinéraires": {
+      "total": 70,
+      "eligible": 19,
       "error": ""
     },
     "grande randonnée": {
@@ -85,9 +55,19 @@
       "eligible": 4,
       "error": ""
     },
-    "randonnees parc naturel régional": {
+    "randonnées du": {
+      "total": 11,
+      "eligible": 8,
+      "error": ""
+    },
+    "randos": {
       "total": 0,
       "eligible": 0,
+      "error": ""
+    },
+    "itinéraires de randonnées": {
+      "total": 21,
+      "eligible": 8,
       "error": ""
     }
   },
@@ -109,6 +89,28 @@
       ]
     },
     {
+      "id": "67b4b3c4539be6f4e220099c",
+      "slug": "itineraires-de-randonnee-pedestre-de-lannion-tregor-communaute",
+      "title": "Itinéraires de randonnée pédestre de Lannion-Trégor Communauté",
+      "producer": "Lannion-Trégor Communauté",
+      "license": "lov2",
+      "score": 26,
+      "resource": [
+        {
+          "id": "225acbbe-22db-4d94-b213-0c0dd8c44584",
+          "format": "geojson",
+          "size": 1748003,
+          "name": "Fichier geojson"
+        },
+        {
+          "id": "8b8b95a6-1cd9-4ee6-a774-c1d594d97fb5",
+          "format": "zip",
+          "size": 704564,
+          "name": "Fichier zip"
+        }
+      ]
+    },
+    {
       "id": "602effc5cd5437e8ec7ce5a9",
       "slug": "pdipr-chemin-de-grande-randonnee-de-pays-grp",
       "title": "PDIPR - chemin de grande randonnée de pays (GRP)",
@@ -121,6 +123,794 @@
           "format": "geojson",
           "size": 665609,
           "name": "PDIPR_grp_cd30.geojson"
+        }
+      ]
+    },
+    {
+      "id": "67f4d1cb70067f599c35f626",
+      "slug": "itineraires-de-randonnee-circuits-qualite-departement-du-calvados",
+      "title": "Itinéraires de randonnée (circuits qualité) – Département du Calvados",
+      "producer": "Département du Calvados",
+      "license": "lov2",
+      "score": 23,
+      "resource": [
+        {
+          "id": "8e2dc746-c927-4889-a527-880c05687dd6",
+          "format": "geojson",
+          "size": 0,
+          "name": "Itinéraires de randonnées (geojson)"
+        },
+        {
+          "id": "80864c50-2983-43ad-b49f-a06499c465ec",
+          "format": "gpkg",
+          "size": 0,
+          "name": "Itinéraires de randonnées (GPKG)"
+        }
+      ]
+    },
+    {
+      "id": "681018366ef14106359e6bf5",
+      "slug": "parcs-naturels-regionaux-itineraires-de-randonnees-a-pied-a-velo-a-vtt-et-a-cheval-publie-dans-chemins-des-parcs",
+      "title": "Parcs naturels régionaux-Itinéraires de randonnées à pied, à vélo, à VTT et à cheval (publié dans Chemins des Parcs)",
+      "producer": "Parcs naturels régionaux de Provence-Alpes-Côte d'Azur",
+      "license": "lov2",
+      "score": 23,
+      "resource": [
+        {
+          "id": "7bda9cfb-29a8-48f2-9f6e-224fa0c6e361",
+          "format": "geojson",
+          "size": 0,
+          "name": "Parcs naturels régionaux Région Sud – Itinéraires de randonnées"
+        },
+        {
+          "id": "65e9da4c-789f-4464-a0c0-3c66a1b0e8e0",
+          "format": "geojson",
+          "size": 0,
+          "name": "Parcs naturels régionaux-Itinéraires de randonnées à pied, à vélo, à VTT et à cheval"
+        }
+      ]
+    },
+    {
+      "id": "68f036f21e16bb92023d9920",
+      "slug": "parcs-naturels-regionaux-itineraires-de-randonnees-a-pied-a-velo-a-vtt-et-a-cheval-les-points-d-i",
+      "title": "Parcs naturels régionaux-Les points d'intérêt des itinéraires de randonnées (publié dans Chemins des Parcs)",
+      "producer": "Parcs naturels régionaux de Provence-Alpes-Côte d'Azur",
+      "license": "lov2",
+      "score": 23,
+      "resource": [
+        {
+          "id": "d39ac683-aab7-4482-9cb8-c4cc38b813cf",
+          "format": "geojson",
+          "size": 0,
+          "name": "Parcs naturels régionaux-Les points d'intérêt des itinéraires de randonnées (publié dans C"
+        }
+      ]
+    },
+    {
+      "id": "68f036dd1e16bb92023d991f",
+      "slug": "parcs-naturels-regionaux-depart-arrivees-des-itineraires-de-randonnees-publie-dans-chemins-des-pa",
+      "title": "Parcs naturels régionaux-Points de départ et d'arrivées des itinéraires de randonnées (publié dans Chemins des Parcs)",
+      "producer": "Parcs naturels régionaux de Provence-Alpes-Côte d'Azur",
+      "license": "lov2",
+      "score": 23,
+      "resource": [
+        {
+          "id": "4e16c723-7d9a-4e28-b075-45c2896ace27",
+          "format": "geojson",
+          "size": 0,
+          "name": "Parcs naturels régionaux-Points de départ et d'arrivées des itinéraires de randonnées (pub"
+        },
+        {
+          "id": "7dc8d89d-f2ff-46e9-91fe-221c20288031",
+          "format": "geojson",
+          "size": 0,
+          "name": "Parcs naturels régionaux-Points de départ et d'arrivées des itinéraires de randonnées (pub"
+        },
+        {
+          "id": "e39b9fbf-5a6b-4a08-ac07-a3feb399a53e",
+          "format": "geojson",
+          "size": 0,
+          "name": "Parcs naturels régionaux - Points de départ et d'arrivées des itinéraires de randonnées"
+        }
+      ]
+    },
+    {
+      "id": "61976bb44fcaffdb7e5506d0",
+      "slug": "plan-departemental-des-itineraires-de-promenade-et-de-randonnee-pdipr-departement-du-calvados",
+      "title": "Plan Départemental des Itinéraires de Promenade et de Randonnée (PDIPR) – Département du Calvados",
+      "producer": "Département du Calvados",
+      "license": "lov2",
+      "score": 23,
+      "resource": [
+        {
+          "id": "4b97636a-bcc9-4c0a-9634-c16fd37738a2",
+          "format": "geojson",
+          "size": 0,
+          "name": "PDIPR (geojson)"
+        },
+        {
+          "id": "e90f5d4c-1af6-445d-87d1-f73d56ec6ad3",
+          "format": "gpkg",
+          "size": 0,
+          "name": "PDIPR (GPKG)"
+        }
+      ]
+    },
+    {
+      "id": "682e4d99187c665b897e7292",
+      "slug": "troncons-du-plan-departemental-et-metropolitain-des-itineraires-de-promenade-et-de-randonnee-pdmipr-de-la-metropole-de-lyon-1",
+      "title": "Tronçons du plan départemental et métropolitain des itinéraires de promenade et de randonnée (PDMIPR) de la Métropole de Lyon",
+      "producer": "Métropole de Lyon",
+      "license": "lov2",
+      "score": 23,
+      "resource": [
+        {
+          "id": "90779881-a5e2-43b7-aaff-968009adb993",
+          "format": "geojson",
+          "size": 0,
+          "name": "metropole-de-lyon:troncon-pdmipr"
+        }
+      ]
+    },
+    {
+      "id": "6836369904734aa91dcef076",
+      "slug": "troncons-du-plan-departemental-et-metropolitain-des-itineraires-de-promenade-et-de-randonnee-pdmipr-de-la-metropole-de-lyon",
+      "title": "Tronçons du plan départemental et métropolitain des itinéraires de promenade et de randonnée (PDMIPR) de la Métropole de Lyon",
+      "producer": "Métropole de Lyon",
+      "license": "lov2",
+      "score": 23,
+      "resource": [
+        {
+          "id": "bb19789d-5456-48ec-8843-e9ffe2469aa6",
+          "format": "geojson",
+          "size": 0,
+          "name": "Tronçons du plan départemental et métropolitain des itinéraires de promenade et de randonn"
+        }
+      ]
+    },
+    {
+      "id": "602effc57a4806b0f07ce5b6",
+      "slug": "pdipr-chemin-de-petite-randonnee-pr",
+      "title": "PDIPR - chemin de petite randonnée (PR)",
+      "producer": "Département du Gard",
+      "license": "lov2",
+      "score": 22,
+      "resource": [
+        {
+          "id": "d9b71fe7-277f-47f4-a616-e1cc88f33647",
+          "format": "geojson",
+          "size": 2360660,
+          "name": "PDIPR_pr_cd30.geojson"
+        }
+      ]
+    },
+    {
+      "id": "5bf8993d8b4c4168f870eb15",
+      "slug": "patrimoines-des-randonnees-du-parc-national-des-ecrins",
+      "title": "Patrimoines des randonnées du Parc national des Écrins",
+      "producer": "Parc national des Écrins",
+      "license": "lov2",
+      "score": 22,
+      "resource": [
+        {
+          "id": "fa36c442-264d-4d8e-a473-4a560ba38813",
+          "format": "geojson",
+          "size": 1120000,
+          "name": "Patrimoines des randonnées du Parc national des Ecrins (GeoJSON)"
+        }
+      ]
+    },
+    {
+      "id": "5bf88cf28b4c4151e7a136d2",
+      "slug": "randonnees-du-parc-national-des-ecrins",
+      "title": "Randonnées du Parc national des Écrins",
+      "producer": "Parc national des Écrins",
+      "license": "lov2",
+      "score": 22,
+      "resource": [
+        {
+          "id": "8d67ea4a-5452-48f8-aacd-810fbc604234",
+          "format": "geojson",
+          "size": 23592960,
+          "name": "Randonnées du Parc national des Ecrins (GeoJSON)"
+        },
+        {
+          "id": "0c62905f-a580-4cee-afc1-5feb9607160d",
+          "format": "geojson",
+          "size": 21705523,
+          "name": "Randonnées du Parc national des Écrins (GeoJSON schéma)"
+        }
+      ]
+    },
+    {
+      "id": "6397c0fa13052a0a79c8cd21",
+      "slug": "21-circuits-de-randonnee-la-metro-en-balade-5",
+      "title": "21 Circuits de randonnée « la Métro en balade »",
+      "producer": "Clermont Auvergne Métropole",
+      "license": "lov2",
+      "score": 19,
+      "resource": [
+        {
+          "id": "43935ee2-3cb4-4965-921e-5594f791c689",
+          "format": "geojson",
+          "size": 0,
+          "name": "Ressource geojson"
+        },
+        {
+          "id": "d331a6e9-fe14-4526-9e3b-49957fbe70ac",
+          "format": "json",
+          "size": 0,
+          "name": "Ressource json"
+        },
+        {
+          "id": "a59659e1-f6a7-40be-9c54-d62a8c72e57f",
+          "format": "json",
+          "size": 0,
+          "name": "Ressource json"
+        }
+      ]
+    },
+    {
+      "id": "673d281b27359ee1a97733e4",
+      "slug": "circuits-de-randonnees-3",
+      "title": "Circuits de randonnées",
+      "producer": "Grand Belfort Communauté d'Agglomération",
+      "license": "lov2",
+      "score": 19,
+      "resource": [
+        {
+          "id": "fb25e9f2-023e-4be9-9f9c-44794677249f",
+          "format": "geojson",
+          "size": 0,
+          "name": "GeoJSON"
+        },
+        {
+          "id": "682e3f34-d9d7-49dd-8d2e-48dc3a37c2eb",
+          "format": "zip",
+          "size": 0,
+          "name": "Shapefile"
+        }
+      ]
+    },
+    {
+      "id": "6300255b506cdcb3a79c0164",
+      "slug": "itineraires-randonnee-pedestre-pdesi-cd76-20210510-1",
+      "title": "Itineraires Randonnée pedestre PDESI CD76 20210510",
+      "producer": "Département de la Seine-Maritime",
+      "license": "lov2",
+      "score": 19,
+      "resource": [
+        {
+          "id": "101841f5-c62e-4096-8a55-119722f0050d",
+          "format": "geojson",
+          "size": 0,
+          "name": "GeoJSON"
+        },
+        {
+          "id": "bf7d375f-f3a9-4aa0-bd95-c1c5b49f965b",
+          "format": "zip",
+          "size": 0,
+          "name": "Shapefile"
+        }
+      ]
+    },
+    {
+      "id": "63ec58de3c8c492d2d1a2e1b",
+      "slug": "itineraires-culturels-du-conseil-de-leurope",
+      "title": "Itinéraires culturels du Conseil de l’Europe",
+      "producer": "Ministère de la Culture",
+      "license": "lov2",
+      "score": 19,
+      "resource": [
+        {
+          "id": "4d423bf4-5f5d-42f7-b0f2-daf84d36d14b",
+          "format": "geojson",
+          "size": 94102,
+          "name": "itineraires-culturels-du-conseil-de-l-europe.geojson"
+        },
+        {
+          "id": "d201fbe5-1c70-495e-8620-b0c157bd2c1f",
+          "format": "json",
+          "size": 94567,
+          "name": "itineraires-culturels-du-conseil-de-l-europe.json"
+        },
+        {
+          "id": "43e54e3d-01cc-499e-8713-2a7a80921b8c",
+          "format": "zip",
+          "size": 16376,
+          "name": "itineraires-culturels-du-conseil-de-l-europe.zip"
+        }
+      ]
+    },
+    {
+      "id": "6681f1b0308599523b36b501",
+      "slug": "sync-14d60bec-ca5c-43a1-8daa-6b46c8c6c032-25",
+      "title": "Itinéraires de découverte du Grand Avignon",
+      "producer": "Grand Avignon",
+      "license": "lov2",
+      "score": 19,
+      "resource": [
+        {
+          "id": "75fa6cf0-0474-4309-8b6d-3c5c278b9f5f",
+          "format": "geojson",
+          "size": 0,
+          "name": "ga_itineraire_nature.geojson"
+        },
+        {
+          "id": "14b498e1-b893-4884-83f6-dc53521d0283",
+          "format": "zip",
+          "size": 0,
+          "name": "ga_itineraire_nature.zip"
+        }
+      ]
+    },
+    {
+      "id": "630ea6771de456c79d9c0161",
+      "slug": "d30-3v",
+      "title": "Itinéraires et boucles cyclables du Gard",
+      "producer": "Département du Gard",
+      "license": "lov2",
+      "score": 19,
+      "resource": [
+        {
+          "id": "9ceb46a2-001a-4f9e-9804-57cdf06b930c",
+          "format": "geojson",
+          "size": 0,
+          "name": "BD30_01 - La Camargue Gardoise"
+        },
+        {
+          "id": "54b43ade-bca1-4ca0-88ed-45d3679bc394",
+          "format": "geojson",
+          "size": 0,
+          "name": "BD30_02 - Les Costières"
+        },
+        {
+          "id": "a73fee75-f00b-4e80-b9c2-8cb1b7e81362",
+          "format": "geojson",
+          "size": 0,
+          "name": "BD30_03 - Le Vidourle"
+        }
+      ]
+    },
+    {
+      "id": "6a82d49d4d38e3e750d68442",
+      "slug": "mobilite-itineraires-malins-grand-poitiers-donnees-metiers-2",
+      "title": "Mobilité - Itinéraires malins - Grand Poitiers Données métiers",
+      "producer": "Grand Poitiers Open Data",
+      "license": "lov2",
+      "score": 19,
+      "resource": [
+        {
+          "id": "6a1fe740-4bc8-4447-9752-91802d88f455",
+          "format": "geojson",
+          "size": 18141,
+          "name": "Fichier geojson"
+        }
+      ]
+    },
+    {
+      "id": "6397c0f71ab5b84650a18343",
+      "slug": "randonnees-ceyrando-ville-de-ceyrat-4",
+      "title": "Randonnées Ceyrando - Ville de Ceyrat",
+      "producer": "Clermont Auvergne Métropole",
+      "license": "lov2",
+      "score": 19,
+      "resource": [
+        {
+          "id": "e36eaadf-db8c-4541-91b8-a64b3aa44c24",
+          "format": "geojson",
+          "size": 0,
+          "name": "Ressource geojson"
+        },
+        {
+          "id": "d0bb2e1e-0709-4ef7-84fb-07ae7757bc11",
+          "format": "json",
+          "size": 0,
+          "name": "Ressource json"
+        },
+        {
+          "id": "b313ab20-92a1-4546-b9f6-e352e02afde6",
+          "format": "json",
+          "size": 0,
+          "name": "Ressource json"
+        }
+      ]
+    },
+    {
+      "id": "62ac8931c76809b8f9f93798",
+      "slug": "boucles-de-randonnee-inscrites-au-plan-departemental-des-itineraires-de-petite-randonnee-du-departement-de-la-dordogne",
+      "title": "Boucles de randonnée inscrites au Plan Départemental des Itinéraires de Petite Randonnée du Département de la Dordogne ",
+      "producer": "Conseil départemental de la Dordogne",
+      "license": "lov2",
+      "score": 16,
+      "resource": [
+        {
+          "id": "b0542d21-4977-4dbe-a730-7c776621167a",
+          "format": "gpkg",
+          "size": 14708736,
+          "name": "liaisons-pdipr-cd24.gpkg"
+        },
+        {
+          "id": "95507b66-3552-45f0-bf36-0043e030a177",
+          "format": "json",
+          "size": 11228131,
+          "name": "boucles-pdipr-cd24.json"
+        },
+        {
+          "id": "4a408ac5-9008-4db4-bd88-251da527a513",
+          "format": "gpkg",
+          "size": 4964352,
+          "name": "boucles-pdipr-cd24.gpkg"
+        }
+      ]
+    },
+    {
+      "id": "65f81489e87fda79e6053f5d",
+      "slug": "itineraires-pdipr-sentiers-de-randonnee-de-la-haute-savoie-2023-2",
+      "title": "Itinéraires PDIPR (sentiers de randonnée) de la Haute-Savoie 2023",
+      "producer": "Conseil Départemental de la Haute-Savoie",
+      "license": "lov2",
+      "score": 16,
+      "resource": [
+        {
+          "id": "57e5a1f6-ca6c-41c4-b639-404e834bc56e",
+          "format": "zip",
+          "size": 20587939,
+          "name": "randonne-pedestre-haute-savoie.zip"
+        }
+      ]
+    },
+    {
+      "id": "610bf2a1d6fecd30e6cdfdb9",
+      "slug": "itineraires-de-randonnee-du-parc-national-des-cevennes",
+      "title": "Itinéraires de randonnée du Parc national des Cévennes",
+      "producer": "Parc national des Cévennes",
+      "license": "fr-lo",
+      "score": 16,
+      "resource": [
+        {
+          "id": "4eee2f30-32de-4900-9591-be5ee3003e4d",
+          "format": "json",
+          "size": 53226984,
+          "name": "itineraires-rando-export.json"
+        }
+      ]
+    },
+    {
+      "id": "6470c1f2b5c104f10e360811",
+      "slug": "itineraires-de-randonnee-sur-le-parc-du-vercors",
+      "title": "Itinéraires de randonnée sur le Parc du Vercors",
+      "producer": "Parc Naturel Régional du Vercors",
+      "license": "lov2",
+      "score": 16,
+      "resource": [
+        {
+          "id": "3a7a00bd-abc8-457f-8d6b-48177b9bdfb9",
+          "format": "gpkg",
+          "size": 9093120,
+          "name": "itineraires.gpkg"
+        },
+        {
+          "id": "21930eb0-c59a-4a38-b101-a4dbabd22099",
+          "format": "gpkg",
+          "size": 2240512,
+          "name": "tab-signal-plaque.csv"
+        },
+        {
+          "id": "16149ca9-a80a-472c-8a16-083476c0510d",
+          "format": "gpkg",
+          "size": 1085440,
+          "name": "signaletique.gpkg"
+        }
+      ]
+    },
+    {
+      "id": "5e7c81b607fe99377c06d0a4",
+      "slug": "plan-departemental-des-itineraires-de-promenades-et-de-randonnees-du-departement-de-lallier",
+      "title": "Plan départemental des itinéraires de promenades et de randonnées du département de l'Allier",
+      "producer": "Madada",
+      "license": "lov2",
+      "score": 16,
+      "resource": [
+        {
+          "id": "8108aab9-a5de-4539-b8e7-0594cfdce1f8",
+          "format": "zip",
+          "size": 3136471,
+          "name": "pdipr202001.zip"
+        }
+      ]
+    },
+    {
+      "id": "616d8beeb2c0d299aa11e606",
+      "slug": "plan-departemental-des-itineraires-de-promenades-et-de-randonnees-du-departement-du-pas-de-calais",
+      "title": "Plan départemental des itinéraires de promenades et de randonnées du département du Pas-de-Calais",
+      "producer": "Madada",
+      "license": "fr-lo",
+      "score": 16,
+      "resource": [
+        {
+          "id": "d6db3f0d-41b9-48a8-9a06-53bbc92b2a34",
+          "format": "zip",
+          "size": 1349610,
+          "name": "pdiprpasdecalais.zip"
+        }
+      ]
+    },
+    {
+      "id": "63002568a89413e25149e2ed",
+      "slug": "itineraires-equestres-pdesi-cd76-20210510-1",
+      "title": "Itineraires Equestres PDESI CD76 20210510",
+      "producer": "Département de la Seine-Maritime",
+      "license": "lov2",
+      "score": 15,
+      "resource": [
+        {
+          "id": "024475ac-7b66-4b4f-9176-925936cedeef",
+          "format": "geojson",
+          "size": 0,
+          "name": "GeoJSON"
+        },
+        {
+          "id": "aa9c8cfb-cdbe-4ea9-9f2d-239de2cb1964",
+          "format": "zip",
+          "size": 0,
+          "name": "Shapefile"
+        }
+      ]
+    },
+    {
+      "id": "6300256357b76675c19c016d",
+      "slug": "itineraires-nautiques-pdesi-cd76-20210510-1",
+      "title": "Itineraires Nautiques PDESI CD76 20210510",
+      "producer": "Département de la Seine-Maritime",
+      "license": "lov2",
+      "score": 15,
+      "resource": [
+        {
+          "id": "8d0067c7-dbbb-4398-b6f8-187c64b6d20c",
+          "format": "geojson",
+          "size": 0,
+          "name": "GeoJSON"
+        },
+        {
+          "id": "05ea3c99-e917-4922-8277-9c7d7df0eb39",
+          "format": "zip",
+          "size": 0,
+          "name": "Shapefile"
+        }
+      ]
+    },
+    {
+      "id": "63002562506cdcb3a79c016b",
+      "slug": "itineraires-velo-vtt-pdesi-cd76-20210510-1",
+      "title": "Itineraires Velo VTT PDESI CD76 20210510",
+      "producer": "Département de la Seine-Maritime",
+      "license": "lov2",
+      "score": 15,
+      "resource": [
+        {
+          "id": "9aa601ae-9e7f-4d16-b215-ccad067f2fa6",
+          "format": "geojson",
+          "size": 0,
+          "name": "GeoJSON"
+        },
+        {
+          "id": "46e93b2e-7b12-42d0-aad5-bcd7138a31a4",
+          "format": "zip",
+          "size": 0,
+          "name": "Shapefile"
+        }
+      ]
+    },
+    {
+      "id": "61a5158fb8b9b1b0e24ed79e",
+      "slug": "itineraires-de-petites-randonnees-du-pdipr-departement-du-loiret-1",
+      "title": "Itinéraires de petites randonnées du PDIPR - Département du Loiret",
+      "producer": "Département du Loiret",
+      "license": "lov2",
+      "score": 13,
+      "resource": [
+        {
+          "id": "aa6284ac-0b48-4d68-b331-c7e950c1e5fe",
+          "format": "zip",
+          "size": 0,
+          "name": "Itinéraires de petites randonnées du PDIPR [SHP]"
+        }
+      ]
+    },
+    {
+      "id": "5d26ec9406e3e7246f614ab1",
+      "slug": "itineraires-de-randonnee-inscrits-au-plan-departemental-des-itineraires-de-promenade-et-de-randonnee-pdipr-du-gers-1",
+      "title": "Itinéraires de randonnée inscrits au Plan Départemental des Itinéraires de Promenade et de Randonnée (PDIPR) du Gers",
+      "producer": "Département du Gers",
+      "license": "lov2",
+      "score": 13,
+      "resource": [
+        {
+          "id": "b0c32e68-92ea-4d80-a818-6a28edc6eb6e",
+          "format": "json",
+          "size": 0,
+          "name": "itineraires-de-randonnee-inscrits-au-plan-departemental-des-itineraires-de-prome.json"
+        },
+        {
+          "id": "b8427021-e054-424d-a24b-d95d7bb14a74",
+          "format": "json",
+          "size": 0,
+          "name": "itineraires-de-randonnee-inscrits-au-plan-departemental-des-itineraires-de-prome.geojson"
+        },
+        {
+          "id": "256c5e5b-5000-4d87-861c-0ee683c3ee04",
+          "format": "zip",
+          "size": 0,
+          "name": "itineraires-de-randonnee-inscrits-au-plan-departemental-des-itineraires-de-prome.zip"
+        }
+      ]
+    },
+    {
+      "id": "6a46fe2f5417274350b55a20",
+      "slug": "les-circuits-inscrits-au-plan-departemental-des-itineraires-de-promenade-et-de-randonnee-puy-de-dome-spatial-ville-de-clermont-ferrand",
+      "title": "Les circuits inscrits au Plan Départemental des Itinéraires de Promenade et de Randonnée - Puy-de-Dôme (spatial) - Ville de Clermont-Ferrand",
+      "producer": "Clermont Auvergne Métropole",
+      "license": "lov2",
+      "score": 13,
+      "resource": [
+        {
+          "id": "0ea4aa8d-c572-41e5-964c-2c4875c81367",
+          "format": "json",
+          "size": 0,
+          "name": "les_circuits_des_itineraires_de_promenade_conseil-dep-63-kml-vcf.json"
+        },
+        {
+          "id": "63fe04ab-f3fd-4943-a6cc-ced7a9e7108d",
+          "format": "json",
+          "size": 0,
+          "name": "les_circuits_des_itineraires_de_promenade_conseil-dep-63-kml-vcf.geojson"
+        },
+        {
+          "id": "6cae59ca-f393-421f-9966-946bdeebc0f8",
+          "format": "zip",
+          "size": 0,
+          "name": "les_circuits_des_itineraires_de_promenade_conseil-dep-63-kml-vcf.zip"
+        }
+      ]
+    },
+    {
+      "id": "57868ef5a3a7295d371add3b",
+      "slug": "plan-departemental-des-itineraires-de-promenade-et-de-randonnee-pdipr",
+      "title": "Plan Départemental des Itinéraires de Promenade et de Randonnée (PDIPR)",
+      "producer": "Département des Hauts-de-Seine",
+      "license": "fr-lo",
+      "score": 13,
+      "resource": [
+        {
+          "id": "6fb20000-79ac-42bd-ae89-498a3a302b6e",
+          "format": "json",
+          "size": 0,
+          "name": "plan-departemental-des-itineraires-de-promenade-et-de-randonnee-pdipr.json"
+        },
+        {
+          "id": "2f1a8ba5-5f26-42ba-a065-c6079f8aef4f",
+          "format": "json",
+          "size": 0,
+          "name": "plan-departemental-des-itineraires-de-promenade-et-de-randonnee-pdipr.geojson"
+        },
+        {
+          "id": "6ee6c22b-5251-417c-bd1c-996bc264f830",
+          "format": "zip",
+          "size": 0,
+          "name": "plan-departemental-des-itineraires-de-promenade-et-de-randonnee-pdipr.zip"
+        }
+      ]
+    },
+    {
+      "id": "60480d49f5e8e65bc27a57de",
+      "slug": "plan-departemental-des-itineraires-de-promenades-et-de-randonnees-departement-de-lisere",
+      "title": "Plan Départemental des itinéraires de promenades et de randonnées - Département de l'Isère",
+      "producer": "Conseil départemental de l'Isère",
+      "license": "lov2",
+      "score": 13,
+      "resource": [
+        {
+          "id": "4dc6eb3a-d4d1-433d-beb2-3ef71215e879",
+          "format": "json",
+          "size": 0,
+          "name": "plan-departemental-des-itineraires-de-promenades-et-de-randonnees-departement-de.json"
+        },
+        {
+          "id": "4c04a6bf-0497-4093-888f-7919797219c5",
+          "format": "json",
+          "size": 0,
+          "name": "plan-departemental-des-itineraires-de-promenades-et-de-randonnees-departement-de.geojson"
+        },
+        {
+          "id": "0b1a9790-a926-4a0c-b33a-eadb800bbac3",
+          "format": "zip",
+          "size": 0,
+          "name": "plan-departemental-des-itineraires-de-promenades-et-de-randonnees-departement-de.zip"
+        }
+      ]
+    },
+    {
+      "id": "676210883eb01baad04f066d",
+      "slug": "plan-departemental-des-itineraires-de-promenade-et-de-randonnee-pdipr-3",
+      "title": "Plan départemental des itinéraires de promenade et de randonnée (PDIPR)",
+      "producer": "Conseil départemental d'Eure-et-Loir",
+      "license": "lov2",
+      "score": 13,
+      "resource": [
+        {
+          "id": "d81c5a7e-eae1-42c7-b638-8d69b737c01e",
+          "format": "json",
+          "size": 0,
+          "name": "pdipr.json"
+        },
+        {
+          "id": "974e12c6-67ed-4de7-b2ff-f68d57997c02",
+          "format": "json",
+          "size": 0,
+          "name": "pdipr.geojson"
+        },
+        {
+          "id": "81f55a08-837f-46b3-ab80-5f7e2933c6de",
+          "format": "zip",
+          "size": 0,
+          "name": "pdipr.zip"
+        }
+      ]
+    },
+    {
+      "id": "627dd852bcea1b008a902161",
+      "slug": "plan-departemental-des-itineraires-de-promenade-et-de-randonnee-pdipr-2",
+      "title": "Plan départemental des itinéraires de promenade et de randonnée (PDIPR)",
+      "producer": "Conseil départemental de la Haute-Garonne - Haute-Garonne Open Data",
+      "license": "lov2",
+      "score": 13,
+      "resource": [
+        {
+          "id": "8f29748d-4eda-437f-a92b-4f95d60a6b01",
+          "format": "json",
+          "size": 0,
+          "name": "itineraires-promenades-randonnees-haute-garonne.json"
+        },
+        {
+          "id": "a44bbf54-6c18-4249-8682-3b1395a0a137",
+          "format": "json",
+          "size": 0,
+          "name": "itineraires-promenades-randonnees-haute-garonne.geojson"
+        },
+        {
+          "id": "a0b9d32b-b044-430b-8f63-4933521b6ae5",
+          "format": "zip",
+          "size": 0,
+          "name": "itineraires-promenades-randonnees-haute-garonne.zip"
+        }
+      ]
+    },
+    {
+      "id": "5ff3e487a6e290535b5d201e",
+      "slug": "plan-departemental-des-itineraires-de-promenade-et-de-randonnee-pdipr-en-loire-atlantique",
+      "title": "Plan départemental des itinéraires de promenade et de randonnée (PDIPR) en Loire-Atlantique",
+      "producer": "Département de Loire-Atlantique",
+      "license": "lov2",
+      "score": 13,
+      "resource": [
+        {
+          "id": "5739acae-01da-4e65-84b0-51d52938249e",
+          "format": "json",
+          "size": 0,
+          "name": "224400028_itineraires-de-promenade-et-de-randonnee-en-loire-atlantique-pdipr.json"
+        },
+        {
+          "id": "2657732a-f17d-483e-81eb-e3b0329c847e",
+          "format": "json",
+          "size": 0,
+          "name": "224400028_itineraires-de-promenade-et-de-randonnee-en-loire-atlantique-pdipr.geojson"
+        },
+        {
+          "id": "02593cbd-1c36-4f37-88ca-2c9b94e5f808",
+          "format": "zip",
+          "size": 0,
+          "name": "224400028_itineraires-de-promenade-et-de-randonnee-en-loire-atlantique-pdipr.zip"
         }
       ]
     },
@@ -153,6 +943,82 @@
       ]
     },
     {
+      "id": "6696333f1b9b23fe732a70d7",
+      "slug": "archives-sentiers-de-randonnee-pdipr-de-haute-savoie-2017-2020",
+      "title": "Archives _ Sentiers de randonnée PDIPR de Haute Savoie _2017-2020",
+      "producer": "Conseil Départemental de la Haute-Savoie",
+      "license": "lov2",
+      "score": 12,
+      "resource": [
+        {
+          "id": "fb209035-ea1f-41cf-aabf-118002c61f84",
+          "format": "zip",
+          "size": 10964290,
+          "name": "archive-pdipr-d74-l93-2017-2020.zip"
+        }
+      ]
+    },
+    {
+      "id": "5abca45f88ee3868626482d4",
+      "slug": "chemins-de-randonnee-du-douaisis",
+      "title": "Chemins de randonnée du Douaisis",
+      "producer": "DOUAISIS AGGLO",
+      "license": "fr-lo",
+      "score": 12,
+      "resource": [
+        {
+          "id": "62715f07-dca6-4d1f-87f6-886d168407cb",
+          "format": "zip",
+          "size": 115055,
+          "name": "Chemins de randonnée de la Communauté d'Agglomération du Douaisis au format GPX (fichier z"
+        }
+      ]
+    },
+    {
+      "id": "6936f41bee3c013313ed0666",
+      "slug": "chemins-de-randonnees-ca-grand-chatellerault",
+      "title": "Chemins de randonnées - CA Grand Châtellerault",
+      "producer": "",
+      "license": "lov2",
+      "score": 12,
+      "resource": [
+        {
+          "id": "2d9f2d6b-0889-400f-9432-a936286c956c",
+          "format": "gpkg",
+          "size": 1826816,
+          "name": "chemins_rando.gpkg"
+        }
+      ]
+    },
+    {
+      "id": "6479a418a0103260d18f1eb5",
+      "slug": "departement-de-la-nievre-randonnees",
+      "title": "Département de la Nièvre - Randonnées",
+      "producer": "Conseil départemental de la Nièvre",
+      "license": "lov2",
+      "score": 12,
+      "resource": [
+        {
+          "id": "f3676f2d-3c6c-4a88-8c03-f39a0bd706f3",
+          "format": "json",
+          "size": 3567634,
+          "name": "cd58-randonnee-2025.json"
+        },
+        {
+          "id": "e1a4178f-c7a0-402c-bac3-df29b0eec161",
+          "format": "json",
+          "size": 3567634,
+          "name": "cd58-randonnee-2024.json"
+        },
+        {
+          "id": "2d642439-2a33-4c9a-ac23-89afceceaece",
+          "format": "json",
+          "size": 3567634,
+          "name": "cd58-randonnee-2024.json"
+        }
+      ]
+    },
+    {
       "id": "58a1814088ee385d0d9b81a4",
       "slug": "les-chemins-de-grandes-randonnees-du-departement-du-lot-format-shp",
       "title": "LES CHEMINS DE GRANDES RANDONNEES DU DEPARTEMENT DU LOT (FORMAT SHP)",
@@ -165,6 +1031,702 @@
           "format": "zip",
           "size": 204249,
           "name": "LES CHEMINS DE GRANDES RANDONNEES DU DEPARTEMENT DU LOT (FORMAT SHP)"
+        }
+      ]
+    },
+    {
+      "id": "583efc55c751df7badc0bb7e",
+      "slug": "sentiers-de-randonnees-dans-le-frontonnais",
+      "title": "Sentiers de randonnées dans le Frontonnais",
+      "producer": "Communuaté de Communes du Frontonnais",
+      "license": "fr-lo",
+      "score": 12,
+      "resource": [
+        {
+          "id": "5df6e557-c57f-4128-9bc9-17181452dfe5",
+          "format": "zip",
+          "size": 101033,
+          "name": "CCF_sentiersRANDONNEE.zip"
+        }
+      ]
+    },
+    {
+      "id": "674662127b431165ae7733dd",
+      "slug": "boucles-de-randonnees",
+      "title": "Boucles de randonnées",
+      "producer": "Communauté de Communes Coeur de France",
+      "license": "lov2",
+      "score": 9,
+      "resource": [
+        {
+          "id": "d61afa8c-d44b-463c-9a24-6d6040f5561a",
+          "format": "json",
+          "size": 0,
+          "name": "boucles-de-randonnees.json"
+        },
+        {
+          "id": "b98853b5-aa79-45af-833c-a362eb795689",
+          "format": "json",
+          "size": 0,
+          "name": "boucles-de-randonnees.geojson"
+        },
+        {
+          "id": "b3887c96-1e27-4b82-8d3c-02ac3a7a7bb7",
+          "format": "zip",
+          "size": 0,
+          "name": "boucles-de-randonnees.zip"
+        }
+      ]
+    },
+    {
+      "id": "62c3fb378a8cf773dda1f848",
+      "slug": "circuits-de-randonnee-vtt-en-eure-et-loir",
+      "title": "Circuits de randonnée VTT en Eure-et-Loir",
+      "producer": "Conseil départemental d'Eure-et-Loir",
+      "license": "lov2",
+      "score": 9,
+      "resource": [
+        {
+          "id": "8ed0fbf7-ecb3-4b5c-90dd-1caccf70713d",
+          "format": "json",
+          "size": 0,
+          "name": "circuits-de-randonnee-vtt-en-eure-et-loir1.json"
+        },
+        {
+          "id": "dff18f4b-5ef9-47c9-a3de-41c7c9818439",
+          "format": "json",
+          "size": 0,
+          "name": "circuits-de-randonnee-vtt-en-eure-et-loir1.geojson"
+        },
+        {
+          "id": "cab5b122-a901-4f69-8757-afca035d8329",
+          "format": "zip",
+          "size": 0,
+          "name": "circuits-de-randonnee-vtt-en-eure-et-loir1.zip"
+        }
+      ]
+    },
+    {
+      "id": "62c3fb37cfd111e77c538364",
+      "slug": "circuits-de-randonnee-canoe-en-eure-et-loir",
+      "title": "Circuits de randonnée canoë en Eure-et-Loir",
+      "producer": "Conseil départemental d'Eure-et-Loir",
+      "license": "lov2",
+      "score": 9,
+      "resource": [
+        {
+          "id": "c705b2f0-187c-4062-993d-74ff2f5cd6f4",
+          "format": "json",
+          "size": 0,
+          "name": "circuits-de-randonnee-canoe-en-eure-et-loir.json"
+        },
+        {
+          "id": "a3e537aa-7a1c-43e1-86b0-62cbdb5ebaf6",
+          "format": "json",
+          "size": 0,
+          "name": "circuits-de-randonnee-canoe-en-eure-et-loir.geojson"
+        },
+        {
+          "id": "38c976ce-6ab1-472f-bc01-9c41c8c63d45",
+          "format": "zip",
+          "size": 0,
+          "name": "circuits-de-randonnee-canoe-en-eure-et-loir.zip"
+        }
+      ]
+    },
+    {
+      "id": "6110db6af270f0303f2f94c2",
+      "slug": "circuits-de-randonnee-pedestre",
+      "title": "Circuits de randonnée pédestre",
+      "producer": "Communauté d'Agglomération Lunel Agglo",
+      "license": "lov2",
+      "score": 9,
+      "resource": [
+        {
+          "id": "9895cf5d-0c83-4ac0-abe0-249986ef552f",
+          "format": "zip",
+          "size": 25202,
+          "name": "Circuits de randonnée pédestre - GPX"
+        },
+        {
+          "id": "bf316a4c-0770-4066-979a-376b6b2cf5f6",
+          "format": "zip",
+          "size": 21150,
+          "name": "Circuits de randonnée pédestre - GPKG"
+        },
+        {
+          "id": "b40681c9-d6b5-49b8-bcef-62e60ccba0d9",
+          "format": "zip",
+          "size": 20329,
+          "name": "Circuits de randonnée pédestre - SQL"
+        }
+      ]
+    },
+    {
+      "id": "62c3fb378119417a9b538362",
+      "slug": "circuits-de-randonnee-pedestre-en-eure-et-loir",
+      "title": "Circuits de randonnée pédestre en Eure-et-Loir",
+      "producer": "Conseil départemental d'Eure-et-Loir",
+      "license": "lov2",
+      "score": 9,
+      "resource": [
+        {
+          "id": "f0a6ef2e-84fa-4b00-a1d2-17b91e466cf4",
+          "format": "json",
+          "size": 0,
+          "name": "eure-et-loir-randonnees.json"
+        }
+      ]
+    },
+    {
+      "id": "62c3fb372a5995a7bfa1f848",
+      "slug": "circuits-de-randonnee-equestre-en-eure-et-loir",
+      "title": "Circuits de randonnée équestre en Eure-et-Loir",
+      "producer": "Conseil départemental d'Eure-et-Loir",
+      "license": "lov2",
+      "score": 9,
+      "resource": [
+        {
+          "id": "5a5c0817-03a2-4650-ac23-3494ce9ef8ce",
+          "format": "json",
+          "size": 0,
+          "name": "circuits-de-randonnee-equestre-en-eure-et-loir.json"
+        },
+        {
+          "id": "c3d8d96a-9a8b-4592-8f87-f1b6dee9f53c",
+          "format": "json",
+          "size": 0,
+          "name": "circuits-de-randonnee-equestre-en-eure-et-loir.geojson"
+        },
+        {
+          "id": "9de4a5d8-69e3-40b4-939a-556e6a9fe8f9",
+          "format": "zip",
+          "size": 0,
+          "name": "circuits-de-randonnee-equestre-en-eure-et-loir.zip"
+        }
+      ]
+    },
+    {
+      "id": "64f6705524becd3ebaae9bff",
+      "slug": "circuits-de-randonnees-direction-du-developpement-economique-et-de-la-promotion-du-territoire-saint-lo-agglo-attitude-manche-2023",
+      "title": "Circuits de randonnées - Direction du Développement économique et de la Promotion du territoire, Saint-Lô Agglo / Attitude Manche - 2023",
+      "producer": "Communauté d'Agglomération Saint-Lô Agglo",
+      "license": "lov2",
+      "score": 9,
+      "resource": [
+        {
+          "id": "7a9e29fc-113b-4a20-8df0-4e8a60ae30a1",
+          "format": "zip",
+          "size": 0,
+          "name": "saintloagglo_tourisme_sla_randonnees.zip"
+        }
+      ]
+    },
+    {
+      "id": "5cb490e69ce2e718e0bc8896",
+      "slug": "circuits-de-randonnees-pour-le-territoire-de-cap-atlantique",
+      "title": "Circuits de randonnées pour le territoire de Cap Atlantique",
+      "producer": "CapAtlantique La Baule-Guérande Agglo",
+      "license": "lov2",
+      "score": 9,
+      "resource": [
+        {
+          "id": "d447bf4a-bc8a-4b02-9fe3-e8e5aebb514b",
+          "format": "json",
+          "size": 0,
+          "name": "244400610_circuits-rando.json"
+        },
+        {
+          "id": "e4509fe8-ef24-458c-b167-9c9e8b121341",
+          "format": "json",
+          "size": 0,
+          "name": "244400610_circuits-rando.geojson"
+        },
+        {
+          "id": "e183f0b2-a181-4008-bfcb-3c3625909789",
+          "format": "zip",
+          "size": 0,
+          "name": "244400610_circuits-rando.zip"
+        }
+      ]
+    },
+    {
+      "id": "66fb3be2370262b757436db2",
+      "slug": "circuits-de-randonnees-sur-le-territoire-de-saint-nazaire-agglo-1",
+      "title": "Circuits de randonnées sur le territoire de Saint-Nazaire Agglo",
+      "producer": "Saint-Nazaire agglo - La CARENE",
+      "license": "lov2",
+      "score": 9,
+      "resource": [
+        {
+          "id": "3bf37821-06e5-4088-92b9-5f26b324e9a8",
+          "format": "json",
+          "size": 0,
+          "name": "244400644_circuits_rando_carene.json"
+        },
+        {
+          "id": "9f7f7011-c99d-49fc-8d51-746c347d398f",
+          "format": "json",
+          "size": 0,
+          "name": "244400644_circuits_rando_carene.geojson"
+        },
+        {
+          "id": "127465d2-9816-4320-8ca7-edb19d0c44bd",
+          "format": "zip",
+          "size": 0,
+          "name": "244400644_circuits_rando_carene.zip"
+        }
+      ]
+    },
+    {
+      "id": "67f5baab03325228295b7d8a",
+      "slug": "itineraires-velo-et-pedestre-1",
+      "title": "Itinéraires Vélo et Pédestre",
+      "producer": "Bordeaux Métropole",
+      "license": "fr-lo",
+      "score": 9,
+      "resource": [
+        {
+          "id": "983cca6f-ca01-437c-9287-16805578259e",
+          "format": "json",
+          "size": 0,
+          "name": "pc_itinerance_l.json"
+        },
+        {
+          "id": "9f21921a-0548-4d18-b141-5e5470bdafde",
+          "format": "json",
+          "size": 0,
+          "name": "pc_itinerance_l.geojson"
+        },
+        {
+          "id": "be04891a-5196-4e45-ac58-f322172525f7",
+          "format": "zip",
+          "size": 0,
+          "name": "pc_itinerance_l.zip"
+        }
+      ]
+    },
+    {
+      "id": "5e33f2fbdee7e7710df5c8fc",
+      "slug": "itineraires-cyclables-en-maine-et-loire",
+      "title": "Itinéraires cyclables en Maine-et-Loire",
+      "producer": "Département de Maine-et-Loire",
+      "license": "lov2",
+      "score": 9,
+      "resource": [
+        {
+          "id": "46bd3777-3a30-4c3c-bfe0-d2ab2b1e855f",
+          "format": "json",
+          "size": 0,
+          "name": "224900019_itineraires-cyclables-en-maine-et-loire.json"
+        },
+        {
+          "id": "b521c62c-1043-44db-bc2b-eaf55d65ee67",
+          "format": "json",
+          "size": 0,
+          "name": "224900019_itineraires-cyclables-en-maine-et-loire.geojson"
+        },
+        {
+          "id": "71f574fb-4837-472a-b16b-ab3224cbe22d",
+          "format": "zip",
+          "size": 0,
+          "name": "224900019_itineraires-cyclables-en-maine-et-loire.zip"
+        }
+      ]
+    },
+    {
+      "id": "5d26ec959ce2e73529f50c5c",
+      "slug": "itineraires-de-cyclotourisme-du-gers-2",
+      "title": "Itinéraires de cyclotourisme du Gers",
+      "producer": "Département du Gers",
+      "license": "lov2",
+      "score": 9,
+      "resource": [
+        {
+          "id": "f06f64d5-6bd5-40ab-9bad-827dfbd77671",
+          "format": "json",
+          "size": 0,
+          "name": "itineraires-de-cyclotourisme.json"
+        },
+        {
+          "id": "faaa761a-a78d-4d06-b98c-4b4ad8b83b34",
+          "format": "json",
+          "size": 0,
+          "name": "itineraires-de-cyclotourisme.geojson"
+        },
+        {
+          "id": "ed09dc53-becb-4f2e-83b0-39189c957c6e",
+          "format": "zip",
+          "size": 0,
+          "name": "itineraires-de-cyclotourisme.zip"
+        }
+      ]
+    },
+    {
+      "id": "66516543bf9d1e79a16740f0",
+      "slug": "itineraires-des-balades-sur-toulouse-metropole",
+      "title": "Itinéraires des balades sur Toulouse Métropole",
+      "producer": "Toulouse métropole",
+      "license": "lov2",
+      "score": 9,
+      "resource": [
+        {
+          "id": "e9da2de0-fdda-4415-ae3c-7bae915a5890",
+          "format": "json",
+          "size": 0,
+          "name": "balade.json"
+        },
+        {
+          "id": "42f67a7d-799f-4ea1-a45d-456a4185949b",
+          "format": "json",
+          "size": 0,
+          "name": "balade.geojson"
+        },
+        {
+          "id": "e6d36cd5-a756-4b79-bf15-086cea8877ab",
+          "format": "zip",
+          "size": 0,
+          "name": "balade.zip"
+        }
+      ]
+    },
+    {
+      "id": "56b0c2e1b595086d5669cb85",
+      "slug": "itineraires-decouverte-des-reperes-de-crue",
+      "title": "Itinéraires découverte des repères de crue",
+      "producer": "Toulouse métropole",
+      "license": "lov2",
+      "score": 9,
+      "resource": [
+        {
+          "id": "0d374ca8-2f2a-4c05-b8c7-1f2c9c820188",
+          "format": "json",
+          "size": 0,
+          "name": "itineraires-decouverte-des-reperes-de-crue.json"
+        },
+        {
+          "id": "4213d66b-d18a-40b0-9b61-7260362dfc0d",
+          "format": "json",
+          "size": 0,
+          "name": "itineraires-decouverte-des-reperes-de-crue.geojson"
+        },
+        {
+          "id": "e6fe7b72-b56c-47be-b348-e83ddafe032e",
+          "format": "zip",
+          "size": 0,
+          "name": "itineraires-decouverte-des-reperes-de-crue.zip"
+        }
+      ]
+    },
+    {
+      "id": "58a1847888ee385ead9b81a4",
+      "slug": "les-chemins-de-petites-randonnees-du-territoire-du-grand-cahors-format-shp",
+      "title": "LES CHEMINS DE PETITES RANDONNEES DU TERRITOIRE DU GRAND CAHORS (FORMAT SHP)",
+      "producer": "Communauté d'Agglomération du Grand Cahors",
+      "license": "fr-lo",
+      "score": 9,
+      "resource": [
+        {
+          "id": "7dc89c3e-b753-4098-b71c-278d9ff475c9",
+          "format": "zip",
+          "size": 54102,
+          "name": "LES CHEMINS DE PETITES RANDONNEES DU TERRITOIRE DU GRAND CAHORS (FORMAT SHP)"
+        }
+      ]
+    },
+    {
+      "id": "60a84a15ebaae75d8e7a1e4b",
+      "slug": "les-circuits-de-randonnees-pedestres-sur-le-territoire-de-m2a",
+      "title": "Les circuits de randonnées pédestres sur le territoire de m2A",
+      "producer": "Mulhouse Alsace Agglomération",
+      "license": "lov2",
+      "score": 9,
+      "resource": [
+        {
+          "id": "24c8c469-af2f-4fe6-af92-62f9b0a63f7e",
+          "format": "json",
+          "size": 0,
+          "name": "m2a_les-circuits-de-randonnees-pedestres_m2a.json"
+        },
+        {
+          "id": "da463857-d0eb-4415-8598-2b3ee12c7f95",
+          "format": "json",
+          "size": 0,
+          "name": "m2a_les-circuits-de-randonnees-pedestres_m2a.geojson"
+        },
+        {
+          "id": "579bd736-0dd7-4855-a148-5dca4cd2777f",
+          "format": "zip",
+          "size": 0,
+          "name": "m2a_les-circuits-de-randonnees-pedestres_m2a.zip"
+        }
+      ]
+    },
+    {
+      "id": "69e2cb2eb6c8f312caa21d46",
+      "slug": "liste-des-randonnees-de-lescapad",
+      "title": "Liste des randonnées de l’Escapad’",
+      "producer": "Clermont Auvergne Métropole",
+      "license": "lov2",
+      "score": 9,
+      "resource": [
+        {
+          "id": "c0460225-3eb2-414b-906e-4c4d90693101",
+          "format": "json",
+          "size": 0,
+          "name": "liste-des-randonnees-de-lescapad.json"
+        },
+        {
+          "id": "fced119a-d16b-4598-a32a-62c0945be765",
+          "format": "json",
+          "size": 0,
+          "name": "liste-des-randonnees-de-lescapad.geojson"
+        },
+        {
+          "id": "555ae3af-75b8-47ba-9814-f342c0cdf2e5",
+          "format": "zip",
+          "size": 0,
+          "name": "liste-des-randonnees-de-lescapad.zip"
+        }
+      ]
+    },
+    {
+      "id": "68779dd0d0dfa38e7a74db0b",
+      "slug": "pdesi-ski-de-randonnee",
+      "title": "PDESI - Ski de randonnée",
+      "producer": "Conseil départemental de l'Isère",
+      "license": "lov2",
+      "score": 9,
+      "resource": [
+        {
+          "id": "0193afd5-ddcf-4475-bef0-7299c149c771",
+          "format": "json",
+          "size": 0,
+          "name": "pdesi_ski_randonnee.json"
+        },
+        {
+          "id": "c0948000-620d-4e17-bd31-eb17b930b592",
+          "format": "json",
+          "size": 0,
+          "name": "pdesi_ski_randonnee.geojson"
+        },
+        {
+          "id": "58a98cc0-e8eb-44b0-8d9f-4d21b89fd090",
+          "format": "zip",
+          "size": 0,
+          "name": "pdesi_ski_randonnee.zip"
+        }
+      ]
+    },
+    {
+      "id": "5ffe3ab1ab7cfc28087d8b81",
+      "slug": "panneaux-dinterpretation-ornithologique-sur-les-circuits-de-randonnees-pour-le-territoire-de-cap-atlantique",
+      "title": "Panneaux d'interprétation ornithologique sur les circuits de randonnées pour le territoire de Cap Atlantique",
+      "producer": "CapAtlantique La Baule-Guérande Agglo",
+      "license": "lov2",
+      "score": 9,
+      "resource": [
+        {
+          "id": "247efc60-ce83-47c1-a6aa-37a62d5929b5",
+          "format": "json",
+          "size": 0,
+          "name": "244400610_pan_ornitho_rando.json"
+        },
+        {
+          "id": "70b45638-c6be-42d5-afa8-7e148d9105ec",
+          "format": "json",
+          "size": 0,
+          "name": "244400610_pan_ornitho_rando.geojson"
+        },
+        {
+          "id": "a293cc2c-b5ab-41ba-91ab-ddd156665c3f",
+          "format": "zip",
+          "size": 0,
+          "name": "244400610_pan_ornitho_rando.zip"
+        }
+      ]
+    },
+    {
+      "id": "5ffe3ab2dc12f54d697d8b81",
+      "slug": "panneaux-de-depart-des-circuits-de-randonnees-pour-le-territoire-de-cap-atlantique",
+      "title": "Panneaux de départ des circuits de randonnées pour le territoire de Cap Atlantique",
+      "producer": "CapAtlantique La Baule-Guérande Agglo",
+      "license": "lov2",
+      "score": 9,
+      "resource": [
+        {
+          "id": "11e694b8-0dd6-48b2-a1e3-b67859b593e3",
+          "format": "json",
+          "size": 0,
+          "name": "244400610_pan_depart_rando.json"
+        },
+        {
+          "id": "58fe0ae8-6cf1-4837-923e-d31a55eef174",
+          "format": "json",
+          "size": 0,
+          "name": "244400610_pan_depart_rando.geojson"
+        },
+        {
+          "id": "f6be726e-f691-41fd-9200-045b62757c04",
+          "format": "zip",
+          "size": 0,
+          "name": "244400610_pan_depart_rando.zip"
+        }
+      ]
+    },
+    {
+      "id": "5f4ee0dcfc67d07021b722b7",
+      "slug": "plan-departemental-des-espaces-sites-et-itineraires",
+      "title": "Plan départemental des espaces sites et itinéraires",
+      "producer": "Département de l'Hérault",
+      "license": "lov2",
+      "score": 9,
+      "resource": [
+        {
+          "id": "30e51c9e-3487-4cb9-a5a8-5ecffcf53304",
+          "format": "json",
+          "size": 0,
+          "name": "pdesi-herault.json"
+        },
+        {
+          "id": "9389e395-6fe9-479c-8289-3c5b3e33e8e7",
+          "format": "json",
+          "size": 0,
+          "name": "pdesi-herault.geojson"
+        },
+        {
+          "id": "c3b32e97-1d19-467a-9fdd-6c8d79a7538c",
+          "format": "zip",
+          "size": 0,
+          "name": "pdesi-herault.zip"
+        }
+      ]
+    },
+    {
+      "id": "69e962c787f2ae03a3a21d7b",
+      "slug": "points-dinteret-sur-les-itineraires-cyclables",
+      "title": "Points d'intérêt sur les itinéraires cyclables",
+      "producer": "Région Centre-Val de Loire",
+      "license": "lov2",
+      "score": 9,
+      "resource": [
+        {
+          "id": "ca3086d1-b32a-4c00-b9ed-39e93f9589ab",
+          "format": "json",
+          "size": 0,
+          "name": "point-interet-cyclo-rcvl.json"
+        },
+        {
+          "id": "6e9ab93d-b413-441a-b95e-b78750bde7f3",
+          "format": "json",
+          "size": 0,
+          "name": "point-interet-cyclo-rcvl.geojson"
+        },
+        {
+          "id": "09c76fcf-0bc0-4e64-85ee-300f1e3f9460",
+          "format": "zip",
+          "size": 0,
+          "name": "point-interet-cyclo-rcvl.zip"
+        }
+      ]
+    },
+    {
+      "id": "69a0e12f2970a865472f548d",
+      "slug": "remi-itineraires-du-reseau-de-transport-regional",
+      "title": "REMI - Itinéraires du réseau de transport régional",
+      "producer": "Région Centre-Val de Loire",
+      "license": "lov2",
+      "score": 9,
+      "resource": [
+        {
+          "id": "6d4197b6-6a11-465d-9903-d29cd1468709",
+          "format": "json",
+          "size": 0,
+          "name": "remi-itineraires-rcvl.json"
+        },
+        {
+          "id": "1ca74c1f-91a2-4c76-acff-8f33bf999014",
+          "format": "json",
+          "size": 0,
+          "name": "remi-itineraires-rcvl.geojson"
+        },
+        {
+          "id": "692ba4cd-ba3e-4b7e-99ea-d51f0c73ee25",
+          "format": "zip",
+          "size": 0,
+          "name": "remi-itineraires-rcvl.zip"
+        }
+      ]
+    },
+    {
+      "id": "5f45fc49522e4efc45a1772f",
+      "slug": "sentiers-de-randonnees-pdipr-sur-lagglomeration-dannemasse",
+      "title": "SENTIERS DE RANDONNEES PDIPR SUR L'AGGLOMERATION D'ANNEMASSE",
+      "producer": "Communauté d'Agglomération Annemasse - les Voirons Agglomération",
+      "license": "lov2",
+      "score": 9,
+      "resource": [
+        {
+          "id": "50abb2ed-ad6e-49e8-beb2-960db04b5728",
+          "format": "zip",
+          "size": 40387,
+          "name": "sentiers-aa-15092021.zip"
+        }
+      ]
+    },
+    {
+      "id": "5f23618789b0d6ca01d05ffd",
+      "slug": "traces-des-circuits-randonnees-pedestres-tours-metropole-1",
+      "title": "Tracés des circuits Randonnées pédestres - Tours Métropole",
+      "producer": "Tours Métropole Val de Loire",
+      "license": "lov2",
+      "score": 9,
+      "resource": [
+        {
+          "id": "f4eda9dc-9707-48f0-9c59-42553bc2a66b",
+          "format": "json",
+          "size": 0,
+          "name": "circuit-de-randonnee-pedestre.json"
+        },
+        {
+          "id": "27d2ef93-bc5b-497d-938f-432a5a4c50f7",
+          "format": "json",
+          "size": 0,
+          "name": "circuit-de-randonnee-pedestre.geojson"
+        },
+        {
+          "id": "a799ff89-f91d-4215-8573-5a1eaa47f53b",
+          "format": "zip",
+          "size": 0,
+          "name": "circuit-de-randonnee-pedestre.zip"
+        }
+      ]
+    },
+    {
+      "id": "5f5c10ec4bd19187068f0771",
+      "slug": "obsolete-remi-itineraires-scolaires-du-reseau",
+      "title": "[Obsolète]Rémi - itinéraires scolaires du réseau",
+      "producer": "Région Centre-Val de Loire",
+      "license": "lov2",
+      "score": 9,
+      "resource": [
+        {
+          "id": "b8bd662b-567a-4f3c-908b-867af589c915",
+          "format": "json",
+          "size": 0,
+          "name": "remi-itineraires-scolaires-du-reseau.json"
+        },
+        {
+          "id": "8d4e3d2c-c535-4106-91f2-95bcd78bc107",
+          "format": "json",
+          "size": 0,
+          "name": "remi-itineraires-scolaires-du-reseau.geojson"
+        },
+        {
+          "id": "959019e9-cdd4-4cfc-96c7-900740f94eb2",
+          "format": "zip",
+          "size": 0,
+          "name": "remi-itineraires-scolaires-du-reseau.zip"
         }
       ]
     }
