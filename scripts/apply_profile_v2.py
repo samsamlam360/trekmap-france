@@ -207,8 +207,8 @@ function projects(){
       '<label>Notes personnelles<textarea name="notes" maxlength="2000" placeholder="Idées, impressions, informations utiles…">'+e(j&&j.notes||'')+'</textarea></label>'+
       '<div id="tm-p-completion" class="tm-p-two" '+(st==='completed'?'':'hidden')+'>'+
         '<label>Date de la sortie<input type="date" name="completed_on" value="'+e(j&&j.completed_on||'')+'"></label>'+
-        '<label>Distance parcourue (km)<input type="number" min="0" max="20000" step=".1" name="actual_distance_km" value="'+e(j&&j.actual_distance_km==null?'':j.actual_distance_km)+'"></label>'+
-        '<label>Dénivelé réel (m)<input type="number" min="0" max="150000" name="actual_ascent_m" value="'+e(j&&j.actual_ascent_m==null?'':j.actual_ascent_m)+'"></label>'+
+        '<label>Distance parcourue (km)<input type="number" min="0" max="20000" step=".1" name="actual_distance_km" value="'+e(j?.actual_distance_km==null?'':j.actual_distance_km)+'"></label>'+
+        '<label>Dénivelé réel (m)<input type="number" min="0" max="150000" name="actual_ascent_m" value="'+e(j?.actual_ascent_m==null?'':j.actual_ascent_m)+'"></label>'+
         '<label>Note de la sortie<select name="rating"><option value="">Sans note</option>'+
            [1,2,3,4,5].map(function(x){return '<option value="'+x+'">'+x+'/5</option>'}).join('')+'</select></label></div>'+
       '<label>Liens de photos (un URL HTTPS par ligne, maximum 5)<textarea name="photos" placeholder="https://…" maxlength="2100">'+e((j&&j.photo_urls||[]).join('\n'))+'</textarea></label>'+
