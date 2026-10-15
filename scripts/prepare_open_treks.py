@@ -47,6 +47,14 @@ SOURCES = [
         "max_routes": 35,
     },
     {
+        "id": "parc-cevennes",
+        "producer": "Parc national des Cévennes",
+        "region": "Occitanie",
+        "dataset": "https://www.data.gouv.fr/datasets/itineraires-de-randonnee-du-parc-national-des-cevennes",
+        "download": "https://www.data.gouv.fr/api/1/datasets/r/4eee2f30-32de-4900-9591-be5ee3003e4d",
+        "max_routes": 35,
+    },
+    {
         "id": "parc-ecrins",
         "producer": "Parc national des Écrins",
         "region": "Provence-Alpes-Côte d'Azur",
@@ -58,7 +66,7 @@ SOURCES = [
 LICENSE = "Licence Ouverte / Open Licence version 2.0"
 # Keep downloads strictly scoped to the government dataset IDs above.
 ALLOWED_HOSTS = {"www.data.gouv.fr", "data.gouv.fr", "datarmor.cotesdarmor.fr",
-                 "data.grandlyon.com", "data.calvados.fr",
+                 "data.grandlyon.com", "data.calvados.fr", "static.data.gouv.fr",
                  "rando.ecrins-parcnational.fr", "geotrek.ecrins-parcnational.fr",
                  "geotrek.fr"}
 
@@ -249,6 +257,11 @@ def build():
             # First usable routes sorted by stable source ID; deterministic reruns.
             chosen=sorted(by_key.values(),key=lambda d:d["source_key"])[:source["max_routes"]]
             routes.extend(chosen)
+            if not chosen and raw:
+                sample=raw[0]
+                print(f"DIAGNOSTIC {source['id']}: keys={list((sample.get('properties') or {}).keys())[:16]} "
+                      f"geometry={((sample.get('geometry') or {}).get('type'))}, "
+                      f"name={str(attrs(sample.get('properties') or {},'nom','name','titre'))[:50]}")
             stats[source["id"]]=len(chosen)
             print(f"{source['id']}: raw={len(raw)}, geometries_ok={len(filtered)}, chosen={len(chosen)}")
         except (requests.RequestException,ValueError,TypeError,KeyError) as exc:
