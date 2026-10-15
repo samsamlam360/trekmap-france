@@ -1,0 +1,172 @@
+{
+  "queries": {
+    "randonnée Normandie": {
+      "total": 0,
+      "eligible": 0,
+      "error": ""
+    },
+    "randonnée Bretagne": {
+      "total": 0,
+      "eligible": 0,
+      "error": ""
+    },
+    "randonnée Bourgogne-Franche-Comté": {
+      "total": 0,
+      "eligible": 0,
+      "error": ""
+    },
+    "randonnée Nouvelle-Aquitaine": {
+      "total": 0,
+      "eligible": 0,
+      "error": ""
+    },
+    "randonnée Grand Est": {
+      "total": 1,
+      "eligible": 0,
+      "error": ""
+    },
+    "randonnée Auvergne-Rhône-Alpes": {
+      "total": 0,
+      "eligible": 0,
+      "error": ""
+    },
+    "randonnée Corse": {
+      "total": 0,
+      "eligible": 0,
+      "error": ""
+    },
+    "randonnée Occitanie": {
+      "total": 0,
+      "eligible": 0,
+      "error": ""
+    },
+    "randonnée Pays de la Loire": {
+      "total": 0,
+      "eligible": 0,
+      "error": ""
+    },
+    "randonnée Centre-Val de Loire": {
+      "total": 0,
+      "eligible": 0,
+      "error": ""
+    },
+    "randonnée Provence-Alpes-Côte d'Azur": {
+      "total": 0,
+      "eligible": 0,
+      "error": ""
+    },
+    "randonnée Île-de-France": {
+      "total": 0,
+      "eligible": 0,
+      "error": ""
+    },
+    "randonnée Hauts-de-France": {
+      "total": 0,
+      "eligible": 0,
+      "error": ""
+    },
+    "randonnées geotrek": {
+      "total": 0,
+      "eligible": 0,
+      "error": ""
+    },
+    "itinéraires randonnées pédestres": {
+      "total": 2,
+      "eligible": 0,
+      "error": ""
+    },
+    "GR itinéraire pédestre": {
+      "total": 0,
+      "eligible": 0,
+      "error": ""
+    },
+    "grande randonnée": {
+      "total": 8,
+      "eligible": 4,
+      "error": ""
+    },
+    "randonnees parc naturel régional": {
+      "total": 0,
+      "eligible": 0,
+      "error": ""
+    }
+  },
+  "datasets": [
+    {
+      "id": "602effc52cdee5deab7ce5b8",
+      "slug": "plan-departemental-des-itineraires-de-promenades-et-de-randonnees-pdipr-chemin-de-grande-randonnee",
+      "title": "Plan Départemental des Itinéraires de Promenades et de Randonnées - PDIPR - chemin de grande randonnée (GR)",
+      "producer": "Département du Gard",
+      "license": "lov2",
+      "score": 30,
+      "resource": [
+        {
+          "id": "27092024-676b-4bdb-9236-6cd45af5ce45",
+          "format": "geojson",
+          "size": 4331359,
+          "name": "PDIPR_gr_cd30.geojson"
+        }
+      ]
+    },
+    {
+      "id": "602effc5cd5437e8ec7ce5a9",
+      "slug": "pdipr-chemin-de-grande-randonnee-de-pays-grp",
+      "title": "PDIPR - chemin de grande randonnée de pays (GRP)",
+      "producer": "Département du Gard",
+      "license": "lov2",
+      "score": 26,
+      "resource": [
+        {
+          "id": "4ede6499-b84a-4195-a9a9-f1e5b3258791",
+          "format": "geojson",
+          "size": 665609,
+          "name": "PDIPR_grp_cd30.geojson"
+        }
+      ]
+    },
+    {
+      "id": "5978147da3a72957e0f83664",
+      "slug": "via-garona-chemin-de-grande-randonnee-gr861",
+      "title": "Via Garona Chemin de Grande Randonnée GR861",
+      "producer": "Conseil départemental de la Haute-Garonne - Haute-Garonne Open Data",
+      "license": "lov2",
+      "score": 13,
+      "resource": [
+        {
+          "id": "702cbcf5-19b5-4217-8861-b014aef5f3ec",
+          "format": "json",
+          "size": 0,
+          "name": "via-garona.json"
+        },
+        {
+          "id": "d8a8e1eb-92e9-4676-b1d6-575e323e9aa5",
+          "format": "json",
+          "size": 0,
+          "name": "via-garona.geojson"
+        },
+        {
+          "id": "2ea1fc1a-ca90-40ab-90fe-4d87af8b47df",
+          "format": "zip",
+          "size": 0,
+          "name": "via-garona.zip"
+        }
+      ]
+    },
+    {
+      "id": "58a1814088ee385d0d9b81a4",
+      "slug": "les-chemins-de-grandes-randonnees-du-departement-du-lot-format-shp",
+      "title": "LES CHEMINS DE GRANDES RANDONNEES DU DEPARTEMENT DU LOT (FORMAT SHP)",
+      "producer": "Communauté d'Agglomération du Grand Cahors",
+      "license": "fr-lo",
+      "score": 12,
+      "resource": [
+        {
+          "id": "d4bb5770-ad74-40d0-bb30-6247bff60c9a",
+          "format": "zip",
+          "size": 204249,
+          "name": "LES CHEMINS DE GRANDES RANDONNEES DU DEPARTEMENT DU LOT (FORMAT SHP)"
+        }
+      ]
+    }
+  ]
+}
