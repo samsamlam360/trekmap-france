@@ -165,35 +165,35 @@
         "preview": [
           {
             "km": 171.19,
-            "name": "GR®6"
+            "name": "GR®6 · section gardoise"
           },
           {
             "km": 150.05,
-            "name": "GR®63"
+            "name": "GR®63 · section gardoise"
           },
           {
             "km": 142.97,
-            "name": "GR®700 - Le chemin de Régordane - Chemin de Saint-Gilles"
+            "name": "GR®700 - Le chemin de Régordane - Chemin de Saint-Gilles · section gardoise"
           },
           {
             "km": 105.49,
-            "name": "GR®42_1 - Du Pilat à la Méditerranée par les balcons du Rhône"
+            "name": "GR®42_1 - Du Pilat à la Méditerranée par les balcons du Rhône · section gardoise"
           },
           {
             "km": 74.62,
-            "name": "GR®44B"
+            "name": "GR®44B · section gardoise"
           },
           {
             "km": 64.98,
-            "name": "GR®67"
+            "name": "GR®67 · section gardoise"
           },
           {
             "km": 57.42,
-            "name": "GR®653 - Sentier vers Saint-Jacques-de-Compostelle - Via Arles"
+            "name": "GR®653 - Sentier vers Saint-Jacques-de-Compostelle - Via Arles · section gardoise"
           },
           {
             "km": 54.4,
-            "name": "GR®66"
+            "name": "GR®66 · section gardoise"
           }
         ],
         "raw_count": 26,
@@ -533,11 +533,11 @@
         "preview": [
           {
             "km": 59.55,
-            "name": "GRP®1 Tour du Pays Viganais"
+            "name": "GRP®1 Tour du Pays Viganais · parcours gardois"
           },
           {
             "km": 57.89,
-            "name": "GRP®4 Tour de la Haute Vallée de la Cèze"
+            "name": "GRP®4 Tour de la Haute Vallée de la Cèze · parcours gardois"
           }
         ],
         "raw_count": 6,
