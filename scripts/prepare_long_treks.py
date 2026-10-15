@@ -209,6 +209,14 @@ def build():
                                 "lengths_km":[round(base.distance(v),2) for v in lines[:12]],
                                 "connected":stitch(f.get("geometry") or {}) is not None,
                                 "is_walk":base.is_walk(f.get("properties") or {}),
+                                "raw_coord_sample":(segments[0][:2] if segments else []),
+                                "parsed_lines":sum(len(v)>=3 for v in lines),
+                                "total_parsed_km":round(sum(base.distance(v) for v in lines),2),
+                                "nearest_endpoint_km":[round(min((
+                                    base.haversine(x,y)
+                                    for j,other in enumerate(lines) if j!=i and len(other)>=3
+                                    for x in (v[0],v[-1]) for y in (other[0],other[-1])),
+                                    default=999),3) for i,v in enumerate(lines[:24]) if len(v)>=3],
                             })
                     candidates=[]
                     for f in features:
