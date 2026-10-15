@@ -404,23 +404,22 @@ try:
     discover=driver.find_element(By.CSS_SELECTOR, '[data-p-select="910002"]')
     assert "À découvrir" in discover.text
     driver.execute_script(
-        "window.__profileErrors=[]; window.__profileClicks=[];"
-        "let r=document.getElementById('tm-profile-v2');"
-        "r.addEventListener('click',e=>__profileClicks.push({phase:'capture',target:e.target.tagName,value:e.target.closest('button')?.dataset.pSelect}),true);"
-        "r.addEventListener('click',e=>__profileClicks.push({phase:'bubble',target:e.target.tagName,value:e.target.closest('button')?.dataset.pSelect}));"
+        "window.__profileErrors=[];"
         "window.addEventListener('error',e=>__profileErrors.push(String(e.message)));"
         "window.addEventListener('unhandledrejection',e=>__profileErrors.push(String(e.reason)));"
     )
     discover.click()
-    diagnostic=driver.execute_script(
-        "return {view:document.getElementById('tm-p-content').innerText.slice(0,1000),"
-        "editor:!!document.getElementById('tm-p-journey-card'),"
-        "button:!!document.querySelector('[data-p-select=\\\"910002\\\"]'),"
-        "focus:document.activeElement?.id,clicks:window.__profileClicks,errors:window.__profileErrors};"
+    wait.until(lambda d: d.find_element(By.ID, "tm-p-journey-card").is_displayed())
+    assert not driver.execute_script("return window.__profileErrors"), (
+        "The first-time adventure editor raised a JavaScript exception"
     )
-    print('PROFILE DISCOVER DIAGNOSTIC:',diagnostic,flush=True)
-    wait.until(lambda d: d.find_element(By.ID, "tm-p-journey-card").is_displayed(),
-               message=str(diagnostic))
+    assert not driver.find_element(By.ID,"tm-p-completion").is_displayed(), (
+        "Completion-only metrics must stay hidden on an unstarted trek"
+    )
+    assert "18.0 km" in driver.find_element(By.CSS_SELECTOR,
+        '[data-p-select="910001"]').find_element(By.XPATH,"..").text, (
+        "Sparse collection membership must not overwrite the trek distance"
+    )
     assert "Sentier à découvrir" in driver.find_element(By.ID, "tm-p-journey-card").text
     assert driver.execute_script(
         "return document.activeElement?.id==='tm-p-journey-card'"
