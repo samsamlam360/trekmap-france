@@ -167,6 +167,15 @@ body.tm-filters-collapsed #tm-unified-drawer{left:14px!important}
     try{const r=await fetch(api()+'/catalog/criteria',{headers:authHeaders(),cache:'no-store'});if(!r.ok)return;const d=await r.json();criteria.clear();(d.items||[]).forEach(x=>criteria.set(Number(x.id),x));criteriaReady=true}catch(e){console.warn('Critères indisponibles',e)}
   }
 
+  // Licence Ouverte imports without elevation contain a provenance warning;
+  // their stored zero is a legacy technical placeholder, NOT a measured flat trail.
+  function elevationKnown(t){
+    return !(Number(t?.elevation||0)===0 &&
+      String(t?.description||'').includes('Dénivelé non renseigné'));
+  }
+  function elevationLabel(t){
+    return elevationKnown(t)?Math.round(Number(t.elevation||0))+' m':'Non renseigné';
+  }
   function matches(t){
     const x=extra(t.id),u=currentUserSafe(),mode=currentMode();
     if(mode==='favorites'&&!t.is_favorite)return false;
@@ -175,14 +184,14 @@ body.tm-filters-collapsed #tm-unified-drawer{left:14px!important}
     const region=$('region-filter')?.value||'',difficulty=$('difficulty-filter')?.value||'';
     if(region&&normText(t.region)!==normText(region))return false;if(difficulty&&String(t.difficulty)!==difficulty)return false;
     const dist=Number($('distance-range')?.value||0),dt=Number($('distance-tolerance')?.value||0);if(dist>0&&Math.abs(Number(t.distance||0)-dist)>dt)return false;
-    const elev=Number($('elevation-range')?.value||0),et=Number($('elevation-tolerance')?.value||0);if(elev>0&&Math.abs(Number(t.elevation||0)-elev)>et)return false;
+    const elev=Number($('elevation-range')?.value||0),et=Number($('elevation-tolerance')?.value||0);if(elev>0&&(!elevationKnown(t)||Math.abs(Number(t.elevation||0)-elev)>et))return false;
     const dur=Number($('duration-filter')?.value||0);if(dur>0&&Number(t.duration_days||999)>dur)return false;
     const route=$('tm-route-filter')?.value||'',season=$('tm-season-filter')?.value||'',rating=Number($('tm-rating-filter')?.value||0),photo=$('tm-photo-filter')?.value||'',place=normText($('tm-place-filter')?.value||'');
     if(route&&normText(x.route_type)!==normText(route))return false;if(season&&!normText(x.best_season).includes(normText(season)))return false;if(rating&&Number(x.rating_average||0)<rating)return false;if(photo==='yes'&&!x.has_photo)return false;if(photo==='no'&&x.has_photo)return false;if(place&&!normText([x.start_name,x.end_name,poiText(x)].join(' ')).includes(place))return false;
     const tokens=normText(query()).split(/\s+/).filter(Boolean);if(tokens.length){const hay=normText([t.name,t.region,t.description,difficultyName[t.difficulty],x.route_type,x.best_season,x.start_name,x.end_name,poiText(x)].join(' '));if(!tokens.every(tok=>hay.includes(tok)))return false}
     return true;
   }
-  function sortData(data){const s=$('sort-filter')?.value||'relevance';return data.sort((a,b)=>s==='distance'?Number(a.distance||0)-Number(b.distance||0):s==='elevation'?Number(a.elevation||0)-Number(b.elevation||0):s==='duration'?Number(a.duration_days||999)-Number(b.duration_days||999):s==='name'?String(a.name||'').localeCompare(String(b.name||''),'fr'):Number(b.view_count||0)-Number(a.view_count||0)||Number(extra(b.id).rating_average||0)-Number(extra(a.id).rating_average||0))}
+  function sortData(data){const s=$('sort-filter')?.value||'relevance';return data.sort((a,b)=>s==='distance'?Number(a.distance||0)-Number(b.distance||0):s==='elevation'?Number(!elevationKnown(a))-Number(!elevationKnown(b))||Number(a.elevation||0)-Number(b.elevation||0):s==='duration'?Number(a.duration_days||999)-Number(b.duration_days||999):s==='name'?String(a.name||'').localeCompare(String(b.name||''),'fr'):Number(b.view_count||0)-Number(a.view_count||0)||Number(extra(b.id).rating_average||0)-Number(extra(a.id).rating_average||0))}
   function resultTitle(){const m=currentMode();if(query()||['tm-route-filter','tm-season-filter','tm-rating-filter','tm-photo-filter','tm-place-filter'].some(id=>String($(id)?.value||'')&&!['0'].includes(String($(id)?.value))))return'Résultats de recherche';return({favorites:'Mes favoris',mine:'Mes treks',private:'Mes treks privés'})[m]||'Treks populaires'}
 
   // Draw a truthful thumbnail from the trek's route, not a stock illustration.
@@ -212,7 +221,7 @@ body.tm-filters-collapsed #tm-unified-drawer{left:14px!important}
     $('tm-info-result-count').textContent=String(data.length);
     renderInfo(selectedId==null?null:allTreksSafe().find(t=>Number(t.id)===selectedId));
     if(!data.length){track.innerHTML='<div class="tm-drawer-empty">Aucun trek ne correspond aux critères.</div>';return}
-    track.innerHTML=data.map(t=>{const x=extra(t.id),chips=[difficultyName[t.difficulty]||'Moyen'];if(x.route_type)chips.push(x.route_type);if(Number(x.rating_count||0)>0)chips.push('★ '+Number(x.rating_average||0).toFixed(1));return `<article class="tm-trek-tile ${Number(t.id)===selectedId?'selected':''}" data-id="${Number(t.id)}" tabindex="0" role="button" aria-label="Ouvrir le trek ${esc(t.name||'Trek')}"><div class="tm-tile-landscape" data-trek-preview="route">${routePreview(t)}</div><strong>${esc(t.name||'Trek')}</strong><div class="region">${esc(t.region||'France')}</div><div class="tm-tile-chips">${chips.slice(0,3).map(c=>`<span class="tm-chip">${esc(c)}</span>`).join('')}</div><div class="tm-tile-meta"><span>📏 ${Number(t.distance||0).toFixed(1)} km</span><span>↗ ${Math.round(t.elevation||0)} m</span></div><span class="tm-tile-open">Ouvrir le trek ↗</span></article>`}).join('');
+    track.innerHTML=data.map(t=>{const x=extra(t.id),chips=[difficultyName[t.difficulty]||'Moyen'];if(x.route_type)chips.push(x.route_type);if(Number(x.rating_count||0)>0)chips.push('★ '+Number(x.rating_average||0).toFixed(1));return `<article class="tm-trek-tile ${Number(t.id)===selectedId?'selected':''}" data-id="${Number(t.id)}" tabindex="0" role="button" aria-label="Ouvrir le trek ${esc(t.name||'Trek')}"><div class="tm-tile-landscape" data-trek-preview="route">${routePreview(t)}</div><strong>${esc(t.name||'Trek')}</strong><div class="region">${esc(t.region||'France')}</div><div class="tm-tile-chips">${chips.slice(0,3).map(c=>`<span class="tm-chip">${esc(c)}</span>`).join('')}</div><div class="tm-tile-meta"><span>📏 ${Number(t.distance||0).toFixed(1)} km</span><span>↗ ${elevationLabel(t)}</span></div><span class="tm-tile-open">Ouvrir le trek ↗</span></article>`}).join('');
     // Re-rendering cards on selection must NOT reset the horizontal position.
     track.scrollLeft=Math.min(previousScroll,Math.max(0,track.scrollWidth-track.clientWidth));
     syncDrawerArrows();
@@ -260,7 +269,7 @@ body.tm-filters-collapsed #tm-unified-drawer{left:14px!important}
     content.innerHTML=`<div class="tm-info-trek-name">${esc(t.name||'Trek')}</div>
       <p class="tm-info-region">⌖ ${esc(t.region||'France')}</p>
       <div class="tm-info-kpis"><div><strong>${distance.toFixed(1)} km</strong><span>Distance</span></div>
-      <div><strong>${Math.round(climb)} m</strong><span>Dénivelé +</span></div>
+      <div><strong>${elevationLabel(t)}</strong><span>Dénivelé +</span></div>
       <div><strong>${esc(difficultyName[t.difficulty]||'Moyen')}</strong><span>Difficulté</span></div></div>
       <p class="tm-info-description">${esc((t.description||'').slice(0,220))||'Parcours à découvrir sur la carte et dans sa fiche.'}</p>`;
     actions.hidden=false;
@@ -430,7 +439,7 @@ body.tm-filters-collapsed #tm-unified-drawer{left:14px!important}
   // Accueil unifié.
   const home=$('tm-home');function hideHome(){home?.classList.add('tm-hidden');setTimeout(()=>{try{map.invalidateSize()}catch(_){}},50)}function showHome(){home?.classList.remove('tm-hidden');window.scrollTo(0,0)}window.TrekMapShowHome=showHome;window.TrekMapHideHome=hideHome;
   document.querySelectorAll('[data-home-explore]').forEach(b=>b.onclick=()=>{hideHome();try{currentTab='all'}catch(_){}applyUnifiedFilters()});document.querySelectorAll('[data-home-create]').forEach(b=>b.onclick=()=>{hideHome();setTimeout(()=>$('tm-create-btn').click(),80)});document.querySelectorAll('[data-home-account]').forEach(b=>b.onclick=()=>{hideHome();setTimeout(()=>$('tm-account-btn').click(),80)});$('tm-home-logo')?.addEventListener('click',e=>{e.preventDefault();showHome()});const hs=$('tm-home-search'),hb=$('tm-home-search-btn');const homeGo=()=>{hideHome();search.value=hs?.value||'';if(hiddenSearch)hiddenSearch.value=search.value;try{currentTab='all'}catch(_){}applyUnifiedFilters()};hb?.addEventListener('click',homeGo);hs?.addEventListener('keydown',e=>{if(e.key==='Enter')homeGo()});
-  async function homeData(){try{const [tr,sr]=await Promise.all([fetch(api()+'/treks',{cache:'no-store'}),fetch(api()+'/statistics',{cache:'no-store'})]);const list=tr.ok?await tr.json():[],s=sr.ok?await sr.json():{};const featured=[...(Array.isArray(list)?list:[])].sort((a,b)=>Number(b.view_count||0)-Number(a.view_count||0)).slice(0,3);const box=$('tm-featured');if(box)box.innerHTML=featured.map(t=>`<article class="tm-f-card" data-home-trek="${Number(t.id)}"><div class="tm-f-top"><div><h3>${esc(t.name)}</h3><p>${esc(t.region||'France')}</p></div><span>🥾</span></div><div class="tm-f-badges"><span class="tm-f-badge">${difficultyName[t.difficulty]||'Randonnée'}</span></div><div class="tm-f-meta"><span>📏 ${Number(t.distance||0).toFixed(1)} km</span><span>↗ ${Math.round(t.elevation||0)} m</span></div></article>`).join('')||'<div>Les premiers itinéraires arrivent bientôt.</div>';box?.querySelectorAll('[data-home-trek]').forEach(c=>c.onclick=()=>{hideHome();openTrek(Number(c.dataset.homeTrek))});if($('tm-stat-treks'))$('tm-stat-treks').textContent=s.treks??list.length;if($('tm-stat-distance'))$('tm-stat-distance').textContent=Number(s.distance_km||0).toLocaleString('fr-FR');if($('tm-stat-creators'))$('tm-stat-creators').textContent=s.creators??'—'}catch(_){}}
+  async function homeData(){try{const [tr,sr]=await Promise.all([fetch(api()+'/treks',{cache:'no-store'}),fetch(api()+'/statistics',{cache:'no-store'})]);const list=tr.ok?await tr.json():[],s=sr.ok?await sr.json():{};const featured=[...(Array.isArray(list)?list:[])].sort((a,b)=>Number(b.view_count||0)-Number(a.view_count||0)).slice(0,3);const box=$('tm-featured');if(box)box.innerHTML=featured.map(t=>`<article class="tm-f-card" data-home-trek="${Number(t.id)}"><div class="tm-f-top"><div><h3>${esc(t.name)}</h3><p>${esc(t.region||'France')}</p></div><span>🥾</span></div><div class="tm-f-badges"><span class="tm-f-badge">${difficultyName[t.difficulty]||'Randonnée'}</span></div><div class="tm-f-meta"><span>📏 ${Number(t.distance||0).toFixed(1)} km</span><span>↗ ${elevationLabel(t)}</span></div></article>`).join('')||'<div>Les premiers itinéraires arrivent bientôt.</div>';box?.querySelectorAll('[data-home-trek]').forEach(c=>c.onclick=()=>{hideHome();openTrek(Number(c.dataset.homeTrek))});if($('tm-stat-treks'))$('tm-stat-treks').textContent=s.treks??list.length;if($('tm-stat-distance'))$('tm-stat-distance').textContent=Number(s.distance_km||0).toLocaleString('fr-FR');if($('tm-stat-creators'))$('tm-stat-creators').textContent=s.creators??'—'}catch(_){}}
 
   // Quand les traces sont rechargees, toute l'interface se resynchronise.
   const legacyLoadTraces=window.loadTraces;if(typeof legacyLoadTraces==='function')window.loadTraces=async function(){const r=await legacyLoadTraces.apply(this,arguments);criteriaReady=false;await loadCriteria(true);applyUnifiedFilters();return r};
