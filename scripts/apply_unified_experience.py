@@ -347,9 +347,15 @@ body.tm-filters-collapsed #tm-unified-drawer{left:14px!important}
     const max=Math.max(0,track.scrollWidth-track.clientWidth);
     e.preventDefault();
     e.stopPropagation(); // Do not also zoom the underlying Leaflet map.
+    // Force an immediate, non-snapping scroll before changing scrollLeft.
+    // Unlike a hover/fine-pointer media query this works in browser fullscreen,
+    // hybrid touchscreen laptops, and headless Chrome.
+    track.classList.add('tm-wheel-direct');
     track.scrollLeft=Math.max(0,Math.min(max,track.scrollLeft+pixels*boost));
     syncDrawerArrows();
   },{passive:false});
+  // A finger gesture should use the original mobile snap/swipe semantics.
+  track?.addEventListener('touchstart',()=>track.classList.remove('tm-wheel-direct'),{passive:true});
   const drawerNav=document.createElement('div');drawerNav.className='tm-drawer-nav';
   drawerNav.innerHTML='<button type="button" data-scroll-dir="-1" aria-label="Treks précédents">‹</button><button type="button" data-scroll-dir="1" aria-label="Treks suivants">›</button>';
   $('tm-drawer-head').after(drawerNav);
