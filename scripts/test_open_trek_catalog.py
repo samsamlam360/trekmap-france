@@ -32,7 +32,7 @@ class CatalogCheck(unittest.TestCase):
                 self.assertLessEqual(route["distance"],90)
                 self.assertLessEqual(len(route["name"]),155)
                 self.assertIn(route["region"],{
-                    "Bretagne","Normandie","Auvergne-Rhône-Alpes","Provence-Alpes-Côte d'Azur"})
+                    "Bretagne","Normandie","Auvergne-Rhône-Alpes","Provence-Alpes-Côte d'Azur","Occitanie"})
                 self.assertIn(route["difficulty"],{"easy","medium","hard","extreme"})
                 self.assertIn("Licence Ouverte",route["description"])
                 self.assertIn(route["source_url"],route["description"])
