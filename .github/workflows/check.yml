@@ -86,6 +86,8 @@ jobs:
           python scripts/apply_language_learning_ui.py
           python scripts/apply_reasoning_agent_ui.py
           python scripts/apply_trekbrain_ui.py
+      - name: Tester les intervalles de durée du catalogue
+        run: node scripts/test_duration_filter_ranges.mjs
       - name: Vérifier le frontend construit
         shell: python
         run: |

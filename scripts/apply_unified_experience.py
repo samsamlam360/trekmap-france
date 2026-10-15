@@ -185,7 +185,7 @@ body.tm-filters-collapsed #tm-unified-drawer{left:14px!important}
     if(region&&normText(t.region)!==normText(region))return false;if(difficulty&&String(t.difficulty)!==difficulty)return false;
     const dist=Number($('distance-range')?.value||0),dt=Number($('distance-tolerance')?.value||0);if(dist>0&&Math.abs(Number(t.distance||0)-dist)>dt)return false;
     const elev=Number($('elevation-range')?.value||0),et=Number($('elevation-tolerance')?.value||0);if(elev>0&&(!elevationKnown(t)||Math.abs(Number(t.elevation||0)-elev)>et))return false;
-    const dur=Number($('duration-filter')?.value||0);if(dur>0&&Number(t.duration_days||999)>dur)return false;
+    const dur=$('duration-filter')?.value||'';if(!matchesDurationRange(t.duration_days,dur))return false;
     const route=$('tm-route-filter')?.value||'',season=$('tm-season-filter')?.value||'',rating=Number($('tm-rating-filter')?.value||0),photo=$('tm-photo-filter')?.value||'',place=normText($('tm-place-filter')?.value||'');
     if(route&&normText(x.route_type)!==normText(route))return false;if(season&&!normText(x.best_season).includes(normText(season)))return false;if(rating&&Number(x.rating_average||0)<rating)return false;if(photo==='yes'&&!x.has_photo)return false;if(photo==='no'&&x.has_photo)return false;if(place&&!normText([x.start_name,x.end_name,poiText(x)].join(' ')).includes(place))return false;
     const tokens=normText(query()).split(/\s+/).filter(Boolean);if(tokens.length){const hay=normText([t.name,t.region,t.description,difficultyName[t.difficulty],x.route_type,x.best_season,x.start_name,x.end_name,poiText(x)].join(' '));if(!tokens.every(tok=>hay.includes(tok)))return false}
