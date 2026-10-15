@@ -1,0 +1,2463 @@
+{
+  "source": "OpenStreetMap (ODbL 1.0), Waymarked Trails search",
+  "diagnostics": {
+    "overpass_errors": [
+      "500 Server Error: Internal Server Error for url: https://overpass.kumi.systems/api/interpreter"
+    ],
+    "search_errors": []
+  },
+  "bbox": [
+    -0.45,
+    46.15,
+    4.0,
+    49.05
+  ],
+  "overpass_routes": [],
+  "waymarked_search": {
+    "Touraine": [
+      {
+        "id": 17381485,
+        "name": "Le Tour de La Croix - La-Croix-en-Touraine",
+        "ref": "",
+        "network": "LOC",
+        "itinerary": null
+      },
+      {
+        "id": 17381574,
+        "name": "La Herserie - La-Croix-en-Touraine",
+        "ref": "",
+        "network": "LOC",
+        "itinerary": null
+      },
+      {
+        "id": 17785436,
+        "name": "Chantilly - Courcelles-de-Touraine",
+        "ref": "45",
+        "network": "LOC",
+        "itinerary": null
+      },
+      {
+        "id": 17781639,
+        "name": "Le Breuil - Mazières-de-Touraine",
+        "ref": "16",
+        "network": "LOC",
+        "itinerary": null
+      },
+      {
+        "id": 17380534,
+        "name": "La Chauvinière - La-Croix-en-Touraine",
+        "ref": "",
+        "network": "LOC",
+        "itinerary": null
+      },
+      {
+        "id": 17483743,
+        "name": "Circuit n°3 - Rouziers-de-Touraine",
+        "ref": "",
+        "network": "LOC",
+        "itinerary": null
+      },
+      {
+        "id": 17545397,
+        "name": "Sainte-Maure-de-Touraine Circuit 1",
+        "ref": "",
+        "network": "LOC",
+        "itinerary": null
+      },
+      {
+        "id": 17758751,
+        "name": "Autour de Bueil-en-Touraine - Circuit 2",
+        "ref": "",
+        "network": "LOC",
+        "itinerary": null
+      },
+      {
+        "id": 16874380,
+        "name": "Sentier des Vergers - Lignières-de-Touraine",
+        "ref": "",
+        "network": "LOC",
+        "itinerary": null
+      },
+      {
+        "id": 17814132,
+        "name": "Ingrandes de Touraine - Coteaux-sur-Loire",
+        "ref": "70",
+        "network": "LOC",
+        "itinerary": null
+      },
+      {
+        "id": 16887869,
+        "name": "Noyant-de-Touraine - Vallées et plateaux - Variante 11km",
+        "ref": "",
+        "network": "LOC",
+        "itinerary": null
+      },
+      {
+        "id": 16887868,
+        "name": "Noyant-de-Touraine - Vallées et plateaux - Variante 14,5m",
+        "ref": "",
+        "network": "LOC",
+        "itinerary": null
+      },
+      {
+        "id": 17352465,
+        "name": "Bueil-en-Touraine - Autour de la Vallée du Long - Circuit 3",
+        "ref": "",
+        "network": "LOC",
+        "itinerary": null
+      },
+      {
+        "id": 17352507,
+        "name": "Sur les Pas de la Dame de Beauté - Circuit 1 - Bueil-en-Touraine",
+        "ref": "",
+        "network": "LOC",
+        "itinerary": null
+      },
+      {
+        "id": 17355430,
+        "name": "L'Eau au Fil des Siècles en Val de Cher - Circuit Bleu - Civray-de-Touraine",
+        "ref": "",
+        "network": "LOC",
+        "itinerary": null
+      },
+      {
+        "id": 17355529,
+        "name": "L'Eau au Fil des Siècles en Val de Cher - Circuit Jaune - Civray-de-Touraine",
+        "ref": "",
+        "network": "LOC",
+        "itinerary": null
+      },
+      {
+        "id": 17355438,
+        "name": "L'Eau au Fil des Siècles en Val de Cher - Circuit Rouge - Civray-de-Touraine",
+        "ref": "",
+        "network": "LOC",
+        "itinerary": null
+      }
+    ],
+    "Sologne": [
+      {
+        "id": 13885611,
+        "name": "Tours de Sologne",
+        "ref": "",
+        "network": "REG",
+        "itinerary": null
+      },
+      {
+        "id": 17071935,
+        "name": "Entre Loire et Sologne",
+        "ref": "",
+        "network": "LOC",
+        "itinerary": null
+      },
+      {
+        "id": 13046192,
+        "name": "Traversée de la Sologne",
+        "ref": "GR 31",
+        "network": "NAT",
+        "itinerary": null
+      },
+      {
+        "id": 13024121,
+        "name": "Traversée de la Sologne, De Cosne à Menetou",
+        "ref": "",
+        "network": "NAT",
+        "itinerary": null
+      },
+      {
+        "id": 1562017,
+        "name": "Traversée de la Sologne, De Menetou à Lamotte",
+        "ref": "",
+        "network": "NAT",
+        "itinerary": null
+      },
+      {
+        "id": 13457269,
+        "name": "Traversée de la Sologne, de Lamotte à La Ferté St-Cyr",
+        "ref": "",
+        "network": "NAT",
+        "itinerary": null
+      },
+      {
+        "id": 13468382,
+        "name": "Traversée de la Sologne, de La Ferté St-Cyr à Blois",
+        "ref": "",
+        "network": "NAT",
+        "itinerary": null
+      }
+    ],
+    "GR 3": [
+      {
+        "id": 18931292,
+        "name": "GR 3 Sender Central de Catalunya - Etapa 51",
+        "ref": "GR 3",
+        "network": "NAT",
+        "itinerary": [
+          "Aspa",
+          "Lleida"
+        ]
+      },
+      {
+        "id": 18929409,
+        "name": "GR 3 Sender Central de Catalunya - Etapa 29",
+        "ref": "GR 3",
+        "network": "NAT",
+        "itinerary": [
+          "Sant Joan de les Abadesses",
+          "Vallfogona de Ripollès"
+        ]
+      },
+      {
+        "id": 18929057,
+        "name": "GR 3 Sender Central de Catalunya - Etapa 10",
+        "ref": "GR 3",
+        "network": "NAT",
+        "itinerary": [
+          "Adons",
+          "Viu de Llevata"
+        ]
+      },
+      {
+        "id": 18929006,
+        "name": "GR 3 Sender Central de Catalunya - Etapa 05",
+        "ref": "GR 3",
+        "network": "NAT",
+        "itinerary": [
+          "Àger",
+          "Sant Esteve de la Sarga"
+        ]
+      },
+      {
+        "id": 18929029,
+        "name": "GR 3 Sender Central de Catalunya - Etapa 08",
+        "ref": "GR 3",
+        "network": "NAT",
+        "itinerary": [
+          "Pont d'Orrit",
+          "La Torre de Tamúrcia"
+        ]
+      },
+      {
+        "id": 18928977,
+        "name": "GR 3 Sender Central de Catalunya - Etapa 03",
+        "ref": "GR 3",
+        "network": "NAT",
+        "itinerary": [
+          "Balaguer",
+          "Tartareu"
+        ]
+      },
+      {
+        "id": 18929153,
+        "name": "GR 3 Sender Central de Catalunya - Etapa 21",
+        "ref": "GR 3",
+        "network": "NAT",
+        "itinerary": [
+          "Ansovell",
+          "Estana"
+        ]
+      },
+      {
+        "id": 18929110,
+        "name": "GR 3 Sender Central de Catalunya - Etapa 16",
+        "ref": "GR 3",
+        "network": "NAT",
+        "itinerary": [
+          "Sort",
+          "Rubió"
+        ]
+      },
+      {
+        "id": 1716189,
+        "name": "GR 3 Sender Central de Catalunya",
+        "ref": "GR 3",
+        "network": "NAT",
+        "itinerary": null
+      },
+      {
+        "id": 18929080,
+        "name": "GR 3 Sender Central de Catalunya - Etapa 13",
+        "ref": "GR 3",
+        "network": "NAT",
+        "itinerary": [
+          "Les Esglésies",
+          "Senterada"
+        ]
+      },
+      {
+        "id": 18929407,
+        "name": "GR 3 Sender Central de Catalunya - Etapa 28",
+        "ref": "GR 3",
+        "network": "NAT",
+        "itinerary": [
+          "Campdevànol",
+          "Sant Joan de les Avadesses"
+        ]
+      },
+      {
+        "id": 18929081,
+        "name": "GR 3 Sender Central de Catalunya - Etapa 12",
+        "ref": "GR 3",
+        "network": "NAT",
+        "itinerary": [
+          "El Pont de Suert",
+          "Les Esglésies"
+        ]
+      },
+      {
+        "id": 18929065,
+        "name": "GR 3 Sender Central de Catalunya - Etapa 11",
+        "ref": "GR 3",
+        "network": "NAT",
+        "itinerary": [
+          "Viu de Llevata",
+          "El Pont de Suert"
+        ]
+      },
+      {
+        "id": 18929567,
+        "name": "GR 3 Sender Central de Catalunya - Etapa 32",
+        "ref": "GR 3",
+        "network": "NAT",
+        "itinerary": [
+          "Sant Quirze de Besora",
+          "Collet de Sant Martí"
+        ]
+      },
+      {
+        "id": 18929116,
+        "name": "GR 3 Sender Central de Catalunya - Etapa 18",
+        "ref": "GR 3",
+        "network": "NAT",
+        "itinerary": [
+          "Sant Joan de l'Erm",
+          "Castellbó"
+        ]
+      },
+      {
+        "id": 18931293,
+        "name": "GR 3 Sender Central de Catalunya - Etapa 50",
+        "ref": "GR 3",
+        "network": "NAT",
+        "itinerary": [
+          "Les Borges Blanques",
+          "Aspa"
+        ]
+      },
+      {
+        "id": 18929149,
+        "name": "GR 3 Sender Central de Catalunya - Etapa 20",
+        "ref": "GR 3",
+        "network": "NAT",
+        "itinerary": [
+          "La Seu d'Urgell",
+          "Ansovell"
+        ]
+      },
+      {
+        "id": 18931277,
+        "name": "GR 3 Sender Central de Catalunya - Etapa 46",
+        "ref": "GR 3",
+        "network": "NAT",
+        "itinerary": [
+          "Agramunt",
+          "Tàrrega"
+        ]
+      },
+      {
+        "id": 18931274,
+        "name": "GR 3 Sender Central de Catalunya - Etapa 48",
+        "ref": "GR 3",
+        "network": "NAT",
+        "itinerary": [
+          "Vallbona de les Monges",
+          "Fulleda"
+        ]
+      },
+      {
+        "id": 18931281,
+        "name": "GR 3 Sender Central de Catalunya - Etapa 42",
+        "ref": "GR 3",
+        "network": "NAT",
+        "itinerary": [
+          "Cardona",
+          "Solsona"
+        ]
+      },
+      {
+        "id": 18928938,
+        "name": "GR 3 Sender Central de Catalunya - Etapa 01",
+        "ref": "GR 3",
+        "network": "NAT",
+        "itinerary": [
+          "Lleida",
+          "Menàrguens"
+        ]
+      },
+      {
+        "id": 18929150,
+        "name": "GR 3 Sender Central de Catalunya - Etapa 19",
+        "ref": "GR 3",
+        "network": "NAT",
+        "itinerary": [
+          "Castellbó",
+          "La Seu d'Urgell"
+        ]
+      },
+      {
+        "id": 18931126,
+        "name": "GR 3 Sender Central de Catalunya - Etapa 39",
+        "ref": "GR 3",
+        "network": "NAT",
+        "itinerary": [
+          "Manresa",
+          "Camps"
+        ]
+      },
+      {
+        "id": 18929109,
+        "name": "GR 3 Sender Central de Catalunya - Etapa 17",
+        "ref": "GR 3",
+        "network": "NAT",
+        "itinerary": [
+          "Rubió",
+          "Sant Joan de l'Erm"
+        ]
+      },
+      {
+        "id": 18929336,
+        "name": "GR 3 Sender Central de Catalunya - Etapa 22",
+        "ref": "GR 3",
+        "network": "NAT",
+        "itinerary": [
+          "Estana",
+          "Bellver de Cerdanya"
+        ]
+      },
+      {
+        "id": 18929395,
+        "name": "GR 3 Sender Central de Catalunya - Etapa 27",
+        "ref": "GR 3",
+        "network": "NAT",
+        "itinerary": [
+          "Montgrony",
+          "Campdevànol"
+        ]
+      },
+      {
+        "id": 18929397,
+        "name": "GR 3 Sender Central de Catalunya - Etapa 25",
+        "ref": "GR 3",
+        "network": "NAT",
+        "itinerary": [
+          "Coll de Pal",
+          "Castellar de n'Hug"
+        ]
+      },
+      {
+        "id": 18929412,
+        "name": "GR 3 Sender Central de Catalunya - Etapa 30",
+        "ref": "GR 3",
+        "network": "NAT",
+        "itinerary": [
+          "Vallfogona de Ripollès",
+          "Vidrà"
+        ]
+      },
+      {
+        "id": 2704569,
+        "name": "La Loire sauvage à pied",
+        "ref": "GR 3",
+        "network": "NAT",
+        "itinerary": [
+          "La Baule",
+          "Mont Mézenc"
+        ]
+      },
+      {
+        "id": 18929585,
+        "name": "GR 3 Sender Central de Catalunya - Etapa 34",
+        "ref": "GR 3",
+        "network": "NAT",
+        "itinerary": [
+          "Sant Bartomeu del Grau",
+          "L'Estany"
+        ]
+      },
+      {
+        "id": 18928978,
+        "name": "GR 3 Sender Central de Catalunya - Etapa 02",
+        "ref": "GR 3",
+        "network": "NAT",
+        "itinerary": [
+          "Menàrguens",
+          "Balaguer"
+        ]
+      },
+      {
+        "id": 18929032,
+        "name": "GR 3 Sender Central de Catalunya - Etapa 06",
+        "ref": "GR 3",
+        "network": "NAT",
+        "itinerary": [
+          "Sant Esteve de la Sarga",
+          "El Pont de Montanyana"
+        ]
+      },
+      {
+        "id": 18929591,
+        "name": "GR 3 Sender Central de Catalunya - Etapa 35",
+        "ref": "GR 3",
+        "network": "NAT",
+        "itinerary": [
+          "L'Estany",
+          "Moià"
+        ]
+      },
+      {
+        "id": 18930369,
+        "name": "GR 3 Sender Central de Catalunya - Etapa 37",
+        "ref": "GR 3",
+        "network": "NAT",
+        "itinerary": [
+          "Monistrol de Calders",
+          "Navarcles"
+        ]
+      },
+      {
+        "id": 18931125,
+        "name": "GR 3 Sender Central de Catalunya - Etapa 40",
+        "ref": "GR 3",
+        "network": "NAT",
+        "itinerary": [
+          "Camps",
+          "Salo"
+        ]
+      },
+      {
+        "id": 18931282,
+        "name": "GR 3 Sender Central de Catalunya - Etapa 41",
+        "ref": "GR 3",
+        "network": "NAT",
+        "itinerary": [
+          "Salo",
+          "Cardona"
+        ]
+      },
+      {
+        "id": 18931273,
+        "name": "GR 3 Sender Central de Catalunya - Etapa 49",
+        "ref": "GR 3",
+        "network": "NAT",
+        "itinerary": [
+          "Fulleda",
+          "Les Borges Blanques"
+        ]
+      },
+      {
+        "id": 18931276,
+        "name": "GR 3 Sender Central de Catalunya - Etapa 47",
+        "ref": "GR 3",
+        "network": "NAT",
+        "itinerary": [
+          "Tàrrega",
+          "Vallbona de les Monges"
+        ]
+      },
+      {
+        "id": 18931279,
+        "name": "GR 3 Sender Central de Catalunya - Etapa 44",
+        "ref": "GR 3",
+        "network": "NAT",
+        "itinerary": [
+          "Madrona",
+          "Ponts"
+        ]
+      },
+      {
+        "id": 18929111,
+        "name": "GR 3 Sender Central de Catalunya - Etapa 15",
+        "ref": "GR 3",
+        "network": "NAT",
+        "itinerary": [
+          "Gerri de la Sal",
+          "Sort"
+        ]
+      },
+      {
+        "id": 18929003,
+        "name": "GR 3 Sender Central de Catalunya - Etapa 04",
+        "ref": "GR 3",
+        "network": "NAT",
+        "itinerary": [
+          "Tartareu",
+          "Àger"
+        ]
+      },
+      {
+        "id": 18929058,
+        "name": "GR 3 Sender Central de Catalunya - Etapa 09",
+        "ref": "GR 3",
+        "network": "NAT",
+        "itinerary": [
+          "La Torre de Tamúrcia",
+          "Adons"
+        ]
+      },
+      {
+        "id": 18929586,
+        "name": "GR 3 Sender Central de Catalunya - Etapa 33",
+        "ref": "GR 3",
+        "network": "NAT",
+        "itinerary": [
+          "Collet de Sant Martí",
+          "Sant Bartomeu del Grau"
+        ]
+      },
+      {
+        "id": 18929396,
+        "name": "GR 3 Sender Central de Catalunya - Etapa 26",
+        "ref": "GR 3",
+        "network": "NAT",
+        "itinerary": [
+          "Castellar de n'Hug",
+          "Montgrony"
+        ]
+      },
+      {
+        "id": 18929031,
+        "name": "GR 3 Sender Central de Catalunya - Etapa 07",
+        "ref": "GR 3",
+        "network": "NAT",
+        "itinerary": [
+          "El Pont de Montanyana",
+          "Pont d'Orrit"
+        ]
+      },
+      {
+        "id": 18929112,
+        "name": "GR 3 Sender Central de Catalunya - Etapa 14",
+        "ref": "GR 3",
+        "network": "NAT",
+        "itinerary": [
+          "Senterada",
+          "Gerri de la Sal"
+        ]
+      },
+      {
+        "id": 18929359,
+        "name": "GR 3 Sender Central de Catalunya - Etapa 24",
+        "ref": "GR 3",
+        "network": "NAT",
+        "itinerary": [
+          "Alp",
+          "Coll de Pal"
+        ]
+      },
+      {
+        "id": 18929590,
+        "name": "GR 3 Sender Central de Catalunya - Etapa 36",
+        "ref": "GR 3",
+        "network": "NAT",
+        "itinerary": [
+          "Moià",
+          "Monistrol de Calders"
+        ]
+      },
+      {
+        "id": 18929335,
+        "name": "GR 3 Sender Central de Catalunya - Etapa 23",
+        "ref": "GR 3",
+        "network": "NAT",
+        "itinerary": [
+          "Bellver de Cerdanya",
+          "Alp"
+        ]
+      },
+      {
+        "id": 18931127,
+        "name": "GR 3 Sender Central de Catalunya - Etapa 38",
+        "ref": "GR 3",
+        "network": "NAT",
+        "itinerary": [
+          "Navarcles",
+          "Manresa"
+        ]
+      }
+    ],
+    "GR3": [
+      {
+        "id": 12077278,
+        "name": "Eijsden-Margraten Gr3",
+        "ref": "Gr3",
+        "network": "LOC",
+        "itinerary": null
+      },
+      {
+        "id": 12077278,
+        "name": "Eijsden-Margraten Gr3",
+        "ref": "Gr3",
+        "network": "LOC",
+        "itinerary": null
+      },
+      {
+        "id": 3124695,
+        "name": "Camí de la Sal (variant GR3)",
+        "ref": "GR3.1",
+        "network": "NAT",
+        "itinerary": [
+          "Sant Joan de Vilatorrada",
+          "Sant Martí de Fontelles"
+        ]
+      }
+    ],
+    "GR 41": [
+      {
+        "id": 15706394,
+        "name": "La Vallée du Cher",
+        "ref": "GR 41",
+        "network": "NAT",
+        "itinerary": null
+      },
+      {
+        "id": 8499904,
+        "name": "40-41",
+        "ref": "40-41",
+        "network": "NDS",
+        "itinerary": null
+      },
+      {
+        "id": 9644845,
+        "name": "GR 412 Boucle 1 Boucle Noire",
+        "ref": "GR 412 B1",
+        "network": "NAT",
+        "itinerary": null
+      },
+      {
+        "id": 101692,
+        "name": "GR 20",
+        "ref": "GR 20",
+        "network": "NAT",
+        "itinerary": [
+          "Calenzana",
+          "Conca"
+        ]
+      },
+      {
+        "id": 5011474,
+        "name": "GR 5b",
+        "ref": "GR 5b",
+        "network": "NAT",
+        "itinerary": null
+      },
+      {
+        "id": 7238091,
+        "name": "GR R1",
+        "ref": "GR R1",
+        "network": "NAT",
+        "itinerary": null
+      },
+      {
+        "id": 7238289,
+        "name": "GR R3",
+        "ref": "GR R3",
+        "network": "NAT",
+        "itinerary": null
+      },
+      {
+        "id": 5119656,
+        "name": "GR 5c",
+        "ref": "GR 5c",
+        "network": "NAT",
+        "itinerary": null
+      },
+      {
+        "id": 11888292,
+        "name": "GR 5G",
+        "ref": "GR 5G",
+        "network": "NAT",
+        "itinerary": null
+      },
+      {
+        "id": 17637988,
+        "name": "GR 74",
+        "ref": "GR 74",
+        "network": "NAT",
+        "itinerary": null
+      },
+      {
+        "id": 7238256,
+        "name": "GR R2",
+        "ref": "GR R2",
+        "network": "NAT",
+        "itinerary": null
+      },
+      {
+        "id": 4655872,
+        "name": "PR 41",
+        "ref": "",
+        "network": "LOC",
+        "itinerary": null
+      },
+      {
+        "id": 157373,
+        "name": "GR 412 Sentier des Terrils",
+        "ref": "GR 412",
+        "network": "NAT",
+        "itinerary": null
+      },
+      {
+        "id": 15647499,
+        "name": "GR 62C",
+        "ref": "GR 62C",
+        "network": "NAT",
+        "itinerary": [
+          "Valleraugue (Poteau Valleraugue - Cagnel)",
+          "Jonction GR 60"
+        ]
+      },
+      {
+        "id": 14313151,
+        "name": "GR 76B",
+        "ref": "GR 76B",
+        "network": "NAT",
+        "itinerary": [
+          "la Chapelle-sous-Brancion"
+        ]
+      },
+      {
+        "id": 14313047,
+        "name": "GR 76C",
+        "ref": "GR 76C",
+        "network": "NAT",
+        "itinerary": null
+      },
+      {
+        "id": 2785102,
+        "name": "GR 532",
+        "ref": "GR 532",
+        "network": "NAT",
+        "itinerary": [
+          "Mulhouse",
+          "Soultz-sous-Forêts"
+        ]
+      },
+      {
+        "id": 7407977,
+        "name": "GR 10F",
+        "ref": "GR 10F",
+        "network": "NAT",
+        "itinerary": null
+      },
+      {
+        "id": 21258168,
+        "name": "GR 121",
+        "ref": "",
+        "network": "NAT",
+        "itinerary": [
+          "Liège",
+          "Côte d'Opale"
+        ]
+      },
+      {
+        "id": 2139550,
+        "name": "GR 127",
+        "ref": "GR 127",
+        "network": "NAT",
+        "itinerary": null
+      },
+      {
+        "id": 3538122,
+        "name": "GR 62A",
+        "ref": "GR 62A",
+        "network": "NAT",
+        "itinerary": [
+          "Meyrueis",
+          "Pont du Ravin du Riou Sec"
+        ]
+      },
+      {
+        "id": 14313152,
+        "name": "GR 76A",
+        "ref": "GR 76A",
+        "network": "NAT",
+        "itinerary": null
+      },
+      {
+        "id": 15662377,
+        "name": "GR 62B",
+        "ref": "GR 62B",
+        "network": "NAT",
+        "itinerary": [
+          "Panneau Information Puy-de-Wolf",
+          "Villefranche-de-Rouergue"
+        ]
+      },
+      {
+        "id": 12513965,
+        "name": "GR 126",
+        "ref": "",
+        "network": "NAT",
+        "itinerary": null
+      },
+      {
+        "id": 18549723,
+        "name": "GR 129",
+        "ref": "GR 129",
+        "network": "NAT",
+        "itinerary": null
+      },
+      {
+        "id": 9628450,
+        "name": "GR 21B",
+        "ref": "GR 21B",
+        "network": "NAT",
+        "itinerary": [
+          "Villainville",
+          "Yport"
+        ]
+      },
+      {
+        "id": 9079172,
+        "name": "GR 531",
+        "ref": "GR 531",
+        "network": "NAT",
+        "itinerary": [
+          "Leymen",
+          "Soultz-sous-Forêts"
+        ]
+      },
+      {
+        "id": 14310467,
+        "name": "GR 76D",
+        "ref": "GR 76D",
+        "network": "NAT",
+        "itinerary": [
+          "Le Creusot TGV",
+          "Macon TGV"
+        ]
+      },
+      {
+        "id": 9994009,
+        "name": "GR 412 Boucle 2 Les Coteaux",
+        "ref": "GR 412 B2",
+        "network": "NAT",
+        "itinerary": null
+      },
+      {
+        "id": 12420102,
+        "name": "GR 412 Liaison gare de Namur",
+        "ref": "GR 412 L2",
+        "network": "NAT",
+        "itinerary": null
+      },
+      {
+        "id": 9994110,
+        "name": "GR 412 Boucle 3 Hasard-Bas Bois",
+        "ref": "GR 412 B3",
+        "network": "NAT",
+        "itinerary": null
+      },
+      {
+        "id": 15651974,
+        "name": "GR 412 Liaison gare de Thulin",
+        "ref": "GR 412 L3",
+        "network": "NAT",
+        "itinerary": null
+      },
+      {
+        "id": 18498654,
+        "name": "Ruta 41",
+        "ref": "41",
+        "network": "LOC",
+        "itinerary": [
+          "Inchereda",
+          "Enchereda",
+          "Riscos de Juel",
+          "Inchereda"
+        ]
+      },
+      {
+        "id": 2142646,
+        "name": "GR 127B",
+        "ref": "GR 127B",
+        "network": "NAT",
+        "itinerary": null
+      },
+      {
+        "id": 13481799,
+        "name": "GR 412 Liaison GR 573 et gare d'Angleur",
+        "ref": "GR 412 L1",
+        "network": "NAT",
+        "itinerary": null
+      },
+      {
+        "id": 13828923,
+        "name": "variante GR 4B",
+        "ref": "GR 4B",
+        "network": "NAT",
+        "itinerary": [
+          "Labastide-de-Virac",
+          "Orgnac-l'Aven"
+        ]
+      },
+      {
+        "id": 5988320,
+        "name": "11.41 HPS",
+        "ref": "",
+        "network": "LOC",
+        "itinerary": null
+      },
+      {
+        "id": 16007118,
+        "name": "GR 412 Boucle Noire variante sommet terril des Piges",
+        "ref": "GR 412 V2",
+        "network": "REG",
+        "itinerary": null
+      },
+      {
+        "id": 15897998,
+        "name": "GR 5G Nord",
+        "ref": "",
+        "network": "NAT",
+        "itinerary": [
+          "Cocheren",
+          "Saarbrucken"
+        ]
+      },
+      {
+        "id": 3792033,
+        "name": "41. Polleur",
+        "ref": "",
+        "network": "LOC",
+        "itinerary": null
+      },
+      {
+        "id": 20700052,
+        "name": "GR 192 Camí del Vent - Etapa 4",
+        "ref": "GR 192",
+        "network": "NAT",
+        "itinerary": [
+          "La Torre de la Calma",
+          "Bassa del Povet de l'Amorós"
+        ]
+      },
+      {
+        "id": 18308154,
+        "name": "GR 5 France",
+        "ref": "",
+        "network": "INT",
+        "itinerary": null
+      },
+      {
+        "id": 16234315,
+        "name": "Accès GR 59",
+        "ref": "GR 559A",
+        "network": "NAT",
+        "itinerary": [
+          "Lons-le-Saunier",
+          "Perrigny"
+        ]
+      },
+      {
+        "id": 18308155,
+        "name": "GR 5 België",
+        "ref": "",
+        "network": "INT",
+        "itinerary": null
+      },
+      {
+        "id": 14636198,
+        "name": "41 Kreuzweg",
+        "ref": "41",
+        "network": "LOC",
+        "itinerary": null
+      },
+      {
+        "id": 10678386,
+        "name": "Redruth BR 41 Ground Truth",
+        "ref": "",
+        "network": "LOC",
+        "itinerary": null
+      },
+      {
+        "id": 16699053,
+        "name": "GR 5 Vosges",
+        "ref": "GR 5",
+        "network": "INT",
+        "itinerary": [
+          "Le Donon",
+          "Fesches-le-Châtel"
+        ]
+      },
+      {
+        "id": 11226412,
+        "name": "Alsdorf (41) - Alsdorf (43)",
+        "ref": "41-43",
+        "network": "NDS",
+        "itinerary": null
+      },
+      {
+        "id": 20070482,
+        "name": "Liaison GR 7",
+        "ref": "",
+        "network": "LOC",
+        "itinerary": [
+          "GR 7",
+          "Gr 7"
+        ]
+      },
+      {
+        "id": 18099035,
+        "name": "Wanderweg 41",
+        "ref": "41",
+        "network": "LOC",
+        "itinerary": null
+      }
+    ],
+    "GR 46": [
+      {
+        "id": 6439515,
+        "name": "De Tours à Toulouse",
+        "ref": "GR 46",
+        "network": "NAT",
+        "itinerary": [
+          "Tours",
+          "Brive la Gaillarde",
+          "Toulouse"
+        ]
+      },
+      {
+        "id": 19728508,
+        "name": "Tierra de los Descubrimientos",
+        "ref": "GR 46",
+        "network": "NAT",
+        "itinerary": [
+          "Mina Concepción",
+          "Navahermosa"
+        ]
+      },
+      {
+        "id": 2984855,
+        "name": "46",
+        "ref": "46",
+        "network": "LOC",
+        "itinerary": null
+      },
+      {
+        "id": 11894631,
+        "name": "GR 5G",
+        "ref": "",
+        "network": "NAT",
+        "itinerary": [
+          "Metz",
+          "Cocheren"
+        ]
+      },
+      {
+        "id": 17637988,
+        "name": "GR 74",
+        "ref": "GR 74",
+        "network": "NAT",
+        "itinerary": null
+      },
+      {
+        "id": 101692,
+        "name": "GR 20",
+        "ref": "GR 20",
+        "network": "NAT",
+        "itinerary": [
+          "Calenzana",
+          "Conca"
+        ]
+      },
+      {
+        "id": 7238256,
+        "name": "GR R2",
+        "ref": "GR R2",
+        "network": "NAT",
+        "itinerary": null
+      },
+      {
+        "id": 8497488,
+        "name": "31-46",
+        "ref": "31-46",
+        "network": "NDS",
+        "itinerary": null
+      },
+      {
+        "id": 5119656,
+        "name": "GR 5c",
+        "ref": "GR 5c",
+        "network": "NAT",
+        "itinerary": null
+      },
+      {
+        "id": 11888292,
+        "name": "GR 5G",
+        "ref": "GR 5G",
+        "network": "NAT",
+        "itinerary": null
+      },
+      {
+        "id": 6197308,
+        "name": "GR 96",
+        "ref": "GR 96",
+        "network": "NAT",
+        "itinerary": [
+          "Samoëns",
+          "Aix-les-Bains"
+        ]
+      },
+      {
+        "id": 7238091,
+        "name": "GR R1",
+        "ref": "GR R1",
+        "network": "NAT",
+        "itinerary": null
+      },
+      {
+        "id": 14313151,
+        "name": "GR 76B",
+        "ref": "GR 76B",
+        "network": "NAT",
+        "itinerary": [
+          "la Chapelle-sous-Brancion"
+        ]
+      },
+      {
+        "id": 2454566,
+        "name": "GR 122",
+        "ref": "GR 122",
+        "network": "NAT",
+        "itinerary": null
+      },
+      {
+        "id": 18549723,
+        "name": "GR 129",
+        "ref": "GR 129",
+        "network": "NAT",
+        "itinerary": null
+      },
+      {
+        "id": 12513965,
+        "name": "GR 126",
+        "ref": "",
+        "network": "NAT",
+        "itinerary": null
+      },
+      {
+        "id": 2139550,
+        "name": "GR 127",
+        "ref": "GR 127",
+        "network": "NAT",
+        "itinerary": null
+      },
+      {
+        "id": 9628450,
+        "name": "GR 21B",
+        "ref": "GR 21B",
+        "network": "NAT",
+        "itinerary": [
+          "Villainville",
+          "Yport"
+        ]
+      },
+      {
+        "id": 9079172,
+        "name": "GR 531",
+        "ref": "GR 531",
+        "network": "NAT",
+        "itinerary": [
+          "Leymen",
+          "Soultz-sous-Forêts"
+        ]
+      },
+      {
+        "id": 21258168,
+        "name": "GR 121",
+        "ref": "",
+        "network": "NAT",
+        "itinerary": [
+          "Liège",
+          "Côte d'Opale"
+        ]
+      },
+      {
+        "id": 14313152,
+        "name": "GR 76A",
+        "ref": "GR 76A",
+        "network": "NAT",
+        "itinerary": null
+      },
+      {
+        "id": 33270,
+        "name": "GR 105",
+        "ref": "GR 105",
+        "network": "NAT",
+        "itinerary": null
+      },
+      {
+        "id": 2790505,
+        "name": "GR 66A",
+        "ref": "66A",
+        "network": "LOC",
+        "itinerary": null
+      },
+      {
+        "id": 2099432,
+        "name": "GR 564",
+        "ref": "GR 564",
+        "network": "NAT",
+        "itinerary": null
+      },
+      {
+        "id": 15662377,
+        "name": "GR 62B",
+        "ref": "GR 62B",
+        "network": "NAT",
+        "itinerary": [
+          "Panneau Information Puy-de-Wolf",
+          "Villefranche-de-Rouergue"
+        ]
+      },
+      {
+        "id": 7407977,
+        "name": "GR 10F",
+        "ref": "GR 10F",
+        "network": "NAT",
+        "itinerary": null
+      },
+      {
+        "id": 15647499,
+        "name": "GR 62C",
+        "ref": "GR 62C",
+        "network": "NAT",
+        "itinerary": [
+          "Valleraugue (Poteau Valleraugue - Cagnel)",
+          "Jonction GR 60"
+        ]
+      },
+      {
+        "id": 3538122,
+        "name": "GR 62A",
+        "ref": "GR 62A",
+        "network": "NAT",
+        "itinerary": [
+          "Meyrueis",
+          "Pont du Ravin du Riou Sec"
+        ]
+      },
+      {
+        "id": 14310467,
+        "name": "GR 76D",
+        "ref": "GR 76D",
+        "network": "NAT",
+        "itinerary": [
+          "Le Creusot TGV",
+          "Macon TGV"
+        ]
+      },
+      {
+        "id": 2142646,
+        "name": "GR 127B",
+        "ref": "GR 127B",
+        "network": "NAT",
+        "itinerary": null
+      },
+      {
+        "id": 2141317,
+        "name": "GR 127A",
+        "ref": "GR 127A",
+        "network": "NAT",
+        "itinerary": null
+      },
+      {
+        "id": 13828923,
+        "name": "variante GR 4B",
+        "ref": "GR 4B",
+        "network": "NAT",
+        "itinerary": [
+          "Labastide-de-Virac",
+          "Orgnac-l'Aven"
+        ]
+      },
+      {
+        "id": 15897998,
+        "name": "GR 5G Nord",
+        "ref": "",
+        "network": "NAT",
+        "itinerary": [
+          "Cocheren",
+          "Saarbrucken"
+        ]
+      },
+      {
+        "id": 20700052,
+        "name": "GR 192 Camí del Vent - Etapa 4",
+        "ref": "GR 192",
+        "network": "NAT",
+        "itinerary": [
+          "La Torre de la Calma",
+          "Bassa del Povet de l'Amorós"
+        ]
+      },
+      {
+        "id": 16234315,
+        "name": "Accès GR 59",
+        "ref": "GR 559A",
+        "network": "NAT",
+        "itinerary": [
+          "Lons-le-Saunier",
+          "Perrigny"
+        ]
+      },
+      {
+        "id": 18308154,
+        "name": "GR 5 France",
+        "ref": "",
+        "network": "INT",
+        "itinerary": null
+      },
+      {
+        "id": 16699053,
+        "name": "GR 5 Vosges",
+        "ref": "GR 5",
+        "network": "INT",
+        "itinerary": [
+          "Le Donon",
+          "Fesches-le-Châtel"
+        ]
+      },
+      {
+        "id": 18308155,
+        "name": "GR 5 België",
+        "ref": "",
+        "network": "INT",
+        "itinerary": null
+      },
+      {
+        "id": 16234317,
+        "name": "Accès GR 59",
+        "ref": "GR 59A",
+        "network": "NAT",
+        "itinerary": [
+          "Dole",
+          "Arc-et-Senans"
+        ]
+      }
+    ],
+    "GR 35": [
+      {
+        "id": 6630218,
+        "name": "GR 35 Altxonbide ibilbidea",
+        "ref": "GR 35",
+        "network": "NAT",
+        "itinerary": null
+      },
+      {
+        "id": 6630216,
+        "name": "E2 Altxonbide ibilbidea: Bidegoian - Zaldibia",
+        "ref": "GR 35",
+        "network": "NAT",
+        "itinerary": null
+      },
+      {
+        "id": 7477707,
+        "name": "Du Perche à la Loire",
+        "ref": "GR 35",
+        "network": "NAT",
+        "itinerary": null
+      },
+      {
+        "id": 6630217,
+        "name": "E1 Altxonbide ibilbidea: Zarautz - Bidegoian",
+        "ref": "GR 35",
+        "network": "NAT",
+        "itinerary": null
+      },
+      {
+        "id": 6630215,
+        "name": "E3 Altxonbide ibilbidea: Zaldibia - Lizarrusti",
+        "ref": "GR 35",
+        "network": "NAT",
+        "itinerary": null
+      },
+      {
+        "id": 6630218,
+        "name": "GR 35 Altxonbide ibilbidea",
+        "ref": "GR 35",
+        "network": "NAT",
+        "itinerary": null
+      }
+    ],
+    "GR 36": [
+      {
+        "id": 7074522,
+        "name": "Trans- Espadan",
+        "ref": "GR 36",
+        "network": "LOC",
+        "itinerary": null
+      },
+      {
+        "id": 12095694,
+        "name": "De la Manche aux Pyrénées 01, Ouistreham - Pont-d'Ouilly",
+        "ref": "GR 36",
+        "network": "NAT",
+        "itinerary": [
+          "Ouistreham",
+          "Pont-d'Ouilly"
+        ]
+      },
+      {
+        "id": 1179652,
+        "name": "Trans-Espadán",
+        "ref": "GR 36",
+        "network": "NAT",
+        "itinerary": null
+      },
+      {
+        "id": 10805122,
+        "name": "De la Manche aux Pyrénées",
+        "ref": "GR 36",
+        "network": "NAT",
+        "itinerary": null
+      },
+      {
+        "id": 3008239,
+        "name": "36",
+        "ref": "36",
+        "network": "LOC",
+        "itinerary": null
+      },
+      {
+        "id": 8487604,
+        "name": "36-38",
+        "ref": "36-38",
+        "network": "NDS",
+        "itinerary": null
+      },
+      {
+        "id": 7238091,
+        "name": "GR R1",
+        "ref": "GR R1",
+        "network": "NAT",
+        "itinerary": null
+      },
+      {
+        "id": 11888292,
+        "name": "GR 5G",
+        "ref": "GR 5G",
+        "network": "NAT",
+        "itinerary": null
+      },
+      {
+        "id": 7238289,
+        "name": "GR R3",
+        "ref": "GR R3",
+        "network": "NAT",
+        "itinerary": null
+      },
+      {
+        "id": 11894631,
+        "name": "GR 5G",
+        "ref": "",
+        "network": "NAT",
+        "itinerary": [
+          "Metz",
+          "Cocheren"
+        ]
+      },
+      {
+        "id": 101692,
+        "name": "GR 20",
+        "ref": "GR 20",
+        "network": "NAT",
+        "itinerary": [
+          "Calenzana",
+          "Conca"
+        ]
+      },
+      {
+        "id": 5011474,
+        "name": "GR 5b",
+        "ref": "GR 5b",
+        "network": "NAT",
+        "itinerary": null
+      },
+      {
+        "id": 7238256,
+        "name": "GR R2",
+        "ref": "GR R2",
+        "network": "NAT",
+        "itinerary": null
+      },
+      {
+        "id": 2099432,
+        "name": "GR 564",
+        "ref": "GR 564",
+        "network": "NAT",
+        "itinerary": null
+      },
+      {
+        "id": 14313047,
+        "name": "GR 76C",
+        "ref": "GR 76C",
+        "network": "NAT",
+        "itinerary": null
+      },
+      {
+        "id": 21258168,
+        "name": "GR 121",
+        "ref": "",
+        "network": "NAT",
+        "itinerary": [
+          "Liège",
+          "Côte d'Opale"
+        ]
+      },
+      {
+        "id": 33270,
+        "name": "GR 105",
+        "ref": "GR 105",
+        "network": "NAT",
+        "itinerary": null
+      },
+      {
+        "id": 2139550,
+        "name": "GR 127",
+        "ref": "GR 127",
+        "network": "NAT",
+        "itinerary": null
+      },
+      {
+        "id": 12513965,
+        "name": "GR 126",
+        "ref": "",
+        "network": "NAT",
+        "itinerary": null
+      },
+      {
+        "id": 18549723,
+        "name": "GR 129",
+        "ref": "GR 129",
+        "network": "NAT",
+        "itinerary": null
+      },
+      {
+        "id": 15662377,
+        "name": "GR 62B",
+        "ref": "GR 62B",
+        "network": "NAT",
+        "itinerary": [
+          "Panneau Information Puy-de-Wolf",
+          "Villefranche-de-Rouergue"
+        ]
+      },
+      {
+        "id": 2790505,
+        "name": "GR 66A",
+        "ref": "66A",
+        "network": "LOC",
+        "itinerary": null
+      },
+      {
+        "id": 14313152,
+        "name": "GR 76A",
+        "ref": "GR 76A",
+        "network": "NAT",
+        "itinerary": null
+      },
+      {
+        "id": 2785102,
+        "name": "GR 532",
+        "ref": "GR 532",
+        "network": "NAT",
+        "itinerary": [
+          "Mulhouse",
+          "Soultz-sous-Forêts"
+        ]
+      },
+      {
+        "id": 15647499,
+        "name": "GR 62C",
+        "ref": "GR 62C",
+        "network": "NAT",
+        "itinerary": [
+          "Valleraugue (Poteau Valleraugue - Cagnel)",
+          "Jonction GR 60"
+        ]
+      },
+      {
+        "id": 2454566,
+        "name": "GR 122",
+        "ref": "GR 122",
+        "network": "NAT",
+        "itinerary": null
+      },
+      {
+        "id": 14313151,
+        "name": "GR 76B",
+        "ref": "GR 76B",
+        "network": "NAT",
+        "itinerary": [
+          "la Chapelle-sous-Brancion"
+        ]
+      },
+      {
+        "id": 2142646,
+        "name": "GR 127B",
+        "ref": "GR 127B",
+        "network": "NAT",
+        "itinerary": null
+      },
+      {
+        "id": 18475131,
+        "name": "Ruta 36",
+        "ref": "36",
+        "network": "LOC",
+        "itinerary": [
+          "Embalse del Garabato",
+          "Embalse del Garabato"
+        ]
+      },
+      {
+        "id": 7717946,
+        "name": "36/H4: Große Plaike",
+        "ref": "36;H4",
+        "network": "LOC",
+        "itinerary": null
+      },
+      {
+        "id": 11916619,
+        "name": "GR 5G Sud",
+        "ref": "",
+        "network": "NAT",
+        "itinerary": [
+          "Cocheren",
+          "Welferding"
+        ]
+      },
+      {
+        "id": 10914990,
+        "name": "Liaison GR 37 - GR 39",
+        "ref": "",
+        "network": "NAT",
+        "itinerary": null
+      },
+      {
+        "id": 12927077,
+        "name": "Liaison GR 37-GR 38",
+        "ref": "",
+        "network": "NAT",
+        "itinerary": null
+      },
+      {
+        "id": 18929590,
+        "name": "GR 3 Sender Central de Catalunya - Etapa 36",
+        "ref": "GR 3",
+        "network": "NAT",
+        "itinerary": [
+          "Moià",
+          "Monistrol de Calders"
+        ]
+      },
+      {
+        "id": 15897998,
+        "name": "GR 5G Nord",
+        "ref": "",
+        "network": "NAT",
+        "itinerary": [
+          "Cocheren",
+          "Saarbrucken"
+        ]
+      },
+      {
+        "id": 20700053,
+        "name": "GR 192 Camí del Vent - Etapa 3",
+        "ref": "GR 192",
+        "network": "NAT",
+        "itinerary": [
+          "Masboquera",
+          "Torre de la Calma"
+        ]
+      },
+      {
+        "id": 16234315,
+        "name": "Accès GR 59",
+        "ref": "GR 559A",
+        "network": "NAT",
+        "itinerary": [
+          "Lons-le-Saunier",
+          "Perrigny"
+        ]
+      },
+      {
+        "id": 18308154,
+        "name": "GR 5 France",
+        "ref": "",
+        "network": "INT",
+        "itinerary": null
+      },
+      {
+        "id": 16234317,
+        "name": "Accès GR 59",
+        "ref": "GR 59A",
+        "network": "NAT",
+        "itinerary": [
+          "Dole",
+          "Arc-et-Senans"
+        ]
+      },
+      {
+        "id": 10686918,
+        "name": "Redruth FP 36 Ground Truth",
+        "ref": "",
+        "network": "LOC",
+        "itinerary": null
+      },
+      {
+        "id": 18308155,
+        "name": "GR 5 België",
+        "ref": "",
+        "network": "INT",
+        "itinerary": null
+      }
+    ],
+    "GR 655": [
+      {
+        "id": 6026933,
+        "name": "Via Turonensis",
+        "ref": "GR 655",
+        "network": "INT",
+        "itinerary": null
+      },
+      {
+        "id": 12719320,
+        "name": "de Saint-Quentin à Orrouy (selon GR 655)",
+        "ref": "",
+        "network": "INT",
+        "itinerary": [
+          "Saint-Quentin",
+          "Orrouy"
+        ]
+      },
+      {
+        "id": 6778141,
+        "name": "655",
+        "ref": "655",
+        "network": "LOC",
+        "itinerary": [
+          "s PP za Vojak i. od Grnjača",
+          "Grnjača",
+          "s PP za Vojak z. od Grnjača"
+        ]
+      }
+    ],
+    "Berry": [
+      {
+        "id": 12995568,
+        "name": "Berry Hill Trail",
+        "ref": "",
+        "network": "LOC",
+        "itinerary": null
+      },
+      {
+        "id": 18466047,
+        "name": "Berry Bluff Trail",
+        "ref": "",
+        "network": "LOC",
+        "itinerary": null
+      },
+      {
+        "id": 21108627,
+        "name": "Berry Patch Trail",
+        "ref": "",
+        "network": "LOC",
+        "itinerary": null
+      },
+      {
+        "id": 19109017,
+        "name": "Lower Berry Trail",
+        "ref": "",
+        "network": "LOC",
+        "itinerary": null
+      },
+      {
+        "id": 6780738,
+        "name": "Sentiero Tenente Berry",
+        "ref": "TB",
+        "network": "LOC",
+        "itinerary": null
+      },
+      {
+        "id": 19560122,
+        "name": "La Grand Noir du Berry",
+        "ref": "",
+        "network": "LOC",
+        "itinerary": null
+      },
+      {
+        "id": 11569411,
+        "name": "Berry Hollow Fire Road",
+        "ref": "",
+        "network": "LOC",
+        "itinerary": null
+      },
+      {
+        "id": 18990713,
+        "name": "Berry Creek Falls Trail",
+        "ref": "",
+        "network": "LOC",
+        "itinerary": null
+      },
+      {
+        "id": 12901574,
+        "name": "Berry's Green Circular Walk",
+        "ref": "",
+        "network": "LOC",
+        "itinerary": null
+      }
+    ],
+    "Vallée du Cher": [
+      {
+        "id": 15706394,
+        "name": "La Vallée du Cher",
+        "ref": "GR 41",
+        "network": "NAT",
+        "itinerary": null
+      }
+    ],
+    "Compostelle": [
+      {
+        "id": 18083879,
+        "name": "Le Compostelle",
+        "ref": "PR2",
+        "network": "LOC",
+        "itinerary": null
+      }
+    ],
+    "Loire": [
+      {
+        "id": 17781568,
+        "name": "La Loire - Langeais",
+        "ref": "6",
+        "network": "LOC",
+        "itinerary": null
+      },
+      {
+        "id": 2013686,
+        "name": "Les Bords de Loire",
+        "ref": "71389_circuit_sa1.xy",
+        "network": "LOC",
+        "itinerary": null
+      },
+      {
+        "id": 8186441,
+        "name": "Le Bord de la Loire",
+        "ref": "",
+        "network": "LOC",
+        "itinerary": null
+      },
+      {
+        "id": 13472159,
+        "name": "Du Cher à La Loire",
+        "ref": "GR 413",
+        "network": "NAT",
+        "itinerary": null
+      },
+      {
+        "id": 7653968,
+        "name": "De Loire et Forêt",
+        "ref": "",
+        "network": "LOC",
+        "itinerary": null
+      },
+      {
+        "id": 13481848,
+        "name": "De La Seine à La Loire",
+        "ref": "GR 32",
+        "network": "NAT",
+        "itinerary": null
+      },
+      {
+        "id": 7477707,
+        "name": "Du Perche à la Loire",
+        "ref": "GR 35",
+        "network": "NAT",
+        "itinerary": null
+      },
+      {
+        "id": 13046468,
+        "name": "De Vendôme au Loire",
+        "ref": "GR 353",
+        "network": "NAT",
+        "itinerary": null
+      },
+      {
+        "id": 15832003,
+        "name": "Les Gorges de la Loire",
+        "ref": "",
+        "network": "REG",
+        "itinerary": null
+      },
+      {
+        "id": 17071935,
+        "name": "Entre Loire et Sologne",
+        "ref": "",
+        "network": "LOC",
+        "itinerary": null
+      },
+      {
+        "id": 9854725,
+        "name": "circuit Èvre et Loire",
+        "ref": "",
+        "network": "LOC",
+        "itinerary": null
+      },
+      {
+        "id": 20988939,
+        "name": "Des coteaux à la Loire",
+        "ref": "",
+        "network": "LOC",
+        "itinerary": null
+      },
+      {
+        "id": 2704569,
+        "name": "La Loire sauvage à pied",
+        "ref": "GR 3",
+        "network": "NAT",
+        "itinerary": [
+          "La Baule",
+          "Mont Mézenc"
+        ]
+      },
+      {
+        "id": 16486257,
+        "name": "Circuit des bords de Loire",
+        "ref": "",
+        "network": "LOC",
+        "itinerary": null
+      },
+      {
+        "id": 17824005,
+        "name": "Les serres - Chouzé-sur-Loire",
+        "ref": "85",
+        "network": "LOC",
+        "itinerary": null
+      },
+      {
+        "id": 17814024,
+        "name": "Les Forges - Coteaux-sur-Loire",
+        "ref": "67",
+        "network": "LOC",
+        "itinerary": null
+      },
+      {
+        "id": 16367841,
+        "name": "Bréhémont - Entre Indre et Loire",
+        "ref": "",
+        "network": "LOC",
+        "itinerary": null
+      },
+      {
+        "id": 16341208,
+        "name": "Tours Sentier Bord de Loire",
+        "ref": "33",
+        "network": "LOC",
+        "itinerary": null
+      },
+      {
+        "id": 17817756,
+        "name": "Port Boulet - Chouzé-sur-Loire",
+        "ref": "84",
+        "network": "LOC",
+        "itinerary": null
+      },
+      {
+        "id": 6768606,
+        "name": "Vallée de la Loire Rive Droite",
+        "ref": "",
+        "network": "NAT",
+        "itinerary": null
+      },
+      {
+        "id": 17817674,
+        "name": "De la Loire au Lane - La-Chapelle-sur-Loire",
+        "ref": "82",
+        "network": "LOC",
+        "itinerary": null
+      },
+      {
+        "id": 17826574,
+        "name": "L’Île Bourdon - Chouzé-sur-Loire",
+        "ref": "91",
+        "network": "LOC",
+        "itinerary": null
+      },
+      {
+        "id": 17813962,
+        "name": "Les Trois Vaux - Coteaux-sur-Loire",
+        "ref": "64",
+        "network": "LOC",
+        "itinerary": null
+      },
+      {
+        "id": 17504104,
+        "name": "Le Morier - Saint-Michel-sur-Loire",
+        "ref": "10",
+        "network": "LOC",
+        "itinerary": null
+      },
+      {
+        "id": 6762350,
+        "name": "Les Coteaux du Layon et de la Loire",
+        "ref": "",
+        "network": "REG",
+        "itinerary": null
+      },
+      {
+        "id": 8415539,
+        "name": "De Vendôme au Loire, Vendôme - Saint-Lubin",
+        "ref": "GR 353",
+        "network": "NAT",
+        "itinerary": null
+      },
+      {
+        "id": 17813988,
+        "name": "Le Carroi Marin - Coteaux-sur-Loire",
+        "ref": "65",
+        "network": "LOC",
+        "itinerary": null
+      },
+      {
+        "id": 13873878,
+        "name": "De Châteaux en Châteaux entre la Loire et le Cher",
+        "ref": "",
+        "network": "REG",
+        "itinerary": null
+      },
+      {
+        "id": 17504045,
+        "name": "Les Grands Ormeaux - Coteaux-sur-Loire",
+        "ref": "7",
+        "network": "LOC",
+        "itinerary": null
+      },
+      {
+        "id": 16378678,
+        "name": "Entre Loire et vignes - Montlouis-sur-Loire",
+        "ref": "",
+        "network": "LOC",
+        "itinerary": null
+      },
+      {
+        "id": 4043074,
+        "name": "L'Atlantique entre Loire et Bidassoa",
+        "ref": "GR 8",
+        "network": "NAT",
+        "itinerary": [
+          "Saint-Brevin-les-Pins",
+          "Hendaye"
+        ]
+      },
+      {
+        "id": 17813877,
+        "name": "Landes et Forêts - Coteaux-sur-Loire",
+        "ref": "63",
+        "network": "LOC",
+        "itinerary": null
+      },
+      {
+        "id": 8462260,
+        "name": "Voie de Vézelay, Vézelay - La Charité-sur-Loire",
+        "ref": "",
+        "network": "NAT",
+        "itinerary": null
+      },
+      {
+        "id": 17078035,
+        "name": "Entre fleuve et bois - Rilly-sur-Loire",
+        "ref": "",
+        "network": "LOC",
+        "itinerary": null
+      },
+      {
+        "id": 16478204,
+        "name": "Circuit de la Noue et des bords de Loire",
+        "ref": "",
+        "network": "LOC",
+        "itinerary": null
+      },
+      {
+        "id": 16341820,
+        "name": "Saint-Cyr-sur-Loire Sentier découverte",
+        "ref": "25",
+        "network": "LOC",
+        "itinerary": null
+      },
+      {
+        "id": 17814001,
+        "name": "Rochecotte et Chabrol - Coteaux-sur-Loire",
+        "ref": "66",
+        "network": "LOC",
+        "itinerary": null
+      },
+      {
+        "id": 18257156,
+        "name": "Entre Vignes et Bois - Montlouis-sur-Loire",
+        "ref": "",
+        "network": "LOC",
+        "itinerary": null
+      },
+      {
+        "id": 17826596,
+        "name": "Le Port de Montsoreau - Chouzé-sur-Loire",
+        "ref": "92",
+        "network": "LOC",
+        "itinerary": null
+      },
+      {
+        "id": 16819743,
+        "name": "Randonnée non balisée de Rilly sur Loire",
+        "ref": "",
+        "network": "LOC",
+        "itinerary": null
+      },
+      {
+        "id": 16337956,
+        "name": "Sentier entre Loire et Vignes - Rochecorbon",
+        "ref": "21",
+        "network": "LOC",
+        "itinerary": null
+      },
+      {
+        "id": 17814132,
+        "name": "Ingrandes de Touraine - Coteaux-sur-Loire",
+        "ref": "70",
+        "network": "LOC",
+        "itinerary": null
+      },
+      {
+        "id": 17504102,
+        "name": "La Gironde de l'Étang - Saint-Michel-sur-Loire",
+        "ref": "9",
+        "network": "LOC",
+        "itinerary": null
+      },
+      {
+        "id": 16341772,
+        "name": "Sentier du bord de Loire - Saint-Pierre-des-Corps",
+        "ref": "29",
+        "network": "LOC",
+        "itinerary": null
+      },
+      {
+        "id": 16378679,
+        "name": "Entre Loire et vignes (variante) - Montlouis-sur-Loire",
+        "ref": "",
+        "network": "LOC",
+        "itinerary": null
+      },
+      {
+        "id": 17078040,
+        "name": "Par le Coteau et les Varennes - Rilly-sur-Loire",
+        "ref": "",
+        "network": "LOC",
+        "itinerary": null
+      },
+      {
+        "id": 17826653,
+        "name": "Les Bateaux de Loire - La Chapelle-sur-Loire - Retigné",
+        "ref": "81",
+        "network": "LOC",
+        "itinerary": null
+      },
+      {
+        "id": 16341685,
+        "name": "Sentier entre Loire et Cher - Saint-Pierre-des-Corps",
+        "ref": "30",
+        "network": "LOC",
+        "itinerary": null
+      },
+      {
+        "id": 12080571,
+        "name": "Via Turonensis par Orléans, Orléans - Meung-sur-Loire",
+        "ref": "",
+        "network": "INT",
+        "itinerary": [
+          "Orléans",
+          "Meung-sur-Loire"
+        ]
+      },
+      {
+        "id": 8410979,
+        "name": "Vallée de la Loire Rive droite par Champtocé",
+        "ref": "",
+        "network": "NAT",
+        "itinerary": null
+      }
+    ],
+    "Brenne": [
+      {
+        "id": 17470202,
+        "name": "Vignes et Brenne",
+        "ref": "",
+        "network": "LOC",
+        "itinerary": null
+      },
+      {
+        "id": 17329915,
+        "name": "Vallée de la Brenne",
+        "ref": "",
+        "network": "LOC",
+        "itinerary": null
+      },
+      {
+        "id": 17432860,
+        "name": "Circuit des Plateaux de la Brenne",
+        "ref": "",
+        "network": "LOC",
+        "itinerary": null
+      },
+      {
+        "id": 18243526,
+        "name": "Rencontre avec les paysages de Brenne",
+        "ref": "2",
+        "network": "LOC",
+        "itinerary": null
+      },
+      {
+        "id": 16367870,
+        "name": "Vignes et Patrimoine - Vernou-sur-Brenne",
+        "ref": "",
+        "network": "LOC",
+        "itinerary": null
+      },
+      {
+        "id": 17544899,
+        "name": "Découvertes Champêtres en Val de Brenne et Gâtines",
+        "ref": "",
+        "network": "LOC",
+        "itinerary": null
+      }
+    ],
+    "Perche": [
+      {
+        "id": 12820305,
+        "name": "Circuit du Perche",
+        "ref": "",
+        "network": "LOC",
+        "itinerary": null
+      },
+      {
+        "id": 2667178,
+        "name": "Perche authentique",
+        "ref": "",
+        "network": "LOC",
+        "itinerary": null
+      },
+      {
+        "id": 7477707,
+        "name": "Du Perche à la Loire",
+        "ref": "GR 35",
+        "network": "NAT",
+        "itinerary": null
+      },
+      {
+        "id": 7087062,
+        "name": "Circuit de Haute-Perche",
+        "ref": "",
+        "network": "LOC",
+        "itinerary": null
+      }
+    ],
+    "Vendôme": [
+      {
+        "id": 13046468,
+        "name": "De Vendôme au Loire",
+        "ref": "GR 353",
+        "network": "NAT",
+        "itinerary": null
+      },
+      {
+        "id": 16446658,
+        "name": "Chemin de Trèves, Vendôme - Tours",
+        "ref": "",
+        "network": "INT",
+        "itinerary": [
+          "Vendôme",
+          "Tours"
+        ]
+      },
+      {
+        "id": 8415539,
+        "name": "De Vendôme au Loire, Vendôme - Saint-Lubin",
+        "ref": "GR 353",
+        "network": "NAT",
+        "itinerary": null
+      },
+      {
+        "id": 13046466,
+        "name": "De Vendôme au Loir, variante Blois",
+        "ref": "",
+        "network": "NAT",
+        "itinerary": null
+      },
+      {
+        "id": 19417626,
+        "name": "Chemin de Trèves, Châteaudun - Vendôme",
+        "ref": "",
+        "network": "INT",
+        "itinerary": [
+          "Châteaudun",
+          "Vendôme"
+        ]
+      },
+      {
+        "id": 13046467,
+        "name": "De Vendôme au Loire, variante Chouzy-sur-Cisse",
+        "ref": "",
+        "network": "NAT",
+        "itinerary": null
+      },
+      {
+        "id": 8415515,
+        "name": "Via Turonensis par Chartres, Vendôme - Lavardin",
+        "ref": "",
+        "network": "INT",
+        "itinerary": [
+          "Vendôme",
+          "Villiersfaux",
+          "Houssay",
+          "Lavardin"
+        ]
+      },
+      {
+        "id": 11894574,
+        "name": "Via Turonensis par Chartres, Montigny-le-Gannelon - Vendôme",
+        "ref": "",
+        "network": "NAT",
+        "itinerary": [
+          "Vendôme"
+        ]
+      }
+    ],
+    "Beauce": [
+      {
+        "id": 10273314,
+        "name": "L'Essonne - Aux Confins de la Beauce",
+        "ref": "",
+        "network": "REG",
+        "itinerary": null
+      },
+      {
+        "id": 16780746,
+        "name": "Randonnée non balisée de Champigny-en-Beauce",
+        "ref": "",
+        "network": "LOC",
+        "itinerary": null
+      }
+    ]
+  }
+}

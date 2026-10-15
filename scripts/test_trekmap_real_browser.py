@@ -580,6 +580,18 @@ try:
     # is actually interactable rather than checking immediately after class change.
     wait.until(lambda d: mobile_close.is_displayed(),
                message=f"Mobile filter close remained hidden: {mobile_info}")
+    # A visible button can still move under the pointer while the 240 ms
+    # bottom-sheet translation runs. Wait for its true settled hit target.
+    wait.until(lambda d: d.execute_script(
+        "const f=document.querySelector('#sidebar .filters'),"
+        "b=document.getElementById('tm-filter-toggle');"
+        "if(!f||!b)return false;"
+        "const matrix=getComputedStyle(f).transform;"
+        "const settled=matrix==='none'||/matrix\\(1,\\s*0,\\s*0,\\s*1,\\s*0,\\s*0\\)/.test(matrix);"
+        "const r=b.getBoundingClientRect();"
+        "const hit=document.elementFromPoint(r.left+r.width/2,r.top+r.height/2);"
+        "return settled&&(hit===b||b.contains(hit));"
+    ), message=f"Mobile filter close never became clickable: {mobile_info}")
     mobile_close.click()
     wait.until(lambda d: "tm-mobile-filters-open" not in
                d.find_element(By.TAG_NAME, "body").get_attribute("class").split())
