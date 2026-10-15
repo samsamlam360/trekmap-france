@@ -403,8 +403,21 @@ try:
     # Reproduce reported bug: "À découvrir" must expose and focus the actual editor.
     discover=driver.find_element(By.CSS_SELECTOR, '[data-p-select="910002"]')
     assert "À découvrir" in discover.text
+    driver.execute_script(
+        "window.__profileErrors=[];"
+        "window.addEventListener('error',e=>__profileErrors.push(String(e.message)));"
+        "window.addEventListener('unhandledrejection',e=>__profileErrors.push(String(e.reason)));"
+    )
     discover.click()
-    wait.until(lambda d: d.find_element(By.ID, "tm-p-journey-card").is_displayed())
+    diagnostic=driver.execute_script(
+        "return {view:document.getElementById('tm-p-content').innerText.slice(0,1000),"
+        "editor:!!document.getElementById('tm-p-journey-card'),"
+        "button:!!document.querySelector('[data-p-select=\\\"910002\\\"]'),"
+        "focus:document.activeElement?.id,errors:window.__profileErrors};"
+    )
+    print('PROFILE DISCOVER DIAGNOSTIC:',diagnostic,flush=True)
+    wait.until(lambda d: d.find_element(By.ID, "tm-p-journey-card").is_displayed(),
+               message=str(diagnostic))
     assert "Sentier à découvrir" in driver.find_element(By.ID, "tm-p-journey-card").text
     assert driver.execute_script(
         "return document.activeElement?.id==='tm-p-journey-card'"
