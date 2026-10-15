@@ -104,6 +104,13 @@ try:
     bar = driver.find_element(By.ID, "tm-inline-filters")
     advanced_button = driver.find_element(By.ID, "tm-inline-advanced")
     assert bar.is_displayed(), "Quick filters must be visible beside the search"
+    assert driver.find_element(By.ID, "trekmap-explorer-finish-css"), "Final Explorer layer absent"
+    assert Select(driver.find_element(By.ID, "tm-inline-difficulty")).first_selected_option.text == "Difficulté", (
+        "Quick difficulty menu must be labelled rather than showing ambiguous Toutes")
+    assert not driver.find_element(By.CSS_SELECTOR, "#tm-desktop-info .tm-info-selected").is_displayed(), (
+        "No empty selected-trek card should occupy the map")
+    assert driver.find_element(By.CSS_SELECTOR, "#tm-desktop-info .tm-info-overview").is_displayed(), (
+        "Compact trek count should stay visible")
     assert not driver.find_element(By.ID, "sidebar").is_displayed(), (
         "The old permanent left filter panel must be hidden")
     layout = driver.execute_script(
@@ -212,6 +219,18 @@ try:
     )
     previews=driver.find_elements(By.CSS_SELECTOR, "#tm-drawer-track .tm-mini-route")
     assert len(previews)>=14, "Each trek with valid geometry needs a route preview"
+    wait.until(lambda d: d.execute_script(
+        "return !!window.TrekMapExplorerFocus && window.TrekMapExplorerFocus.getLayerCount()>=14"))
+    # Hover the REAL fifth card and verify the map highlights its route.
+    hover_card = driver.find_element(By.CSS_SELECTOR, '#tm-drawer-track .tm-trek-tile:nth-child(5)')
+    hover_id = int(hover_card.get_attribute('data-id'))
+    driver.execute_script("arguments[0].dispatchEvent(new PointerEvent('pointerover',"
+                          "{bubbles:true,pointerType:'mouse'}))", hover_card)
+    assert driver.execute_script("return window.TrekMapExplorerFocus.getFocused()") == hover_id
+    assert driver.execute_script("return window.TrekMapExplorerFocus.getGlowLayerCount()") == 2
+    driver.execute_script("arguments[0].dispatchEvent(new PointerEvent('pointerout',"
+                          "{bubbles:true,pointerType:'mouse'}))", hover_card)
+    assert driver.execute_script("return window.TrekMapExplorerFocus.getGlowLayerCount()") == 0
     actual_path=driver.execute_script(
         "return document.querySelector('#tm-drawer-track .tm-mini-route path').getAttribute('d')"
     )
@@ -247,6 +266,14 @@ try:
     wait.until(lambda d: d.find_element(By.ID,'modal-backdrop').is_displayed())
     assert name in driver.find_element(By.ID,'modal').text, "Card click opened the wrong trek"
     assert name in info.text, "Side panel did not update to chosen trek"
+    wait.until(lambda d: d.execute_script(
+        "return window.TrekMapExplorerFocus.getSelected()===Number(arguments[0])", card_id))
+    assert driver.execute_script("return window.TrekMapExplorerFocus.getGlowLayerCount()") == 2, (
+        "Selection should keep the active route highlighted")
+    assert not driver.find_element(By.CSS_SELECTOR, "#tm-desktop-info .tm-info-overview").is_displayed(), (
+        "Redundant overview must disappear when a trek is selected")
+    assert driver.find_element(By.CSS_SELECTOR, "#tm-desktop-info .tm-info-selected").is_displayed(), (
+        "Real selected route info should appear")
     assert 'selected' in driver.find_element(
         By.CSS_SELECTOR, f'#tm-drawer-track .tm-trek-tile[data-id="{card_id}"]'
     ).get_attribute('class'), "Selected card lost its highlight"
