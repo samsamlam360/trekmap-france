@@ -121,6 +121,9 @@ def make_route(feature,src,rid):
     if not rawname:return None
     name=" ".join(str(rawname).split())[:155]
     if len(name)<4 or name.isdigit():return None
+    normname=base.folded(name)
+    if any(word in normname for word in ("gravel","vtt","velo","cyclo","bike","trail running","en trail")):
+        return None
     extracted=stitch(feature.get("geometry") or {})
     if not extracted:return None
     full,km=extracted
@@ -194,6 +197,19 @@ def build():
                     record["schema"]=(
                       list((features[0].get("properties") or {}).keys())[:17]
                       if features else [])
+                    if source_id in ("via-garona","gard-gr","gard-grp"):
+                        record["samples"]=[]
+                        for f in features[:8]:
+                            segments=base.segments(f.get("geometry") or {})
+                            lines=[base.parse_line(l) for l in segments]
+                            record["samples"].append({
+                                "name":base.attrs(f.get("properties") or {},"name","nom","nom_itineraire"),
+                                "geometry_type":(f.get("geometry") or {}).get("type"),
+                                "segments":len(lines),
+                                "lengths_km":[round(base.distance(v),2) for v in lines[:12]],
+                                "connected":stitch(f.get("geometry") or {}) is not None,
+                                "is_walk":base.is_walk(f.get("properties") or {}),
+                            })
                     candidates=[]
                     for f in features:
                         t=make_route(f,src,rid)
