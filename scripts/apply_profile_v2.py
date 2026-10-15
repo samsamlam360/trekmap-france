@@ -75,6 +75,7 @@ block=r'''<!-- TREKMAP_PROFILE_V2_START -->
 .tm-p-form input[type=checkbox]{width:auto;min-height:auto;margin:0 8px 0 0;accent-color:#128359}
 .tm-p-form .tm-p-check{display:flex;align-items:center;font-weight:550}
 .tm-p-form .tm-p-two{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:11px}
+.tm-p-form .tm-p-two[hidden]{display:none!important}
 .tm-p-card .tm-p-save-msg{margin-top:8px;font-size:12px;color:#155f40}
 .tm-p-callout{background:#edf7ef;border:1px solid #cfe5d3;padding:12px 14px;border-radius:12px;
   color:#416b52;font-size:12px;line-height:1.5;margin:12px 0}
@@ -155,7 +156,16 @@ const accountTreks=function(){
   (model.treks||[]).concat(model.favorites||[])
     .concat((model.journeys||[]).map(function(j){return {id:j.trek_id,name:j.name,region:j.region,distance:j.distance,elevation:j.elevation,is_public:j.is_public}}))
     .concat((model.collections||[]).flatMap(function(collection){return collection.treks||[]}))
-    .forEach(function(t){if(Number.isSafeInteger(Number(t.id))&&Number(t.id)>0)m.set(Number(t.id),t)});
+    .forEach(function(t){
+      const id=Number(t.id);
+      if(!Number.isSafeInteger(id)||id<=0)return;
+      const previous=m.get(id)||{};
+      // Collection entries contain only id/name/region, never discard the
+      // richer distance, ascent or ownership information from actual treks.
+      m.set(id,{...previous,...t,
+        distance:t.distance==null?previous.distance:t.distance,
+        elevation:t.elevation==null?previous.elevation:t.elevation});
+    });
   return [...m.values()];
 };
 function journey(id){return (model&&model.journeys||[]).find(function(j){return Number(j.trek_id)===Number(id)})}
@@ -376,7 +386,9 @@ window.TrekMapProfileV2={open:open,close:close};
 root.addEventListener('click',async function(event){
  const button=event.target.closest('button');if(!button)return;
  const id=button.dataset.pTab;
- if(id){tab=id;selected=null;plan=null;render();return}
+ if(id){tab=id;selected=null;plan=null;render();
+   if(id==='home'){const n=root.querySelector('.tm-p-nav');if(n)n.scrollLeft=0}
+   return}
  if(button.id==='tm-p-exit'){close();return}
  if(button.dataset.pGo){tab=button.dataset.pGo;selected=null;render();return}
  if(button.dataset.pRetry){await open();return}
