@@ -100,60 +100,78 @@ try:
     driver.find_element(By.ID, "tm-main-search-clear").click()
     assert search.get_attribute("value") == "", "Search clear action is broken"
 
-    # Explorer 2026: map is full width; quick filters mirror the real controls.
+    # The compact filter bar starts collapsed; its real toggle is beside search.
     bar = driver.find_element(By.ID, "tm-inline-filters")
-    advanced_button = driver.find_element(By.ID, "tm-inline-advanced")
-    assert bar.is_displayed(), "Quick filters must be visible beside the search"
-    assert driver.find_element(By.ID, "trekmap-explorer-finish-css"), "Final Explorer layer absent"
-    assert Select(driver.find_element(By.ID, "tm-inline-difficulty")).first_selected_option.text == "Difficulté", (
-        "Quick difficulty menu must be labelled rather than showing ambiguous Toutes")
-    assert not driver.find_element(By.CSS_SELECTOR, "#tm-desktop-info .tm-info-selected").is_displayed(), (
-        "No empty selected-trek card should occupy the map")
-    assert driver.find_element(By.CSS_SELECTOR, "#tm-desktop-info .tm-info-overview").is_displayed(), (
-        "Compact trek count should stay visible")
-    assert not driver.find_element(By.ID, "sidebar").is_displayed(), (
-        "The old permanent left filter panel must be hidden")
+    toggle = driver.find_element(By.ID, "tm-search-filter-toggle")
+    assert toggle.is_displayed() and not bar.is_displayed()
+    assert driver.find_element(By.ID, "trekmap-map-tools-v2-css"), "Missing final UI layer"
+    toggle.click()
+    wait.until(lambda d: bar.is_displayed())
+    assert toggle.get_attribute("aria-expanded") == "true"
+    assert Select(driver.find_element(By.ID, "tm-inline-difficulty")).first_selected_option.text == "Difficulté"
+    assert not driver.find_element(By.CSS_SELECTOR, "#tm-desktop-info .tm-info-selected").is_displayed()
+    assert driver.find_element(By.CSS_SELECTOR, "#tm-desktop-info .tm-info-overview").is_displayed()
+    assert not driver.find_element(By.ID, "sidebar").is_displayed()
+
     layout = driver.execute_script(
         "const d=document.getElementById('tm-unified-drawer').getBoundingClientRect();"
         "const z=document.querySelector('.leaflet-left').getBoundingClientRect();"
         "const b=document.getElementById('tm-inline-filters').getBoundingClientRect();"
-        "return {drawerLeft:d.left,zoomLeft:z.left,quickLeft:b.left,quickTop:b.top,"
-        "viewport:innerWidth};"
-    )
+        "const s=document.getElementById('tm-main-search-wrap').getBoundingClientRect();"
+        "const t=document.getElementById('tm-search-filter-toggle').getBoundingClientRect();"
+        "return {drawerLeft:d.left,zoomLeft:z.left,quickTop:b.top,searchRight:s.right,"
+        "toggleLeft:t.left,toggleRight:t.right,viewport:innerWidth};")
     assert layout["drawerLeft"] < 40 and layout["zoomLeft"] < 55, layout
-    assert layout["quickLeft"] > 150 and layout["quickTop"] > 70, layout
-    # Real native quick select triggers the existing filter change handler.
+    assert layout["quickTop"] > 70 and layout["toggleLeft"] >= layout["searchRight"] - 1, layout
+
+    # These three popovers must contain ONLY their own source controls.
+    for trigger, count, mode, source in [
+        ("distance-range", 2, "Distance", "distance-range"),
+        ("elevation-range", 2, "Dénivelé", "elevation-range"),
+        ("duration-filter", 1, "Durée", "duration-filter")
+    ]:
+        driver.find_element(By.CSS_SELECTOR, f'[data-filter-target="{trigger}"]').click()
+        panel = driver.find_element(By.ID, "tm-map-filter-popover")
+        assert panel.is_displayed() and mode in panel.text
+        assert len(panel.find_elements(By.CSS_SELECTOR, "input,select")) == count
+        assert not driver.find_element(By.ID, "sidebar").is_displayed()
+        if source != "duration-filter":
+            value = "14" if source == "distance-range" else "350"
+            driver.execute_script(
+                "let x=document.querySelector('#tm-map-filter-popover input[type=range]');"
+                "x.value=arguments[0];x.dispatchEvent(new Event('input',{bubbles:true}));", value)
+            assert driver.find_element(By.ID, source).get_attribute("value") == value
+        panel.find_element(By.CSS_SELECTOR, ".tm-mini-dismiss").click()
+        assert not panel.is_displayed()
+
+    # Both new inline categories control the ORIGINAL selects.
+    assert driver.find_element(By.ID, "tm-inline-sort").is_displayed()
+    assert driver.find_element(By.ID, "tm-inline-route").is_displayed()
+    assert driver.find_element(By.ID, "sort-filter").get_attribute("value") == (
+        driver.find_element(By.ID, "tm-inline-sort").get_attribute("value"))
+    assert driver.find_element(By.ID, "tm-route-filter").get_attribute("value") == (
+        driver.find_element(By.ID, "tm-inline-route").get_attribute("value"))
+
+    # CI PostGIS can have an empty region catalogue: simulate async population.
     quick_region = driver.find_element(By.ID, "tm-inline-region")
-    # CI PostGIS has no catalog regions: simulate the async option population
-    # on the original select and verify that the quick mirror follows it.
     if len(Select(quick_region).options) <= 1:
-        driver.execute_script(
-            "document.getElementById('region-filter').add("
-            "new Option('Région test CI','region-test-ci'))"
-        )
+        driver.execute_script("document.getElementById('region-filter').add("
+                              "new Option('Région test CI','region-test-ci'))")
     wait.until(lambda d: len(Select(quick_region).options) > 1)
     first_region = next((o.get_attribute("value") for o in Select(quick_region).options
                          if o.get_attribute("value")), None)
-    assert first_region, "No region option loaded into quick filter"
+    assert first_region
     Select(quick_region).select_by_value(first_region)
-    wait.until(lambda d: d.find_element(By.ID, "region-filter").get_attribute("value")
-               == first_region)
-    assert driver.find_element(By.CSS_SELECTOR, "#tm-inline-advanced .tm-active-count").text == "1"
-    advanced_button.click()
-    wait.until(lambda d: "tm-inline-filters-open" in
-               d.find_element(By.TAG_NAME, "body").get_attribute("class").split())
-    assert driver.find_element(By.ID, "sidebar").is_displayed(), "Advanced popup missing"
-    driver.find_element(By.ID, "reset-filters").click()
-    wait.until(lambda d: d.find_element(By.ID, "tm-inline-region").get_attribute("value") == "")
-    driver.find_element(By.ID, "tm-filter-toggle").click()
-    wait.until(lambda d: "tm-inline-filters-open" not in
-               d.find_element(By.TAG_NAME, "body").get_attribute("class").split())
-    assert not driver.find_element(By.ID, "sidebar").is_displayed(), "Popup did not close"
-    # Quick buttons open the existing advanced control instead of duplicated fields.
-    driver.find_element(By.CSS_SELECTOR, '[data-filter-target="distance-range"]').click()
-    wait.until(lambda d: d.find_element(By.ID, "sidebar").is_displayed())
-    driver.find_element(By.ID, "tm-inline-advanced").click()
-    assert not driver.find_element(By.ID, "sidebar").is_displayed()
+    wait.until(lambda d: d.find_element(By.ID, "region-filter").get_attribute("value") == first_region)
+    Select(quick_region).select_by_value("")
+    wait.until(lambda d: d.find_element(By.ID, "region-filter").get_attribute("value") == "")
+    # Restore untouched defaults before checking the independent map scenarios.
+    driver.execute_script("resetFilters();")
+    toggle.click()
+    wait.until(lambda d: not bar.is_displayed())
+    toggle.click()
+    wait.until(lambda d: bar.is_displayed())
+    assert toggle.get_attribute("aria-expanded") == "true"
 
     drawer_button = driver.find_element(By.ID, "tm-drawer-head")
     drawer = driver.find_element(By.ID, "tm-unified-drawer")
@@ -220,6 +238,18 @@ try:
     assert len(previews)>=14, "Each trek with valid geometry needs a route preview"
     wait.until(lambda d: d.execute_script(
         "return !!window.TrekMapExplorerFocus && window.TrekMapExplorerFocus.getLayerCount()>=14"))
+    # At low zoom nearby routes are grouped into numbered Leaflet markers.
+    driver.execute_script("map.setView([45.115,3.2],6);window.TrekMapClusters.refresh();")
+    wait.until(lambda d: d.execute_script(
+        "return window.TrekMapClusters.getTotal()>=14 && "
+        "window.TrekMapClusters.getCounts().some(x=>x>1)"))
+    counts = driver.execute_script("return window.TrekMapClusters.getCounts()")
+    assert sum(counts) == 14, counts
+    assert driver.execute_script("return window.TrekMapClusters.getMarkerCount()") < 14
+    driver.execute_script("map.setZoom(12);")
+    wait.until(lambda d: d.execute_script(
+        "return window.TrekMapClusters.getMarkerCount()===0"))
+
     # Hover the REAL fifth card and verify the map highlights its route.
     hover_card = driver.find_element(By.CSS_SELECTOR, '#tm-drawer-track .tm-trek-tile:nth-child(5)')
     hover_id = int(hover_card.get_attribute('data-id'))
@@ -315,6 +345,13 @@ try:
     assert second in driver.find_element(By.ID,'modal').text, "Hover movement blocked second trek"
     driver.find_element(By.ID,'modal-close').click()
     wait.until(lambda d: not d.find_element(By.ID,'modal-backdrop').is_displayed())
+    # A click on empty Leaflet background must clear the trek but NOT its filters.
+    driver.execute_script("map.fire('click',{sourceTarget:map,latlng:map.getCenter()});")
+    wait.until(lambda d: d.execute_script("return window.TrekMapExplorerFocus.getSelected()===null"))
+    assert driver.execute_script("return window.TrekMapExplorerFocus.getGlowLayerCount()") == 0
+    assert driver.find_element(By.CSS_SELECTOR, "#tm-desktop-info .tm-info-overview").is_displayed()
+    assert not driver.find_element(By.CSS_SELECTOR, "#tm-desktop-info .tm-info-selected").is_displayed()
+    assert not driver.find_elements(By.CSS_SELECTOR, "#tm-drawer-track .tm-trek-tile.selected")
     driver.save_screenshot(str(OUT / "desktop-carrousel-and-selection.png"))
     # Preserve the original mobile navigation and hide only desktop helper panel.
     driver.set_window_size(390, 844)
