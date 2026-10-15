@@ -56,7 +56,7 @@ try:
                      "route_type":"Boucle","transit":True,"water":True,"food":True,"sleep":True})
     profile_v2.save_settings(settings,user=user)
     local_photo = "data:image/jpeg;base64," + base64.b64encode(
-        b"\\xff\\xd8\\xff" + b"test-local-photo" + b"\\xff\\xd9"
+        b"\xff\xd8\xff" + b"test-local-photo" + b"\xff\xd9"
     ).decode("ascii")
     profile_v2.save_journey(trek_id,
         profile_v2.JourneyPayload(status="completed",completed_on=date(2026,8,12),
