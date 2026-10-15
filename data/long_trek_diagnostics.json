@@ -173,7 +173,20 @@
               0
             ],
             "name": "GR®653 - Sentier vers Saint-Jacques-de-Compostelle - Via Arles",
-            "segments": 1
+            "nearest_endpoint_km": [],
+            "parsed_lines": 0,
+            "raw_coord_sample": [
+              [
+                831463.0150176114,
+                6287799.131978687
+              ],
+              [
+                831462.9773782186,
+                6287799.1380167175
+              ]
+            ],
+            "segments": 1,
+            "total_parsed_km": 0
           },
           {
             "connected": false,
@@ -183,7 +196,20 @@
               0
             ],
             "name": "GR®700 - Le chemin de Régordane - Chemin de Saint-Gilles",
-            "segments": 1
+            "nearest_endpoint_km": [],
+            "parsed_lines": 0,
+            "raw_coord_sample": [
+              [
+                775668.4612709823,
+                6367330.063044279
+              ],
+              [
+                775689.4491622344,
+                6367311.090389562
+              ]
+            ],
+            "segments": 1,
+            "total_parsed_km": 0
           },
           {
             "connected": false,
@@ -204,7 +230,20 @@
               0
             ],
             "name": "GR®70 - Le chemin de Stevenson",
-            "segments": 44
+            "nearest_endpoint_km": [],
+            "parsed_lines": 0,
+            "raw_coord_sample": [
+              [
+                770851.874330931,
+                6334467.615715131
+              ],
+              [
+                770867.0869519857,
+                6334494.459377583
+              ]
+            ],
+            "segments": 44,
+            "total_parsed_km": 0
           },
           {
             "connected": false,
@@ -214,7 +253,20 @@
               0
             ],
             "name": "GR®42_1 - Du Pilat à la Méditerranée par les balcons du Rhône",
-            "segments": 1
+            "nearest_endpoint_km": [],
+            "parsed_lines": 0,
+            "raw_coord_sample": [
+              [
+                825208.1409782657,
+                6356944.84214076
+              ],
+              [
+                825207.988960733,
+                6356944.6926913345
+              ]
+            ],
+            "segments": 1,
+            "total_parsed_km": 0
           },
           {
             "connected": false,
@@ -235,7 +287,20 @@
               0
             ],
             "name": "GR®42_2 - Du Pilat à la Méditerranée par les balcons du Rhône",
-            "segments": 82
+            "nearest_endpoint_km": [],
+            "parsed_lines": 0,
+            "raw_coord_sample": [
+              [
+                792285.180191149,
+                6271778.110184351
+              ],
+              [
+                792287.2676972148,
+                6271772.882695054
+              ]
+            ],
+            "segments": 82,
+            "total_parsed_km": 0
           },
           {
             "connected": false,
@@ -256,7 +321,20 @@
               0
             ],
             "name": "Le chemin de Saint-Guilhem-le-Désert",
-            "segments": 104
+            "nearest_endpoint_km": [],
+            "parsed_lines": 0,
+            "raw_coord_sample": [
+              [
+                741182.0035315667,
+                6305114.1699939165
+              ],
+              [
+                741129.8841132924,
+                6305100.934001852
+              ]
+            ],
+            "segments": 104,
+            "total_parsed_km": 0
           },
           {
             "connected": false,
@@ -277,7 +355,20 @@
               0
             ],
             "name": "Le Chemin Urbain V",
-            "segments": 256
+            "nearest_endpoint_km": [],
+            "parsed_lines": 0,
+            "raw_coord_sample": [
+              [
+                808319.1823937106,
+                6316532.121894391
+              ],
+              [
+                808329.1714421455,
+                6316532.036868089
+              ]
+            ],
+            "segments": 256,
+            "total_parsed_km": 0
           },
           {
             "connected": false,
@@ -287,7 +378,20 @@
               0
             ],
             "name": "GR®4",
-            "segments": 1
+            "nearest_endpoint_km": [],
+            "parsed_lines": 0,
+            "raw_coord_sample": [
+              [
+                814770.9091660868,
+                6359617.697096197
+              ],
+              [
+                815188.020645171,
+                6359555.5963098
+              ]
+            ],
+            "segments": 1,
+            "total_parsed_km": 0
           }
         ],
         "schema": [
@@ -325,7 +429,20 @@
               0
             ],
             "name": "GRP®1 Tour du Pays Viganais",
-            "segments": 1
+            "nearest_endpoint_km": [],
+            "parsed_lines": 0,
+            "raw_coord_sample": [
+              [
+                748620.6701842333,
+                6321250.852967424
+              ],
+              [
+                748622.862257704,
+                6321273.806972032
+              ]
+            ],
+            "segments": 1,
+            "total_parsed_km": 0
           },
           {
             "connected": false,
@@ -341,7 +458,20 @@
               0
             ],
             "name": "GRP®3 Tour de la Vallée du Galeizon",
-            "segments": 7
+            "nearest_endpoint_km": [],
+            "parsed_lines": 0,
+            "raw_coord_sample": [
+              [
+                773138.7517489902,
+                6340610.995549214
+              ],
+              [
+                773168.3209973739,
+                6340563.791849785
+              ]
+            ],
+            "segments": 7,
+            "total_parsed_km": 0
           },
           {
             "connected": false,
@@ -351,7 +481,20 @@
               0
             ],
             "name": "GRP®2 Tour de la Haute Vallée Borgne",
-            "segments": 1
+            "nearest_endpoint_km": [],
+            "parsed_lines": 0,
+            "raw_coord_sample": [
+              [
+                750760.7090031526,
+                6336417.139769445
+              ],
+              [
+                750773.4994739273,
+                6336394.05621914
+              ]
+            ],
+            "segments": 1,
+            "total_parsed_km": 0
           },
           {
             "connected": false,
@@ -361,7 +504,20 @@
               0
             ],
             "name": "GRP®4 Tour de la Haute Vallée de la Cèze",
-            "segments": 1
+            "nearest_endpoint_km": [],
+            "parsed_lines": 0,
+            "raw_coord_sample": [
+              [
+                780839.3752759004,
+                6361544.032898225
+              ],
+              [
+                780839.377335615,
+                6361544.031027524
+              ]
+            ],
+            "segments": 1,
+            "total_parsed_km": 0
           },
           {
             "connected": false,
@@ -371,7 +527,20 @@
               0
             ],
             "name": "GRP®5 Le Cévenol",
-            "segments": 1
+            "nearest_endpoint_km": [],
+            "parsed_lines": 0,
+            "raw_coord_sample": [
+              [
+                775728.8719553001,
+                6361725.739496723
+              ],
+              [
+                775717.8681431431,
+                6361750.7183512105
+              ]
+            ],
+            "segments": 1,
+            "total_parsed_km": 0
           },
           {
             "connected": false,
@@ -381,7 +550,20 @@
               0
             ],
             "name": "GRP®6 Tour de la Haute Vallée du Luech",
-            "segments": 1
+            "nearest_endpoint_km": [],
+            "parsed_lines": 0,
+            "raw_coord_sample": [
+              [
+                773709.1492733832,
+                6356503.456392162
+              ],
+              [
+                773725.9666091615,
+                6356501.307797094
+              ]
+            ],
+            "segments": 1,
+            "total_parsed_km": 0
           }
         ],
         "schema": [
@@ -437,7 +619,40 @@
               1.98
             ],
             "name": "Via Garona",
-            "segments": 19
+            "nearest_endpoint_km": [
+              0.381,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "parsed_lines": 19,
+            "raw_coord_sample": [
+              [
+                0.569048558994977,
+                43.04127045863751
+              ],
+              [
+                0.569115863075602,
+                43.040817312350036
+              ]
+            ],
+            "segments": 19,
+            "total_parsed_km": 171.91
           }
         ],
         "schema": [
