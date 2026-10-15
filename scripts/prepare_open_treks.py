@@ -132,14 +132,34 @@ def clean_geometry(feature):
     raw_lines=[parse_line(raw) for raw in segments(feature.get("geometry"))]
     lines=[line for line in raw_lines if len(line)>=3]
     if not lines:return None
-    # Never invent connections between disconnected MultiLineString segments.
-    # Publish only a *complete* single line or a clearly dominant section.
+    # Multipart sources may split a route at administrative / network
+    # boundaries. Rejoin only where REAL segment endpoints agree within 25m.
+    # Never link arbitrary components by drawing a straight line across land.
     if len(lines)>1:
         lengths=[distance(line) for line in lines]
-        longest=max(range(len(lines)),key=lambda i:lengths[i])
-        if sum(lengths) and lengths[longest]/sum(lengths)<0.97:
-            return None
-        points=lines[longest]
+        anchor=max(range(len(lines)),key=lambda i:lengths[i])
+        points=list(lines[anchor])
+        remaining=[list(line) for i,line in enumerate(lines) if i!=anchor]
+        for _ in range(len(remaining)):
+            best=None
+            for i,line in enumerate(remaining):
+                options=[
+                    (haversine(points[-1],line[0]),"append",False),
+                    (haversine(points[-1],line[-1]),"append",True),
+                    (haversine(points[0],line[-1]),"prepend",False),
+                    (haversine(points[0],line[0]),"prepend",True),
+                ]
+                for gap,side,reverse in options:
+                    if best is None or gap<best[0]:best=(gap,i,side,reverse)
+            if best is None or best[0]>0.025:
+                return None  # disconnected / branching: reject route
+            gap,i,side,reverse=best
+            line=remaining.pop(i)
+            if reverse:line.reverse()
+            if side=="append":
+                points.extend(line[1:] if gap<0.001 else line)
+            else:
+                points=(line[:-1] if gap<0.001 else line)+points
     else:
         points=lines[0]
     steps=[haversine(a,b) for a,b in zip(points,points[1:])]
