@@ -152,6 +152,10 @@ def make_route(feature,src,rid):
     if not rawname:return None
     name=" ".join(str(rawname).split())[:155]
     if len(name)<4 or name.isdigit():return None
+    if src["id"]=="gard-gr":
+        name=(name+" · section gardoise")[:155]
+    elif src["id"]=="gard-grp":
+        name=(name+" · parcours gardois")[:155]
     normname=base.folded(name)
     if any(word in normname for word in ("gravel","vtt","velo","cyclo","bike","trail running","en trail")):
         return None
