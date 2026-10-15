@@ -140,7 +140,10 @@ try:
             driver.execute_script(
                 "let x=document.querySelector('#tm-map-filter-popover input[type=range]');"
                 "x.value=arguments[0];x.dispatchEvent(new Event('input',{bubbles:true}));", value)
-            assert driver.find_element(By.ID, source).get_attribute("value") == value
+            actual=driver.find_element(By.ID, source).get_attribute("value")
+            popup_value=driver.execute_script(
+                "return document.querySelector('#tm-map-filter-popover input[type=range]').value")
+            assert actual == value, f"{source}: expected={value}, actual={actual}, popup={popup_value}"
         panel.find_element(By.CSS_SELECTOR, ".tm-mini-dismiss").click()
         assert not panel.is_displayed()
 
