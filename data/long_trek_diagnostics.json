@@ -4,7 +4,7 @@
     "metadata_resources": 1,
     "resources": [
       {
-        "accepted": 35,
+        "accepted": 27,
         "id": "4eee2f30-32de-4900-9591-be5ee3003e4d",
         "preview": [
           {
@@ -86,16 +86,12 @@
     "metadata_resources": 2,
     "resources": [
       {
-        "accepted": 11,
+        "accepted": 10,
         "id": "0c62905f-a580-4cee-afc1-5feb9607160d",
         "preview": [
           {
             "km": 92.29,
             "name": "Tour du Vieux Chaillol"
-          },
-          {
-            "km": 91.85,
-            "name": "Tour du Vieux Chaillol en trail"
           },
           {
             "km": 89.34,
@@ -168,6 +164,132 @@
         "id": "27092024-676b-4bdb-9236-6cd45af5ce45",
         "preview": [],
         "raw_count": 26,
+        "samples": [
+          {
+            "connected": false,
+            "geometry_type": "MultiLineString",
+            "is_walk": true,
+            "lengths_km": [
+              0
+            ],
+            "name": "GR®653 - Sentier vers Saint-Jacques-de-Compostelle - Via Arles",
+            "segments": 1
+          },
+          {
+            "connected": false,
+            "geometry_type": "MultiLineString",
+            "is_walk": true,
+            "lengths_km": [
+              0
+            ],
+            "name": "GR®700 - Le chemin de Régordane - Chemin de Saint-Gilles",
+            "segments": 1
+          },
+          {
+            "connected": false,
+            "geometry_type": "MultiLineString",
+            "is_walk": true,
+            "lengths_km": [
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0
+            ],
+            "name": "GR®70 - Le chemin de Stevenson",
+            "segments": 44
+          },
+          {
+            "connected": false,
+            "geometry_type": "MultiLineString",
+            "is_walk": true,
+            "lengths_km": [
+              0
+            ],
+            "name": "GR®42_1 - Du Pilat à la Méditerranée par les balcons du Rhône",
+            "segments": 1
+          },
+          {
+            "connected": false,
+            "geometry_type": "MultiLineString",
+            "is_walk": true,
+            "lengths_km": [
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0
+            ],
+            "name": "GR®42_2 - Du Pilat à la Méditerranée par les balcons du Rhône",
+            "segments": 82
+          },
+          {
+            "connected": false,
+            "geometry_type": "MultiLineString",
+            "is_walk": true,
+            "lengths_km": [
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0
+            ],
+            "name": "Le chemin de Saint-Guilhem-le-Désert",
+            "segments": 104
+          },
+          {
+            "connected": false,
+            "geometry_type": "MultiLineString",
+            "is_walk": true,
+            "lengths_km": [
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0
+            ],
+            "name": "Le Chemin Urbain V",
+            "segments": 256
+          },
+          {
+            "connected": false,
+            "geometry_type": "MultiLineString",
+            "is_walk": true,
+            "lengths_km": [
+              0
+            ],
+            "name": "GR®4",
+            "segments": 1
+          }
+        ],
         "schema": [
           "id",
           "structure",
@@ -194,6 +316,74 @@
         "id": "4ede6499-b84a-4195-a9a9-f1e5b3258791",
         "preview": [],
         "raw_count": 6,
+        "samples": [
+          {
+            "connected": false,
+            "geometry_type": "MultiLineString",
+            "is_walk": true,
+            "lengths_km": [
+              0
+            ],
+            "name": "GRP®1 Tour du Pays Viganais",
+            "segments": 1
+          },
+          {
+            "connected": false,
+            "geometry_type": "MultiLineString",
+            "is_walk": true,
+            "lengths_km": [
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0
+            ],
+            "name": "GRP®3 Tour de la Vallée du Galeizon",
+            "segments": 7
+          },
+          {
+            "connected": false,
+            "geometry_type": "MultiLineString",
+            "is_walk": true,
+            "lengths_km": [
+              0
+            ],
+            "name": "GRP®2 Tour de la Haute Vallée Borgne",
+            "segments": 1
+          },
+          {
+            "connected": false,
+            "geometry_type": "MultiLineString",
+            "is_walk": true,
+            "lengths_km": [
+              0
+            ],
+            "name": "GRP®4 Tour de la Haute Vallée de la Cèze",
+            "segments": 1
+          },
+          {
+            "connected": false,
+            "geometry_type": "MultiLineString",
+            "is_walk": true,
+            "lengths_km": [
+              0
+            ],
+            "name": "GRP®5 Le Cévenol",
+            "segments": 1
+          },
+          {
+            "connected": false,
+            "geometry_type": "MultiLineString",
+            "is_walk": true,
+            "lengths_km": [
+              0
+            ],
+            "name": "GRP®6 Tour de la Haute Vallée du Luech",
+            "segments": 1
+          }
+        ],
         "schema": [
           "id",
           "structure",
@@ -227,6 +417,29 @@
         "id": "d8a8e1eb-92e9-4676-b1d6-575e323e9aa5",
         "preview": [],
         "raw_count": 1,
+        "samples": [
+          {
+            "connected": false,
+            "geometry_type": "MultiLineString",
+            "is_walk": true,
+            "lengths_km": [
+              5.37,
+              38.49,
+              0.68,
+              0.68,
+              3.05,
+              0.19,
+              7.4,
+              40.82,
+              0.62,
+              0.62,
+              1.79,
+              1.98
+            ],
+            "name": "Via Garona",
+            "segments": 19
+          }
+        ],
         "schema": [
           "nom_itineraire",
           "id",
