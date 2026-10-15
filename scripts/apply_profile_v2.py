@@ -531,3 +531,8 @@ if html.count("</body>")!=1:
 html=html.replace("</body>",block+"\n</body>",1)
 path.write_text(html,encoding="utf-8")
 print("TrekMap profile v2 installed without replacing legacy account/password/route handlers")
+
+# Apply the map-first Explorer layout after the existing profile and desktop CSS.
+# This is the last UI installer reached by the Render build.
+from runpy import run_path
+run_path(str(Path(__file__).with_name("apply_inline_filters.py")))
