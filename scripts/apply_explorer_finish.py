@@ -232,6 +232,9 @@ block=r'''<!-- TREKMAP_EXPLORER_FINISH_START -->
       if(e.target.closest('.tm-trek-tile')){hovered=null;focusRoute()}
     });
   }
+  document.addEventListener('trekmap:detail-cleared',function(){
+    selected=null;hovered=null;focusRoute();
+  });
   document.addEventListener('trekmap:detail-opened',function(e){
     var id=Number(e.detail&&e.detail.id);
     if(Number.isFinite(id)){selected=id;hovered=null;focusRoute()}
