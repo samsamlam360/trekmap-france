@@ -1,0 +1,1810 @@
+{
+  "results": [
+    {
+      "region": "Bourgogne-Franche-Comté",
+      "query": "Tour du Morvan",
+      "results": [
+        {
+          "type": "relation",
+          "id": 12662183,
+          "ref": "TM",
+          "name": "Le Tour du Morvan",
+          "group": "REG",
+          "linear": "yes",
+          "symbol_id": "osmc_REG_empty_yellow-upper_red-lower_0054004d_black"
+        },
+        {
+          "type": "relation",
+          "id": 12635898,
+          "name": "Tour du Morvan (principale)",
+          "group": "REG",
+          "linear": "yes",
+          "symbol_id": "osmc_REG_empty_yellow-upper_red-lower_0054004d_black"
+        }
+      ],
+      "keys": [
+        "query",
+        "page",
+        "results"
+      ]
+    },
+    {
+      "region": "Bretagne",
+      "query": "Tour de Bretagne",
+      "results": [
+        {
+          "type": "relation",
+          "id": 11093598,
+          "ref": "GRP MdB",
+          "name": "Tour des Marches de Bretagne",
+          "group": "REG",
+          "linear": "yes",
+          "symbol_id": "osmc_REG_empty_yellow-upper_red-lower_004d00640042_black"
+        },
+        {
+          "type": "relation",
+          "id": 12013135,
+          "ref": "1",
+          "name": "Tour du lac de Bain-de-Bretagne",
+          "group": "LOC",
+          "linear": "yes",
+          "symbol_id": "ref_LOC_0031"
+        },
+        {
+          "type": "relation",
+          "id": 8373372,
+          "ref": "GR 37",
+          "name": "Cœur de Bretagne",
+          "group": "NAT",
+          "linear": "yes",
+          "itinerary": [
+            "Mont-Saint-Michel",
+            "Le Faou"
+          ],
+          "symbol_id": "osmc_NAT_empty_white-upper_red-lower_00330037_black"
+        }
+      ],
+      "keys": [
+        "query",
+        "page",
+        "results"
+      ]
+    },
+    {
+      "region": "Bretagne",
+      "query": "GR34",
+      "results": [
+        {
+          "type": "relation",
+          "id": 6547843,
+          "ref": "GR34",
+          "name": "Trilho Interpretativo da Serra Amarela",
+          "group": "REG",
+          "linear": "no",
+          "symbol_description": "White over Red",
+          "symbol_id": "osmc_REG_white_red-lower_0047005200330034_black"
+        },
+        {
+          "type": "relation",
+          "id": 17931787,
+          "name": "Liaison GR34 - GR38",
+          "group": "NAT",
+          "linear": "yes",
+          "symbol_id": "osmc_NAT_empty_white-upper_red-lower"
+        }
+      ],
+      "keys": [
+        "query",
+        "page",
+        "results"
+      ]
+    },
+    {
+      "region": "Bourgogne-Franche-Comté",
+      "query": "GR13",
+      "results": [
+        {
+          "type": "relation",
+          "id": 2438730,
+          "ref": "GR13",
+          "name": "Via Algarviana",
+          "group": "REG",
+          "linear": "no",
+          "symbol_description": "White over Red",
+          "itinerary": [
+            "Alcoutim",
+            "Cabo de São Vicente"
+          ],
+          "symbol_id": "osmc_REG_white_red-lower_0047005200310033_black"
+        },
+        {
+          "type": "relation",
+          "id": 8555645,
+          "ref": "GR13",
+          "name": "Via Algarviana - Ligação à Rota Vicentina",
+          "group": "REG",
+          "linear": "yes",
+          "symbol_id": "osmc_REG_white_red-lower_0047005200310033_black"
+        },
+        {
+          "type": "relation",
+          "id": 14283909,
+          "ref": "GR11 E",
+          "name": "GR11 E",
+          "group": "NAT",
+          "linear": "yes",
+          "symbol_id": "osmc_NAT_empty_white-upper_red-lower_003100310045_black"
+        },
+        {
+          "type": "relation",
+          "id": 19579472,
+          "name": "Accès GR11",
+          "group": "NAT",
+          "linear": "yes",
+          "symbol_id": "ref_NAT_00410047005200310031"
+        },
+        {
+          "type": "relation",
+          "id": 20082506,
+          "ref": "GR15.2",
+          "name": "GR15.2 Sector 2",
+          "group": "REG",
+          "linear": "no",
+          "itinerary": [
+            "Vales Mortos",
+            "A-do-Pinto"
+          ],
+          "symbol_id": "osmc_REG_white_red-lower"
+        },
+        {
+          "type": "relation",
+          "id": 20000284,
+          "ref": "GR15.2",
+          "name": "GR15.2 Sector 4",
+          "group": "REG",
+          "linear": "yes",
+          "itinerary": [
+            "Vila Verde de Ficalho",
+            "Pias"
+          ],
+          "symbol_id": "osmc_REG_white_red-lower"
+        },
+        {
+          "type": "relation",
+          "id": 20082435,
+          "ref": "GR15.2",
+          "name": "GR15.2 Sector 3",
+          "group": "REG",
+          "linear": "yes",
+          "itinerary": [
+            "A-do-Pinto",
+            "Vila Verde de Ficalho"
+          ],
+          "symbol_id": "osmc_REG_white_red-lower"
+        },
+        {
+          "type": "relation",
+          "id": 20082555,
+          "ref": "GR15.2",
+          "name": "GR15.2 Sector 1",
+          "group": "REG",
+          "linear": "no",
+          "itinerary": [
+            "Monte Lilef-Ranch",
+            "Vales Mortos"
+          ],
+          "symbol_id": "osmc_REG_white_red-lower"
+        },
+        {
+          "type": "relation",
+          "id": 15626017,
+          "ref": "GR 17 L1",
+          "name": "GR17 Liaison GRP 577",
+          "group": "NAT",
+          "linear": "yes",
+          "symbol_id": "osmc_NAT_white_red-lower_00310037004c_black"
+        },
+        {
+          "type": "relation",
+          "id": 12077214,
+          "ref": "Gr1",
+          "name": "Eijsden-Margraten Gr1 Historische Bronkroute",
+          "group": "LOC",
+          "linear": "yes",
+          "symbol_description": "Speciale bronkbordjes (grijs met paard)",
+          "symbol_id": "osmc_LOC_gray_004700720031_black"
+        },
+        {
+          "type": "relation",
+          "id": 19447954,
+          "ref": "GRT 3",
+          "name": "Bera (GR11) - Ibardin (GR10)",
+          "group": "NAT",
+          "linear": "yes",
+          "symbol_description": "white strip on top of red strip",
+          "symbol_id": "osmc_NAT_white_red-lower_00540033_black"
+        },
+        {
+          "type": "relation",
+          "id": 7238091,
+          "ref": "GR R1",
+          "name": "GR R1",
+          "group": "NAT",
+          "linear": "yes",
+          "symbol_id": "osmc_NAT_white_red-lower_00520031_black"
+        },
+        {
+          "type": "relation",
+          "id": 7238256,
+          "ref": "GR R2",
+          "name": "GR R2",
+          "group": "NAT",
+          "linear": "yes",
+          "symbol_id": "osmc_NAT_white_red-lower_00520032_black"
+        },
+        {
+          "type": "relation",
+          "id": 11894631,
+          "name": "GR 5G",
+          "group": "NAT",
+          "linear": "yes",
+          "itinerary": [
+            "Metz",
+            "Cocheren"
+          ],
+          "symbol_id": "ref_NAT_00470052002000350047"
+        },
+        {
+          "type": "relation",
+          "id": 6197308,
+          "ref": "GR 96",
+          "name": "GR 96",
+          "group": "NAT",
+          "linear": "yes",
+          "itinerary": [
+            "Samoëns",
+            "Aix-les-Bains"
+          ],
+          "symbol_id": "osmc_NAT_empty_white-upper_red-lower_00390036_black"
+        },
+        {
+          "type": "relation",
+          "id": 5011474,
+          "ref": "GR 5b",
+          "name": "GR 5b",
+          "group": "NAT",
+          "linear": "yes",
+          "symbol_id": "osmc_NAT_empty_white-upper_red-lower_00350062_black"
+        },
+        {
+          "type": "relation",
+          "id": 19448055,
+          "ref": "GRT 7",
+          "name": "Lepoeder (GR12) - Auritz (GR11)",
+          "group": "LOC",
+          "linear": "sorted",
+          "symbol_description": "Marra txuri eta gorria - Rayas roja y blanca - White and red stripes",
+          "symbol_id": "osmc_LOC_empty_white-upper_red-lower_00540037_black"
+        },
+        {
+          "type": "relation",
+          "id": 13630746,
+          "ref": "GR12",
+          "name": "GR12 Amsterdam-Paris NL",
+          "group": "INT",
+          "linear": "no",
+          "itinerary": [
+            "Amsterdam",
+            "Bergen op Zoom"
+          ],
+          "symbol_id": "osmc_INT_white_red-lower_0046006c_black"
+        },
+        {
+          "type": "relation",
+          "id": 19448060,
+          "ref": "GRT 8",
+          "name": "Txutxurieta (GR11) - Azpegi (GR12)",
+          "group": "NAT",
+          "linear": "yes",
+          "symbol_description": "Marra txuri eta gorria - Rayas roja y blanca - White and red stripes",
+          "symbol_id": "osmc_NAT_white_red-lower_00540038_black"
+        },
+        {
+          "type": "relation",
+          "id": 14313151,
+          "ref": "GR 76B",
+          "name": "GR 76B",
+          "group": "NAT",
+          "linear": "yes",
+          "itinerary": [
+            "la Chapelle-sous-Brancion"
+          ],
+          "symbol_id": "osmc_NAT_empty_white-upper_red-lower_003700360042_black"
+        }
+      ],
+      "keys": [
+        "query",
+        "page",
+        "results"
+      ]
+    },
+    {
+      "region": "Bourgogne-Franche-Comté",
+      "query": "GR de Pays Tour du Morvan",
+      "results": [
+        {
+          "type": "relation",
+          "id": 12662183,
+          "ref": "TM",
+          "name": "Le Tour du Morvan",
+          "group": "REG",
+          "linear": "yes",
+          "symbol_id": "osmc_REG_empty_yellow-upper_red-lower_0054004d_black"
+        },
+        {
+          "type": "relation",
+          "id": 15594354,
+          "ref": "GRP TPM",
+          "name": "Tour du Pays de Montbéliard",
+          "group": "REG",
+          "linear": "yes",
+          "symbol_description": "yellow bar over red",
+          "itinerary": [
+            "Mandeure",
+            "Thulay",
+            "Seloncourt",
+            "Vandoncourt",
+            "Abbévillers",
+            "Villars-lès-Blamont",
+            "Saint-Hippolyte",
+            "Sancey-le-Grand",
+            "Belvoir",
+            "Mandeure"
+          ],
+          "symbol_id": "osmc_REG_empty_yellow-upper_red-lower_00540050004d_black"
+        },
+        {
+          "type": "relation",
+          "id": 14961076,
+          "name": "Tour du Pays de Mélusine",
+          "group": "REG",
+          "linear": "no",
+          "symbol_id": "osmc_REG_empty_yellow-upper_red-lower_004d0045004c_black"
+        },
+        {
+          "type": "relation",
+          "id": 1696127,
+          "ref": "GRP 563",
+          "name": "GRP 563 Tour du Pays de Herve",
+          "group": "REG",
+          "linear": "sorted",
+          "symbol_id": "osmc_REG_yellow_red-lower_003500360033_black"
+        },
+        {
+          "type": "relation",
+          "id": 19556979,
+          "ref": "TPM",
+          "name": "Le tour du pays de la Meije",
+          "group": "LOC",
+          "linear": "no",
+          "symbol_id": "osmc_LOC_white_00320030_black"
+        },
+        {
+          "type": "relation",
+          "id": 12635898,
+          "name": "Tour du Morvan (principale)",
+          "group": "REG",
+          "linear": "yes",
+          "symbol_id": "osmc_REG_empty_yellow-upper_red-lower_0054004d_black"
+        },
+        {
+          "type": "relation",
+          "id": 17874820,
+          "name": "Tour du Pays de la Zorn",
+          "group": "REG",
+          "linear": "yes",
+          "symbol_description": "yellow bar over red",
+          "itinerary": [
+            "Hochfelden",
+            "Hochfelden"
+          ],
+          "symbol_id": "osmc_REG_empty_yellow-upper_red-lower"
+        },
+        {
+          "type": "relation",
+          "id": 1790017,
+          "ref": "GRPPF",
+          "name": "Tour du Pays de Falaise",
+          "group": "LOC",
+          "linear": "no",
+          "symbol_id": "osmc_LOC_empty_yellow-upper_red-lower_00500046_black"
+        },
+        {
+          "type": "relation",
+          "id": 12035545,
+          "ref": "GRP VL",
+          "name": "Tour du Pays de Vannes - Lanvaux",
+          "group": "REG",
+          "linear": "yes",
+          "symbol_id": "osmc_REG_empty_yellow-upper_red-lower"
+        },
+        {
+          "type": "relation",
+          "id": 20740337,
+          "name": "Tour du Pays de Gaston Bachelard",
+          "group": "REG",
+          "linear": "yes",
+          "symbol_id": "osmc_REG_empty_yellow-upper_red-lower_005400470042_black"
+        },
+        {
+          "type": "relation",
+          "id": 12666223,
+          "ref": "TM",
+          "name": "Tour du Morvan - Accès Saulieu",
+          "group": "REG",
+          "linear": "no",
+          "symbol_id": "osmc_REG_empty_yellow-upper_red-lower_0054004d_black"
+        },
+        {
+          "type": "relation",
+          "id": 20253408,
+          "ref": "TPMB",
+          "name": "Tour du Pays du Mont-Blanc",
+          "group": "REG",
+          "linear": "yes",
+          "symbol_id": "osmc_REG_empty_yellow-upper_red-lower"
+        },
+        {
+          "type": "relation",
+          "id": 12665953,
+          "ref": "TM",
+          "name": "Tour du Morvan - Variante Ouroux - Moux",
+          "group": "REG",
+          "linear": "sorted",
+          "symbol_id": "osmc_REG_empty_yellow-upper_red-lower_0054004d_black"
+        },
+        {
+          "type": "relation",
+          "id": 19587040,
+          "name": "Tour du Pays de Lhuis et d'Izieu",
+          "group": "REG",
+          "linear": "yes",
+          "symbol_id": "osmc_REG_empty_yellow-upper_red-lower"
+        },
+        {
+          "type": "relation",
+          "id": 11190426,
+          "ref": "GRP PM",
+          "name": "Tour du Pays Malouin",
+          "group": "REG",
+          "linear": "no",
+          "symbol_id": "osmc_REG_empty_yellow-upper_red-lower_0050004d_black"
+        },
+        {
+          "type": "relation",
+          "id": 12662249,
+          "ref": "TM",
+          "name": "Tour du Morvan - Accès Château-Chinon",
+          "group": "REG",
+          "linear": "yes",
+          "symbol_id": "osmc_REG_empty_yellow-upper_red-lower_0054004d_black"
+        },
+        {
+          "type": "relation",
+          "id": 11818226,
+          "name": "Tour du Pays d'Aire",
+          "group": "LOC",
+          "linear": "no",
+          "symbol_id": "osmc_LOC_white_yellow-bar_00500041004c_black"
+        },
+        {
+          "type": "relation",
+          "id": 5464360,
+          "name": "Tour du Pays d'Ouche",
+          "group": "REG",
+          "linear": "yes",
+          "symbol_id": "osmc_REG_empty_yellow-upper_red-lower_0050004f_black"
+        },
+        {
+          "type": "relation",
+          "id": 13271438,
+          "name": "Tour du Pays d'Olmes",
+          "group": "REG",
+          "linear": "yes",
+          "symbol_id": "osmc_REG_empty_yellow-upper_red-lower_004f004c004d_black"
+        },
+        {
+          "type": "relation",
+          "id": 12666706,
+          "ref": "TM",
+          "name": "Tour du Morvan - Variante La Boutière",
+          "group": "REG",
+          "linear": "no",
+          "symbol_id": "osmc_REG_empty_yellow-upper_red-lower_0054004d_black"
+        }
+      ],
+      "keys": [
+        "query",
+        "page",
+        "results"
+      ]
+    },
+    {
+      "region": "Grand Est",
+      "query": "Traversée des Vosges",
+      "results": [
+        {
+          "type": "relation",
+          "id": 20619685,
+          "name": "Traversée du Massif des Vosges",
+          "group": "NAT",
+          "linear": "yes",
+          "symbol_id": "osmc_NAT_white_red-rectangle"
+        },
+        {
+          "type": "relation",
+          "id": 11060939,
+          "ref": "05",
+          "name": "Traversée des Miroirs",
+          "group": "LOC",
+          "linear": "yes",
+          "symbol_id": "osmc_LOC_white_yellow-bar_00300035_black"
+        },
+        {
+          "type": "relation",
+          "id": 7411272,
+          "ref": "GR 10",
+          "name": "La traversée des Pyrénées",
+          "group": "NAT",
+          "linear": "yes",
+          "symbol_id": "osmc_NAT_empty_white-upper_red-lower_00310030_black"
+        },
+        {
+          "type": "relation",
+          "id": 2704286,
+          "name": "Grande Traversée des Alpes",
+          "group": "NAT",
+          "linear": "yes",
+          "itinerary": [
+            "Saint-Gingolph",
+            "Nice"
+          ],
+          "symbol_id": "ctb_NAT_red_004700540041"
+        },
+        {
+          "type": "relation",
+          "id": 6158468,
+          "name": "Grande Traversée des Préalpes",
+          "group": "REG",
+          "linear": "yes",
+          "symbol_id": "osmc_REG_empty_yellow-upper_red-lower"
+        }
+      ],
+      "keys": [
+        "query",
+        "page",
+        "results"
+      ]
+    },
+    {
+      "region": "Grand Est",
+      "query": "GR5",
+      "results": [
+        {
+          "type": "relation",
+          "id": 12888679,
+          "ref": "GR5",
+          "name": "Grande Rota – Fojos",
+          "group": "REG",
+          "linear": "no",
+          "symbol_id": "osmc_REG_white_red-lower_004700520035_black"
+        },
+        {
+          "type": "relation",
+          "id": 15539684,
+          "ref": "GR5",
+          "group": "INT",
+          "linear": "yes",
+          "itinerary": [
+            "Belfort",
+            "Wissgrut",
+            "Ballon d’Alsace"
+          ],
+          "symbol_id": "osmc_INT_white_red-rectangle"
+        },
+        {
+          "type": "relation",
+          "id": 17966601,
+          "ref": "BUCH",
+          "name": "old GR5 feeder",
+          "group": "LOC",
+          "linear": "yes",
+          "symbol_id": "osmc_LOC_white_dot_orange"
+        }
+      ],
+      "keys": [
+        "query",
+        "page",
+        "results"
+      ]
+    },
+    {
+      "region": "Hauts-de-France",
+      "query": "GR120",
+      "results": [
+        {
+          "type": "relation",
+          "id": 19448055,
+          "ref": "GRT 7",
+          "name": "Lepoeder (GR12) - Auritz (GR11)",
+          "group": "LOC",
+          "linear": "sorted",
+          "symbol_description": "Marra txuri eta gorria - Rayas roja y blanca - White and red stripes",
+          "symbol_id": "osmc_LOC_empty_white-upper_red-lower_00540037_black"
+        },
+        {
+          "type": "relation",
+          "id": 13630746,
+          "ref": "GR12",
+          "name": "GR12 Amsterdam-Paris NL",
+          "group": "INT",
+          "linear": "no",
+          "itinerary": [
+            "Amsterdam",
+            "Bergen op Zoom"
+          ],
+          "symbol_id": "osmc_INT_white_red-lower_0046006c_black"
+        },
+        {
+          "type": "relation",
+          "id": 19448060,
+          "ref": "GRT 8",
+          "name": "Txutxurieta (GR11) - Azpegi (GR12)",
+          "group": "NAT",
+          "linear": "yes",
+          "symbol_description": "Marra txuri eta gorria - Rayas roja y blanca - White and red stripes",
+          "symbol_id": "osmc_NAT_white_red-lower_00540038_black"
+        },
+        {
+          "type": "relation",
+          "id": 14283909,
+          "ref": "GR11 E",
+          "name": "GR11 E",
+          "group": "NAT",
+          "linear": "yes",
+          "symbol_id": "osmc_NAT_empty_white-upper_red-lower_003100310045_black"
+        },
+        {
+          "type": "relation",
+          "id": 19046012,
+          "ref": "GRT 13",
+          "name": "Iparraldea: Intzola lepoa (GR12) - Cazette (GR10)",
+          "group": "NAT",
+          "linear": "yes",
+          "symbol_description": "Marra txuri eta gorria - Rayas roja y blanca - White and red stripes",
+          "symbol_id": "osmc_NAT_empty_white-upper_red-lower_005400310033_black"
+        },
+        {
+          "type": "relation",
+          "id": 101692,
+          "ref": "GR 20",
+          "name": "GR 20",
+          "group": "NAT",
+          "linear": "yes",
+          "itinerary": [
+            "Calenzana",
+            "Conca"
+          ],
+          "symbol_id": "osmc_NAT_empty_white-upper_red-lower_00320030_black"
+        },
+        {
+          "type": "relation",
+          "id": 19448068,
+          "ref": "GRT 9",
+          "name": "Urbeltza (GR12) - Burdin hesiak pasabidea (GR11)",
+          "group": "NAT",
+          "linear": "yes",
+          "symbol_description": "Marra txuri eta gorria - Rayas roja y blanca - White and red stripes",
+          "symbol_id": "osmc_NAT_empty_white-upper_red-lower_00540039_black"
+        },
+        {
+          "type": "relation",
+          "id": 13985223,
+          "ref": "E7;GR12",
+          "name": "Grande Rota do Tejo, Rota Europeia E7-GR12 , Portugal",
+          "group": "INT",
+          "linear": "no",
+          "itinerary": [
+            "Monfortinho",
+            "Lisboa"
+          ],
+          "symbol_id": "osmc_INT_blue_00450037_yellow"
+        },
+        {
+          "type": "relation",
+          "id": 19579472,
+          "name": "Accès GR11",
+          "group": "NAT",
+          "linear": "yes",
+          "symbol_id": "ref_NAT_00410047005200310031"
+        },
+        {
+          "type": "relation",
+          "id": 20082506,
+          "ref": "GR15.2",
+          "name": "GR15.2 Sector 2",
+          "group": "REG",
+          "linear": "no",
+          "itinerary": [
+            "Vales Mortos",
+            "A-do-Pinto"
+          ],
+          "symbol_id": "osmc_REG_white_red-lower"
+        },
+        {
+          "type": "relation",
+          "id": 20082555,
+          "ref": "GR15.2",
+          "name": "GR15.2 Sector 1",
+          "group": "REG",
+          "linear": "no",
+          "itinerary": [
+            "Monte Lilef-Ranch",
+            "Vales Mortos"
+          ],
+          "symbol_id": "osmc_REG_white_red-lower"
+        },
+        {
+          "type": "relation",
+          "id": 20000284,
+          "ref": "GR15.2",
+          "name": "GR15.2 Sector 4",
+          "group": "REG",
+          "linear": "yes",
+          "itinerary": [
+            "Vila Verde de Ficalho",
+            "Pias"
+          ],
+          "symbol_id": "osmc_REG_white_red-lower"
+        },
+        {
+          "type": "relation",
+          "id": 20082435,
+          "ref": "GR15.2",
+          "name": "GR15.2 Sector 3",
+          "group": "REG",
+          "linear": "yes",
+          "itinerary": [
+            "A-do-Pinto",
+            "Vila Verde de Ficalho"
+          ],
+          "symbol_id": "osmc_REG_white_red-lower"
+        },
+        {
+          "type": "relation",
+          "id": 13684293,
+          "name": "Liaison Ghisoni GR20",
+          "group": "LOC",
+          "linear": "yes",
+          "itinerary": [
+            "Pont de Canali",
+            "Bergeries de Cardo",
+            "Crête de Cardo"
+          ],
+          "symbol_id": "osmc_LOC_empty_bar_yellow"
+        },
+        {
+          "type": "relation",
+          "id": 15626017,
+          "ref": "GR 17 L1",
+          "name": "GR17 Liaison GRP 577",
+          "group": "NAT",
+          "linear": "yes",
+          "symbol_id": "osmc_NAT_white_red-lower_00310037004c_black"
+        },
+        {
+          "type": "relation",
+          "id": 4099118,
+          "ref": "VA-R120",
+          "name": "Via Alpina Red R120",
+          "group": "INT",
+          "linear": "yes",
+          "symbol_id": "ref_INT_00560041002d00520031"
+        },
+        {
+          "type": "relation",
+          "id": 19447954,
+          "ref": "GRT 3",
+          "name": "Bera (GR11) - Ibardin (GR10)",
+          "group": "NAT",
+          "linear": "yes",
+          "symbol_description": "white strip on top of red strip",
+          "symbol_id": "osmc_NAT_white_red-lower_00540033_black"
+        },
+        {
+          "type": "relation",
+          "id": 9627013,
+          "name": "Variante Alpine GR20",
+          "group": "LOC",
+          "linear": "sorted",
+          "itinerary": [
+            "Refuge de l'Onda",
+            "Monte d'Oro",
+            "Vizzavona"
+          ],
+          "symbol_id": "ref_LOC_00560041004700520032"
+        },
+        {
+          "type": "relation",
+          "id": 12077214,
+          "ref": "Gr1",
+          "name": "Eijsden-Margraten Gr1 Historische Bronkroute",
+          "group": "LOC",
+          "linear": "yes",
+          "symbol_description": "Speciale bronkbordjes (grijs met paard)",
+          "symbol_id": "osmc_LOC_gray_004700720031_black"
+        },
+        {
+          "type": "relation",
+          "id": 6197308,
+          "ref": "GR 96",
+          "name": "GR 96",
+          "group": "NAT",
+          "linear": "yes",
+          "itinerary": [
+            "Samoëns",
+            "Aix-les-Bains"
+          ],
+          "symbol_id": "osmc_NAT_empty_white-upper_red-lower_00390036_black"
+        }
+      ],
+      "keys": [
+        "query",
+        "page",
+        "results"
+      ]
+    },
+    {
+      "region": "Grand Est",
+      "query": "GR53",
+      "results": [
+        {
+          "type": "relation",
+          "id": 11166627,
+          "name": "Variante GR532",
+          "group": "LOC",
+          "linear": "no",
+          "symbol_description": "rectangle jaune barré de blanc",
+          "itinerary": [
+            "Mulhouse",
+            "Steinbrunn-le-Haut"
+          ],
+          "symbol_id": "osmc_LOC_yellow_white-stripe"
+        },
+        {
+          "type": "relation",
+          "id": 12092627,
+          "name": "Mulhouse - Galfingue - Jonction GR531",
+          "group": "LOC",
+          "linear": "yes",
+          "symbol_description": "rectangle bleu barré de blanc",
+          "itinerary": [
+            "Mulhouse",
+            "Galfingue"
+          ],
+          "symbol_id": "osmc_LOC_blue_white-stripe"
+        },
+        {
+          "type": "relation",
+          "id": 17966601,
+          "ref": "BUCH",
+          "name": "old GR5 feeder",
+          "group": "LOC",
+          "linear": "yes",
+          "symbol_id": "osmc_LOC_white_dot_orange"
+        },
+        {
+          "type": "relation",
+          "id": 11774605,
+          "name": "Jonction GR532/GR531 - Bruebach/Helfrantzkirch",
+          "group": "LOC",
+          "linear": "sorted",
+          "symbol_description": "rectangle bleu barré de blanc",
+          "itinerary": [
+            "Bruebach",
+            "Helfrantzkirch"
+          ],
+          "symbol_id": "osmc_LOC_blue_white-stripe"
+        },
+        {
+          "type": "relation",
+          "id": 11888292,
+          "ref": "GR 5G",
+          "name": "GR 5G",
+          "group": "NAT",
+          "linear": "yes",
+          "symbol_id": "osmc_NAT_empty_white-upper_red-lower_00350047_black"
+        },
+        {
+          "type": "relation",
+          "id": 7238091,
+          "ref": "GR R1",
+          "name": "GR R1",
+          "group": "NAT",
+          "linear": "yes",
+          "symbol_id": "osmc_NAT_white_red-lower_00520031_black"
+        },
+        {
+          "type": "relation",
+          "id": 17637988,
+          "ref": "GR 74",
+          "name": "GR 74",
+          "group": "NAT",
+          "linear": "yes",
+          "symbol_id": "osmc_NAT_empty_white-upper_red-lower_00370034_black"
+        },
+        {
+          "type": "relation",
+          "id": 5119656,
+          "ref": "GR 5c",
+          "name": "GR 5c",
+          "group": "NAT",
+          "linear": "yes",
+          "symbol_description": "white-red",
+          "symbol_id": "osmc_NAT_empty_white-upper_red-lower_00350063_black"
+        },
+        {
+          "type": "relation",
+          "id": 5011474,
+          "ref": "GR 5b",
+          "name": "GR 5b",
+          "group": "NAT",
+          "linear": "yes",
+          "symbol_id": "osmc_NAT_empty_white-upper_red-lower_00350062_black"
+        },
+        {
+          "type": "relation",
+          "id": 11894631,
+          "name": "GR 5G",
+          "group": "NAT",
+          "linear": "yes",
+          "itinerary": [
+            "Metz",
+            "Cocheren"
+          ],
+          "symbol_id": "ref_NAT_00470052002000350047"
+        },
+        {
+          "type": "relation",
+          "id": 15647499,
+          "ref": "GR 62C",
+          "name": "GR 62C",
+          "group": "NAT",
+          "linear": "yes",
+          "itinerary": [
+            "Valleraugue (Poteau Valleraugue - Cagnel)",
+            "Jonction GR 60"
+          ],
+          "symbol_id": "osmc_NAT_empty_white-upper_red-lower_003600320043_black"
+        },
+        {
+          "type": "relation",
+          "id": 14313152,
+          "ref": "GR 76A",
+          "name": "GR 76A",
+          "group": "NAT",
+          "linear": "yes",
+          "symbol_id": "osmc_NAT_empty_white-upper_red-lower_003700360041_black"
+        },
+        {
+          "type": "relation",
+          "id": 15662377,
+          "ref": "GR 62B",
+          "name": "GR 62B",
+          "group": "NAT",
+          "linear": "yes",
+          "itinerary": [
+            "Panneau Information Puy-de-Wolf",
+            "Villefranche-de-Rouergue"
+          ],
+          "symbol_id": "osmc_NAT_empty_white-upper_red-lower_003600320042_black"
+        },
+        {
+          "type": "relation",
+          "id": 2454566,
+          "ref": "GR 122",
+          "name": "GR 122",
+          "group": "NAT",
+          "linear": "no",
+          "symbol_id": "osmc_NAT_white_red-lower_003100320032_black"
+        },
+        {
+          "type": "relation",
+          "id": 18549723,
+          "ref": "GR 129",
+          "name": "GR 129",
+          "group": "NAT",
+          "linear": "no",
+          "symbol_id": "osmc_NAT_white_red-lower_003100320039_black"
+        },
+        {
+          "type": "relation",
+          "id": 14313151,
+          "ref": "GR 76B",
+          "name": "GR 76B",
+          "group": "NAT",
+          "linear": "yes",
+          "itinerary": [
+            "la Chapelle-sous-Brancion"
+          ],
+          "symbol_id": "osmc_NAT_empty_white-upper_red-lower_003700360042_black"
+        },
+        {
+          "type": "relation",
+          "id": 3538122,
+          "ref": "GR 62A",
+          "name": "GR 62A",
+          "group": "NAT",
+          "linear": "yes",
+          "itinerary": [
+            "Meyrueis",
+            "Pont du Ravin du Riou Sec"
+          ],
+          "symbol_id": "osmc_NAT_empty_white-upper_red-lower_003600320041_black"
+        },
+        {
+          "type": "relation",
+          "id": 9079172,
+          "ref": "GR 531",
+          "name": "GR 531",
+          "group": "NAT",
+          "linear": "yes",
+          "symbol_description": "blue rectangle",
+          "itinerary": [
+            "Leymen",
+            "Soultz-sous-Forêts"
+          ],
+          "symbol_id": "osmc_NAT_white_blue-rectangle"
+        },
+        {
+          "type": "relation",
+          "id": 9628450,
+          "ref": "GR 21B",
+          "name": "GR 21B",
+          "group": "NAT",
+          "linear": "yes",
+          "itinerary": [
+            "Villainville",
+            "Yport"
+          ],
+          "symbol_id": "osmc_NAT_empty_white-upper_red-lower_003200310042_black"
+        },
+        {
+          "type": "relation",
+          "id": 14313047,
+          "ref": "GR 76C",
+          "name": "GR 76C",
+          "group": "NAT",
+          "linear": "yes",
+          "symbol_id": "osmc_NAT_empty_white-upper_red-lower_003700360043_black"
+        }
+      ],
+      "keys": [
+        "query",
+        "page",
+        "results"
+      ]
+    },
+    {
+      "region": "Hauts-de-France",
+      "query": "Sentier du Littoral",
+      "results": [
+        {
+          "type": "relation",
+          "id": 16240469,
+          "name": "Sentier du Littoral",
+          "group": "LOC",
+          "linear": "no",
+          "itinerary": [
+            "Daoulas",
+            "Hanvec"
+          ],
+          "symbol_id": "ref_LOC_0053004c"
+        },
+        {
+          "type": "relation",
+          "id": 2139379,
+          "ref": "GR 120",
+          "name": "Sentier du Littoral",
+          "group": "NAT",
+          "linear": "no",
+          "symbol_id": "osmc_NAT_empty_white-upper_red-lower_003100320030_black"
+        },
+        {
+          "type": "relation",
+          "id": 15751821,
+          "name": "Sentier du Littoral du Diamant",
+          "group": "LOC",
+          "linear": "no",
+          "symbol_description": "yellow bar",
+          "symbol_id": "osmc_LOC_brown_yellow-bar"
+        },
+        {
+          "type": "relation",
+          "id": 19801574,
+          "name": "Le sentier du Littoral – Sicie",
+          "group": "LOC",
+          "linear": "no",
+          "symbol_id": "ref_LOC_004c004c0053"
+        },
+        {
+          "type": "relation",
+          "id": 9354083,
+          "name": "Sentier du Littoral - Bandol",
+          "group": "LOC",
+          "linear": "yes",
+          "symbol_description": "trait jaune",
+          "itinerary": [
+            "Pointe Fauconniére",
+            "Plage des Engraviers",
+            "Bandol"
+          ],
+          "symbol_id": "osmc_LOC_empty_yellow-bar"
+        },
+        {
+          "type": "relation",
+          "id": 9905807,
+          "name": "Sentier du littoral Martégal",
+          "group": "LOC",
+          "linear": "yes",
+          "symbol_description": "white and red bars",
+          "itinerary": [
+            "Martigues",
+            "Martigues"
+          ],
+          "symbol_id": "osmc_LOC_empty_white-upper_red-lower"
+        },
+        {
+          "type": "relation",
+          "id": 19801575,
+          "name": "Le sentier du Littoral – Sanary",
+          "group": "LOC",
+          "linear": "no",
+          "symbol_id": "ref_LOC_004c004c0053"
+        },
+        {
+          "type": "relation",
+          "id": 20007624,
+          "name": "Sentier Littoral",
+          "group": "REG",
+          "linear": "yes",
+          "itinerary": [
+            "Saint-Joseph",
+            "Puits Arabe",
+            "Tremblet"
+          ],
+          "symbol_id": "osmc_REG_blue-bar"
+        },
+        {
+          "type": "relation",
+          "id": 1980747,
+          "name": "Sentier littoral",
+          "group": "LOC",
+          "linear": "no",
+          "symbol_id": "ref_LOC_00530065006e00740069"
+        },
+        {
+          "type": "relation",
+          "id": 4035442,
+          "name": "Sentier Littoral",
+          "group": "LOC",
+          "linear": "no",
+          "symbol_id": "ref_LOC_0053004c"
+        }
+      ],
+      "keys": [
+        "query",
+        "page",
+        "results"
+      ]
+    },
+    {
+      "region": "Île-de-France",
+      "query": "GR1",
+      "results": [
+        {
+          "type": "relation",
+          "id": 12077214,
+          "ref": "Gr1",
+          "name": "Eijsden-Margraten Gr1 Historische Bronkroute",
+          "group": "LOC",
+          "linear": "yes",
+          "symbol_description": "Speciale bronkbordjes (grijs met paard)",
+          "symbol_id": "osmc_LOC_gray_004700720031_black"
+        },
+        {
+          "type": "relation",
+          "id": 12077214,
+          "ref": "Gr1",
+          "name": "Eijsden-Margraten Gr1 Historische Bronkroute",
+          "group": "LOC",
+          "linear": "yes",
+          "symbol_description": "Speciale bronkbordjes (grijs met paard)",
+          "symbol_id": "osmc_LOC_gray_004700720031_black"
+        },
+        {
+          "type": "relation",
+          "id": 14283909,
+          "ref": "GR11 E",
+          "name": "GR11 E",
+          "group": "NAT",
+          "linear": "yes",
+          "symbol_id": "osmc_NAT_empty_white-upper_red-lower_003100310045_black"
+        },
+        {
+          "type": "relation",
+          "id": 7238091,
+          "ref": "GR R1",
+          "name": "GR R1",
+          "group": "NAT",
+          "linear": "yes",
+          "symbol_id": "osmc_NAT_white_red-lower_00520031_black"
+        }
+      ],
+      "keys": [
+        "query",
+        "page",
+        "results"
+      ]
+    },
+    {
+      "region": "Île-de-France",
+      "query": "Ceinture Verte de l'Île-de-France",
+      "results": [
+        {
+          "type": "relation",
+          "id": 2741382,
+          "name": "Ceinture verte d'Île-de-France",
+          "group": "REG",
+          "linear": "no",
+          "symbol_id": "osmc_REG_empty_yellow-upper_red-lower_00430056_black"
+        }
+      ],
+      "keys": [
+        "query",
+        "page",
+        "results"
+      ]
+    },
+    {
+      "region": "Île-de-France",
+      "query": "GR11",
+      "results": [
+        {
+          "type": "relation",
+          "id": 14766530,
+          "ref": "GR11",
+          "name": "Variante Caminho Histórico - S.Teotónio»Odeceixe",
+          "group": "REG",
+          "linear": "yes",
+          "symbol_id": "osmc_REG_white_red-lower_0047005200310031_black"
+        },
+        {
+          "type": "relation",
+          "id": 7592697,
+          "ref": "GR11",
+          "name": "Rota Vicentina - Caminho Histórico",
+          "group": "NAT",
+          "linear": "no",
+          "symbol_id": "osmc_NAT_white_red-lower_0047005200310031_black"
+        },
+        {
+          "type": "relation",
+          "id": 14283909,
+          "ref": "GR11 E",
+          "name": "GR11 E",
+          "group": "NAT",
+          "linear": "yes",
+          "symbol_id": "osmc_NAT_empty_white-upper_red-lower_003100310045_black"
+        },
+        {
+          "type": "relation",
+          "id": 19579472,
+          "name": "Accès GR11",
+          "group": "NAT",
+          "linear": "yes",
+          "symbol_id": "ref_NAT_00410047005200310031"
+        }
+      ],
+      "keys": [
+        "query",
+        "page",
+        "results"
+      ]
+    },
+    {
+      "region": "Normandie",
+      "query": "Tour du Cotentin",
+      "results": [
+        {
+          "type": "relation",
+          "id": 13429457,
+          "name": "Tour du Valtin",
+          "group": "LOC",
+          "linear": "yes",
+          "itinerary": [
+            "Le Valtin",
+            "Le Valtin"
+          ],
+          "symbol_id": "osmc_LOC_white_green-circle"
+        },
+        {
+          "type": "relation",
+          "id": 1176308,
+          "name": "Tour du Cervin",
+          "group": "REG",
+          "linear": "no",
+          "itinerary": [
+            "St. Niklaus",
+            "Zermatt"
+          ],
+          "symbol_id": "osmc_REG_white_gray-lower_black-triangle_line"
+        },
+        {
+          "type": "relation",
+          "id": 13499671,
+          "ref": "45",
+          "name": "Tour du cap Martin",
+          "group": "LOC",
+          "linear": "no",
+          "symbol_id": "osmc_LOC_white_yellow-bar_00340035_black"
+        },
+        {
+          "type": "relation",
+          "id": 21196458,
+          "name": "Tour du Contras",
+          "group": "LOC",
+          "linear": "no",
+          "symbol_id": "osmc_LOC_empty_yellow-bar"
+        },
+        {
+          "type": "relation",
+          "id": 21196463,
+          "name": "Tour du Courradour",
+          "group": "LOC",
+          "linear": "no",
+          "symbol_id": "osmc_LOC_empty_yellow-bar"
+        },
+        {
+          "type": "relation",
+          "id": 21196495,
+          "name": "Tour du Clap",
+          "group": "LOC",
+          "linear": "no",
+          "symbol_id": "osmc_LOC_empty_yellow-bar"
+        },
+        {
+          "type": "relation",
+          "id": 15602722,
+          "name": "Tour des Coteaux du Lyonnais",
+          "group": "REG",
+          "linear": "yes",
+          "symbol_id": "osmc_REG_empty_yellow-upper_red-lower_0043004c0059_black"
+        },
+        {
+          "type": "relation",
+          "id": 14103275,
+          "name": "Tour du Capcir",
+          "group": "REG",
+          "linear": "yes",
+          "symbol_id": "osmc_REG_empty_yellow-upper_red-lower_004300410050_black"
+        },
+        {
+          "type": "relation",
+          "id": 2185249,
+          "name": "Tour du moulin",
+          "group": "LOC",
+          "linear": "yes",
+          "symbol_id": "ref_LOC_0054006f007500720064"
+        },
+        {
+          "type": "relation",
+          "id": 14103325,
+          "name": "Tour du Carlit",
+          "group": "REG",
+          "linear": "yes",
+          "symbol_id": "osmc_REG_empty_yellow-upper_red-lower_004300410052_black"
+        },
+        {
+          "type": "relation",
+          "id": 21196423,
+          "name": "Tour du Carton",
+          "group": "LOC",
+          "linear": "no",
+          "symbol_id": "osmc_LOC_empty_yellow-bar"
+        },
+        {
+          "type": "relation",
+          "id": 21196483,
+          "name": "Tour du Puy",
+          "group": "LOC",
+          "linear": "sorted",
+          "symbol_id": "osmc_LOC_empty_yellow-bar"
+        },
+        {
+          "type": "relation",
+          "id": 14275535,
+          "name": "Tour du lac",
+          "group": "LOC",
+          "linear": "yes",
+          "symbol_id": "ref_LOC_0054006f007500720064"
+        },
+        {
+          "type": "relation",
+          "id": 19515362,
+          "name": "Tour du Lac",
+          "group": "LOC",
+          "linear": "yes",
+          "symbol_description": "anneau bleu",
+          "itinerary": [
+            "Lac de Schiessrothried",
+            "Lac de Schiessrothried"
+          ],
+          "symbol_id": "osmc_LOC_white_blue-circle"
+        },
+        {
+          "type": "relation",
+          "id": 14275539,
+          "name": "Tour du lac",
+          "group": "LOC",
+          "linear": "yes",
+          "symbol_id": "ref_LOC_0054006f007500720064"
+        },
+        {
+          "type": "relation",
+          "id": 14275534,
+          "name": "Tour du lac",
+          "group": "LOC",
+          "linear": "yes",
+          "symbol_id": "ref_LOC_0054006f007500720064"
+        },
+        {
+          "type": "relation",
+          "id": 17988941,
+          "name": "Tour du lac",
+          "group": "LOC",
+          "linear": "yes",
+          "itinerary": [
+            "Parking de l'office du tourisme de l'Isle Jourdain",
+            "Parking de l'office du tourisme de l'Isle Jourdain"
+          ],
+          "symbol_id": "ref_LOC_0054006f007500720064"
+        },
+        {
+          "type": "relation",
+          "id": 2726788,
+          "name": "Tour du Lac",
+          "group": "LOC",
+          "linear": "no",
+          "symbol_id": "osmc_LOC_empty_yellow-bar"
+        },
+        {
+          "type": "relation",
+          "id": 6308794,
+          "ref": "PR",
+          "name": "Tour du Lac",
+          "group": "LOC",
+          "linear": "sorted",
+          "symbol_id": "ctb_LOC_yellow_00500052"
+        },
+        {
+          "type": "relation",
+          "id": 3819884,
+          "name": "Tour du Lac",
+          "group": "LOC",
+          "linear": "sorted",
+          "symbol_id": "ref_LOC_0054004c"
+        }
+      ],
+      "keys": [
+        "query",
+        "page",
+        "results"
+      ]
+    },
+    {
+      "region": "Normandie",
+      "query": "GR223",
+      "results": [
+        {
+          "type": "relation",
+          "id": 19586166,
+          "ref": "GR 22",
+          "name": "Accès GR22",
+          "group": "NAT",
+          "linear": "yes",
+          "symbol_id": "osmc_NAT_empty_white-upper_red-lower_00320032_black"
+        },
+        {
+          "type": "relation",
+          "id": 6038066,
+          "ref": "GR 22",
+          "name": "GR22 - accès Gare de Tacoignières",
+          "group": "NAT",
+          "linear": "yes",
+          "symbol_id": "osmc_NAT_empty_white-upper_red-lower"
+        },
+        {
+          "type": "relation",
+          "id": 20078892,
+          "ref": "GR 226",
+          "name": "GR226 - Ruta del Lievant",
+          "group": "NAT",
+          "linear": "no",
+          "symbol_description": "white strip on top of red strip",
+          "itinerary": [
+            "Calas de Mallorca",
+            "Cala Mesquida"
+          ],
+          "symbol_id": "osmc_NAT_white_red-lower_003200320036_black"
+        },
+        {
+          "type": "relation",
+          "id": 20078808,
+          "ref": "GR 226",
+          "name": "GR226 - Ruta del Lievant Etapa 3",
+          "group": "NAT",
+          "linear": "yes",
+          "symbol_description": "white strip on top of red strip",
+          "itinerary": [
+            "Son Carrió",
+            "Artà"
+          ],
+          "symbol_id": "osmc_NAT_white_red-lower_003200320036_black"
+        },
+        {
+          "type": "relation",
+          "id": 20078197,
+          "ref": "GR 226",
+          "name": "GR226 - Ruta del Lievant Etapa 1",
+          "group": "NAT",
+          "linear": "yes",
+          "symbol_description": "white strip on top of red strip",
+          "itinerary": [
+            "Cales de Mallorca",
+            "Manacor"
+          ],
+          "symbol_id": "osmc_NAT_white_red-lower_003200320036_black"
+        },
+        {
+          "type": "relation",
+          "id": 20078809,
+          "ref": "GR 226",
+          "name": "GR226 - Ruta del Lievant Etapa 4",
+          "group": "NAT",
+          "linear": "yes",
+          "symbol_description": "white strip on top of red strip",
+          "itinerary": [
+            "Artà",
+            "Cala Mesquida"
+          ],
+          "symbol_id": "osmc_NAT_white_red-lower_003200320036_black"
+        }
+      ],
+      "keys": [
+        "query",
+        "page",
+        "results"
+      ]
+    },
+    {
+      "region": "Pays de la Loire",
+      "query": "GR3",
+      "results": [
+        {
+          "type": "relation",
+          "id": 12077278,
+          "ref": "Gr3",
+          "name": "Eijsden-Margraten Gr3",
+          "group": "LOC",
+          "linear": "yes",
+          "symbol_id": "osmc_LOC_yellow_gray-bar_004700720033_black"
+        },
+        {
+          "type": "relation",
+          "id": 12077278,
+          "ref": "Gr3",
+          "name": "Eijsden-Margraten Gr3",
+          "group": "LOC",
+          "linear": "yes",
+          "symbol_id": "osmc_LOC_yellow_gray-bar_004700720033_black"
+        },
+        {
+          "type": "relation",
+          "id": 3124695,
+          "ref": "GR3.1",
+          "name": "Camí de la Sal (variant GR3)",
+          "group": "NAT",
+          "linear": "yes",
+          "itinerary": [
+            "Sant Joan de Vilatorrada",
+            "Sant Martí de Fontelles"
+          ],
+          "symbol_id": "osmc_NAT_white_red-lower_0033002e0031_black"
+        }
+      ],
+      "keys": [
+        "query",
+        "page",
+        "results"
+      ]
+    },
+    {
+      "region": "Corse",
+      "query": "Mare e Monti",
+      "results": [
+        {
+          "type": "relation",
+          "id": 10034463,
+          "name": "Mare è Monti Sud",
+          "group": "REG",
+          "linear": "yes",
+          "itinerary": [
+            "Porticcio",
+            "Propriano"
+          ],
+          "symbol_id": "osmc_REG_white_orange-bar_004d00e8004d0053_brown"
+        },
+        {
+          "type": "relation",
+          "id": 13731390,
+          "name": "Mare è Monti Nord",
+          "group": "REG",
+          "linear": "sorted",
+          "itinerary": [
+            "Calenzana",
+            "Cargèse"
+          ],
+          "symbol_id": "osmc_REG_white_orange-bar_004d00e8004d004e_brown"
+        },
+        {
+          "type": "relation",
+          "id": 12440558,
+          "name": "Mare è Monti Livantinu",
+          "group": "REG",
+          "linear": "yes",
+          "itinerary": [
+            "Pont de Solenzara",
+            "Ghisoni"
+          ],
+          "symbol_id": "osmc_REG_white_orange-bar_004d00e8004d004c_brown"
+        },
+        {
+          "type": "relation",
+          "id": 13733801,
+          "name": "Mare è Monti Nord Variante",
+          "group": "REG",
+          "linear": "yes",
+          "symbol_id": "ref_REG_004d004d004e0056"
+        },
+        {
+          "type": "relation",
+          "id": 8618628,
+          "name": "Mare è Monti Nord Variante",
+          "group": "REG",
+          "linear": "sorted",
+          "itinerary": [
+            "Tuareli",
+            "Bocca di Melza",
+            "Serriera"
+          ],
+          "symbol_id": "osmc_REG_white_orange-bar_004d00e8004d004e_brown"
+        },
+        {
+          "type": "relation",
+          "id": 13733800,
+          "name": "Mare è Monti Nord Variante",
+          "group": "REG",
+          "linear": "yes",
+          "symbol_id": "ref_REG_004d004d004e0056"
+        },
+        {
+          "type": "relation",
+          "id": 157818,
+          "name": "Mare è Monti Nord Principal",
+          "group": "REG",
+          "linear": "sorted",
+          "itinerary": [
+            "Calenzana",
+            "Cargèse"
+          ],
+          "symbol_id": "osmc_REG_white_orange-bar_004d00e8004d004e_brown"
+        }
+      ],
+      "keys": [
+        "query",
+        "page",
+        "results"
+      ]
+    },
+    {
+      "region": "Pays de la Loire",
+      "query": "GR34",
+      "results": [
+        {
+          "type": "relation",
+          "id": 6547843,
+          "ref": "GR34",
+          "name": "Trilho Interpretativo da Serra Amarela",
+          "group": "REG",
+          "linear": "no",
+          "symbol_description": "White over Red",
+          "symbol_id": "osmc_REG_white_red-lower_0047005200330034_black"
+        },
+        {
+          "type": "relation",
+          "id": 17931787,
+          "name": "Liaison GR34 - GR38",
+          "group": "NAT",
+          "linear": "yes",
+          "symbol_id": "osmc_NAT_empty_white-upper_red-lower"
+        }
+      ],
+      "keys": [
+        "query",
+        "page",
+        "results"
+      ]
+    },
+    {
+      "region": "Corse",
+      "query": "GR20",
+      "results": [
+        {
+          "type": "relation",
+          "id": 13684293,
+          "name": "Liaison Ghisoni GR20",
+          "group": "LOC",
+          "linear": "yes",
+          "itinerary": [
+            "Pont de Canali",
+            "Bergeries de Cardo",
+            "Crête de Cardo"
+          ],
+          "symbol_id": "osmc_LOC_empty_bar_yellow"
+        },
+        {
+          "type": "relation",
+          "id": 9627013,
+          "name": "Variante Alpine GR20",
+          "group": "LOC",
+          "linear": "sorted",
+          "itinerary": [
+            "Refuge de l'Onda",
+            "Monte d'Oro",
+            "Vizzavona"
+          ],
+          "symbol_id": "ref_LOC_00560041004700520032"
+        },
+        {
+          "type": "relation",
+          "id": 19523218,
+          "name": "Liaison Catastaghju-GR20 Refuge d'Usciolu",
+          "group": "LOC",
+          "linear": "yes",
+          "itinerary": [
+            "Catastaghju",
+            "Bergeries de Bianca",
+            "GR20"
+          ],
+          "symbol_id": "osmc_LOC_white_yellow-bar"
+        }
+      ],
+      "keys": [
+        "query",
+        "page",
+        "results"
+      ]
+    }
+  ]
+}
