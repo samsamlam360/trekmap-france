@@ -234,6 +234,15 @@ try:
     card=driver.find_element(By.CSS_SELECTOR, '#tm-drawer-track .tm-trek-tile:nth-child(5)')
     name=card.find_element(By.TAG_NAME,'strong').text
     card_id=card.get_attribute('data-id')
+    # Ensure the target is fully visible within the horizontal carousel.
+    # Selenium's default click scrolling may otherwise target a clipped
+    # fragment outside the full-width drawer and hit the Leaflet canvas.
+    driver.execute_script(
+        "arguments[0].scrollIntoView({block:'nearest',inline:'center',behavior:'instant'})", card)
+    wait.until(lambda d: d.execute_script(
+        "const a=arguments[0].getBoundingClientRect();"
+        "const b=document.getElementById('tm-drawer-track').getBoundingClientRect();"
+        "return a.left>=b.left-1 && a.right<=b.right+1;", card))
     card.click()
     wait.until(lambda d: d.find_element(By.ID,'modal-backdrop').is_displayed())
     assert name in driver.find_element(By.ID,'modal').text, "Card click opened the wrong trek"
@@ -258,6 +267,15 @@ try:
         "clientX:880,clientY:750,buttons:0,pointerId:6}));")
     card=driver.find_element(By.CSS_SELECTOR, '#tm-drawer-track .tm-trek-tile:nth-child(6)')
     second=card.find_element(By.TAG_NAME,'strong').text
+    # Ensure the target is fully visible within the horizontal carousel.
+    # Selenium's default click scrolling may otherwise target a clipped
+    # fragment outside the full-width drawer and hit the Leaflet canvas.
+    driver.execute_script(
+        "arguments[0].scrollIntoView({block:'nearest',inline:'center',behavior:'instant'})", card)
+    wait.until(lambda d: d.execute_script(
+        "const a=arguments[0].getBoundingClientRect();"
+        "const b=document.getElementById('tm-drawer-track').getBoundingClientRect();"
+        "return a.left>=b.left-1 && a.right<=b.right+1;", card))
     card.click()
     wait.until(lambda d: d.find_element(By.ID,'modal-backdrop').is_displayed())
     assert second in driver.find_element(By.ID,'modal').text, "Hover movement blocked second trek"
