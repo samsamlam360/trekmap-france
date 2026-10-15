@@ -5,16 +5,13 @@ No guessed coordinates, no edits to production data. Candidate geometries must b
 retrieved and validated separately before publication.
 """
 import json, requests, time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
 ROOT=Path(__file__).resolve().parents[1]
 OUT=ROOT/"data"/"centre_relation_candidates.json"
 HEADERS={"User-Agent":"TrekMap-France hiking-source-audit/1.0 (ODbL attribution)"}
-OVERPASS_ENDPOINTS=[
-    "https://overpass.kumi.systems/api/interpreter",
-    "https://overpass-api.de/api/interpreter",
-    "https://overpass.nchc.org.tw/api/interpreter",
-]
+OVERPASS_ENDPOINTS=["https://overpass.kumi.systems/api/interpreter"]
 # Bounding box deliberately broad; candidate acceptance later requires French regional geometry.
 QUERY='[out:json][timeout:95];relation["route"~"^(hiking|foot)$"]["network"~"^(nwn|rwn|lwn)$"](46.15,-0.45,49.05,4.0);out tags center;'
 TERMS=["Touraine","Sologne","GR 3","GR3","GR 41","GR 46","GR 35","GR 36","GR 655","Berry","Vallée du Cher","Compostelle","Loire","Brenne","Perche","Vendôme","Beauce"]
@@ -24,7 +21,7 @@ def main():
   relations={}
   for server in OVERPASS_ENDPOINTS:
     try:
-      r=requests.post(server,data={"data":QUERY},headers=HEADERS,timeout=(15,115))
+      r=requests.post(server,data={"data":QUERY},headers=HEADERS,timeout=(8,24))
       r.raise_for_status()
       items=r.json().get("elements",[])
       diag["overpass_server"]=server
@@ -43,9 +40,9 @@ def main():
   # Search for explicitly named multi-day trails in case an Overpass provider is unavailable.
   api="https://hiking.waymarkedtrails.org/api/v1/list/search"
   searches={}
-  for term in TERMS:
+  def search(term):
     try:
-      r=requests.get(api,params={"query":term,"limit":60,"locale":"fr"},headers=HEADERS,timeout=(10,24))
+      r=requests.get(api,params={"query":term,"limit":50,"locale":"fr"},headers=HEADERS,timeout=(8,12))
       r.raise_for_status()
       candidates=r.json().get("results") or []
       matches=[]
@@ -54,8 +51,12 @@ def main():
         ref=str(x.get("ref") or "")
         if x.get("type")=="relation" and (name or ref):
           matches.append({"id":x.get("id"),"name":name,"ref":ref,"network":x.get("group"),"itinerary":x.get("itinerary")})
-      searches[term]=matches[:60]
-    except Exception as e:diag["search_errors"].append({"q":term,"error":str(e)[:170]})
+      return term,matches[:50],None
+    except Exception as e:return term,[],str(e)[:170]
+  with ThreadPoolExecutor(max_workers=5) as pool:
+    for term,matches,error in pool.map(search,TERMS):
+      searches[term]=matches
+      if error:diag["search_errors"].append({"q":term,"error":error})
   values=sorted(relations.values(),key=lambda x:(x["network"] not in ("nwn","rwn"),-len(x["name"]),x["id"]))
   payload={"source":"OpenStreetMap (ODbL 1.0), Waymarked Trails search","diagnostics":diag,
            "bbox":[-0.45,46.15,4.0,49.05],"overpass_routes":values,
