@@ -1,0 +1,45 @@
+name: Prepare public open-data hiking catalogue
+
+on:
+  push:
+    branches:
+      - "feat/open-trek-*"
+    paths:
+      - "scripts/prepare_open_treks.py"
+      - ".github/workflows/open-trek-catalog.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  catalog:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - name: Checkout the exact review branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref_name }}
+          persist-credentials: true
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install importer dependency
+        run: python -m pip install --disable-pip-version-check requests
+      - name: Download and validate public sources
+        run: python scripts/prepare_open_treks.py
+      - name: Check offline catalogue contracts
+        run: python scripts/test_open_trek_catalog.py
+      - name: Commit only the normalized open-data catalogue
+        shell: bash
+        run: |
+          if git diff --quiet -- data/catalogue_open_treks.json && git ls-files --error-unmatch data/catalogue_open_treks.json >/dev/null 2>&1; then
+            echo "Catalogue unchanged, nothing to commit."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -- data/catalogue_open_treks.json
+          git commit -m "data: stage validated licensed French hiking itineraries"
+          git push origin "HEAD:${{ github.ref_name }}"
