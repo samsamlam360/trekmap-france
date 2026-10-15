@@ -119,17 +119,34 @@ jobs:
               return data
 
           treks=load("/treks")
-          assert isinstance(treks,list) and len(treks)>=52, len(treks)
+          assert isinstance(treks,list) and len(treks)>=80, len(treks)
           old_prefixes=("lannion-tregor:","metropole-lyon:","parc-cevennes:","parc-ecrins:")
           new_prefixes=("cevennes-long:","ecrins-long:","gard-gr:","gard-grp:")
           imported=[t for t in treks if any("Référence : "+key in str(t.get("description",""))
                                               for key in old_prefixes)]
           long_treks=[t for t in treks if any("Référence : "+key in str(t.get("description",""))
                                              for key in new_prefixes)]
+          national_official=[t for t in treks if "Référence : regional-" in str(t.get("description",""))]
+          national_osm=[t for t in treks if "Référence : osm-rel:" in str(t.get("description",""))]
           # 123 short open-data circuits were deliberately removed from Neon.
           # Leave user-created treks untouched, even if they are under one day.
           assert len(imported)==17, f"Expected 17 retained original open routes, got {len(imported)}"
           assert len(long_treks)==35, f"Expected 35 multi-day treks, got {len(long_treks)}"
+          assert len(national_official)==12, f"Expected 12 licensed regional treks, got {len(national_official)}"
+          assert len(national_osm)==8, f"Expected 8 ODbL regional treks, got {len(national_osm)}"
+          assert all(float(t.get("duration_days") or 0)>=1 and float(t["distance"])>=20
+                     for t in national_official+national_osm)
+          assert all("OpenStreetMap" in t["description"] and "ODbL" in t["description"]
+                     for t in national_osm), "Missing mandatory ODbL attribution"
+          expected_regions={
+              "Bretagne","Normandie","Pays de la Loire","Centre-Val de Loire",
+              "Nouvelle-Aquitaine","Bourgogne-Franche-Comté","Grand Est",
+              "Hauts-de-France","Île-de-France","Auvergne-Rhône-Alpes","Corse",
+              "Occitanie","Provence-Alpes-Côte d'Azur"
+          }
+          actual_regions={t["region"] for t in treks}
+          assert expected_regions<=actual_regions, (
+              "Missing hiking regions: "+str(sorted(expected_regions-actual_regions)))
           assert all(float(t.get("duration_days") or 0)>=1 for t in imported+long_treks), (
               "A short official open-data walk was unexpectedly republished")
           assert all(float(t["distance"])>=45 and float(t.get("duration_days") or 0)>=2
@@ -141,9 +158,9 @@ jobs:
           assert geo.get("type")=="FeatureCollection", geo.get("type")
           feats=geo.get("features",[])
           geo_ids={int(f.get("id", f.get("properties",{}).get("id"))) for f in feats}
-          missing=sorted({int(t["id"]) for t in imported+long_treks}-geo_ids)
+          missing=sorted({int(t["id"]) for t in imported+long_treks+national_official+national_osm}-geo_ids)
           assert not missing, f"Imported routes missing from map: {missing[:10]}"
-          assert len(feats)>=52, len(feats)
-          print(f"Curated catalog: {len(treks)} visible treks; "
-                f"17 retained original open routes + 35 long routes; "
-                f"{len(feats)} map traces validated. User-created treks preserved.")
+          assert len(feats)>=80, len(feats)
+          print(f"National catalog: {len(treks)} visible treks in 13 regions; "
+                f"17 original + 35 long + 12 official regional + 8 ODbL, "
+                f"{len(feats)} GPS traces validated. User treks preserved.")
