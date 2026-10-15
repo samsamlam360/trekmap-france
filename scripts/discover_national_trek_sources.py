@@ -57,7 +57,10 @@ def candidates(query,metadata):
         "resource":sorted(res,key=lambda x:(x["format"]!="geojson",-x["size"]))[:3]})
     return result
 def main():
-    terms=list(dict.fromkeys(["randonnée "+x for x in REGIONS]+["itinéraires randonnées pédestres","grande randonnée","randonnées geotrek","GR itinéraire pédestre","randonnees parc naturel régional"]))
+    terms=list(dict.fromkeys(["randonnée","randonnee","randonnées","randonnees",
+         "itinéraires de randonnée","sentiers de randonnée","itinéraires",
+         "geotrek","randonnées du","grande randonnée","GR","randonnée pédestre",
+         "itinéraires de randonnées","randos"]))
     combined={}
     diagnostics={}
     with ThreadPoolExecutor(max_workers=6) as exe:
