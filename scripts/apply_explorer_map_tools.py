@@ -80,6 +80,15 @@ block=r'''<!-- TREKMAP_MAP_TOOLS_2026_START -->
   body.tm-mobile-filters-open #sidebar .filters{
     visibility:visible!important;pointer-events:auto!important
   }
+  /* Keep the actual Fermer control above the scrolling filter selects.
+     A focused Region select could intercept clicks on the sticky header. */
+  body.tm-mobile-filters-open #sidebar .filters #tm-filter-head{
+    position:sticky!important;top:0!important;z-index:110!important;
+    isolation:isolate;background:#fff!important
+  }
+  body.tm-mobile-filters-open #sidebar .filters #tm-filter-toggle{
+    position:relative!important;z-index:111!important;touch-action:manipulation
+  }
 }
 /* Move the real Leaflet zoom and existing map-options button into one dock. */
 #tm-map-control-dock{
