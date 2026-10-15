@@ -476,3 +476,8 @@ if html.count("</body>")!=1:raise SystemExit("Unexpected HTML body")
 html=html.replace("</body>",block+"\n</body>",1)
 p.write_text(html,encoding="utf-8")
 print("Map clusters and contextual filters installed")
+
+# Final UI layer: immersive mode requires completed map controls and layout.
+from runpy import run_path
+run_path(str(Path(__file__).with_name("apply_immersive_map.py")))
+
