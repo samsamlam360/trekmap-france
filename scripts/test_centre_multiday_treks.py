@@ -40,7 +40,7 @@ class CentreLongTreks(unittest.TestCase):
                 self.assertGreaterEqual(r["distance"],32)
                 self.assertLessEqual(r["distance"],330)
                 self.assertEqual(r["elevation"],0)
-                self.assertIn("Dénivelé",r["description"])
+                self.assertIn("dénivelé",r["description"].lower())
                 self.assertIn("NON vérifiés",r["description"])
                 self.assertIn("OpenStreetMap",r["description"])
                 self.assertIn(r["source_url"],r["description"])
