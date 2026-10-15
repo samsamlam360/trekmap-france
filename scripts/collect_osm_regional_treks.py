@@ -10,6 +10,8 @@ ROOT=Path(__file__).resolve().parents[1]
 sys.path.insert(0,str(ROOT/"scripts"))
 import prepare_open_treks as gps
 import prepare_long_treks as longer
+from pyproj import Transformer
+MERCATOR_TO_GPS=Transformer.from_crs("EPSG:3857","EPSG:4326",always_xy=True)
 OUT=ROOT/"data"/"osm_regional_treks_odbl.json"
 API="https://hiking.waymarkedtrails.org/api/v1"
 SOURCES=[
@@ -31,7 +33,15 @@ def harvest(region,title,rid,bbox):
         details.raise_for_status()
         detail=details.json()
         result["detail"]={k:detail.get(k) for k in ("name","ref","official_length","group","bbox","linear")}
-        response=requests.get(f"{API}/list/segments",params={"bbox":",".join(str(x) for x in bbox),
+        # This API uses EPSG:3857 METRES for bbox AND returned GeoJSON,
+        # despite the GIS convention of WGS84 degrees. Use the verified route
+        # metadata extent to avoid clipping the trail artificially.
+        bounds=detail.get("bbox") or []
+        if len(bounds)!=4 or not (-22_000_000<float(bounds[0])<22_000_000):
+            raise ValueError("Missing projected geometry bbox")
+        pad=150.0
+        mercator_box=[bounds[0]-pad,bounds[1]-pad,bounds[2]+pad,bounds[3]+pad]
+        response=requests.get(f"{API}/list/segments",params={"bbox":",".join(str(x) for x in mercator_box),
                                   "relations":str(rid)},headers=HEADERS,timeout=(12,60))
         response.raise_for_status()
         payload=response.json()
@@ -42,7 +52,12 @@ def harvest(region,title,rid,bbox):
         raw=[]
         for item in features:
             for line in gps.segments(item.get("geometry") or {}):
-                points=gps.parse_line(line)
+                wgs=[]
+                for point in line:
+                    if not isinstance(point,list) or len(point)<2:continue
+                    lon,lat=MERCATOR_TO_GPS.transform(float(point[0]),float(point[1]))
+                    wgs.append([lon,lat])
+                points=gps.parse_line(wgs)
                 if len(points)>=3:raw.append(points)
         result["segments"]=len(raw)
         result["segment_km"]=[round(gps.distance(p),1) for p in raw[:18]]
