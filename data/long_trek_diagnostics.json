@@ -160,9 +160,42 @@
     "metadata_resources": 1,
     "resources": [
       {
-        "accepted": 0,
+        "accepted": 8,
         "id": "27092024-676b-4bdb-9236-6cd45af5ce45",
-        "preview": [],
+        "preview": [
+          {
+            "km": 171.19,
+            "name": "GR®6"
+          },
+          {
+            "km": 150.05,
+            "name": "GR®63"
+          },
+          {
+            "km": 142.97,
+            "name": "GR®700 - Le chemin de Régordane - Chemin de Saint-Gilles"
+          },
+          {
+            "km": 105.49,
+            "name": "GR®42_1 - Du Pilat à la Méditerranée par les balcons du Rhône"
+          },
+          {
+            "km": 74.62,
+            "name": "GR®44B"
+          },
+          {
+            "km": 64.98,
+            "name": "GR®67"
+          },
+          {
+            "km": 57.42,
+            "name": "GR®653 - Sentier vers Saint-Jacques-de-Compostelle - Via Arles"
+          },
+          {
+            "km": 54.4,
+            "name": "GR®66"
+          }
+        ],
         "raw_count": 26,
         "samples": [
           {
@@ -170,11 +203,13 @@
             "geometry_type": "MultiLineString",
             "is_walk": true,
             "lengths_km": [
-              0
+              57.42
             ],
             "name": "GR®653 - Sentier vers Saint-Jacques-de-Compostelle - Via Arles",
-            "nearest_endpoint_km": [],
-            "parsed_lines": 0,
+            "nearest_endpoint_km": [
+              999
+            ],
+            "parsed_lines": 1,
             "raw_coord_sample": [
               [
                 831463.0150176114,
@@ -186,18 +221,20 @@
               ]
             ],
             "segments": 1,
-            "total_parsed_km": 0
+            "total_parsed_km": 57.42
           },
           {
             "connected": false,
             "geometry_type": "MultiLineString",
             "is_walk": true,
             "lengths_km": [
-              0
+              142.97
             ],
             "name": "GR®700 - Le chemin de Régordane - Chemin de Saint-Gilles",
-            "nearest_endpoint_km": [],
-            "parsed_lines": 0,
+            "nearest_endpoint_km": [
+              999
+            ],
+            "parsed_lines": 1,
             "raw_coord_sample": [
               [
                 775668.4612709823,
@@ -209,29 +246,52 @@
               ]
             ],
             "segments": 1,
-            "total_parsed_km": 0
+            "total_parsed_km": 142.97
           },
           {
             "connected": false,
             "geometry_type": "MultiLineString",
             "is_walk": true,
             "lengths_km": [
-              0,
-              0,
-              0,
-              0,
-              0,
-              0,
-              0,
-              0,
-              0,
-              0,
-              0,
-              0
+              0.1,
+              0.21,
+              0.13,
+              0.05,
+              0.22,
+              0.64,
+              0.1,
+              0.33,
+              0.85,
+              1.43,
+              0.25,
+              0.15
             ],
             "name": "GR®70 - Le chemin de Stevenson",
-            "nearest_endpoint_km": [],
-            "parsed_lines": 0,
+            "nearest_endpoint_km": [
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "parsed_lines": 42,
             "raw_coord_sample": [
               [
                 770851.874330931,
@@ -243,18 +303,20 @@
               ]
             ],
             "segments": 44,
-            "total_parsed_km": 0
+            "total_parsed_km": 30.54
           },
           {
             "connected": false,
             "geometry_type": "MultiLineString",
             "is_walk": true,
             "lengths_km": [
-              0
+              105.49
             ],
             "name": "GR®42_1 - Du Pilat à la Méditerranée par les balcons du Rhône",
-            "nearest_endpoint_km": [],
-            "parsed_lines": 0,
+            "nearest_endpoint_km": [
+              999
+            ],
+            "parsed_lines": 1,
             "raw_coord_sample": [
               [
                 825208.1409782657,
@@ -266,29 +328,37 @@
               ]
             ],
             "segments": 1,
-            "total_parsed_km": 0
+            "total_parsed_km": 105.49
           },
           {
             "connected": false,
             "geometry_type": "MultiLineString",
             "is_walk": true,
             "lengths_km": [
+              0.26,
+              4.34,
+              0.72,
+              0.23,
+              0.06,
+              0.33,
+              0.08,
               0,
-              0,
-              0,
-              0,
-              0,
-              0,
-              0,
-              0,
-              0,
-              0,
-              0,
-              0
+              0.01,
+              0.01,
+              0.01,
+              0.01
             ],
             "name": "GR®42_2 - Du Pilat à la Méditerranée par les balcons du Rhône",
-            "nearest_endpoint_km": [],
-            "parsed_lines": 0,
+            "nearest_endpoint_km": [
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "parsed_lines": 50,
             "raw_coord_sample": [
               [
                 792285.180191149,
@@ -300,29 +370,51 @@
               ]
             ],
             "segments": 82,
-            "total_parsed_km": 0
+            "total_parsed_km": 41.78
           },
           {
             "connected": false,
             "geometry_type": "MultiLineString",
             "is_walk": true,
             "lengths_km": [
-              0,
-              0,
-              0,
-              0,
-              0,
-              0,
-              0,
-              0,
-              0,
-              0,
-              0,
-              0
+              0.05,
+              0.11,
+              4.48,
+              0.03,
+              0.48,
+              5.74,
+              0.18,
+              0.22,
+              0.35,
+              0.3,
+              0.04,
+              0.22
             ],
             "name": "Le chemin de Saint-Guilhem-le-Désert",
-            "nearest_endpoint_km": [],
-            "parsed_lines": 0,
+            "nearest_endpoint_km": [
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "parsed_lines": 94,
             "raw_coord_sample": [
               [
                 741182.0035315667,
@@ -334,29 +426,47 @@
               ]
             ],
             "segments": 104,
-            "total_parsed_km": 0
+            "total_parsed_km": 70.31
           },
           {
             "connected": false,
             "geometry_type": "MultiLineString",
             "is_walk": true,
             "lengths_km": [
-              0,
-              0,
-              0,
-              0,
-              0,
-              0,
-              0,
-              0,
-              0,
-              0,
-              0,
-              0
+              0.13,
+              0.13,
+              0.53,
+              0.14,
+              0.75,
+              0.92,
+              0.42,
+              0.47,
+              1.16,
+              1.26,
+              0.34,
+              0.02
             ],
             "name": "Le Chemin Urbain V",
-            "nearest_endpoint_km": [],
-            "parsed_lines": 0,
+            "nearest_endpoint_km": [
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "parsed_lines": 237,
             "raw_coord_sample": [
               [
                 808319.1823937106,
@@ -368,18 +478,20 @@
               ]
             ],
             "segments": 256,
-            "total_parsed_km": 0
+            "total_parsed_km": 144.93
           },
           {
             "connected": false,
             "geometry_type": "MultiLineString",
             "is_walk": true,
             "lengths_km": [
-              0
+              26.98
             ],
             "name": "GR®4",
-            "nearest_endpoint_km": [],
-            "parsed_lines": 0,
+            "nearest_endpoint_km": [
+              999
+            ],
+            "parsed_lines": 1,
             "raw_coord_sample": [
               [
                 814770.9091660868,
@@ -391,7 +503,7 @@
               ]
             ],
             "segments": 1,
-            "total_parsed_km": 0
+            "total_parsed_km": 26.98
           }
         ],
         "schema": [
@@ -416,9 +528,18 @@
     "metadata_resources": 1,
     "resources": [
       {
-        "accepted": 0,
+        "accepted": 2,
         "id": "4ede6499-b84a-4195-a9a9-f1e5b3258791",
-        "preview": [],
+        "preview": [
+          {
+            "km": 59.55,
+            "name": "GRP®1 Tour du Pays Viganais"
+          },
+          {
+            "km": 57.89,
+            "name": "GRP®4 Tour de la Haute Vallée de la Cèze"
+          }
+        ],
         "raw_count": 6,
         "samples": [
           {
@@ -426,11 +547,13 @@
             "geometry_type": "MultiLineString",
             "is_walk": true,
             "lengths_km": [
-              0
+              59.55
             ],
             "name": "GRP®1 Tour du Pays Viganais",
-            "nearest_endpoint_km": [],
-            "parsed_lines": 0,
+            "nearest_endpoint_km": [
+              999
+            ],
+            "parsed_lines": 1,
             "raw_coord_sample": [
               [
                 748620.6701842333,
@@ -442,24 +565,32 @@
               ]
             ],
             "segments": 1,
-            "total_parsed_km": 0
+            "total_parsed_km": 59.55
           },
           {
             "connected": false,
             "geometry_type": "MultiLineString",
             "is_walk": true,
             "lengths_km": [
-              0,
-              0,
-              0,
-              0,
-              0,
-              0,
-              0
+              4.06,
+              1.43,
+              1.81,
+              4.24,
+              18.58,
+              4.49,
+              1.6
             ],
             "name": "GRP®3 Tour de la Vallée du Galeizon",
-            "nearest_endpoint_km": [],
-            "parsed_lines": 0,
+            "nearest_endpoint_km": [
+              0.0,
+              0.0,
+              0.0,
+              0.003,
+              0.012,
+              0.0,
+              0.0
+            ],
+            "parsed_lines": 7,
             "raw_coord_sample": [
               [
                 773138.7517489902,
@@ -471,18 +602,20 @@
               ]
             ],
             "segments": 7,
-            "total_parsed_km": 0
+            "total_parsed_km": 36.21
           },
           {
             "connected": false,
             "geometry_type": "MultiLineString",
             "is_walk": true,
             "lengths_km": [
-              0
+              25.1
             ],
             "name": "GRP®2 Tour de la Haute Vallée Borgne",
-            "nearest_endpoint_km": [],
-            "parsed_lines": 0,
+            "nearest_endpoint_km": [
+              999
+            ],
+            "parsed_lines": 1,
             "raw_coord_sample": [
               [
                 750760.7090031526,
@@ -494,18 +627,20 @@
               ]
             ],
             "segments": 1,
-            "total_parsed_km": 0
+            "total_parsed_km": 25.1
           },
           {
             "connected": false,
             "geometry_type": "MultiLineString",
             "is_walk": true,
             "lengths_km": [
-              0
+              57.89
             ],
             "name": "GRP®4 Tour de la Haute Vallée de la Cèze",
-            "nearest_endpoint_km": [],
-            "parsed_lines": 0,
+            "nearest_endpoint_km": [
+              999
+            ],
+            "parsed_lines": 1,
             "raw_coord_sample": [
               [
                 780839.3752759004,
@@ -517,18 +652,20 @@
               ]
             ],
             "segments": 1,
-            "total_parsed_km": 0
+            "total_parsed_km": 57.89
           },
           {
             "connected": false,
             "geometry_type": "MultiLineString",
             "is_walk": true,
             "lengths_km": [
-              0
+              18.96
             ],
             "name": "GRP®5 Le Cévenol",
-            "nearest_endpoint_km": [],
-            "parsed_lines": 0,
+            "nearest_endpoint_km": [
+              999
+            ],
+            "parsed_lines": 1,
             "raw_coord_sample": [
               [
                 775728.8719553001,
@@ -540,18 +677,20 @@
               ]
             ],
             "segments": 1,
-            "total_parsed_km": 0
+            "total_parsed_km": 18.96
           },
           {
             "connected": false,
             "geometry_type": "MultiLineString",
             "is_walk": true,
             "lengths_km": [
-              0
+              12.62
             ],
             "name": "GRP®6 Tour de la Haute Vallée du Luech",
-            "nearest_endpoint_km": [],
-            "parsed_lines": 0,
+            "nearest_endpoint_km": [
+              999
+            ],
+            "parsed_lines": 1,
             "raw_coord_sample": [
               [
                 773709.1492733832,
@@ -563,7 +702,7 @@
               ]
             ],
             "segments": 1,
-            "total_parsed_km": 0
+            "total_parsed_km": 12.62
           }
         ],
         "schema": [
