@@ -232,6 +232,9 @@ block=r'''<!-- TREKMAP_EXPLORER_FINISH_START -->
       if(e.target.closest('.tm-trek-tile')){hovered=null;focusRoute()}
     });
   }
+  document.addEventListener('trekmap:detail-cleared',function(){
+    selected=null;hovered=null;focusRoute();
+  });
   document.addEventListener('trekmap:detail-opened',function(e){
     var id=Number(e.detail&&e.detail.id);
     if(Number.isFinite(id)){selected=id;hovered=null;focusRoute()}
@@ -257,3 +260,8 @@ if html.count("</body>")!=1:
 html=html.replace("</body>",block+"\n</body>",1)
 path.write_text(html,encoding="utf-8")
 print("Explorer finishing touches installed after all current UI layers")
+
+# Keep map tools as the final HTML installer on Render and CI.
+from runpy import run_path
+run_path(str(Path(__file__).with_name("apply_explorer_map_tools.py")))
+
