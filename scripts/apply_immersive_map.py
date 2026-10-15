@@ -43,8 +43,15 @@ body.tm-map-immersive.tm-immersive-list-open #tm-unified-drawer{
   bottom:12px!important;width:auto!important;height:var(--tm-drawer)!important;
   z-index:5300!important;visibility:visible!important;opacity:1!important
 }
-body.tm-map-immersive.tm-immersive-list-open #tm-drawer-track{
-  visibility:visible!important
+body.tm-map-immersive.tm-immersive-list-open #tm-unified-drawer.collapsed{
+  /* Keep the 44px header at the BOTTOM when its chevron is clicked. */
+  height:44px!important;min-height:0!important
+}
+body.tm-map-immersive.tm-immersive-list-open #tm-unified-drawer.collapsed #tm-drawer-track{
+  display:none!important;visibility:hidden!important;pointer-events:none!important
+}
+body.tm-map-immersive.tm-immersive-list-open #tm-unified-drawer:not(.collapsed) #tm-drawer-track{
+  display:flex!important;visibility:visible!important
 }
 body.tm-map-immersive #tm-map-control-dock{
   top:14px!important;left:14px!important;right:auto!important;z-index:6600!important
@@ -133,7 +140,8 @@ body.tm-map-immersive #tm-map-immersive-actions{display:flex}
     var on=root.classList.contains('tm-map-immersive');
     menuButton.textContent=on?'⛶ Quitter le mode carte':'⛶ Mode carte immersif';
     menuButton.setAttribute('aria-pressed',String(on));
-    list.setAttribute('aria-pressed',String(root.classList.contains('tm-immersive-list-open')));
+    list.setAttribute('aria-pressed',String(root.classList.contains('tm-immersive-list-open')&&
+      drawer&&!drawer.classList.contains('collapsed')));
   }
   function leave(){
     if(!root.classList.contains('tm-map-immersive'))return;
@@ -154,10 +162,14 @@ body.tm-map-immersive #tm-map-immersive-actions{display:flex}
     root.classList.remove('tm-immersive-list-open');
     root.classList.add('tm-map-immersive');
     reflect();closeMenu();invalidate();
-    // Browser full screen when permitted, useful CSS focus mode as fallback.
-    if(typeof app.requestFullscreen==='function'){
+    // Use the DOCUMENT root as native fullscreen target. Modal dialogs and
+    // toast messages are siblings of #app; fullscreening only #app made the
+    // "Voir la fiche" dialog invisible despite its being open.
+    // The CSS focus mode remains a fallback on restricted browsers.
+    var fullscreenRoot=document.documentElement;
+    if(typeof fullscreenRoot.requestFullscreen==='function'){
       try{
-        var response=app.requestFullscreen({navigationUI:'hide'});
+        var response=fullscreenRoot.requestFullscreen({navigationUI:'hide'});
         requestedNative=true;
         if(response&&response.then)response.then(invalidate).catch(function(){
           requestedNative=false;invalidate();
@@ -181,6 +193,18 @@ body.tm-map-immersive #tm-map-immersive-actions{display:flex}
     if(on&&drawer)drawer.classList.remove('collapsed');
     reflect();invalidate();
   });
+  var drawerHead=document.getElementById('tm-drawer-head');
+  if(drawerHead){
+    // The existing header already toggles .collapsed. Reflect that state in
+    // the immersive Treks button, without adding a duplicate click handler.
+    drawerHead.addEventListener('click',function(){
+      requestAnimationFrame(function(){
+        list.setAttribute('aria-pressed',String(
+          root.classList.contains('tm-immersive-list-open')&&
+          drawer&&!drawer.classList.contains('collapsed')));
+      });
+    });
+  }
   document.addEventListener('fullscreenchange',function(){
     // Esc leaves browser fullscreen: restore every part of the original UI.
     if(root.classList.contains('tm-map-immersive')&&requestedNative&&!document.fullscreenElement)leave();
