@@ -16,6 +16,14 @@ const js=ui.match(/<script id="tm-profile-v2-script">([\s\S]*?)<\/script>/)?.[1]
 const css=ui.match(/<style id="tm-profile-v2-style">([\s\S]*?)<\/style>/)?.[1];
 assert.ok(js && css,'both profile JS and CSS exist');
 new vm.Script(js,{filename:'trekmap-profile-v2.js'});
+assert.ok(ui.includes('name="local_photo"'),'profile accepts device photos');
+assert.ok(js.includes('async function localPhotoData(file)'),'local photo is compressed on device');
+assert.ok(js.includes("canvas.toDataURL('image/jpeg',quality)"),'JPEG encoding is supported');
+assert.ok(js.includes('tm-p-local-photo-preview'),'selected photo has a preview');
+assert.ok(js.includes('urls.unshift(await localPhotoData(chosen))'),'stored photos travel with journey updates');
+assert.ok(api.includes('b64decode') && api.includes('if value.startswith("data:")'),'server checks inline photo bytes');
+assert.ok(api.includes("Une seule photo locale"),'no unlimited database photo storage');
+
 assert.ok(css.includes('@media(max-width:780px)')&&css.includes('focus-visible'),
  'mobile responsive and keyboard accessibility');
 for(const section of ['Tableau de bord','Mes aventures','Carnet','Collections','Préférences']){
