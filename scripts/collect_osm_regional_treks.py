@@ -26,6 +26,34 @@ SOURCES=[
   ("Corse","Mare è Monti Livantinu",12440558,[8.1,41.3,10.0,43.2]),
 ]
 HEADERS={"User-Agent":"TrekMap-France/ODbL-hiking-relation-research (attribution and sharealike)"}
+def longest_real_component(lines):
+    """Return largest connected LINE, never jumping between unrelated branches."""
+    chains=[]
+    # Rebuild as many disjoint connected strings as possible, without
+    # tracing the same segments twice or inventing inaccessible shortcuts.
+    rest=[list(x) for x in lines]
+    while rest:
+        index=max(range(len(rest)),key=lambda i:gps.distance(rest[i]))
+        points=rest.pop(index)
+        while rest:
+            best=None
+            for i,line in enumerate(rest):
+                for dist,side,reverse in (
+                    (gps.haversine(points[-1],line[0]),"append",False),
+                    (gps.haversine(points[-1],line[-1]),"append",True),
+                    (gps.haversine(points[0],line[-1]),"prepend",False),
+                    (gps.haversine(points[0],line[0]),"prepend",True)):
+                    if best is None or dist<best[0]:best=(dist,i,side,reverse)
+            if best is None or best[0]>0.012:break
+            gap,i,side,reverse=best
+            line=rest.pop(i)
+            if reverse:line.reverse()
+            if side=="append":points.extend(line[1:] if gap<0.001 else line)
+            else:points=(line[:-1] if gap<0.001 else line)+points
+        chains.append(points)
+    best=max(chains,key=gps.distance)
+    return best,gps.distance(best),len(chains)
+
 def harvest(region,title,rid,bbox):
     result={"region":region,"name":title,"relation":rid}
     try:
@@ -64,11 +92,12 @@ def harvest(region,title,rid,bbox):
         if not raw:return result
         converted={"type":"MultiLineString","coordinates":[[[x[1],x[0]] for x in line] for line in raw]}
         rebuilt=longer.stitch(converted)
-        if rebuilt is None:
-            result["status"]="fragmented (rejected: no fictitious joins)"
-            return result
-        points,km=rebuilt
-        if not 23<=km<=650:
+        is_partial=rebuilt is None
+        if is_partial:
+            points,km,components=longest_real_component(raw)
+            result["connected_components"]=components
+        else:points,km=rebuilt
+        if not 20<=km<=650:
             result["status"]="too short or huge";result["distance_km"]=round(km,1);return result
         compact=gps.simplify(points,max_points=1100)
         if len(compact)<3 or abs(gps.distance(compact)-km)/km>0.05:
@@ -76,10 +105,11 @@ def harvest(region,title,rid,bbox):
         source=f"https://www.openstreetmap.org/relation/{rid}"
         key=f"osm-rel:{rid}"
         label=(str(detail.get("name") or title)).strip()
-        # Only label verified geospatial sections. Metadata may describe a
-        # larger OSM superroute than the displayed clipped geometry.
-        if detail.get("official_length") and km<0.75*float(detail["official_length"])/1000:
-            label+=" · tronçon vérifié"
+        # Never claim that a partial connected component is the whole GR.
+        # Even a 200-km component of a long official relation may be partial.
+        if is_partial or (
+             detail.get("official_length") and km<0.75*float(detail["official_length"])/1000):
+            label+=" · tronçon continu"
         description=(f"Randonnée pédestre cartographiée dans OpenStreetMap, relation {rid}. "
             f"Distance calculée du tracé réellement représenté : {km:.1f} km. "
             f"Durée indicative : environ {max(1,round(km/20))} jours. "
@@ -88,7 +118,8 @@ def harvest(region,title,rid,bbox):
             f"Source : {source} ; © les contributeurs OpenStreetMap, ODbL 1.0, "
             f"attribution et partage à l'identique : https://www.openstreetmap.org/copyright. "
             f"Référence : {key}.")
-        result["status"]="accepted";result["distance_km"]=round(km,2)
+        result["status"]="accepted (continuous section)" if is_partial else "accepted"
+        result["distance_km"]=round(km,2)
         result["route"]={"source_key":key,"source_name":"Contributeurs OpenStreetMap / Waymarked Trails",
           "source_url":source,"license":"Open Data Commons ODbL 1.0",
           "name":label[:155],"region":region,"distance":round(km,2),
@@ -105,7 +136,7 @@ def main():
     with concurrent.futures.ThreadPoolExecutor(max_workers=3) as pool:
         tasks=[pool.submit(harvest,*row) for row in SOURCES]
         rows=[task.result() for task in concurrent.futures.as_completed(tasks)]
-    routes=[r["route"] for r in rows if r.get("status")=="accepted"]
+    routes=[r["route"] for r in rows if r.get("status","").startswith("accepted")]
     for r in rows:r.pop("route",None)
     OUT.parent.mkdir(exist_ok=True)
     OUT.write_text(json.dumps({"license":"Open Data Commons ODbL 1.0",
