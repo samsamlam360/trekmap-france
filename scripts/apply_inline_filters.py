@@ -118,8 +118,12 @@ block = r'''<!-- TREKMAP_INLINE_FILTERS_2026_START -->
     'tm-route-filter','tm-season-filter','tm-rating-filter','tm-photo-filter','tm-place-filter'];
   function desktop(){return window.innerWidth>820}
   function closePanel(){
-    document.body.classList.remove('tm-inline-filters-open');
-    toggle.setAttribute('aria-expanded','false');
+    // Do not reassign an unchanged body class from a MutationObserver callback:
+    // doing so can enqueue itself forever when TrekBrain route mode starts.
+    if(document.body.classList.contains('tm-inline-filters-open'))
+      document.body.classList.remove('tm-inline-filters-open');
+    if(toggle.getAttribute('aria-expanded')!=='false')
+      toggle.setAttribute('aria-expanded','false');
   }
   function openPanel(id){
     if(!desktop())return;
@@ -157,7 +161,8 @@ block = r'''<!-- TREKMAP_INLINE_FILTERS_2026_START -->
   });
   window.addEventListener('resize',function(){if(!desktop())closePanel()});
   new MutationObserver(function(){
-    if(document.body.classList.contains('tm-brain-route-mode'))closePanel();
+    if(document.body.classList.contains('tm-brain-route-mode') &&
+       document.body.classList.contains('tm-inline-filters-open'))closePanel();
   }).observe(document.body,{attributes:true,attributeFilter:['class']});
   function mirror(source,dest){
     var signature=Array.from(source.options).map(function(o){
