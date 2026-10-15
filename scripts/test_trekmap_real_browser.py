@@ -452,9 +452,11 @@ try:
         "infoClasses:a.className,drawerClasses:document.getElementById('tm-unified-drawer').className,"
         "fullscreen:document.fullscreenElement?.tagName||null,info:r(a),selectedCard:r(d),"
         "controls:r(c),hidden:c.hidden,button:r(b),viewport:innerWidth};")
-    wait.until(lambda d: d.find_element(By.ID, "tm-info-open-detail").is_displayed(),
-               message=f"Detail button hidden in immersive mode: {details_diagnostic}")
-    driver.find_element(By.ID, "tm-info-open-detail").click()
+    # Native fullscreen may resize the viewport below the desktop info
+    # breakpoint. The toolbar must still provide a working Fiche action.
+    wait.until(lambda d: d.find_element(By.ID, "tm-map-immersive-detail").is_displayed(),
+               message=f"Immersive Fiche action unavailable: {details_diagnostic}")
+    driver.find_element(By.ID, "tm-map-immersive-detail").click()
     wait.until(lambda d: d.find_element(By.ID, "modal-backdrop").is_displayed())
     fullscreen_detail=driver.execute_script(
         "const f=document.fullscreenElement,b=document.getElementById('modal-backdrop');"
