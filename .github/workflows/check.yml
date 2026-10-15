@@ -25,7 +25,7 @@ jobs:
       - name: Vérifier la syntaxe Python
         run: python -m compileall -q backend scripts
       - name: Vérifier les fichiers photos personnels (sans base distante)
-        run: python scripts/test_profile_local_photos.py
+        run: python -m scripts.test_profile_local_photos
       - name: Vérifier le contrat du profil et des photos
         run: node scripts/test_profile_v2.mjs
       - name: Vérifier le gardien de correction automatique (sans réseau)
