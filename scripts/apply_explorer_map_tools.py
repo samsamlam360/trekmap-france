@@ -81,16 +81,93 @@ block=r'''<!-- TREKMAP_MAP_TOOLS_2026_START -->
     visibility:visible!important;pointer-events:auto!important
   }
 }
-/* Clusters are view-only markers. The underlying authentic trekking lines remain intact. */
-.tm-trek-cluster-icon{background:none!important;border:0!important}
+/* Move the real Leaflet zoom and existing map-options button into one dock. */
+#tm-map-control-dock{
+  position:absolute;z-index:6600;left:18px;top:calc(var(--tm-top) + 20px);
+  width:110px;display:grid;gap:7px;padding:7px;
+  background:rgba(255,255,255,.94);border:1px solid rgba(199,224,208,.95);
+  border-radius:17px;box-shadow:0 12px 30px rgba(9,50,33,.17);
+  backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px)
+}
+#tm-map-control-dock .leaflet-control-zoom{
+  display:grid!important;grid-template-columns:1fr 1fr!important;gap:5px!important;
+  width:100%!important;border:0!important;margin:0!important;
+  box-shadow:none!important;float:none!important;clear:none!important
+}
+#tm-map-control-dock .leaflet-control-zoom a{
+  display:grid!important;place-items:center;width:100%!important;height:39px!important;
+  line-height:1!important;font-size:22px!important;border:1px solid #d9e8de!important;
+  border-radius:10px!important;background:#f3f9f5!important;color:#165c3d!important;
+  box-sizing:border-box!important;text-decoration:none!important
+}
+#tm-map-control-dock .leaflet-control-zoom a:hover{background:#e5f3e9!important}
+#tm-map-control-dock .leaflet-control-zoom a.leaflet-disabled{opacity:.45}
+#tm-map-control-dock .map-tools{
+  position:relative!important;inset:auto!important;left:auto!important;right:auto!important;
+  top:auto!important;display:block!important;width:100%!important;
+  max-width:none!important;z-index:1!important
+}
+#tm-map-control-dock #tm-map-options{
+  display:flex!important;align-items:center!important;justify-content:center!important;
+  width:100%!important;min-width:0!important;height:39px!important;
+  margin:0!important;padding:0 8px!important;border:1px solid #c7ddce!important;
+  border-radius:10px!important;background:white!important;color:#12583b!important;
+  box-shadow:none!important;font-size:12px!important
+}
+#tm-map-control-dock :is(a,button,select):focus-visible{
+  outline:3px solid #edb435!important;outline-offset:2px!important
+}
+#tm-map-control-dock #tm-map-options-panel{
+  position:absolute!important;top:0!important;left:calc(100% + 12px)!important;
+  right:auto!important;width:min(230px,calc(100vw - 148px))!important;max-width:none!important;
+  z-index:10!important
+}
+body.tm-brain-route-mode #tm-map-control-dock{
+  left:auto;right:15px;top:calc(var(--tm-top) + 14px)
+}
+body.tm-brain-route-mode #tm-map-control-dock #tm-map-options-panel{
+  left:auto!important;right:calc(100% + 12px)!important
+}
+@media(max-width:820px){
+  #tm-map-control-dock{left:10px;top:calc(var(--tm-top) + 12px);
+    width:98px;gap:5px;padding:5px;border-radius:14px}
+  #tm-map-control-dock .leaflet-control-zoom a{height:36px!important}
+  #tm-map-control-dock #tm-map-options{height:36px!important}
+  #tm-map-control-dock #tm-map-options-panel{width:min(230px,calc(100vw - 122px))!important}
+}
+/* Numbered badges exist only for overlapping routes, never a lone trek. */
+.tm-trek-cluster-icon{background:transparent!important;border:0!important;pointer-events:auto}
 .tm-trek-cluster{
-  display:grid;place-items:center;width:42px;height:42px;border-radius:50%;
-  border:3px solid white;background:#087a52;color:white;
-  box-shadow:0 2px 0 rgba(4,67,42,.3),0 0 0 5px rgba(22,137,84,.20),0 4px 17px rgba(4,47,29,.25);
-  font-size:15px;font-weight:900;line-height:1;cursor:pointer}
-.tm-trek-cluster[data-count="single"]{width:32px;height:32px;font-size:12px;
-  background:#237c5d;box-shadow:0 0 0 3px rgba(15,117,78,.15),0 4px 13px rgba(4,47,29,.22)}
-.tm-trek-cluster-icon:focus-visible .tm-trek-cluster{outline:3px solid #f6ae33}
+  position:relative;isolation:isolate;
+  display:grid;place-items:center;width:46px;height:46px;border-radius:50%;
+  border:3px solid #fff;box-sizing:border-box;
+  background:linear-gradient(145deg,#24a679 0%,#08734e 72%,#075b3f 100%);
+  color:white;box-shadow:0 7px 20px rgba(5,61,39,.25),0 0 0 5px rgba(24,145,92,.15);
+  text-shadow:0 1px 2px rgba(0,0,0,.18);
+  font-size:16px;font-weight:900;line-height:1;cursor:pointer;
+  transition:box-shadow .18s ease,filter .18s ease
+}
+.tm-trek-cluster:before{
+  content:"";position:absolute;inset:3px;border:1px solid rgba(255,255,255,.23);
+  border-radius:50%;pointer-events:none
+}
+.tm-trek-cluster-icon:hover .tm-trek-cluster{
+  box-shadow:0 10px 24px rgba(5,61,39,.35),0 0 0 7px rgba(24,145,92,.20);
+  filter:brightness(1.06)
+}
+.tm-trek-cluster-icon:focus-visible .tm-trek-cluster{outline:3px solid #f6ae33;outline-offset:3px}
+.tm-trek-cluster-icon.tm-cluster-enter .tm-trek-cluster{
+  animation:tm-cluster-enter .25s cubic-bezier(.18,1.3,.36,1) both
+}
+.tm-trek-cluster-icon.tm-cluster-leaving{pointer-events:none!important}
+.tm-trek-cluster-icon.tm-cluster-leaving .tm-trek-cluster{
+  animation:tm-cluster-leave .22s ease-in both
+}
+@keyframes tm-cluster-enter{from{opacity:0;transform:scale(.65)}to{opacity:1;transform:scale(1)}}
+@keyframes tm-cluster-leave{from{opacity:1;transform:scale(1)}to{opacity:0;transform:scale(.55)}}
+@media(prefers-reduced-motion:reduce){
+  .tm-trek-cluster-icon .tm-trek-cluster{animation:none!important;transition:none!important}
+}
 .tm-trek-cluster-list{display:grid;gap:5px;min-width:190px;max-width:280px}
 .tm-trek-cluster-list b{font-size:13px;margin-bottom:4px}
 .tm-trek-cluster-list button{padding:7px;text-align:left;border:1px solid #daeadf;border-radius:8px;
@@ -231,6 +308,21 @@ block=r'''<!-- TREKMAP_MAP_TOOLS_2026_START -->
   // Prevent a click on the map background from leaving an unrelated trek
   // selected. Keep drawing mode and the separate TrekBrain map untouched.
   if(typeof map==='undefined'||!map||typeof L==='undefined'||typeof trekLayerGroup==='undefined')return;
+  // Reuse the actual controls. Never create proxy zoom buttons or duplicate map handlers.
+  var zoomControl=map.zoomControl&&map.zoomControl.getContainer();
+  var optionsControl=document.querySelector('.map-tools');
+  var mapHost=$('app');
+  if(zoomControl&&optionsControl&&mapHost&&!$('tm-map-control-dock')){
+    var dock=document.createElement('div');
+    dock.id='tm-map-control-dock';
+    dock.setAttribute('role','group');
+    dock.setAttribute('aria-label','Zoom et options de la carte');
+    mapHost.appendChild(dock);
+    dock.appendChild(zoomControl);
+    dock.appendChild(optionsControl);
+    L.DomEvent.disableClickPropagation(dock);
+    L.DomEvent.disableScrollPropagation(dock);
+  }
   map.on('click',function(e){
     if(document.body.classList.contains('tm-brain-route-mode'))return;
     if(typeof drawMode!=='undefined'&&drawMode)return;
@@ -266,52 +358,85 @@ block=r'''<!-- TREKMAP_MAP_TOOLS_2026_START -->
       seen.add(id);return !!featured(t)
     });
   }
+  // Stable membership keys allow existing badges to stay mounted and glide as
+  // the map pans. Old groups shrink out rather than vanishing instantly.
+  var badgeMarkers=new Map();
+  function retire(key,marker){
+    if(marker._tmLeaving)return;
+    marker._tmLeaving=true;
+    marker._tmExitToken=(marker._tmExitToken||0)+1;
+    var token=marker._tmExitToken,element=marker.getElement();
+    if(element)element.classList.add('tm-cluster-leaving');
+    setTimeout(function(){
+      if(!marker._tmLeaving||marker._tmExitToken!==token)return;
+      clusterLayer.removeLayer(marker);badgeMarkers.delete(key);
+    },240);
+  }
   function clusterNow(){
-    clusterScheduled=false;clusterLayer.clearLayers();currentClusters=[];
-    if(document.body.classList.contains('tm-brain-route-mode')||map.getZoom()>10)return;
-    var treks=data(),radius=map.getZoom()<=6?69:map.getZoom()<=8?57:45;
-    // Stable greedy pixel groups; no extra map provider or plugin.
-    treks.forEach(function(t){
-      var point=featured(t);if(!point)return;
-      var pixel=map.latLngToLayerPoint(point),near=null,best=radius*radius;
-      currentClusters.forEach(function(g){
-        var dx=g.pixel.x-pixel.x,dy=g.pixel.y-pixel.y,d2=dx*dx+dy*dy;
-        if(d2<best){best=d2;near=g}
+    clusterScheduled=false;currentClusters=[];
+    var active=new Set(),brain=document.body.classList.contains('tm-brain-route-mode');
+    if(!brain&&map.getZoom()<=10){
+      var treks=data(),radius=map.getZoom()<=6?69:map.getZoom()<=8?57:45;
+      // Pixel distances determine grouping, real geometry remains untouched.
+      treks.forEach(function(t){
+        var point=featured(t);if(!point)return;
+        var pixel=map.latLngToLayerPoint(point),near=null,best=radius*radius;
+        currentClusters.forEach(function(g){
+          var dx=g.pixel.x-pixel.x,dy=g.pixel.y-pixel.y,d2=dx*dx+dy*dy;
+          if(d2<best){best=d2;near=g}
+        });
+        if(near){
+          near.ids.push(Number(t.id));near.treks.push(t);near.points.push(point);
+          var n=near.ids.length;
+          near.pixel=L.point(near.pixel.x+(pixel.x-near.pixel.x)/n,
+                             near.pixel.y+(pixel.y-near.pixel.y)/n);
+        }else currentClusters.push({ids:[Number(t.id)],treks:[t],points:[point],pixel:pixel});
       });
-      if(near){
-        near.ids.push(Number(t.id));near.treks.push(t);near.points.push(point);
-        var n=near.ids.length;
-        near.pixel=L.point(near.pixel.x+(pixel.x-near.pixel.x)/n,
-                           near.pixel.y+(pixel.y-near.pixel.y)/n);
-      }else currentClusters.push({ids:[Number(t.id)],treks:[t],points:[point],pixel:pixel});
-    });
-    currentClusters.forEach(function(group){
-      var count=group.ids.length,center=map.layerPointToLatLng(group.pixel);
-      var icon=L.divIcon({className:'tm-trek-cluster-icon',
-        html:'<span class="tm-trek-cluster" data-count="'+(count===1?'single':'multiple')+'">'+count+'</span>',
-        iconSize:[count===1?32:42,count===1?32:42],iconAnchor:[count===1?16:21,count===1?16:21]});
-      var marker=L.marker(center,{icon:icon,keyboard:true,bubblingMouseEvents:false,
-        title:count+' trek'+(count>1?'s':'')+' dans cette zone'});
-      marker.on('click',function(){
-        if(count===1){if(window.TrekMapOpenTrek)window.TrekMapOpenTrek(group.ids[0]);return}
-        var zoom=map.getZoom(),bounds=L.latLngBounds(group.points);
-        if(zoom<10){
-          map.fitBounds(bounds.pad(.6),{maxZoom:Math.min(11,zoom+3),animate:true});
-          if(map.getZoom()<=zoom)map.setView(center,zoom+2);
-        }else{
-          var content=document.createElement('div');content.className='tm-trek-cluster-list';
-          var title=document.createElement('b');title.textContent=count+' treks dans cette zone';
-          content.appendChild(title);
-          group.treks.forEach(function(t){
-            var b=document.createElement('button');b.type='button';b.textContent=t.name||'Trek';
-            b.addEventListener('click',function(){map.closePopup();if(window.TrekMapOpenTrek)window.TrekMapOpenTrek(Number(t.id))});
-            content.appendChild(b);
-          });
-          L.popup({maxWidth:295}).setLatLng(center).setContent(content).openOn(map);
+      currentClusters.forEach(function(group){
+        // A single trek already has a clickable route: do not cover it with a '1'.
+        var count=group.ids.length;if(count<2)return;
+        var key=group.ids.slice().sort(function(a,b){return a-b}).join(':');
+        active.add(key);
+        var center=map.layerPointToLatLng(group.pixel);
+        var marker=badgeMarkers.get(key);
+        if(marker){
+          marker._tmGroup=group;
+          marker._tmLeaving=false;
+          marker._tmExitToken=(marker._tmExitToken||0)+1;
+          marker.setLatLng(center);
+          var el=marker.getElement();
+          if(el)el.classList.remove('tm-cluster-leaving');
+          return;
         }
+        var icon=L.divIcon({className:'tm-trek-cluster-icon tm-cluster-enter',
+          html:'<span class="tm-trek-cluster" aria-hidden="true">'+count+'</span>',
+          iconSize:[46,46],iconAnchor:[23,23]});
+        marker=L.marker(center,{icon:icon,keyboard:true,bubblingMouseEvents:false,
+          title:count+' treks dans cette zone'});
+        marker._tmGroup=group;
+        marker.on('click',function(){
+          var g=marker._tmGroup;if(marker._tmLeaving||!g)return;
+          var zoom=map.getZoom(),bounds=L.latLngBounds(g.points);
+          if(zoom<10){
+            map.fitBounds(bounds.pad(.6),{maxZoom:Math.min(11,zoom+3),animate:true});
+            if(map.getZoom()<=zoom)map.setView(map.layerPointToLatLng(g.pixel),zoom+2);
+          }else{
+            var content=document.createElement('div');content.className='tm-trek-cluster-list';
+            var title=document.createElement('b');title.textContent=g.ids.length+' treks dans cette zone';
+            content.appendChild(title);
+            g.treks.forEach(function(t){
+              var b=document.createElement('button');b.type='button';b.textContent=t.name||'Trek';
+              b.addEventListener('click',function(){map.closePopup();if(window.TrekMapOpenTrek)window.TrekMapOpenTrek(Number(t.id))});
+              content.appendChild(b);
+            });
+            L.popup({maxWidth:295}).setLatLng(marker.getLatLng()).setContent(content).openOn(map);
+          }
+        });
+        marker.addTo(clusterLayer);
+        badgeMarkers.set(key,marker);
       });
-      marker.addTo(clusterLayer);
-    });
+    }
+    badgeMarkers.forEach(function(marker,key){if(!active.has(key))retire(key,marker)});
     stopBubbling();
   }
   function scheduleCluster(){

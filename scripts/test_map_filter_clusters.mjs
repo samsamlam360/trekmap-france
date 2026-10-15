@@ -15,6 +15,20 @@ for(const token of ['tm-search-filter-toggle','tm-inline-sort','tm-inline-route'
  assert.ok(js.includes(token),'Missing '+token);
 }
 assert.ok(css.includes('tm-trek-cluster')&&css.includes('tm-filterstrip-closed'));
+for (const part of ['tm-map-control-dock','map.zoomControl.getContainer()',
+  'dock.appendChild(zoomControl)','dock.appendChild(optionsControl)',
+  'L.DomEvent.disableClickPropagation(dock)','if(count<2)return',
+  'tm-cluster-leaving','badgeMarkers','setTimeout(function()']){
+  assert.ok(js.includes(part),'Map controls / badge lifecycle lost: '+part);
+}
+for (const part of ['#tm-map-control-dock','.leaflet-control-zoom',
+  '.tm-cluster-enter','.tm-cluster-leaving','@keyframes tm-cluster-enter',
+  '@keyframes tm-cluster-leave','prefers-reduced-motion']){
+  assert.ok(css.includes(part),'Missing accessible map dock or animation: '+part);
+}
+assert.ok(!js.includes('clusterLayer.clearLayers();currentClusters=[]'),
+  'Do not wipe every badge when zoom changes: animate group transitions');
+
 assert.ok(!/\bfetch\s*\(|XMLHttpRequest|\/treks\/geojson|\/ai\/plan|DATABASE_URL|window\.TrekMapOpenTrek\s*=/.test(js),
   'No external endpoints, DB modification or replacement of original route opening');
 const finish=fs.readFileSync('scripts/apply_explorer_finish.py','utf8');

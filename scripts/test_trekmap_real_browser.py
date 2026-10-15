@@ -187,6 +187,30 @@ try:
     drawer_button.click()
     wait.until(lambda d: ("collapsed" in drawer.get_attribute("class").split()) == prior)
 
+    # Reused zoom links and real Carte action now share one compact dock.
+    dock = driver.find_element(By.ID, "tm-map-control-dock")
+    assert dock.is_displayed(), "Unified map-controls dock is hidden"
+    zoom_in = dock.find_element(By.CSS_SELECTOR, ".leaflet-control-zoom-in")
+    zoom_out = dock.find_element(By.CSS_SELECTOR, ".leaflet-control-zoom-out")
+    assert zoom_in.is_displayed() and zoom_out.is_displayed()
+    assert dock.find_element(By.ID, "tm-map-options").is_displayed()
+    dock_geometry = driver.execute_script(
+        "let d=document.getElementById('tm-map-control-dock').getBoundingClientRect(),"
+        "a=document.querySelector('#tm-map-control-dock .leaflet-control-zoom').getBoundingClientRect(),"
+        "b=document.getElementById('tm-map-options').getBoundingClientRect();"
+        "return {left:d.left,top:d.top,right:d.right,zoomLeft:a.left,buttonLeft:b.left,"
+        "zoomBottom:a.bottom,buttonTop:b.top,buttonRight:b.right};")
+    assert 0 <= dock_geometry["left"] < 48 and dock_geometry["top"] > 75, dock_geometry
+    assert dock_geometry["zoomBottom"] < dock_geometry["buttonTop"], dock_geometry
+    assert dock_geometry["buttonRight"] <= dock_geometry["right"] + 1, dock_geometry
+    driver.execute_script("map.setZoom(7, {animate:false})")
+    wait.until(lambda d: d.execute_script("return map.getZoom()===7 && !map._animatingZoom"))
+    zoom_in.click()
+    wait.until(lambda d: d.execute_script("return map.getZoom()===8 && !map._animatingZoom"),
+               message="Leaflet + did not zoom with the grouped native control")
+    zoom_out.click()
+    wait.until(lambda d: d.execute_script("return map.getZoom()===7 && !map._animatingZoom"),
+               message="Leaflet - did not zoom with the grouped native control")
     map_options = driver.find_element(By.ID, "tm-map-options")
     options_panel = driver.find_element(By.ID, "tm-map-options-panel")
     map_options.click()
@@ -252,9 +276,25 @@ try:
     counts = driver.execute_script("return window.TrekMapClusters.getCounts()")
     assert sum(counts) == 14, counts
     assert driver.execute_script("return window.TrekMapClusters.getMarkerCount()") < 14
-    driver.execute_script("map.setZoom(12);")
+    assert driver.execute_script(
+        "return [...document.querySelectorAll('.tm-trek-cluster')].every("
+        "n => Number(n.textContent) > 1)"), "There must never be a numbered singleton"
+    assert driver.find_elements(By.CSS_SELECTOR, ".tm-cluster-enter .tm-trek-cluster"), (
+        "Cluster badges should have entrance animation")
+    # A lone trek must have a real line, not a decorative '1' badge.
+    driver.execute_script(
+        "window.__tmCIOriginalFiltered=filteredTreks;"
+        "filteredTreks=filteredTreks.slice(0,1);window.TrekMapClusters.refresh();")
+    wait.until(lambda d: d.execute_script(
+        "return window.TrekMapClusters.getTotal()===1"))
     wait.until(lambda d: d.execute_script(
         "return window.TrekMapClusters.getMarkerCount()===0"))
+    driver.execute_script(
+        "filteredTreks=window.__tmCIOriginalFiltered;map.setZoom(12);"
+        "window.TrekMapClusters.refresh();")
+    wait.until(lambda d: d.execute_script(
+        "return window.TrekMapClusters.getMarkerCount()===0"))
+
 
     # Hover the REAL fifth card and verify the map highlights its route.
     hover_card = driver.find_element(By.CSS_SELECTOR, '#tm-drawer-track .tm-trek-tile:nth-child(5)')
@@ -363,6 +403,8 @@ try:
     driver.set_window_size(390, 844)
     mobile_navigation = driver.find_element(By.ID, "tm-mobile-nav")
     assert mobile_navigation.is_displayed(), "Mobile navigation is hidden"
+    assert driver.find_element(By.ID, "tm-map-control-dock").is_displayed(), (
+        "The same existing map controls must remain usable on mobile")
     mobile_filters = mobile_navigation.find_element(By.CSS_SELECTOR, '[data-mobile-action="filters"]')
     mobile_filters.click()
     wait.until(lambda d: "tm-mobile-filters-open" in
