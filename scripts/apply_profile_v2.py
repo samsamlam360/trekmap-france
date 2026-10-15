@@ -46,7 +46,7 @@ block=r'''<!-- TREKMAP_PROFILE_V2_START -->
 .tm-p-item{width:100%;min-width:0;text-align:left;padding:12px;border-radius:12px;border:1px solid #dfece1;
   background:#fbfdfb;display:flex;align-items:center;justify-content:space-between;gap:12px}
 .tm-p-item:hover{background:#edf7f1;border-color:#7dbca0}
-.tm-p-item.is-selected,.tm-p-collection-entry[aria-pressed="true"]{
+.tm-p-project-row.is-selected .tm-p-item,.tm-p-item.is-selected,.tm-p-collection-entry[aria-pressed="true"]{
   border-color:#148052;background:#e8f6ee;box-shadow:inset 3px 0 #148052
 }
 .tm-p-collection-entry{cursor:pointer;font:inherit}
@@ -149,7 +149,7 @@ async function request(path,method,body){
   if(!r.ok)throw Error(typeof d.detail==='string'?d.detail:'Opération indisponible ('+r.status+')');
   return d;
 }
-const allTreks=function(){
+const accountTreks=function(){
   if(!model)return[];
   const m=new Map();
   (model.treks||[]).concat(model.favorites||[])
@@ -194,7 +194,7 @@ function home(){
   '</div><div class="tm-p-callout">Les statistiques de marche ne comptent que les sorties que tu as réellement marquées « Terminées ».</div></div></div>';
 }
 function projects(){
-  const treks=allTreks();
+  const treks=accountTreks();
   const current=selected!=null?treks.find(function(t){return Number(t.id)===Number(selected)}):null;
   const j=current?journey(current.id):null;
   const st=j&&j.status||'planned';
@@ -242,7 +242,7 @@ function journal(){
       '<span>Ton premier badge sera attribué après une sortie terminée.</span>')+'</div></div>';
 }
 function collections(){
-  const collections=model.collections||[], available=allTreks();
+  const collections=model.collections||[], available=accountTreks();
   const chosen=selected!=null?collections.find(function(x){return Number(x.id)===Number(selected)}):null;
   const entries=collections.length?collections.map(function(item){
     const active=chosen&&Number(chosen.id)===Number(item.id);
