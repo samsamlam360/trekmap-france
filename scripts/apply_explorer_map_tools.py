@@ -39,6 +39,7 @@ block=r'''<!-- TREKMAP_MAP_TOOLS_2026_START -->
   body.tm-filterstrip-closed #tm-inline-filters{display:none!important}
   #tm-inline-filters{max-width:calc(100vw - 25px)!important;scrollbar-width:none}
   #tm-inline-filters #tm-inline-advanced{display:none!important}
+  #tm-inline-filters .tm-inline-extra{display:inline-flex!important;align-items:center!important;justify-content:center!important}
   #tm-inline-filters .tm-inline-field{display:flex;align-items:center;gap:5px;
     padding:0 6px;border:1px solid #e1ece4;border-radius:11px;background:#f5f9f6;
     flex:0 0 auto;white-space:nowrap}
