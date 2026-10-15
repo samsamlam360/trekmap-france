@@ -120,8 +120,16 @@ jobs:
 
           treks=load("/treks")
           assert isinstance(treks,list) and len(treks)>=148, len(treks)
-          imported=[t for t in treks if "Licence Ouverte / Open Licence" in str(t.get("description",""))]
-          assert len(imported)==140, f"Expected 140 imported routes, got {len(imported)}"
+          old_prefixes=("lannion-tregor:","metropole-lyon:","parc-cevennes:","parc-ecrins:")
+          new_prefixes=("cevennes-long:","ecrins-long:","gard-gr:","gard-grp:")
+          imported=[t for t in treks if any("Référence : "+key in str(t.get("description",""))
+                                              for key in old_prefixes)]
+          long_treks=[t for t in treks if any("Référence : "+key in str(t.get("description",""))
+                                             for key in new_prefixes)]
+          assert len(imported)==140, f"Expected 140 original open routes, got {len(imported)}"
+          assert len(long_treks)==35, f"Expected 35 new multi-day treks, got {len(long_treks)}"
+          assert all(float(t["distance"])>=45 and float(t.get("duration_days") or 0)>=2
+                     for t in long_treks), "Invalid multi-day lengths / duration"
           assert len({t["id"] for t in treks})==len(treks), "Duplicated public ID"
           region=Counter(t["region"] for t in imported)
           for region_name in ("Bretagne","Auvergne-Rhône-Alpes","Occitanie",
@@ -132,8 +140,9 @@ jobs:
           assert geo.get("type")=="FeatureCollection", geo.get("type")
           feats=geo.get("features",[])
           geo_ids={int(f.get("id", f.get("properties",{}).get("id"))) for f in feats}
-          missing=sorted({int(t["id"]) for t in imported}-geo_ids)
+          missing=sorted({int(t["id"]) for t in imported+long_treks}-geo_ids)
           assert not missing, f"Imported routes missing from map: {missing[:10]}"
-          assert len(feats)>=140, len(feats)
-          print(f"Public catalog: {len(treks)} visible treks, 140 imported; "
-                f"{len(feats)} map traces, four verified regions.")
+          assert len(feats)>=183, len(feats)
+          print(f"Public catalog: {len(treks)} visible treks; "
+                f"140 original open routes + 35 new long routes; "
+                f"{len(feats)} map traces validated.")

@@ -1,0 +1,814 @@
+{
+  "cevennes-long": {
+    "license": "fr-lo",
+    "metadata_resources": 1,
+    "resources": [
+      {
+        "accepted": 27,
+        "id": "4eee2f30-32de-4900-9591-be5ee3003e4d",
+        "preview": [
+          {
+            "km": 161.32,
+            "name": "Tour en Sud Cévennes"
+          },
+          {
+            "km": 122.45,
+            "name": "Boucle du Tour du Pic Cassini"
+          },
+          {
+            "km": 122.45,
+            "name": "Boucle du Tour du Pic Cassini"
+          },
+          {
+            "km": 122.45,
+            "name": "Boucle du Tour du Pic Cassini"
+          },
+          {
+            "km": 91.24,
+            "name": "Boucle du Goulet aux barrages"
+          },
+          {
+            "km": 91.24,
+            "name": "Boucle du Goulet aux barrages"
+          },
+          {
+            "km": 88.08,
+            "name": "Versant océanique de l'Aigoual"
+          },
+          {
+            "km": 86.08,
+            "name": "Boucle de la Borne au Goulet"
+          },
+          {
+            "km": 86.08,
+            "name": "Boucle de la Borne au Goulet"
+          },
+          {
+            "km": 86.08,
+            "name": "Boucle de la Borne au Goulet"
+          },
+          {
+            "km": 84.83,
+            "name": "En bordure des Causses"
+          },
+          {
+            "km": 80.84,
+            "name": "La Corniche des Cévennes"
+          }
+        ],
+        "raw_count": 1162,
+        "schema": [
+          "id_local",
+          "producteur",
+          "contact",
+          "uuid",
+          "url",
+          "id_osm",
+          "nom_itineraire",
+          "pratique",
+          "type_itineraire",
+          "communes_nom",
+          "communes_code",
+          "depart",
+          "arrivee",
+          "duree",
+          "balisage",
+          "longueur",
+          "difficulte"
+        ]
+      }
+    ],
+    "slug": "itineraires-de-randonnee-du-parc-national-des-cevennes",
+    "status": "ok"
+  },
+  "ecrins-long": {
+    "license": "lov2",
+    "metadata_resources": 2,
+    "resources": [
+      {
+        "accepted": 10,
+        "id": "0c62905f-a580-4cee-afc1-5feb9607160d",
+        "preview": [
+          {
+            "km": 92.29,
+            "name": "Tour du Vieux Chaillol"
+          },
+          {
+            "km": 89.34,
+            "name": "Tour du Vieux Chaillol par le Tourond en 6 jours"
+          },
+          {
+            "km": 84.05,
+            "name": "Tour du Pays des Ecrins en 7 jours"
+          },
+          {
+            "km": 76.83,
+            "name": "Tour du Taillefer en 6 jours"
+          },
+          {
+            "km": 76.41,
+            "name": "Tour du Pays des Ecrins en 6 jours"
+          },
+          {
+            "km": 59.52,
+            "name": "De la Grave à l'Argentière-La Bessée sur le GR54 (sans voiture)"
+          },
+          {
+            "km": 56.9,
+            "name": "Tour entre Clarée et Écrins en 6 jours"
+          },
+          {
+            "km": 48.5,
+            "name": "Tour du Taillefer en 4 jours"
+          },
+          {
+            "km": 45.86,
+            "name": "Tour entre Cerces et Ecrins (sans voiture)"
+          },
+          {
+            "km": 45.2,
+            "name": "Tour des refuges en Vallouise en 5 jours"
+          }
+        ],
+        "raw_count": 205,
+        "schema": [
+          "id_local",
+          "producteur",
+          "contact",
+          "uuid",
+          "url",
+          "id_osm",
+          "nom_itineraire",
+          "pratique",
+          "type_itineraire",
+          "communes_nom",
+          "communes_code",
+          "depart",
+          "arrivee",
+          "duree",
+          "balisage",
+          "longueur",
+          "difficulte"
+        ]
+      }
+    ],
+    "slug": "randonnees-du-parc-national-des-ecrins",
+    "status": "ok"
+  },
+  "gard-gr": {
+    "license": "lov2",
+    "metadata_resources": 1,
+    "resources": [
+      {
+        "accepted": 8,
+        "id": "27092024-676b-4bdb-9236-6cd45af5ce45",
+        "preview": [
+          {
+            "km": 171.19,
+            "name": "GR®6 · section gardoise"
+          },
+          {
+            "km": 150.05,
+            "name": "GR®63 · section gardoise"
+          },
+          {
+            "km": 142.97,
+            "name": "GR®700 - Le chemin de Régordane - Chemin de Saint-Gilles · section gardoise"
+          },
+          {
+            "km": 105.49,
+            "name": "GR®42_1 - Du Pilat à la Méditerranée par les balcons du Rhône · section gardoise"
+          },
+          {
+            "km": 74.62,
+            "name": "GR®44B · section gardoise"
+          },
+          {
+            "km": 64.98,
+            "name": "GR®67 · section gardoise"
+          },
+          {
+            "km": 57.42,
+            "name": "GR®653 - Sentier vers Saint-Jacques-de-Compostelle - Via Arles · section gardoise"
+          },
+          {
+            "km": 54.4,
+            "name": "GR®66 · section gardoise"
+          }
+        ],
+        "raw_count": 26,
+        "samples": [
+          {
+            "connected": false,
+            "geometry_type": "MultiLineString",
+            "is_walk": true,
+            "lengths_km": [
+              57.42
+            ],
+            "name": "GR®653 - Sentier vers Saint-Jacques-de-Compostelle - Via Arles",
+            "nearest_endpoint_km": [
+              999
+            ],
+            "parsed_lines": 1,
+            "raw_coord_sample": [
+              [
+                831463.0150176114,
+                6287799.131978687
+              ],
+              [
+                831462.9773782186,
+                6287799.1380167175
+              ]
+            ],
+            "segments": 1,
+            "total_parsed_km": 57.42
+          },
+          {
+            "connected": false,
+            "geometry_type": "MultiLineString",
+            "is_walk": true,
+            "lengths_km": [
+              142.97
+            ],
+            "name": "GR®700 - Le chemin de Régordane - Chemin de Saint-Gilles",
+            "nearest_endpoint_km": [
+              999
+            ],
+            "parsed_lines": 1,
+            "raw_coord_sample": [
+              [
+                775668.4612709823,
+                6367330.063044279
+              ],
+              [
+                775689.4491622344,
+                6367311.090389562
+              ]
+            ],
+            "segments": 1,
+            "total_parsed_km": 142.97
+          },
+          {
+            "connected": false,
+            "geometry_type": "MultiLineString",
+            "is_walk": true,
+            "lengths_km": [
+              0.1,
+              0.21,
+              0.13,
+              0.05,
+              0.22,
+              0.64,
+              0.1,
+              0.33,
+              0.85,
+              1.43,
+              0.25,
+              0.15
+            ],
+            "name": "GR®70 - Le chemin de Stevenson",
+            "nearest_endpoint_km": [
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "parsed_lines": 42,
+            "raw_coord_sample": [
+              [
+                770851.874330931,
+                6334467.615715131
+              ],
+              [
+                770867.0869519857,
+                6334494.459377583
+              ]
+            ],
+            "segments": 44,
+            "total_parsed_km": 30.54
+          },
+          {
+            "connected": false,
+            "geometry_type": "MultiLineString",
+            "is_walk": true,
+            "lengths_km": [
+              105.49
+            ],
+            "name": "GR®42_1 - Du Pilat à la Méditerranée par les balcons du Rhône",
+            "nearest_endpoint_km": [
+              999
+            ],
+            "parsed_lines": 1,
+            "raw_coord_sample": [
+              [
+                825208.1409782657,
+                6356944.84214076
+              ],
+              [
+                825207.988960733,
+                6356944.6926913345
+              ]
+            ],
+            "segments": 1,
+            "total_parsed_km": 105.49
+          },
+          {
+            "connected": false,
+            "geometry_type": "MultiLineString",
+            "is_walk": true,
+            "lengths_km": [
+              0.26,
+              4.34,
+              0.72,
+              0.23,
+              0.06,
+              0.33,
+              0.08,
+              0,
+              0.01,
+              0.01,
+              0.01,
+              0.01
+            ],
+            "name": "GR®42_2 - Du Pilat à la Méditerranée par les balcons du Rhône",
+            "nearest_endpoint_km": [
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "parsed_lines": 50,
+            "raw_coord_sample": [
+              [
+                792285.180191149,
+                6271778.110184351
+              ],
+              [
+                792287.2676972148,
+                6271772.882695054
+              ]
+            ],
+            "segments": 82,
+            "total_parsed_km": 41.78
+          },
+          {
+            "connected": false,
+            "geometry_type": "MultiLineString",
+            "is_walk": true,
+            "lengths_km": [
+              0.05,
+              0.11,
+              4.48,
+              0.03,
+              0.48,
+              5.74,
+              0.18,
+              0.22,
+              0.35,
+              0.3,
+              0.04,
+              0.22
+            ],
+            "name": "Le chemin de Saint-Guilhem-le-Désert",
+            "nearest_endpoint_km": [
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "parsed_lines": 94,
+            "raw_coord_sample": [
+              [
+                741182.0035315667,
+                6305114.1699939165
+              ],
+              [
+                741129.8841132924,
+                6305100.934001852
+              ]
+            ],
+            "segments": 104,
+            "total_parsed_km": 70.31
+          },
+          {
+            "connected": false,
+            "geometry_type": "MultiLineString",
+            "is_walk": true,
+            "lengths_km": [
+              0.13,
+              0.13,
+              0.53,
+              0.14,
+              0.75,
+              0.92,
+              0.42,
+              0.47,
+              1.16,
+              1.26,
+              0.34,
+              0.02
+            ],
+            "name": "Le Chemin Urbain V",
+            "nearest_endpoint_km": [
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "parsed_lines": 237,
+            "raw_coord_sample": [
+              [
+                808319.1823937106,
+                6316532.121894391
+              ],
+              [
+                808329.1714421455,
+                6316532.036868089
+              ]
+            ],
+            "segments": 256,
+            "total_parsed_km": 144.93
+          },
+          {
+            "connected": false,
+            "geometry_type": "MultiLineString",
+            "is_walk": true,
+            "lengths_km": [
+              26.98
+            ],
+            "name": "GR®4",
+            "nearest_endpoint_km": [
+              999
+            ],
+            "parsed_lines": 1,
+            "raw_coord_sample": [
+              [
+                814770.9091660868,
+                6359617.697096197
+              ],
+              [
+                815188.020645171,
+                6359555.5963098
+              ]
+            ],
+            "segments": 1,
+            "total_parsed_km": 26.98
+          }
+        ],
+        "schema": [
+          "id",
+          "structure",
+          "city",
+          "district",
+          "name",
+          "departure",
+          "arrival",
+          "comments",
+          "minimum el",
+          "maximum el"
+        ]
+      }
+    ],
+    "slug": "plan-departemental-des-itineraires-de-promenades-et-de-randonnees-pdipr-chemin-de-grande-randonnee",
+    "status": "ok"
+  },
+  "gard-grp": {
+    "license": "lov2",
+    "metadata_resources": 1,
+    "resources": [
+      {
+        "accepted": 2,
+        "id": "4ede6499-b84a-4195-a9a9-f1e5b3258791",
+        "preview": [
+          {
+            "km": 59.55,
+            "name": "GRP®1 Tour du Pays Viganais · parcours gardois"
+          },
+          {
+            "km": 57.89,
+            "name": "GRP®4 Tour de la Haute Vallée de la Cèze · parcours gardois"
+          }
+        ],
+        "raw_count": 6,
+        "samples": [
+          {
+            "connected": false,
+            "geometry_type": "MultiLineString",
+            "is_walk": true,
+            "lengths_km": [
+              59.55
+            ],
+            "name": "GRP®1 Tour du Pays Viganais",
+            "nearest_endpoint_km": [
+              999
+            ],
+            "parsed_lines": 1,
+            "raw_coord_sample": [
+              [
+                748620.6701842333,
+                6321250.852967424
+              ],
+              [
+                748622.862257704,
+                6321273.806972032
+              ]
+            ],
+            "segments": 1,
+            "total_parsed_km": 59.55
+          },
+          {
+            "connected": false,
+            "geometry_type": "MultiLineString",
+            "is_walk": true,
+            "lengths_km": [
+              4.06,
+              1.43,
+              1.81,
+              4.24,
+              18.58,
+              4.49,
+              1.6
+            ],
+            "name": "GRP®3 Tour de la Vallée du Galeizon",
+            "nearest_endpoint_km": [
+              0.0,
+              0.0,
+              0.0,
+              0.003,
+              0.012,
+              0.0,
+              0.0
+            ],
+            "parsed_lines": 7,
+            "raw_coord_sample": [
+              [
+                773138.7517489902,
+                6340610.995549214
+              ],
+              [
+                773168.3209973739,
+                6340563.791849785
+              ]
+            ],
+            "segments": 7,
+            "total_parsed_km": 36.21
+          },
+          {
+            "connected": false,
+            "geometry_type": "MultiLineString",
+            "is_walk": true,
+            "lengths_km": [
+              25.1
+            ],
+            "name": "GRP®2 Tour de la Haute Vallée Borgne",
+            "nearest_endpoint_km": [
+              999
+            ],
+            "parsed_lines": 1,
+            "raw_coord_sample": [
+              [
+                750760.7090031526,
+                6336417.139769445
+              ],
+              [
+                750773.4994739273,
+                6336394.05621914
+              ]
+            ],
+            "segments": 1,
+            "total_parsed_km": 25.1
+          },
+          {
+            "connected": false,
+            "geometry_type": "MultiLineString",
+            "is_walk": true,
+            "lengths_km": [
+              57.89
+            ],
+            "name": "GRP®4 Tour de la Haute Vallée de la Cèze",
+            "nearest_endpoint_km": [
+              999
+            ],
+            "parsed_lines": 1,
+            "raw_coord_sample": [
+              [
+                780839.3752759004,
+                6361544.032898225
+              ],
+              [
+                780839.377335615,
+                6361544.031027524
+              ]
+            ],
+            "segments": 1,
+            "total_parsed_km": 57.89
+          },
+          {
+            "connected": false,
+            "geometry_type": "MultiLineString",
+            "is_walk": true,
+            "lengths_km": [
+              18.96
+            ],
+            "name": "GRP®5 Le Cévenol",
+            "nearest_endpoint_km": [
+              999
+            ],
+            "parsed_lines": 1,
+            "raw_coord_sample": [
+              [
+                775728.8719553001,
+                6361725.739496723
+              ],
+              [
+                775717.8681431431,
+                6361750.7183512105
+              ]
+            ],
+            "segments": 1,
+            "total_parsed_km": 18.96
+          },
+          {
+            "connected": false,
+            "geometry_type": "MultiLineString",
+            "is_walk": true,
+            "lengths_km": [
+              12.62
+            ],
+            "name": "GRP®6 Tour de la Haute Vallée du Luech",
+            "nearest_endpoint_km": [
+              999
+            ],
+            "parsed_lines": 1,
+            "raw_coord_sample": [
+              [
+                773709.1492733832,
+                6356503.456392162
+              ],
+              [
+                773725.9666091615,
+                6356501.307797094
+              ]
+            ],
+            "segments": 1,
+            "total_parsed_km": 12.62
+          }
+        ],
+        "schema": [
+          "id",
+          "structure",
+          "city",
+          "district",
+          "name",
+          "departure",
+          "arrival",
+          "comments",
+          "minimum el",
+          "maximum el"
+        ]
+      }
+    ],
+    "slug": "pdipr-chemin-de-grande-randonnee-de-pays-grp",
+    "status": "ok"
+  },
+  "vercors-trails": {
+    "license": "lov2",
+    "metadata_resources": 0,
+    "resources": [],
+    "slug": "itineraires-de-randonnee-sur-le-parc-du-vercors",
+    "status": "ok"
+  },
+  "via-garona": {
+    "license": "lov2",
+    "metadata_resources": 2,
+    "resources": [
+      {
+        "accepted": 0,
+        "id": "d8a8e1eb-92e9-4676-b1d6-575e323e9aa5",
+        "preview": [],
+        "raw_count": 1,
+        "samples": [
+          {
+            "connected": false,
+            "geometry_type": "MultiLineString",
+            "is_walk": true,
+            "lengths_km": [
+              5.37,
+              38.49,
+              0.68,
+              0.68,
+              3.05,
+              0.19,
+              7.4,
+              40.82,
+              0.62,
+              0.62,
+              1.79,
+              1.98
+            ],
+            "name": "Via Garona",
+            "nearest_endpoint_km": [
+              0.381,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "parsed_lines": 19,
+            "raw_coord_sample": [
+              [
+                0.569048558994977,
+                43.04127045863751
+              ],
+              [
+                0.569115863075602,
+                43.040817312350036
+              ]
+            ],
+            "segments": 19,
+            "total_parsed_km": 171.91
+          }
+        ],
+        "schema": [
+          "nom_itineraire",
+          "id",
+          "longueur_iti",
+          "geo_point_2d",
+          "gml_id"
+        ]
+      },
+      {
+        "accepted": 0,
+        "error": "resource JSON is not an object",
+        "id": "702cbcf5-19b5-4217-8861-b014aef5f3ec"
+      }
+    ],
+    "slug": "via-garona-chemin-de-grande-randonnee-gr861",
+    "status": "ok"
+  }
+}
