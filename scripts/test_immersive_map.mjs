@@ -27,6 +27,12 @@ assert.ok(js.includes('fullscreenRoot.requestFullscreen') &&
   'Native fullscreen must include sibling detail modals, not only the map');
 assert.ok(!js.includes('app.requestFullscreen('),
   'Fullscreening #app would hide the detail modal outside the fullscreen top layer');
+for(const tag of ['tm-map-immersive-detail','trekmap:detail-opened','trekmap:detail-cleared',
+                  'selectedTrekId','window.openDetail(id)']){
+  assert.ok(js.includes(tag),'Immersive trek detail button must work at all breakpoints: '+tag);
+}
+assert.ok(css.includes('#tm-map-immersive-actions #tm-map-immersive-detail[hidden]'),
+  'No fiche button unless a trek is selected');
 assert.ok(!/\bfetch\s*\(|XMLHttpRequest|DATABASE_URL|\/ai\/plan|\/treks\/|localStorage/.test(js),
           'Map immersion must never call network, write to Neon or change persisted state');
 const predecessor=fs.readFileSync('scripts/apply_explorer_map_tools.py','utf8');
