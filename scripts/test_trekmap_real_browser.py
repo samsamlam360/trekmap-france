@@ -143,7 +143,10 @@ try:
             actual=driver.find_element(By.ID, source).get_attribute("value")
             popup_value=driver.execute_script(
                 "return document.querySelector('#tm-map-filter-popover input[type=range]').value")
-            assert actual == value, f"{source}: expected={value}, actual={actual}, popup={popup_value}"
+            # Existing sliders can define non-unit increments (e.g. 5 km);
+            # the contextual slider must mirror the effective stepped value.
+            assert actual == popup_value and float(actual) > 0, (
+                f"{source}: input={value}, actual={actual}, popup={popup_value}")
         panel.find_element(By.CSS_SELECTOR, ".tm-mini-dismiss").click()
         assert not panel.is_displayed()
 
