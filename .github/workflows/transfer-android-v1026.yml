@@ -1,0 +1,25 @@
+name: Transfer verified Android v1026
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/transfer-android-v1026.yml'
+permissions:
+  contents: read
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Verify official Android release signature file
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release download android-v1026 --repo samsamlam360/trekmap-france --pattern 'trekmap-france.apk' --dir . --clobber
+          echo '7b8eab99cc6fe8f338ff3f75d83ad71a58b8827167ae0a3c2bc9e5340ef0651a  trekmap-france.apk' | sha256sum -c -
+      - name: Attach verified APK for direct phone installation
+        uses: actions/upload-artifact@v4
+        with:
+          name: TrekMap-France-v1026-officiel
+          path: trekmap-france.apk
+          if-no-files-found: error
+          retention-days: 7
