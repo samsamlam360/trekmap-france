@@ -1,5 +1,5 @@
 // Configure the freshly generated Capacitor 8 Android shell.
-// Only foreground geolocation is declared. Background tracking comes in a separate, audited phase.
+// Explicit opt-in foreground location service supports recording while the display is locked.
 import fs from 'node:fs';
 import path from 'node:path';
 
@@ -8,7 +8,7 @@ const manifest=path.join(root,'AndroidManifest.xml');
 if(!fs.existsSync(manifest)) throw Error('Projet natif absent : lance npm run android:add');
 let xml=fs.readFileSync(manifest,'utf8');
 if(!xml.includes('<manifest') || !xml.includes('<application')) throw Error('AndroidManifest.xml inattendu');
-for(const permission of ['android.permission.INTERNET','android.permission.ACCESS_COARSE_LOCATION','android.permission.ACCESS_FINE_LOCATION']){
+for(const permission of ['android.permission.INTERNET','android.permission.ACCESS_COARSE_LOCATION','android.permission.ACCESS_FINE_LOCATION','android.permission.FOREGROUND_SERVICE','android.permission.FOREGROUND_SERVICE_LOCATION','android.permission.POST_NOTIFICATIONS']){
   if(!xml.includes('android:name="'+permission+'"')){
     xml=xml.replace(/(<application\b)/, '    <uses-permission android:name="'+permission+'" />\n\n    $1');
   }
@@ -19,7 +19,32 @@ if(!xml.includes('android.hardware.location.gps')){
 if(!xml.includes('android:usesCleartextTraffic="false"')){
   xml=xml.replace(/<application\b/, '<application android:usesCleartextTraffic="false"');
 }
+if(!xml.includes('fr.trekmap.france.GpsTrackService')){
+  xml=xml.replace('</application>', `
+        <activity android:name="fr.trekmap.france.GpsTrackActivity" android:exported="false" />
+        <service android:name="fr.trekmap.france.GpsTrackService"
+            android:exported="false" android:foregroundServiceType="location" />
+    </application>`);
+}
 fs.writeFileSync(manifest,xml);
+const javaDest=path.join(root,'java/fr/trekmap/france');
+const nativeSrc=path.resolve('native-src/fr/trekmap/france');
+fs.mkdirSync(javaDest,{recursive:true});
+for(const file of ['TrekMapNativeGpsPlugin.java','GpsTrackStore.java','GpsTrackService.java','GpsTrackActivity.java']){
+  fs.copyFileSync(path.join(nativeSrc,file),path.join(javaDest,file));
+}
+// Register only an explicit native tracker launcher. No direct GPS data sent to the WebView.
+fs.writeFileSync(path.join(javaDest,'MainActivity.java'), `package fr.trekmap.france;
+import android.os.Bundle;
+import com.getcapacitor.BridgeActivity;
+public class MainActivity extends BridgeActivity {
+    @Override public void onCreate(Bundle savedInstanceState) {
+        registerPlugin(TrekMapNativeGpsPlugin.class);
+        super.onCreate(savedInstanceState);
+    }
+}
+`);
+
 
 // Brand the adaptive Android icon (no external image/font dependencies).
 const drawable=path.join(root,'res/drawable');
@@ -42,4 +67,4 @@ const adaptive='<?xml version="1.0" encoding="utf-8"?>\n'+
   '</adaptive-icon>\n';
 fs.writeFileSync(path.join(mipmap,'ic_launcher.xml'),adaptive);
 fs.writeFileSync(path.join(mipmap,'ic_launcher_round.xml'),adaptive);
-console.log('TrekMap Android: permissions GPS au premier plan, HTTPS uniquement, identité graphique installées.');
+console.log('TrekMap Android: permissions GPS natif explicite, service de localisation, HTTPS et identité graphique installés.');

@@ -14,7 +14,19 @@ assert.equal(c.loggingBehavior,'none');
 assert.deepEqual([p.dependencies['@capacitor/core'],p.dependencies['@capacitor/android'],p.devDependencies['@capacitor/cli']],['8.5.3','8.5.3','8.5.3']);
 for(const part of ['workflow_dispatch','pull_request','assembleDebug','upload-artifact@v4','node scripts/verify-android.mjs']) assert.ok(w.includes(part),part);
 for(const part of ['android.permission.ACCESS_FINE_LOCATION','android.permission.ACCESS_COARSE_LOCATION','android:usesCleartextTraffic','trekmap_icon_bg']) assert.ok(patch.includes(part),part);
-assert.ok(check.includes('ACCESS_BACKGROUND_LOCATION'),'background tracking should be intentionally absent');
+assert.ok(check.includes('ACCESS_BACKGROUND_LOCATION'),'background location permission must remain absent');
+assert.ok(check.includes('FOREGROUND_SERVICE_LOCATION'),'native foreground tracking must be declared');
+for(const f of ['TrekMapNativeGpsPlugin.java','GpsTrackStore.java','GpsTrackService.java','GpsTrackActivity.java']) {
+ const code=fs.readFileSync('mobile/native-src/fr/trekmap/france/'+f,'utf8');
+ assert.ok(code.includes('package fr.trekmap.france;'),f);
+}
+const svc=fs.readFileSync('mobile/native-src/fr/trekmap/france/GpsTrackService.java','utf8');
+assert.ok(svc.includes('startForeground(')&&svc.includes('removeUpdates('));
+assert.ok(!svc.includes('HttpURLConnection')&&!svc.includes('new URL('));
+const bridge=fs.readFileSync('mobile/native-src/fr/trekmap/france/TrekMapNativeGpsPlugin.java','utf8');
+assert.ok(bridge.includes('"/randonnee"')&&bridge.includes('"https"')&&bridge.includes('openTracker'));
+assert.ok(fs.readFileSync('frontend/hike.html','utf8').includes("nativePlugin.openTracker"));
+
 assert.ok(fs.readFileSync('frontend/hike.html','utf8').includes('navigator.geolocation.watchPosition'));
 assert.ok(fs.readFileSync('mobile/www/offline.html','utf8').includes('Connexion indisponible'));
 console.log('ANDROID SCAFFOLD PASS: isolated Android workflow, transport, live backend, foreground GPS only, offline warning.');
