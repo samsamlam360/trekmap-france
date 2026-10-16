@@ -150,7 +150,7 @@ block=r'''<!-- TM_JOURNEY_PHASE3_START -->
     '<h2>Coordonnées</h2><p>Départ : '+route[0].map(function(n){return n.toFixed(6)}).join(', ')+
     '<br>Arrivée : '+route[route.length-1].map(function(n){return n.toFixed(6)}).join(', ')+'</p>'+
     '<p><strong>Avant de partir :</strong> confirmer météo, eau potable, fermetures, nuitées et transports. Les informations peuvent évoluer.</p>'+
-    '</main></body></'+'html>';
+    '</main></'+'body></'+'html>';
  }
  function offline(t){
    try{
