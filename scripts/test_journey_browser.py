@@ -22,6 +22,9 @@ try:
 
     driver.execute_script("document.getElementById('tm-home')?.classList.add('tm-hidden')")
     # Real shortcut: only the km/day selector opens, not the entire advanced pane.
+    toggle=wait.until(lambda d:d.find_element(By.ID,"tm-search-filter-toggle"))
+    toggle.click()
+    wait.until(lambda d:d.find_element(By.ID,"tm-inline-filters").is_displayed())
     button=wait.until(lambda d:d.find_element(By.ID,"tm-inline-pace"))
     driver.execute_script("arguments[0].scrollIntoView({block:'nearest',inline:'center'})",button)
     visible=driver.execute_script("""
@@ -49,9 +52,16 @@ try:
     assert driver.execute_script("""
        const chips=document.getElementById('tm-journey-active-filters');
        const label=chips?.textContent||'';
-       return chips?.parentElement?.id==='tm-inline-filters' && label.includes('Km / jour')
+       return chips?.parentElement===document.body && label.includes('Km / jour')
               && !label.includes('Avis : Toutes');
     """), "Filter chips should live up in the folded toolbar, without a fake Avis Toutes"
+    old_top=driver.execute_script("return document.getElementById('tm-journey-active-filters').getBoundingClientRect().top")
+    toggle.click()
+    wait.until(lambda d:d.execute_script("return document.body.classList.contains('tm-filterstrip-closed')"))
+    new_top=driver.execute_script("return document.getElementById('tm-journey-active-filters').getBoundingClientRect().top")
+    assert new_top<old_top-25 and driver.find_element(By.ID,"tm-journey-active-filters").is_displayed(), (
+       f"Active chips must move up when filters fold: expanded={old_top}, collapsed={new_top}"
+    )
     driver.execute_script("""
       let select=document.getElementById('tm-daily-pace-filter');
       select.value='';select.dispatchEvent(new Event('change',{bubbles:true}));
