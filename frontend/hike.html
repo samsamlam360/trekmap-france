@@ -60,7 +60,11 @@ aside{height:auto;overflow:visible;padding-bottom:calc(32px + env(safe-area-inse
  #gps-map-controls button{background:#fff;box-shadow:0 3px 14px #143a2634;color:#14543a;border:1px solid #d2e5d7;border-radius:13px;min-height:48px;min-width:48px;padding:9px;font-size:20px;font-weight:750;touch-action:manipulation}
  #gps-map-controls button[aria-pressed="true"]{background:#0e6245;color:#fff}
  #gps-hud{display:block;position:absolute;z-index:5;left:11px;right:11px;bottom:11px;padding:10px;background:#fcfffdf2;border-radius:18px;border:1px solid #cce0d3;box-shadow:0 6px 26px #0c382b3d;backdrop-filter:blur(12px)}
- #gps-hud-status{display:block;color:#356e51;font-size:11px;max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding:0 4px 7px}
+ #gps-hud-top{display:flex;align-items:center;gap:8px;padding-bottom:5px}
+ #gps-hud-toggle{min-height:34px;min-width:58px;flex-shrink:0;font-size:11px;font-weight:750;border:1px solid #d3e4d7;border-radius:9px;color:#175d40;background:#eaf6ed;padding:5px}
+ #gps-hud.is-compact #gps-hud-stats,#gps-hud.is-compact #gps-progress{display:none}
+ #gps-hud.is-compact #gps-hud-top{padding-bottom:9px}
+ #gps-hud-status{display:block;flex:1;min-width:0;color:#356e51;font-size:11px;max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding:0 4px 7px}
  #gps-hud-status[data-kind="danger"]{color:#9f3226;font-weight:800}
  #gps-hud-status[data-kind="warning"]{color:#8b570b}
  #gps-hud-stats{display:grid;grid-template-columns:1.15fr 1fr .8fr;gap:6px}
@@ -98,7 +102,7 @@ aside{height:auto;overflow:visible;padding-bottom:calc(32px + env(safe-area-inse
 <button id="map-heading" type="button" aria-pressed="false" title="Orientation dans le sens de la marche si le cap GPS est disponible" aria-label="Orienter la carte dans le sens de la marche">↗</button>
 </div>
 <div id="gps-hud" aria-label="Tableau de bord de randonnée">
-<div id="gps-hud-status" role="status" data-kind="warning">GPS non démarré · Trace conservée sur ce téléphone</div>
+<div id="gps-hud-top"><div id="gps-hud-status" role="status" data-kind="warning">GPS non démarré · Trace conservée sur ce téléphone</div><button id="gps-hud-toggle" type="button" aria-expanded="true" aria-controls="gps-hud-stats">Réduire ⌄</button></div>
 <div id="gps-hud-stats">
 <div><strong id="hud-remaining">—</strong><small>Restant</small></div>
 <div><strong id="hud-walked">0,00 km</strong><small>Parcouru</small></div>
@@ -640,6 +644,11 @@ el('center').addEventListener('click',()=>{
  else map.fitBounds(routeBounds(),{padding:35,duration:0})}
 });
 // These map controls reuse the same GPS buttons and never duplicate recording.
+el('gps-hud-toggle').addEventListener('click',()=>{
+ const hud=el('gps-hud'),compact=hud.classList.toggle('is-compact');
+ el('gps-hud-toggle').textContent=compact?'Déplier ⌃':'Réduire ⌄';
+ el('gps-hud-toggle').setAttribute('aria-expanded',String(!compact));
+});
 el('map-recenter').addEventListener('click',()=>el('center').click());
 el('map-full').addEventListener('click',()=>{
  if(!map)return;mapFollowing=false;

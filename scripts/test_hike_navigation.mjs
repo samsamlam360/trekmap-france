@@ -18,6 +18,8 @@ assert.ok(html.includes('navigator.geolocation.watchPosition'),'real GPS watch')
 assert.ok(html.includes('id="gps-hud"') && html.includes('id="gps-map-controls"') &&
   html.includes('id="hud-remaining"') && html.includes('id="hud-walked"') &&
   html.includes('id="hud-time"'),'mobile map must expose real GPS stats');
+assert.ok(html.includes('id="gps-hud-toggle"') &&
+  html.includes("hud.classList.toggle('is-compact')"),'GPS panel can be collapsed without disabling commands');
 for(const id of ['quick-start','quick-pause','quick-tools','map-recenter','map-full','map-heading'])
  assert.ok(html.includes('id="'+id+'"') &&
    html.includes("el('"+id+"').addEventListener('click'"),
