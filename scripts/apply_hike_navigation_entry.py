@@ -25,7 +25,10 @@ block='''<!-- TM_HIKER_NAV_ENTRY_START -->
   try{
     localStorage.setItem('tm-navigation-route-v1',JSON.stringify(data));
   }catch(_){if(typeof toast==='function')toast('Stockage de cet appareil saturé. Impossible de préparer le mode randonnée.');return false}
-  window.location.assign('/randonnee');return true;
+  // A pre-v1026 service worker cached /randonnee forever, even while online.
+  // Query-busting forces that old worker to miss the stale page in its cache;
+  // the new worker also replaces the canonical page whenever online.
+  window.location.assign('/randonnee?fresh=network-first-20261016');return true;
  }
  window.TrekMapHikingNavigation={open:open,clean:clean};
 })();

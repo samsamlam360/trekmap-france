@@ -66,6 +66,7 @@ aside{height:auto;overflow:visible;padding-bottom:calc(32px + env(safe-area-inse
 <div class="actions"><button class="primary" id="download">↓ Télécharger une section</button><button id="checkoffline">Assembler / vérifier le trek</button><button id="download-all" type="button">↓ Préparer le trek entier</button></div>
 <progress id="download-progress" max="100" value="0" hidden></progress>
 <div id="offline-status" role="status" aria-live="polite">Pas encore préparé.</div>
+<button id="android-diagnostic" type="button" style="padding:10px 12px;border:1px solid #b6d8bf;background:#eef8f0;color:#0b533a;border-radius:10px;margin:8px 0;font-size:12px">🔎 Vérifier mon stockage Android / version GPS</button>
 <div class="notice">Le fond de carte utilise des données OpenStreetMap via OpenFreeMap (licence ODbL). Il affiche les chemins, l’eau et les zones boisées, mais ce n’est pas une carte IGN ni un système de guidage virage par virage. Le téléchargement est limité pour rester sur un service gratuit.</div>
 <h2>Sécurité</h2><p class="muted">Le GPS peut être imprécis sous les arbres ou en montagne. Il faut garder cet écran ouvert : le navigateur peut interrompre le suivi quand le téléphone se verrouille. Emporte une batterie, une carte ou GPX de secours, et ne coupe pas hors sentier pour rejoindre le tracé. La position reste sur cet appareil, jamais transmise au compte TrekMap.</p>
 <div id="empty"></div></aside></main>
@@ -394,13 +395,13 @@ async function nativePreparation(){
 async function prepare(all=false){
  if(downloadActive)return;
  if(!navigator.onLine){el('offline-status').textContent='Reconnecte-toi pour préparer les tuiles.';return}
- if(!('caches' in window)||!('serviceWorker' in navigator)){el('offline-status').textContent='Stockage de carte indisponible dans ce navigateur.';return}
- // In the APK, the native staged downloader is the only one that feeds the
- // true Android offline map. Do not create confusing web-only downloads.
- if(window.Capacitor?.getPlatform?.()==='android'&&nativePlugin?.openOfflineDownload){
+ // The native Android tile store does not require browser Cache Storage or
+ // a service worker. Check the native path BEFORE web API capability checks.
+ if(window.Capacitor?.getPlatform?.()==='android' && nativePlugin?.openOfflineDownload){
   try{await nativePreparation()}catch(e){el('offline-status').textContent='Échec Android : '+String(e?.message||e)}
   return;
  }
+ if(!('caches' in window)||!('serviceWorker' in navigator)){el('offline-status').textContent='Cache du navigateur indisponible. Si tu es dans TrekMap Android, vérifie que la mise à jour est installée.';return}
  downloadActive=true;
  const bar=el('download-progress'),info=el('offline-status');
  bar.hidden=false;bar.value=0;
@@ -474,6 +475,41 @@ el('download').addEventListener('click',()=>prepare(false));el('checkoffline').a
 // The WebView only opens a native screen. Location recording starts exclusively
 // after a second deliberate tap in that screen. No GPS positions cross this bridge.
 const nativePlugin=window.Capacitor?.Plugins?.TrekMapNativeGPS;
+ el('android-diagnostic').addEventListener('click',async()=>{
+   const platform=window.Capacitor?.getPlatform?.()||'navigateur';
+   const plugin=!!nativePlugin?.listOfflineRoutes;
+   let count='inconnu';
+   if(plugin){
+     try{const r=await nativePlugin.listOfflineRoutes();count=String(r?.routes?.length??0)}
+     catch(e){count='erreur : '+String(e?.message||e)}
+   }
+   const worker=navigator.serviceWorker?.controller?'actif':'inactif';
+   const version='GPS web 2026-10-16, correctif cache réseau';
+   el('offline-status').textContent=version+' · Plateforme : '+platform+
+     ' · Pont Android : '+(plugin?'disponible':'ABSENT')+
+     ' · Treks dans le stockage natif : '+count+
+     ' · Service worker : '+worker+
+     (plugin?' · Si tu as 0 trek, utilise le bouton « Télécharger la carte » pour le sauvegarder.':
+     ' · Si tu es dans l’APK Android, le navigateur n’a pas accès au GPS natif : ne te fie pas aux téléchargements web.');
+ });
+ if(navigator.onLine&&navigator.serviceWorker){
+   navigator.serviceWorker.getRegistration('/').then(reg=>reg?.update()).catch(()=>{});
+ }
+
+ // Saving a trek for the Android offline list is NOT the same as downloading
+ // its tiles. Distinguish the two explicitly and report storage failures.
+ if(window.Capacitor?.getPlatform?.()==='android'){
+   if(!nativePlugin?.saveOfflineRoute){
+     el('offline-status').textContent='⚠ Pont Android absent : les cartes du navigateur ne seront pas visibles dans le GPS hors ligne. Vérifie la version de l’application.';
+   }else {
+     nativePlugin.saveOfflineRoute({route:{id:route.id,name:route.name,region:route.region,
+       coords:coords.length<=6000?coords:coords.filter((_,i)=>i===0||i===coords.length-1||i%Math.ceil(coords.length/5998)===0)}})
+       .then(()=>{if(el('offline-status').textContent==='Pas encore préparé.')
+         el('offline-status').textContent='✓ Trek enregistré pour Android (tracé uniquement). Télécharge encore ses sections de carte avant le mode avion.'})
+       .catch(e=>{el('offline-status').textContent='⚠ Enregistrement du trek Android impossible : '+String(e?.message||e)});
+   }
+ }
+
 function nativeCoords(){
  if(coords.length<=6000)return coords;
  const reduced=[];
