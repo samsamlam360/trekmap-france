@@ -481,11 +481,7 @@ async function checkOffline(){
    (!shell?' Le moteur de carte doit encore être mis en cache.':'');
  }catch(e){info.textContent='Vérification impossible : '+String(e.message||e)}
 }
-el('offline-zoom').addEventListener('change',()=>{// Computing a whole large map (thousands of tile references) at open time can
-// stall or exhaust a mobile WebView. Plan only after the user requests it.
-el('segment-overview').textContent='Parcours chargé ('+formatKm(routeLength)+'). Pour télécharger les cartes, touche « Découper mon trek en sections ».';
-if(coords.length>5500)
- el('offline-status').textContent='Affichage cartographique simplifié pour économiser la mémoire. Tracé GPS et itinéraire téléchargé conservés complets.';});
+el('offline-zoom').addEventListener('change',()=>{try{setSections()}catch(e){el('offline-status').textContent=e.message}});
 el('plan-sections').addEventListener('click',()=>{try{setSections()}catch(e){el('offline-status').textContent=e.message}});
 el('download-all').addEventListener('click',()=>prepare(true));
 el('start').addEventListener('click',start);el('pause').addEventListener('click',pause);
@@ -568,6 +564,10 @@ window.addEventListener('pagehide',()=>{if(active){saved.elapsed=elapsed();saved
 setInterval(update,10000);
 update();
 window.TrekMapHikeCore={dist,projected,tileXY,tilesForLine,validCoords,splitAtDistance,plannedForZoom};
-try{setSections()}catch(e){el('offline-status').textContent=e.message}
+// No tile enumeration or native storage writes on the initial page load.
+el('segment-overview').textContent='Parcours chargé ('+formatKm(routeLength)+'). Pour télécharger les cartes, touche « Découper mon trek en sections ».';
+if(coords.length>5500)
+ el('offline-status').textContent='Aperçu cartographique simplifié pour éviter une surcharge mémoire. Tracé GPS et itinéraire complet conservés.';
+
 })();
 </script></body></html>
