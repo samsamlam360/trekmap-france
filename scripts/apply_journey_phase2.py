@@ -17,6 +17,19 @@ padding:9px 12px;min-height:42px;font-weight:700;font-size:12px}
 #tm-journey-plan-tools button:hover{background:#e9f5ed}
 #tm-journey-progress{margin-top:11px;font-weight:750;font-size:13px;color:#20523c}
 #tm-journey-progress small{display:block;font-size:11px;font-weight:450;color:#65756b;margin-top:4px}
+#tm-journey-days{margin-top:16px;border:1px solid #d6e6db;border-radius:15px;padding:13px;background:#fff}
+#tm-journey-days h3{font-size:16px;margin:0 0 4px;color:#174b33}
+#tm-journey-days p{margin:0 0 12px;font-size:12px;color:#52695b}
+#tm-journey-days details{border:1px solid #dce7df;border-radius:12px;margin:8px 0;overflow:hidden}
+#tm-journey-days summary{cursor:pointer;background:#f0f7f2;padding:12px;min-height:45px;font-weight:800;color:#1b5c3d}
+#tm-journey-days .tm-j-day-fields{padding:12px;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+#tm-journey-days .tm-j-day-fields label{display:grid;gap:5px;min-width:0;font-size:12px;font-weight:750;color:#285b40}
+#tm-journey-days .tm-j-day-fields input,#tm-journey-days .tm-j-day-fields textarea{min-width:0;width:100%;box-sizing:border-box;border:1px solid #bdcfbf;border-radius:9px;padding:9px;font:inherit;font-size:14px;background:white;color:#123c29}
+#tm-journey-days .tm-j-day-fields textarea{min-height:65px;resize:vertical}
+#tm-journey-days .tm-j-day-fields label.tm-j-wide{grid-column:span 2}
+#tm-journey-days :is(input,textarea):focus-visible{outline:3px solid #e6a933;outline-offset:2px}
+@media(max-width:560px){#tm-journey-days .tm-j-day-fields{grid-template-columns:1fr}
+#tm-journey-days .tm-j-day-fields label.tm-j-wide{grid-column:span 1}}
 </style>
 <script id="tm-journey-plan-js">
 (function(){
@@ -75,6 +88,62 @@ padding:9px 12px;min-height:42px;font-weight:700;font-size:12px}
    tools.appendChild(bar);planner.appendChild(tools);
    progress();
  }
+
+ var dayKeys=[
+  ['start','Départ / heure','Ex. gare, 8 h'],
+  ['end','Arrivée / heure','Ex. village, 17 h'],
+  ['distance_km','Distance prévue (km)','Ex. 16'],
+  ['water','Points d’eau et fiabilité','Ex. vérifier la fontaine et sa potabilité'],
+  ['food','Ravitaillement','Ex. épicerie ouverte ?'],
+  ['sleep','Nuitée prévue','Ex. camping, réservation à confirmer'],
+  ['transport','Transport','Ex. train retour'],
+  ['notes','Notes, météo et sécurité','Observations pour cette journée']
+ ];
+ function openFor(t,data){
+   var root=document.getElementById('checklist')?.closest('.planner');
+   if(!root)return;
+   document.getElementById('tm-journey-days')?.remove();
+   var count=Math.min(60,Math.max(1,Math.ceil(Number(t?.duration_days)||1)));
+   var section=document.createElement('section');section.id='tm-journey-days';
+   var title=document.createElement('h3');title.textContent='Préparation jour par jour';
+   var info=document.createElement('p');
+   info.textContent='Prépare chaque journée. Les distances et ressources sont saisies par toi : elles ne sont pas vérifiées automatiquement. Tous les champs sont enregistrés avec la checklist.';
+   section.append(title,info);
+   var existing=new Map((Array.isArray(data?.days)?data.days:[]).filter(function(d){
+     return Number.isInteger(d.day)&&d.day>=1&&d.day<=60;
+   }).map(function(d){return [d.day,d]}));
+   for(var day=1;day<=count;day++){
+     var detail=document.createElement('details');
+     detail.dataset.day=String(day);
+     detail.open=day===1;
+     var summary=document.createElement('summary');summary.textContent='Jour '+day;detail.appendChild(summary);
+     var fields=document.createElement('div');fields.className='tm-j-day-fields';
+     var values=existing.get(day)||{};
+     dayKeys.forEach(function(entry){
+       var label=document.createElement('label'),field=entry[0]==='notes'?document.createElement('textarea'):document.createElement('input');
+       label.textContent=entry[1];field.dataset.dayField=entry[0];
+       field.placeholder=entry[2];field.value=String(values[entry[0]]||'').slice(0,500);
+       field.maxLength=500;
+       if(entry[0]==='notes')label.className='tm-j-wide';
+       else field.type='text';
+       label.appendChild(field);fields.appendChild(label);
+     });
+     detail.appendChild(fields);section.appendChild(detail);
+   }
+   if(Number(t?.duration_days)>60){
+     var note=document.createElement('p');note.textContent='Seules les 60 premières journées peuvent être préparées dans cet éditeur.';section.appendChild(note);
+   }
+   root.appendChild(section);
+ }
+ function getDays(){
+   return [...document.querySelectorAll('#tm-journey-days details[data-day]')].map(function(detail){
+     var result={day:Number(detail.dataset.day)};
+     detail.querySelectorAll('[data-day-field]').forEach(function(input){
+       result[input.dataset.dayField]=String(input.value||'').trim().slice(0,500);
+     });
+     return result;
+   });
+ }
  var modal=document.getElementById('modal');
  if(modal){
    // Only a top-level modal replacement reinitializes the form. Never observe
@@ -85,7 +154,7 @@ padding:9px 12px;min-height:42px;font-weight:700;font-size:12px}
    modal.addEventListener('click',function(){setTimeout(progress,0)});
    enhance();
  }
- window.TrekMapJourneyPlanner={refresh:enhance,templates:templates.map(function(t){return t.label})};
+ window.TrekMapJourneyPlanner={refresh:enhance,openFor:openFor,getDays:getDays,templates:templates.map(function(t){return t.label})};
 })();
 </script>
 <!-- TM_JOURNEY_PHASE2_END -->'''
