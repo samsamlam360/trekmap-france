@@ -75,6 +75,14 @@ assert.ok(!/src=["']https?:\/\//.test(mapHtml),'offline map must not load remote
 assert.ok(!/href=["']https?:\/\//.test(mapHtml),'offline map must not load remote CSS');
 const nativeMap=fs.readFileSync('mobile/native-src/fr/trekmap/france/OfflineVectorMapActivity.java','utf8');
 assert.ok(nativeMap.includes('"routes.json"')&&nativeMap.includes('"waypoints.json"')&&nativeMap.includes('"/native/gps"'));
+assert.ok(nativeMap.includes('"/native/online"')&&nativeMap.includes('NET_CAPABILITY_VALIDATED'),
+  'native map must offer a validated return online');
+assert.ok(nativeMap.includes('route==null?"null":route.toString()'),
+  'offline home must not close on an empty saved route list');
+assert.ok(patch.includes('startActivity(new Intent(this,OfflineVectorMapActivity.class))'),
+  'offline main entry must show the real map, not a placeholder list');
+assert.ok(mapHtml.includes('id="go-online"')&&mapHtml.includes('/native/online'),
+  'offline UI needs a retry-online control');
 assert.ok(nativeMap.includes('if(!"https".equals(req.getUrl().getScheme()))')||
           nativeMap.includes('!"https".equals(req.getUrl().getScheme())'),'non-HTTPS blocked by local map');
 const gpsStore=fs.readFileSync('mobile/native-src/fr/trekmap/france/GpsTrackStore.java','utf8');

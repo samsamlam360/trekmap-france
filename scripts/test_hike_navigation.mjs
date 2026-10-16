@@ -51,6 +51,25 @@ assert.ok(on.meters<2,'on route projects close to zero');
 assert.ok(on.remaining>370&&on.remaining<420,'distance remaining is along the route');
 assert.ok(off.meters>210,'out of route is measurable');
 assert.ok(math.projected([45,2.01],route).remaining<2);
+// Regression: a large route must split instead of refusing >480 map tiles.
+assert.ok(html.includes('id="plan-sections"') && html.includes('id="download-all"') &&
+          html.includes('id="section-picker"'),'chunked controls visible on mobile');
+assert.ok(html.includes('splitAtDistance(') && html.includes('plannedForZoom()'),
+  'route can be partitioned into bounded map-tile sections');
+assert.ok(html.includes('new Set(plan.flatMap(s=>s.files))'),
+  'assembled map reuses a single unique cache of all sections');
+const longCoords=Array.from({length:80},(_,i)=>[45+i*0.001,2+i*0.0007]);
+const sectionCode=html.slice(html.indexOf('function splitAtDistance('),
+                             html.indexOf('async function ensureOfflineShell('));
+const segment=vm.runInNewContext('const dist='+math.dist.toString()+';const RAD=Math.PI/180;'+
+  sectionCode+';({splitAtDistance,segmentLength})');
+const parts=segment.splitAtDistance(longCoords,3000);
+assert.ok(parts.length>=3,'long trail must be split into manageable sections');
+for(let i=1;i<parts.length;i++)
+  assert.deepEqual([...parts[i][0]],[...parts[i-1].at(-1)],'adjacent sections must join at identical points');
+const originalMeters=longCoords.slice(1).reduce((n,p,i)=>n+math.dist(longCoords[i],p),0);
+const piecesMeters=parts.reduce((n,p)=>n+segment.segmentLength(p),0);
+assert.ok(Math.abs(originalMeters-piecesMeters)<2,'splitting must preserve original full trek geometry');
 const tiles=math.tilesForLine(route,14);
 assert.ok(tiles.length>10&&tiles.length<480,tiles.length+' tiles for a short trek');
 assert.ok(tiles.every(p=>/^\/offline-tiles\/(?:9|10|11|12|13|14)\/\d+\/\d+\.pbf$/.test(p)),'tiles served only through controlled source');

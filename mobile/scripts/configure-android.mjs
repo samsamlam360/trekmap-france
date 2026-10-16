@@ -66,7 +66,8 @@ public class MainActivity extends BridgeActivity {
     private void showNativeOffline(){
         if(offlineScreenVisible)return;
         offlineScreenVisible=true;
-        startActivity(new Intent(this,OfflineTreksActivity.class));
+        // The real offline TrekMap map is the home screen, even without saved treks.
+        startActivity(new Intent(this,OfflineVectorMapActivity.class));
     }
     @Override public void onCreate(Bundle savedInstanceState) {
         registerPlugin(TrekMapNativeGpsPlugin.class);

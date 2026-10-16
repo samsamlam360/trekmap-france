@@ -98,11 +98,11 @@ try:
     """)
     browser.find_element(By.ID,'download').click()
     wait_long=WebDriverWait(browser,95)
-    wait_long.until(lambda d: 'tuiles enregistrées' in d.find_element(By.ID,'offline-status').text
+    wait_long.until(lambda d: 'Lot terminé' in d.find_element(By.ID,'offline-status').text
         or 'Échec' in d.find_element(By.ID,'offline-status').text
         or 'partiel' in d.find_element(By.ID,'offline-status').text)
     outcome=browser.find_element(By.ID,'offline-status').text
-    assert 'tuiles enregistrées' in outcome,'offline package not complete: '+outcome
+    assert 'Lot terminé' in outcome,'offline package not complete: '+outcome
     saved=browser.execute_async_script("""
       const done=arguments[0];
       Promise.all([caches.open('tm-hike-app-v1'),caches.open('tm-hike-tiles-v1')])

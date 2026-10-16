@@ -113,6 +113,13 @@ final class OfflineTileStore {
      * No user position or trek coordinates leave the device, only z/x/y tile IDs.
      */
     static void download(Context context,JSONObject route,int stage,Reporter reporter){
+        download(context,route,stage,reporter,MAX_TILES_PER_ACTION,MAX_BYTES_PER_ACTION);
+    }
+    static void download(Context context,JSONObject route,int stage,Reporter reporter,
+                         int maxNewTiles,long maxNewBytes){
+        if(maxNewTiles<=0 || maxNewBytes<=0)return;
+        final int tileBudget=Math.min(MAX_TILES_PER_ACTION,maxNewTiles);
+        final long byteBudget=Math.min(MAX_BYTES_PER_ACTION,maxNewBytes);
         LinkedHashSet<String> tiles=stageTiles(route,stage);
         int total=tiles.size(),completed=0,downloaded=0,errors=0;
         long bytes=0;
@@ -120,7 +127,7 @@ final class OfflineTileStore {
             if(reporter.isCancelled()){reporter.report(completed,total,downloaded,"En pause. Reprends plus tard.");return;}
             File dest=file(context,t);
             if(dest.isFile()&&dest.length()>0){completed++;continue;}
-            if(downloaded>=MAX_TILES_PER_ACTION || bytes>=MAX_BYTES_PER_ACTION){
+            if(downloaded>=tileBudget || bytes>=byteBudget){
                 reporter.report(completed,total,downloaded,"Lot terminé. Relance pour continuer cette étape.");
                 return;
             }
@@ -149,7 +156,7 @@ final class OfflineTileStore {
                     byte[] block=new byte[16384];int len;
                     while((len=input.read(block))>=0){
                         size+=len;
-                        if(size>350000 || bytes+size>MAX_BYTES_PER_ACTION)throw new Exception("BUDGET");
+                        if(size>350000 || bytes+size>byteBudget)throw new Exception("BUDGET");
                         output.write(block,0,len);
                     }
                     output.getFD().sync();

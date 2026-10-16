@@ -4,10 +4,12 @@
 <style>
 *{box-sizing:border-box}html,body{margin:0;min-height:100%;font-family:system-ui,-apple-system,Segoe UI,sans-serif;background:#f2f8f4;color:#153a28}
 button,select{font:inherit}button{cursor:pointer;min-height:44px}button:disabled{opacity:.55;cursor:not-allowed}
-header{display:flex;align-items:center;gap:10px;background:#0a5338;color:white;min-height:58px;padding:9px 14px}
+header{display:flex;align-items:center;gap:10px;background:#0a5338;color:white;min-height:58px;
+padding: max(54px, calc(env(safe-area-inset-top, 0px) + 14px)) 14px 12px;
+position:relative;z-index:5}
 header a{color:white;text-decoration:none;font-weight:750}header strong{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 header button{background:#ffffff22;color:white;border:1px solid #ffffff70;border-radius:10px;padding:9px}
-main{display:grid;grid-template-columns:minmax(0,1fr) 340px;height:calc(100dvh - 58px);min-height:500px}
+main{display:grid;grid-template-columns:minmax(0,1fr) 340px;height:calc(100dvh - 120px);min-height:400px}
 #mapwrap{position:relative;min-height:280px;background:#e1ebe4}#nav-map{height:100%;width:100%}
 #map-fallback{display:none;position:absolute;inset:0;z-index:2;background:#e5f0e7;align-items:center;justify-content:center;padding:20px;flex-direction:column;gap:10px;text-align:center}
 #map-fallback svg{width:100%;height:70%;max-height:500px}
@@ -32,9 +34,15 @@ p{line-height:1.5}.muted{font-size:12px;color:#5a7465}.notice{font-size:12px;col
 #offline-zoom{width:100%;min-height:44px;padding:8px;border-radius:9px;border:1px solid #b5d0be;background:white}
 progress{width:100%;height:15px;accent-color:#12875b}
 #offline-status{min-height:38px;font-size:12px;line-height:1.55;color:#355c44}
+#section-picker{width:100%;min-height:46px;margin:8px 0;padding:10px;border:1px solid #b5d0be;
+border-radius:10px;background:#fff;color:#0a4c35}
+#segment-overview{font-size:12px;line-height:1.5;color:#355e45;margin:8px 0}
+#download-all{background:#116d4b;color:#fff}
+header #center{flex-shrink:0;min-height:48px}header a{min-height:48px;display:flex;align-items:center}
+
 #empty{padding:16px;color:#a62c22;font-weight:750;display:none}
 a.link{color:#115d40}
-@media(max-width:850px){header{min-height:54px}main{display:flex;flex-direction:column;height:auto;min-height:calc(100dvh - 54px)}
+@media(max-width:850px){header{min-height:54px}main{display:flex;flex-direction:column;height:auto;min-height:0}
 #mapwrap{height:min(55dvh,580px);min-height:300px;flex:none}
 aside{height:auto;overflow:visible;padding-bottom:calc(32px + env(safe-area-inset-bottom))}
 .stats .stat b{font-size:20px}}
@@ -50,7 +58,11 @@ aside{height:auto;overflow:visible;padding-bottom:calc(32px + env(safe-area-inse
 <p class="muted">À effectuer avec du réseau et avant le départ. Les cartes téléchargées restent dans le stockage de ce navigateur sur cet appareil.</p>
 <label class="muted" for="offline-zoom">Niveau de détail</label>
 <select id="offline-zoom"><option value="13">Standard (zoom 9 à 13, plus léger)</option><option value="14" selected>Détaillé (zoom 9 à 14)</option></select>
-<div class="actions"><button class="primary" id="download">↓ Télécharger la carte</button><button id="checkoffline">Vérifier le hors-ligne</button></div>
+<button id="plan-sections" type="button" style="width:100%;margin-top:9px;background:#e8f5ec;color:#10573b;border:1px solid #b9d6c3;border-radius:10px;padding:11px;font-weight:750">✂ Découper mon trek en sections</button>
+<div id="segment-overview" aria-live="polite">Les sections se réunissent automatiquement dans la carte du parcours complet. Aucun morceau du tracé n'est supprimé.</div>
+<label class="muted" for="section-picker">Section à préparer</label>
+<select id="section-picker" aria-label="Choisir une section du trek"></select>
+<div class="actions"><button class="primary" id="download">↓ Télécharger une section</button><button id="checkoffline">Assembler / vérifier le trek</button><button id="download-all" type="button">↓ Préparer le trek entier</button></div>
 <progress id="download-progress" max="100" value="0" hidden></progress>
 <div id="offline-status" role="status" aria-live="polite">Pas encore préparé.</div>
 <div class="notice">Le fond de carte utilise des données OpenStreetMap via OpenFreeMap (licence ODbL). Il affiche les chemins, l’eau et les zones boisées, mais ce n’est pas une carte IGN ni un système de guidage virage par virage. Le téléchargement est limité pour rester sur un service gratuit.</div>
@@ -295,67 +307,169 @@ function exportTrace(){
  const url=URL.createObjectURL(new Blob([gpx],{type:'application/gpx+xml'}));
  const a=document.createElement('a');a.href=url;a.download='marche-'+route.id+'.gpx';a.click();setTimeout(()=>URL.revokeObjectURL(url),2000);
 }
-async function prepare(){
- if(!navigator.onLine){el('offline-status').textContent='Connecte-toi à Internet avant de télécharger la carte.';return}
- if(!('caches' in window)||!('serviceWorker' in navigator)){el('offline-status').textContent='Ton navigateur ne permet pas le téléchargement hors connexion.';return}
- const z=Number(el('offline-zoom').value),files=tilesForLine(coords,z);
- if(files.length>TILE_CAP){
-  el('offline-status').textContent='Zone trop vaste ('+files.length+' tuiles). Choisis « Standard » ou prépare une étape plus courte.';
-  return;
- }
- el('download').disabled=true;el('download-progress').hidden=false;el('download-progress').value=0;
- const bar=el('download-progress'),info=el('offline-status');let bytes=0,done=0,failed=0,success=0;
- try{
-  await navigator.serviceWorker.register('/navigation-worker.js',{scope:'/'});
-  const app=await caches.open(CACHE_APP);
-  const main=await fetch('/randonnee',{cache:'no-store'});
-  if(!main.ok)throw Error('Page de navigation inaccessible');
-  await app.put('/randonnee',main);
-  for(const lib of ['https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js','https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css']){
-    const a=await fetch(lib);if(!a.ok)throw Error('Bibliothèque cartographique inaccessible : '+lib);
-    await app.put(lib,a);
-  }
-  const tiles=await caches.open(CACHE_TILES);
-  let index=0,over=false;
-  async function worker(){
-   while(index<files.length&&!over){
-    const path=files[index++];
-    try{
-     const found=await tiles.match(path);
-     if(found){success++;continue}
-     const response=await fetch(path);
-     if(!response.ok)throw Error('HTTP '+response.status);
-     const blob=await response.blob();
-     if(bytes+blob.size>BYTE_CAP){over=true;throw Error('30 Mo atteints')}
-     bytes+=blob.size;
-     await tiles.put(path,new Response(blob,{status:200,headers:{'Content-Type':'application/x-protobuf','Cache-Control':'public, max-age=604800'}}));
-     success++;
-    }catch(_){failed++}
-    finally{done++;bar.value=Math.round(done/files.length*100);
-      info.textContent=done+'/'+files.length+' tuiles vérifiées · '+Math.round(bytes/1024/1024*10)/10+' Mo téléchargés'+(failed?' · '+failed+' manquantes':'');}
+// Every section has its original geometry. The offline cache stores a UNION of
+// tile paths, not a shortened GPS route. A single tile is stored once for all
+// sections, and no intermediate piece is lost when they are reassembled.
+let plannedSections=[],downloadActive=false;
+function splitAtDistance(line,chunkMeters){
+ const output=[],EPS=0.00001;
+ if(line.length<2)return output;
+ let current=[line[0]],used=0,sections=0;
+ for(let i=1;i<line.length;i++){
+  const end=line[i],a=line[i-1],length=dist(a,end);
+  if(length<EPS)continue;
+  let done=0;
+  while(done<length-EPS){
+   const take=Math.min(length-done,Math.max(1,chunkMeters-used));
+   done+=take;used+=take;
+   const t=Math.min(1,done/length);
+   const point=[a[0]+(end[0]-a[0])*t,a[1]+(end[1]-a[1])*t];
+   current.push(point);
+   if(used>=chunkMeters-EPS){
+    output.push(current);
+    current=[point];used=0;sections++;
+    if(sections>900)throw Error('Itinéraire trop long pour un seul téléchargement. Prépare les journées individuellement.');
    }
   }
-  await Promise.all([worker(),worker(),worker()]);
-  const complete=success===files.length&&!over;
-  localStorage.setItem('tm-hike-offline-v1-'+route.id,JSON.stringify({complete,tiles:files.length,zoom:z,stamp:Date.now()}));
-  info.textContent=complete?'✓ Carte et application disponibles hors connexion : '+success+' tuiles enregistrées. Teste en mode avion avant de partir.':
-    '⚠ Téléchargement partiel : '+success+'/'+files.length+' tuiles. Réessaie en Wi-Fi ou choisis Standard. Ne pars pas sans carte de secours.';
- }catch(e){info.textContent='Échec de préparation : '+(e.message||e)+'. La carte n’est pas prête hors connexion.'}
- finally{el('download').disabled=false}
+ }
+ if(current.length>=2)output.push(current);
+ return output.length?output:[line];
+}
+function segmentLength(line){let meters=0;for(let i=1;i<line.length;i++)meters+=dist(line[i-1],line[i]);return meters}
+function plannedForZoom(){
+ const z=Number(el('offline-zoom').value);
+ let queue=splitAtDistance(coords,3000);
+ const sections=[],max=900;
+ while(queue.length){
+  const part=queue.shift();const files=tilesForLine(part,z);
+  if(files.length>TILE_CAP){
+   if(segmentLength(part)<80)throw Error('Le détail de la carte nécessite trop de tuiles pour cette section. Choisis Standard.');
+   const halves=splitAtDistance(part,segmentLength(part)/2);
+   if(halves.length<2)throw Error('Impossible de subdiviser ce morceau du tracé.');
+   queue.unshift(...halves);continue;
+  }
+  sections.push({coords:part,files,meters:segmentLength(part)});
+  if(sections.length+queue.length>max)throw Error('Trop de sections. Choisis Standard ou prépare une randonnée plus courte.');
+ }
+ return sections;
+}
+function setSections(){
+ plannedSections=plannedForZoom();
+ const picker=el('section-picker');const previous=Number(picker.value)||0;
+ picker.replaceChildren();
+ plannedSections.forEach((section,i)=>{
+  const option=document.createElement('option');
+  option.value=String(i);option.textContent='Section '+(i+1)+'/'+plannedSections.length+
+    ' · '+(section.meters/1000).toFixed(1).replace('.',',')+' km · '+section.files.length+' tuiles';
+  picker.appendChild(option);
+ });
+ picker.value=String(Math.min(previous,plannedSections.length-1));
+ const unique=new Set(plannedSections.flatMap(s=>s.files));
+ el('segment-overview').textContent='✓ '+plannedSections.length+' sections · '+unique.size+
+    ' tuiles distinctes pour le parcours COMPLET. Les sections sont recollées automatiquement sur la même carte. Les téléchargements interrompus reprennent uniquement les tuiles manquantes.';
+ return plannedSections;
+}
+async function ensureOfflineShell(){
+ await navigator.serviceWorker.register('/navigation-worker.js',{scope:'/'});
+ const app=await caches.open(CACHE_APP),main=await fetch('/randonnee',{cache:'no-store'});
+ if(!main.ok)throw Error('Page de navigation inaccessible');
+ await app.put('/randonnee',main);
+ for(const lib of ['https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js','https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css']){
+  if(!(await app.match(lib))){
+   const a=await fetch(lib);if(!a.ok)throw Error('Bibliothèque cartographique indisponible');
+   await app.put(lib,a);
+  }
+ }
+}
+async function nativePreparation(){
+ if(!nativePlugin?.saveOfflineRoute||!nativePlugin?.openOfflineDownload)return false;
+ // Download in Android's PRIVATE storage: browser Cache Storage is a separate
+ // mechanism and cannot be used as the native offline map's data source.
+ await nativePlugin.saveOfflineRoute({route:nativeRoute()});
+ await nativePlugin.openOfflineDownload({id:route.id});
+ el('offline-status').textContent='✓ Trek enregistré dans Android. Prépare les sections dans la fenêtre ouverte puis ouvre la carte hors ligne.';
+ return true;
+}
+async function prepare(all=false){
+ if(downloadActive)return;
+ if(!navigator.onLine){el('offline-status').textContent='Reconnecte-toi pour préparer les tuiles.';return}
+ if(!('caches' in window)||!('serviceWorker' in navigator)){el('offline-status').textContent='Stockage de carte indisponible dans ce navigateur.';return}
+ // In the APK, the native staged downloader is the only one that feeds the
+ // true Android offline map. Do not create confusing web-only downloads.
+ if(window.Capacitor?.getPlatform?.()==='android'&&nativePlugin?.openOfflineDownload){
+  try{await nativePreparation()}catch(e){el('offline-status').textContent='Échec Android : '+String(e?.message||e)}
+  return;
+ }
+ downloadActive=true;
+ const bar=el('download-progress'),info=el('offline-status');
+ bar.hidden=false;bar.value=0;
+ el('download').disabled=true;el('download-all').disabled=true;
+ let totalNew=0,bytes=0,fail=0,rateLimit=false;
+ try{
+  const plan=setSections();
+  await ensureOfflineShell();
+  const cache=await caches.open(CACHE_TILES);
+  const first=all?0:Math.max(0,Math.min(plan.length-1,Number(el('section-picker').value)||0));
+  const chosen=all?plan.slice():[plan[first]];
+  const wanted=[...new Set(chosen.flatMap(s=>s.files))];
+  let done=0;
+  for(const path of wanted){
+   // A click is bounded to a safe batch. Clicking again resumes.
+   if(totalNew>=TILE_CAP||bytes>=BYTE_CAP){
+    info.textContent='Lot atteint : '+totalNew+' tuiles / '+Math.round(bytes/1048576)+' Mo. Clique de nouveau pour continuer et recoller les sections.';
+    break;
+   }
+   try{
+    if(!(await cache.match(path))){
+     const r=await fetch(path);
+     if(r.status===429){rateLimit=true;break}
+     if(!r.ok)throw Error('HTTP '+r.status);
+     const b=await r.blob();
+     if(b.size===0||b.size>350000)throw Error('Tuile invalide');
+     if(bytes+b.size>BYTE_CAP)break;
+     await cache.put(path,new Response(b,{headers:{'Content-Type':'application/x-protobuf'}}));
+     bytes+=b.size;totalNew++;
+    }
+   }catch(_){fail++}
+   done++;bar.value=Math.round((done/wanted.length)*100);
+   if(done%10===0)info.textContent=done+'/'+wanted.length+' tuiles traitées · '+totalNew+' nouvelles · '+fail+' erreurs';
+  }
+  if(rateLimit)info.textContent='Limite horaire des cartes atteinte. Les parties déjà enregistrées sont conservées. Reviens plus tard.';
+  else if(!info.textContent.startsWith('Lot atteint'))info.textContent='Lot terminé. '+totalNew+' nouvelles tuiles, '+fail+' erreurs. Appuie sur « Assembler / vérifier le trek » pour connaître les sections manquantes.';
+  localStorage.setItem('tm-hike-offline-v1-'+route.id,JSON.stringify({partial:true,sections:plan.length,zoom:Number(el('offline-zoom').value),stamp:Date.now()}));
+ }catch(e){info.textContent='Préparation interrompue : '+String(e.message||e)+'. Les tuiles déjà téléchargées restent enregistrées.'}
+ finally{downloadActive=false;el('download').disabled=false;el('download-all').disabled=false}
 }
 async function checkOffline(){
- if(!('caches' in window)){el('offline-status').textContent='Stockage hors ligne indisponible.';return}
- const a=await caches.open(CACHE_APP),t=await caches.open(CACHE_TILES),z=Number(el('offline-zoom').value);
- const files=tilesForLine(coords,z);
- const samples=files.slice(0,Math.min(20,files.length));
- let ok=0;for(const path of samples){if(await t.match(path))ok++}
- const shell=!!(await a.match('/randonnee'))&&!!(await a.match('https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js'));
- el('offline-status').textContent=(shell&&ok===samples.length?'✓ Contrôle rapide réussi. ':'⚠ Carte incomplète. ')+
-   ok+'/'+samples.length+' tuiles d’échantillon présentes. Coupe le réseau et ouvre « Mode randonnée » pour une vérification réelle.';
+ if(!('caches' in window)){el('offline-status').textContent='Cache indisponible.';return}
+ const info=el('offline-status');info.textContent='Vérification des sections et assemblage du parcours…';
+ try{
+  const plan=setSections();
+  const unique=[...new Set(plan.flatMap(s=>s.files))];
+  const cache=await caches.open(CACHE_TILES),app=await caches.open(CACHE_APP);
+  const missing=[];
+  let available=0;
+  for(let i=0;i<unique.length;i++){
+   if(await cache.match(unique[i]))available++;
+   else missing.push(unique[i]);
+  }
+  const shell=!!(await app.match('/randonnee')) &&
+   !!(await app.match('https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js'));
+  const complete=shell&&available===unique.length&&unique.length>0;
+  localStorage.setItem('tm-hike-offline-v1-'+route.id,JSON.stringify({complete,sections:plan.length,tiles:unique.length,present:available,zoom:Number(el('offline-zoom').value),stamp:Date.now()}));
+  info.textContent=(complete?'✓ Parcours complet reconstitué ! ':'⚠ Assemblage partiel : ')+
+   available+'/'+unique.length+' tuiles présentes sur '+plan.length+' sections. '+
+   (complete?'Trace intégrale et carte en cache. Teste en mode avion.':
+    'Il manque '+missing.length+' tuiles ; clique sur « Préparer le trek entier » pour reprendre.')+
+   (!shell?' Le moteur de carte doit encore être mis en cache.':'');
+ }catch(e){info.textContent='Vérification impossible : '+String(e.message||e)}
 }
+el('offline-zoom').addEventListener('change',()=>{try{setSections()}catch(e){el('offline-status').textContent=e.message}});
+el('plan-sections').addEventListener('click',()=>{try{setSections()}catch(e){el('offline-status').textContent=e.message}});
+el('download-all').addEventListener('click',()=>prepare(true));
 el('start').addEventListener('click',start);el('pause').addEventListener('click',pause);
 el('finish').addEventListener('click',finish);el('export').addEventListener('click',exportTrace);
-el('download').addEventListener('click',prepare);el('checkoffline').addEventListener('click',checkOffline);
+el('download').addEventListener('click',()=>prepare(false));el('checkoffline').addEventListener('click',checkOffline);
 // The WebView only opens a native screen. Location recording starts exclusively
 // after a second deliberate tap in that screen. No GPS positions cross this bridge.
 const nativePlugin=window.Capacitor?.Plugins?.TrekMapNativeGPS;
@@ -406,6 +520,7 @@ el('center').addEventListener('click',()=>{
 window.addEventListener('pagehide',()=>{if(active){saved.elapsed=elapsed();saved.startedAt=null;active=false;persist()}releaseWatch()});
 setInterval(update,10000);
 update();
-window.TrekMapHikeCore={dist,projected,tileXY,tilesForLine,validCoords};
+window.TrekMapHikeCore={dist,projected,tileXY,tilesForLine,validCoords,splitAtDistance,plannedForZoom};
+try{setSections()}catch(e){el('offline-status').textContent=e.message}
 })();
 </script></body></html>

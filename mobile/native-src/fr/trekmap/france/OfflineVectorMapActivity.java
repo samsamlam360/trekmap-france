@@ -49,7 +49,8 @@ public class OfflineVectorMapActivity extends Activity {
             org.json.JSONArray saved=OfflineRouteStore.list(this);
             route=saved.optJSONObject(0);
         }
-        if(route==null){Toast.makeText(this,"Aucun trek téléchargé sur cet appareil",Toast.LENGTH_LONG).show();finish();return;}
+        // Keep the offline map UI alive even if no trek has been prepared yet.
+        // It must offer a 'Retry online' button rather than unexpectedly closing.
         final WebViewAssetLoader loader=new WebViewAssetLoader.Builder()
             .setDomain(DOMAIN)
             .addPathHandler("/assets/",new WebViewAssetLoader.AssetsPathHandler(this))
@@ -67,7 +68,7 @@ public class OfflineVectorMapActivity extends Activity {
                 }catch(Exception e){return denied();}
             })
             .addPathHandler("/data/",path->{
-                if("route.json".equals(path))return json(route.toString());
+                if("route.json".equals(path))return json(route==null?"null":route.toString());
                 if("routes.json".equals(path))return json(OfflineRouteStore.list(this).toString());
                 if("waypoints.json".equals(path)){
                     org.json.JSONArray result=new org.json.JSONArray();
@@ -110,6 +111,25 @@ public class OfflineVectorMapActivity extends Activity {
             @Override public boolean shouldOverrideUrlLoading(WebView view,WebResourceRequest request){
                 Uri u=request.getUrl();
                 if("https".equals(u.getScheme()) && DOMAIN.equals(u.getHost()) &&
+                   "/native/online".equals(u.getPath())){
+                    android.net.ConnectivityManager cm=(android.net.ConnectivityManager)getSystemService(CONNECTIVITY_SERVICE);
+                    android.net.NetworkCapabilities caps=cm==null?null:cm.getNetworkCapabilities(cm.getActiveNetwork());
+                    if(caps!=null &&
+                       caps.hasCapability(android.net.NetworkCapabilities.NET_CAPABILITY_INTERNET) &&
+                       caps.hasCapability(android.net.NetworkCapabilities.NET_CAPABILITY_VALIDATED)){
+                        Intent online=new Intent(OfflineVectorMapActivity.this,MainActivity.class);
+                        online.setAction("fr.trekmap.france.RELOAD_ONLINE");
+                        online.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP|Intent.FLAG_ACTIVITY_SINGLE_TOP);
+                        startActivity(online);
+                        finish();
+                    }else{
+                        Toast.makeText(OfflineVectorMapActivity.this,
+                          "Aucune connexion Internet confirmée. Reste en mode hors ligne.",
+                          Toast.LENGTH_LONG).show();
+                    }
+                    return true;
+                }
+                if("https".equals(u.getScheme()) && DOMAIN.equals(u.getHost()) &&
                    u.getPath()!=null && u.getPath().startsWith("/native/")){
                     final String id=u.getQueryParameter("route");
                     JSONObject saved=id==null?null:OfflineRouteStore.find(OfflineVectorMapActivity.this,id);
@@ -131,6 +151,18 @@ public class OfflineVectorMapActivity extends Activity {
         });
         setContentView(web);
         web.loadUrl("https://"+DOMAIN+"/assets/public/offline-map.html");
+    }
+    @Override public void onBackPressed(){
+        // Do not reveal the blank online WebView when offline.
+        android.net.ConnectivityManager cm=(android.net.ConnectivityManager)getSystemService(CONNECTIVITY_SERVICE);
+        android.net.NetworkCapabilities caps=cm==null?null:cm.getNetworkCapabilities(cm.getActiveNetwork());
+        if(caps!=null&&caps.hasCapability(android.net.NetworkCapabilities.NET_CAPABILITY_VALIDATED)){
+            Intent intent=new Intent(this,MainActivity.class);
+            intent.setAction("fr.trekmap.france.RELOAD_ONLINE");
+            intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP|Intent.FLAG_ACTIVITY_SINGLE_TOP);
+            startActivity(intent);finish();
+        }else Toast.makeText(this,"Mode hors ligne. Reconnecte-toi puis appuie sur Actualiser.",
+            Toast.LENGTH_LONG).show();
     }
     @Override protected void onDestroy(){
         if(web!=null){web.loadUrl("about:blank");web.destroy();web=null;}
