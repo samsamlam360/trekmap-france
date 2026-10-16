@@ -232,12 +232,13 @@ async function openPlan(id){
     }
     const saved=Array.isArray(d.checklist)?d.checklist:[];
     if(saved.length) saved.forEach(x=>addChecklistItem(x,false)); else addChecklistItem();
+    window.TrekMapJourneyPlanner?.openFor(t,d);
     $('add-check').onclick=(ev)=>{ev.preventDefault();ev.stopPropagation();addChecklistItem()};
     $('save-plan').onclick=async()=>{
       const button=$('save-plan'); button.disabled=true; button.textContent='Enregistrement…';
       const checklist=[...list.querySelectorAll('.check-row')].map(r=>({done:r.querySelector('input[type="checkbox"]').checked,text:r.querySelector('input[type="text"]').value.trim()})).filter(x=>x.text);
       try{
-        const rr=await fetch(API+`/treks/${id}/plan`,{method:'PUT',headers:headers({'Content-Type':'application/json'},'PUT'),body:JSON.stringify({notes:$('plan-notes').value,checklist})});
+        const rr=await fetch(API+`/treks/${id}/plan`,{method:'PUT',headers:headers({'Content-Type':'application/json'},'PUT'),body:JSON.stringify({notes:$('plan-notes').value,checklist,days:window.TrekMapJourneyPlanner?.getDays?.()||[]})});
         const rrRaw=await rr.text(); let dd={}; try{dd=rrRaw?JSON.parse(rrRaw):{}}catch(e){}
         if(!rr.ok)throw new Error(dd.detail||`HTTP ${rr.status}`);
         closeModal();toast('Préparation enregistrée.');
