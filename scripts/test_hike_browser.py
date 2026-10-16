@@ -82,6 +82,25 @@ try:
     browser.set_window_size(390,844)
     assert browser.find_element(By.ID,'nav-map').is_displayed()
     assert browser.find_element(By.ID,'download').is_displayed()
+    # GPS cockpit should be useful before opening any secondary options.
+    hud=browser.find_element(By.ID,'gps-hud')
+    assert hud.is_displayed(),'mobile GPS dashboard missing'
+    assert browser.find_element(By.ID,'gps-map-controls').is_displayed()
+    assert browser.find_element(By.ID,'hud-walked').text==browser.find_element(By.ID,'walked').text
+    assert browser.find_element(By.ID,'hud-remaining').text==browser.find_element(By.ID,'remaining').text
+    assert browser.find_element(By.ID,'hud-time').text==browser.find_element(By.ID,'elapsed').text
+    assert browser.execute_script("return document.getElementById('mapwrap').getBoundingClientRect().height")>=410
+    assert browser.find_element(By.ID,'quick-pause').is_enabled(),'quick pause must work while recording'
+    browser.find_element(By.ID,'quick-pause').click()
+    assert 'pause' in browser.find_element(By.ID,'state').text.lower()
+    assert browser.find_element(By.ID,'quick-pause').text.startswith('▶'),'resume action must be visible'
+    browser.find_element(By.ID,'quick-pause').click()
+    assert not browser.find_element(By.ID,'quick-start').is_enabled(),'original and quick GPS controls must stay in sync'
+    browser.find_element(By.ID,'map-heading').click()
+    assert browser.find_element(By.ID,'map-heading').get_attribute('aria-pressed')=='true'
+    browser.find_element(By.ID,'map-heading').click()
+    assert browser.find_element(By.ID,'map-heading').get_attribute('aria-pressed')=='false'
+
     assert browser.execute_script("return document.documentElement.scrollWidth<=window.innerWidth+2"),'nav viewport horizontally overflowing'
     before_reload=browser.find_element(By.ID,'walked').text
     browser.get(BASE+'/randonnee')
