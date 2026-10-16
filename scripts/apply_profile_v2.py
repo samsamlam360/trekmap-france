@@ -124,9 +124,9 @@ block=r'''<!-- TREKMAP_PROFILE_V2_START -->
       <div class="tm-p-brand"><img src="/brand-pin.svg" alt=""> TrekMap</div>
       <button type="button" data-p-tab="home" class="active">⌂ Tableau de bord</button>
       <button type="button" data-p-tab="projects">⌖ Mes aventures</button>
+      <button type="button" data-p-tab="downloads">⬇ Treks téléchargés</button>
       <button type="button" data-p-tab="journal">▤ Carnet</button>
       <button type="button" data-p-tab="collections">♡ Collections</button>
-      <button type="button" data-p-tab="downloads">⬇ Treks téléchargés</button>
       <button type="button" data-p-tab="preferences">⚙ Préférences</button>
       <button type="button" id="tm-p-exit" class="tm-p-exit">← Revenir à la carte</button>
     </nav>
@@ -279,7 +279,10 @@ function projects(){
       '<button type="button" class="tm-p-btn" data-p-open-trek="'+Number(current.id)+'">Voir la fiche du trek</button></div></form>'+
       '<div id="tm-p-plan-editor"></div></div>';
   }else panel='<div class="tm-p-card"><h3>Choisir un trek</h3><p class="tm-p-muted">Sélectionne un trek créé ou mis en favori pour suivre sa préparation, renseigner ton carnet et accéder à sa checklist.</p></div>';
-  return '<h2 class="tm-p-heading">Mes aventures</h2><div class="tm-p-cols"><div class="tm-p-card">'+
+  return '<div class="tm-p-inline" style="justify-content:space-between;margin-bottom:14px;gap:12px;align-items:center">'+
+    '<h2 class="tm-p-heading" style="margin:0">Mes aventures</h2>'+
+    '<button type="button" class="tm-p-btn primary" data-p-go="downloads">⬇ Treks téléchargés</button></div>'+
+    '<div class="tm-p-cols"><div class="tm-p-card">'+
     '<h3>Tous mes treks et favoris</h3><div class="tm-p-list">'+(treks.length?treks.map(function(t){
        const j=journey(t.id),tag=statusNames[j&&j.status||'planned'];
        return '<div class="tm-p-project-row'+(Number(selected)===Number(t.id)?' is-selected':'')+'">'+
@@ -480,7 +483,7 @@ root.addEventListener('click',async function(event){
    if(id==='downloads')refreshDownloads();
    return}
  if(button.id==='tm-p-exit'){close();return}
- if(button.dataset.pGo){tab=button.dataset.pGo;selected=null;render();return}
+ if(button.dataset.pGo){tab=button.dataset.pGo;selected=null;render();if(tab==='downloads')await refreshDownloads();return}
  if(button.dataset.pRetry){await open();return}
   if(button.dataset.pOfflineRefresh){await refreshDownloads();return}
   if(button.dataset.pOfflineOpen){
