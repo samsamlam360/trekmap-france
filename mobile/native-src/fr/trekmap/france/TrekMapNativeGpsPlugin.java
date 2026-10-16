@@ -1,129 +1,183 @@
 package fr.trekmap.france;
 
+import android.app.Activity;
 import android.content.Intent;
 import android.net.Uri;
+import android.webkit.WebView;
 import com.getcapacitor.JSObject;
 import com.getcapacitor.Plugin;
 import com.getcapacitor.PluginCall;
 import com.getcapacitor.PluginMethod;
 import com.getcapacitor.annotation.CapacitorPlugin;
+import org.json.JSONArray;
+import org.json.JSONObject;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 /**
- * Opens native GPS controls; never returns coordinates or starts tracking from JavaScript.
- * The user must explicitly press Start inside the native screen.
+ * Opens Android hiking tools only for TrekMap's verified HTTPS origins.
+ * IMPORTANT: WebView.getUrl() MUST be called from the WebView UI thread.
+ * Capacitor invokes plugin methods from its own execution context.
+ * DB/JSON/tiles computations run off the Android main thread; only URL
+ * validation and Activity starts touch the UI thread.
  */
 @CapacitorPlugin(name = "TrekMapNativeGPS")
 public class TrekMapNativeGpsPlugin extends Plugin {
-    private boolean trustedHikePage(){
-        String url=getBridge().getWebView().getUrl();
-        Uri u=Uri.parse(url==null?"":url);
-        return "https".equals(u.getScheme()) &&
-                "trekmap-france.onrender.com".equals(u.getHost()) &&
-                "/randonnee".equals(u.getPath()) && u.getPort()==-1;
+    private static final ExecutorService IO=Executors.newSingleThreadExecutor(r->{
+        Thread t=new Thread(r,"trekmap-native-route-io");
+        t.setDaemon(true);
+        return t;
+    });
+    private interface Task { void run() throws Exception; }
+
+    private void permitted(PluginCall call,boolean hikeOnly,Task action){
+        final Activity activity=getActivity();
+        if(activity==null||activity.isFinishing()){
+            call.reject("TrekMap Android n'est plus au premier plan.");return;
+        }
+        // A WebView method on the CapacitorPlugins worker causes Android's
+        // WebView thread checker to throw, and can close the whole app.
+        activity.runOnUiThread(()->{
+            try {
+                final WebView web=getBridge()==null?null:getBridge().getWebView();
+                final String current=web==null?null:web.getUrl();
+                final Uri uri=Uri.parse(current==null?"":current);
+                final String path=uri.getPath();
+                final boolean secure="https".equals(uri.getScheme())
+                        && "trekmap-france.onrender.com".equals(uri.getHost())
+                        && uri.getPort()==-1;
+                final boolean accepted=secure && ("/randonnee".equals(path) ||
+                        (!hikeOnly && "/".equals(path)));
+                if(!accepted){
+                    call.reject(hikeOnly?"Action réservée au mode randonnée TrekMap.":
+                            "Cette action doit être ouverte depuis TrekMap France.");return;
+                }
+                IO.execute(()->{
+                    try{action.run();}
+                    catch(Exception e){call.reject("Action Android interrompue : "+e.getMessage());}
+                });
+            }catch(Exception e){
+                call.reject("Impossible de vérifier la page Android : "+e.getMessage());
+            }
+        });
     }
+    private void launch(PluginCall call,Intent intent){
+        final Activity activity=getActivity();
+        if(activity==null||activity.isFinishing()){
+            call.reject("TrekMap a été fermé : rouvre l'application.");return;
+        }
+        activity.runOnUiThread(()->{
+            try {
+                if(activity.isFinishing()||activity.isDestroyed()){
+                    call.reject("TrekMap a été fermé : réessaie.");return;
+                }
+                activity.startActivity(intent);
+                call.resolve();
+            }catch(Exception e){
+                call.reject("Écran Android inaccessible : "+e.getMessage());
+            }
+        });
+    }
+
     @PluginMethod
     public void saveOfflineRoute(PluginCall call){
-        if(!trustedHikePage()){call.reject("Cette action nécessite la page randonnée TrekMap.");return;}
-        JSObject route=call.getObject("route");
-        if(route==null||!GpsTrackStore.isValidRoute(route)){
-            call.reject("Le trek doit avoir un tracé valide (maximum 6 000 points).");return;
-        }
-        if(!OfflineRouteStore.put(getContext(),route)){
-            call.reject("Stockage Android impossible. Libère de l'espace et réessaie.");return;
-        }
-        JSObject result=new JSObject();result.put("saved",true);
-        result.put("count",OfflineRouteStore.list(getContext()).length());
-        call.resolve(result);
+        permitted(call,true,()->{
+            JSObject route=call.getObject("route");
+            if(route==null||!GpsTrackStore.isValidRoute(route)){
+                call.reject("Trek invalide. Maximum 6 000 coordonnées.");return;
+            }
+            if(!OfflineRouteStore.put(getContext(),route)){
+                call.reject("Enregistrement local impossible. Vérifie l'espace disponible.");return;
+            }
+            JSObject result=new JSObject();
+            result.put("saved",true);
+            result.put("count",OfflineRouteStore.list(getContext()).length());
+            call.resolve(result);
+        });
     }
-    private boolean trustedTrekMapPage(){
-        String url=getBridge().getWebView().getUrl();
-        Uri u=Uri.parse(url==null?"":url);
-        return "https".equals(u.getScheme()) &&
-                "trekmap-france.onrender.com".equals(u.getHost()) &&
-                ("/".equals(u.getPath())||"/randonnee".equals(u.getPath()))&&u.getPort()==-1;
-    }
+
     @PluginMethod
     public void listOfflineRoutes(PluginCall call){
-        if(!trustedTrekMapPage()){call.reject("Origine non autorisée.");return;}
-        org.json.JSONArray all=OfflineRouteStore.list(getContext());
-        org.json.JSONArray publicList=new org.json.JSONArray();
-        for(int i=0;i<all.length();i++){
-            org.json.JSONObject r=all.optJSONObject(i);
-            if(r==null)continue;
-            org.json.JSONObject item=new org.json.JSONObject();
-            try{
-                item.put("id",r.optString("id"));
-                item.put("name",r.optString("name"));
-                item.put("region",r.optString("region"));
-                item.put("sections",OfflineTileStore.stages(r));
+        permitted(call,false,()->{
+            JSONArray all=OfflineRouteStore.list(getContext()),publicList=new JSONArray();
+            for(int i=0;i<all.length();i++){
+                JSONObject route=all.optJSONObject(i);
+                if(route==null||!GpsTrackStore.isValidRoute(route))continue;
+                JSONObject item=new JSONObject();
+                item.put("id",route.optString("id"));
+                item.put("name",route.optString("name"));
+                item.put("region",route.optString("region"));
+                item.put("sections",OfflineTileStore.stages(route));
                 publicList.put(item);
-            }catch(org.json.JSONException ignored){}
-        }
-        JSObject res=new JSObject();res.put("routes",publicList);call.resolve(res);
+            }
+            JSObject res=new JSObject();res.put("routes",publicList);
+            call.resolve(res);
+        });
     }
+
     @PluginMethod
     public void openOfflineRoute(PluginCall call){
-        if(!trustedTrekMapPage()){call.reject("Origine non autorisée.");return;}
-        String id=call.getString("id","");
-        if(OfflineRouteStore.find(getContext(),id)==null){
-            call.reject("Trek hors ligne introuvable.");return;
-        }
-        Intent intent=new Intent(getActivity(),OfflineRouteActivity.class);
-        intent.putExtra("route_id",id);
-        getActivity().runOnUiThread(()->getActivity().startActivity(intent));
-        call.resolve();
+        permitted(call,false,()->{
+            String id=call.getString("id","");
+            if(OfflineRouteStore.find(getContext(),id)==null){
+                call.reject("Trek hors ligne introuvable.");return;
+            }
+            Intent intent=new Intent(getContext(),OfflineRouteActivity.class);
+            intent.putExtra("route_id",id);
+            launch(call,intent);
+        });
     }
+
     @PluginMethod
     public void openOfflineDownload(PluginCall call){
-        if(!trustedTrekMapPage()){call.reject("Origine non autorisée.");return;}
-        String id=call.getString("id","");
-        if(OfflineRouteStore.find(getContext(),id)==null){
-            call.reject("Enregistre d'abord le trek dans Android.");return;
-        }
-        Intent intent=new Intent(getActivity(),OfflineDownloadActivity.class);
-        intent.putExtra("route_id",id);
-        getActivity().runOnUiThread(()->getActivity().startActivity(intent));
-        call.resolve();
+        permitted(call,false,()->{
+            String id=call.getString("id","");
+            if(OfflineRouteStore.find(getContext(),id)==null){
+                call.reject("Enregistre d'abord ce trek dans Android.");return;
+            }
+            Intent intent=new Intent(getContext(),OfflineDownloadActivity.class);
+            intent.putExtra("route_id",id);
+            launch(call,intent);
+        });
     }
+
     @PluginMethod
     public void openOfflineJournal(PluginCall call){
-        if(!trustedTrekMapPage()){call.reject("Origine non autorisée.");return;}
-        Intent intent=new Intent(getActivity(),TrackArchiveActivity.class);
-        getActivity().runOnUiThread(()->getActivity().startActivity(intent));
-        call.resolve();
+        permitted(call,false,()->launch(call,
+                new Intent(getContext(),TrackArchiveActivity.class)));
     }
+
     @PluginMethod
     public void openOfflineMap(PluginCall call){
-        if(!trustedTrekMapPage()){call.reject("Origine non autorisée.");return;}
-        Intent intent=new Intent(getActivity(),OfflineVectorMapActivity.class);
-        String id=call.getString("id","");
-        if(OfflineRouteStore.find(getContext(),id)!=null)intent.putExtra("route_id",id);
-        getActivity().runOnUiThread(()->getActivity().startActivity(intent));
-        call.resolve();
+        permitted(call,false,()->{
+            Intent intent=new Intent(getContext(),OfflineVectorMapActivity.class);
+            String id=call.getString("id","");
+            if(!id.isEmpty()&&OfflineRouteStore.find(getContext(),id)!=null){
+                intent.putExtra("route_id",id);
+            }
+            launch(call,intent);
+        });
     }
+
     @PluginMethod
     public void openOfflineRoutes(PluginCall call){
-        if(!trustedTrekMapPage()){call.reject("Action réservée à TrekMap.");return;}
-        Intent intent=new Intent(getActivity(),OfflineTreksActivity.class);
-        intent.putExtra("list_only",true);
-        getActivity().runOnUiThread(()->getActivity().startActivity(intent));
-        call.resolve();
+        permitted(call,false,()->{
+            Intent intent=new Intent(getContext(),OfflineTreksActivity.class);
+            intent.putExtra("list_only",true);
+            launch(call,intent);
+        });
     }
+
     @PluginMethod
-    public void openTracker(PluginCall call) {
-        if (!trustedHikePage()) {
-            call.reject("Le GPS natif est réservé à la page randonnée sécurisée.");
-            return;
-        }
-        JSObject requested = call.getObject("route");
-        if (requested == null || !GpsTrackStore.isValidRoute(requested)) {
-            call.reject("Le trek doit posséder un tracé GPS valide.");
-            return;
-        }
-        // Bounded JSON (< 6000 coords) and private explicit Activity; not exposed to third-party pages.
-        Intent intent = new Intent(getActivity(), GpsTrackActivity.class);
-        intent.putExtra("trekmap_route", requested.toString());
-        getActivity().runOnUiThread(() -> getActivity().startActivity(intent));
-        call.resolve();
+    public void openTracker(PluginCall call){
+        permitted(call,true,()->{
+            JSObject route=call.getObject("route");
+            if(route==null||!GpsTrackStore.isValidRoute(route)){
+                call.reject("Tracé GPS invalide.");return;
+            }
+            Intent intent=new Intent(getContext(),GpsTrackActivity.class);
+            intent.putExtra("trekmap_route",route.toString());
+            launch(call,intent);
+        });
     }
 }
