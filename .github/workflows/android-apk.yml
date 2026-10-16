@@ -66,6 +66,25 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
+      - name: Test signed release with disposable CI key (never publish)
+        if: github.event_name == 'pull_request'
+        working-directory: mobile/android
+        shell: bash
+        run: |
+          keytool -genkeypair -noprompt -storetype PKCS12 \
+            -keystore "$RUNNER_TEMP/ci-disposable.p12" \
+            -alias ci -storepass temporaryCI123 -keypass temporaryCI123 \
+            -dname "CN=TrekMap CI, OU=Android test, O=CI, C=FR" \
+            -keyalg RSA -keysize 2048 -validity 3
+          export TREKMAP_KEYSTORE_PATH="$RUNNER_TEMP/ci-disposable.p12"
+          export TREKMAP_KEYSTORE_PASSWORD="temporaryCI123"
+          export TREKMAP_KEY_PASSWORD="temporaryCI123"
+          export TREKMAP_KEY_ALIAS="ci"
+          ./gradlew --no-daemon :app:assembleRelease
+          signed="app/build/outputs/apk/release/app-release.apk"
+          test -s "$signed"
+          verifier="$(find "$ANDROID_HOME/build-tools" -maxdepth 2 -name apksigner -type f | sort -V | tail -1)"
+          "$verifier" verify "$signed"
       - name: Configure persistent Android signing
         if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
         shell: bash
