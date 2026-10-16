@@ -24,6 +24,11 @@ assert.ok(js.includes('urls.unshift(await localPhotoData(chosen))'),'stored phot
 assert.ok(api.includes('b64decode') && api.includes('if value.startswith("data:")'),'server checks inline photo bytes');
 assert.ok(api.includes("Une seule photo locale"),'no unlimited database photo storage');
 
+assert.ok(ui.includes('data-p-tab="downloads"') && js.includes('function downloads()'), 'downloaded treks tab must exist in actual profile v2');
+assert.ok(js.includes('native.listOfflineRoutes()') && js.includes('native.openOfflineRoute('), 'profile v2 reads and opens local Android treks');
+assert.ok(js.includes('native.openOfflineDownload('), 'profile v2 downloads maps from inside profile');
+assert.ok(css.includes('env(safe-area-inset-top') && css.includes('max(48px'), 'mobile tabs must clear the Android status bar');
+assert.ok(css.includes('min-height:48px;touch-action:manipulation'), 'mobile tab touch target must be 48px');
 assert.ok(css.includes('@media(max-width:780px)')&&css.includes('focus-visible'),
  'mobile responsive and keyboard accessibility');
 for(const section of ['Tableau de bord','Mes aventures','Carnet','Collections','Préférences']){

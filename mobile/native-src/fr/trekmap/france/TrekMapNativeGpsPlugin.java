@@ -75,7 +75,7 @@ public class TrekMapNativeGpsPlugin extends Plugin {
     }
     @PluginMethod
     public void openOfflineDownload(PluginCall call){
-        if(!trustedHikePage()){call.reject("Origine non autorisée.");return;}
+        if(!trustedTrekMapPage()){call.reject("Origine non autorisée.");return;}
         String id=call.getString("id","");
         if(OfflineRouteStore.find(getContext(),id)==null){
             call.reject("Enregistre d'abord le trek dans Android.");return;

@@ -101,10 +101,13 @@ block=r'''<!-- TREKMAP_PROFILE_V2_START -->
   .tm-p-nav{padding:14px 8px}}
 @media(max-width:780px){
   .tm-p-shell{display:block;padding:0 12px 24px}
-  .tm-p-nav{position:sticky;top:0;z-index:2;border-radius:0 0 15px 15px;min-height:0;padding:9px 7px;
-    display:flex;align-items:center;gap:5px;overflow-x:auto;scrollbar-width:thin}
+  /* Android status bar: keep profile controls below system icons even in edge-to-edge WebView. */
+  .tm-p-nav{position:sticky;top:0;z-index:3;border-radius:0 0 15px 15px;min-height:0;
+    padding:max(48px, calc(env(safe-area-inset-top, 0px) + 12px)) 9px 12px;
+    display:flex;align-items:center;gap:8px;overflow-x:auto;overflow-y:hidden;
+    -webkit-overflow-scrolling:touch;scrollbar-width:thin;touch-action:pan-x;scroll-padding-inline:12px}
   .tm-p-nav .tm-p-brand{display:none}
-  .tm-p-nav button{width:auto;white-space:nowrap;flex:0 0 auto;font-size:12px;margin:0;padding:9px 11px;min-height:42px}
+  .tm-p-nav button{width:auto;white-space:nowrap;flex:0 0 auto;font-size:13px;margin:0;padding:11px 14px;min-height:48px;touch-action:manipulation}
   .tm-p-nav .tm-p-exit{margin:0}
   .tm-p-hero{margin-top:12px;border-radius:16px;padding:18px;gap:11px;min-height:110px}
   .tm-p-avatar{width:56px;height:56px;font-size:30px;border-radius:16px}
@@ -123,6 +126,7 @@ block=r'''<!-- TREKMAP_PROFILE_V2_START -->
       <button type="button" data-p-tab="projects">⌖ Mes aventures</button>
       <button type="button" data-p-tab="journal">▤ Carnet</button>
       <button type="button" data-p-tab="collections">♡ Collections</button>
+      <button type="button" data-p-tab="downloads">⬇ Treks téléchargés</button>
       <button type="button" data-p-tab="preferences">⚙ Préférences</button>
       <button type="button" id="tm-p-exit" class="tm-p-exit">← Revenir à la carte</button>
     </nav>
@@ -139,6 +143,7 @@ const content=root.querySelector('#tm-p-content'),hero=root.querySelector('#tm-p
 const avatarIcons={mountain:'⛰',compass:'◈',tent:'⛺',forest:'♣',hiker:'♙'};
 const statusNames={planned:'À découvrir',preparing:'En préparation',ready:'Prêt',completed:'Terminé'};
 let model=null,tab='home',selected=null,plan=null,profileLoading=false;
+ let downloadedRoutes=[],downloadStatus='loading';
 let previousFocus=null;
 function e(s){return String(s==null?'':s).replace(/[&<>'"]/g,function(x){return {'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[x]})}
 function el(id){return root.querySelector('#'+id)}
@@ -221,6 +226,7 @@ function load(){
 }
 function nav(){
   root.querySelectorAll('[data-p-tab]').forEach(function(b){b.classList.toggle('active',b.dataset.pTab===tab);b.setAttribute('aria-current',b.dataset.pTab===tab?'page':'false')});
+  const active=root.querySelector('[data-p-tab].active');if(active&&tab!=='home')active.scrollIntoView({inline:'nearest',block:'nearest'});
 }
 function head(){
   if(!model){hero.innerHTML='<div>Chargement du profil…</div>';return}
@@ -342,6 +348,43 @@ function collections(){
         '<button class="tm-p-btn primary" type="submit">Créer</button></form>'+
       '<div class="tm-p-list" style="margin-top:14px">'+entries+'</div></div>'+panel+'</div>';
 }
+function downloads(){
+  const native=window.Capacitor?.Plugins?.TrekMapNativeGPS;
+  let body;
+  if(!native?.listOfflineRoutes){
+    body='<p class="tm-p-muted">Les treks téléchargés sont uniquement accessibles dans l’application Android, sur le téléphone où ils ont été enregistrés.</p>';
+  }else if(downloadStatus==='loading'){
+    body='<p class="tm-p-muted" role="status">Lecture des treks téléchargés…</p>';
+  }else if(downloadStatus==='error'){
+    body='<p class="tm-p-muted" role="alert">Impossible de lire tes treks téléchargés sur ce téléphone.</p>';
+  }else if(!downloadedRoutes.length){
+    body='<p class="tm-p-muted">Aucun trek sauvegardé. Ouvre un trek, entre dans Mode randonnée puis choisis « Enregistrer pour Android hors réseau ».</p>';
+  }else {
+    body='<div class="tm-p-list">'+downloadedRoutes.map(function(r){
+      const n=Math.max(1,Number(r.sections)||1);
+      return '<div class="tm-p-item"><div><b>'+e(r.name||'Randonnée')+'</b>'+
+        '<small>'+e(r.region||'France')+' · '+n+' section'+(n>1?'s':'')+' cartographique'+(n>1?'s':'')+'</small>'+
+        '<small>Tracé enregistré. Vérifie la couverture de la carte avant ton départ.</small></div>'+
+        '<div class="tm-p-inline"><button type="button" class="tm-p-btn primary" data-p-offline-open="'+e(r.id)+'">Ouvrir</button>'+
+        '<button type="button" class="tm-p-btn" data-p-offline-download="'+e(r.id)+'">Télécharger la carte</button></div></div>';
+    }).join('')+'</div>';
+  }
+  return '<h2 class="tm-p-heading">Treks téléchargés</h2><div class="tm-p-card">'+
+    '<h3>Mes randonnées hors connexion</h3><p class="tm-p-muted">Les fichiers restent sur cet appareil, sans synchronisation Neon. Pour les grands treks, prépare la carte section par section, avant d’activer le mode avion.</p>'+
+    body+'<div style="margin-top:14px"><button type="button" class="tm-p-btn" data-p-offline-refresh="1">↻ Actualiser la liste</button></div></div>';
+}
+async function refreshDownloads(){
+  const native=window.Capacitor?.Plugins?.TrekMapNativeGPS;
+  downloadedRoutes=[];downloadStatus='loading';
+  if(tab==='downloads')render();
+  if(!native?.listOfflineRoutes){downloadStatus='unsupported';if(tab==='downloads')render();return}
+  try{
+    const d=await native.listOfflineRoutes();
+    downloadedRoutes=Array.isArray(d?.routes)?d.routes.filter(function(r){return r&&typeof r.id==='string'&&r.id.length>0}):[];
+    downloadStatus='ready';
+  }catch(err){downloadStatus='error'}
+  if(tab==='downloads'&&!root.hidden)render();
+}
 function preferences(){
  const s=model.settings||{},p=s.preferences||{},icons=Object.keys(avatarIcons);
  return '<h2 class="tm-p-heading">Mes préférences et ma confidentialité</h2><div class="tm-p-cols">'+
@@ -370,7 +413,7 @@ function preferences(){
 }
 function render(){
  nav();head();if(!model){content.innerHTML='<div class="tm-p-card">Chargement…</div>';return}
- content.innerHTML=({home:home,projects:projects,journal:journal,collections:collections,preferences:preferences}[tab]||home)();
+ content.innerHTML=({home:home,projects:projects,journal:journal,collections:collections,downloads:downloads,preferences:preferences}[tab]||home)();
  if(tab==='projects'&&selected!=null){
   const j=journey(selected)||{},f=el('tm-p-journey-form');
   if(f){f.elements.status.value=j.status||'planned';f.elements.rating.value=j.rating||''}
@@ -434,10 +477,26 @@ root.addEventListener('click',async function(event){
  const id=button.dataset.pTab;
  if(id){tab=id;selected=null;plan=null;render();
    if(id==='home'){const n=root.querySelector('.tm-p-nav');if(n)n.scrollLeft=0}
+   if(id==='downloads')refreshDownloads();
    return}
  if(button.id==='tm-p-exit'){close();return}
  if(button.dataset.pGo){tab=button.dataset.pGo;selected=null;render();return}
  if(button.dataset.pRetry){await open();return}
+  if(button.dataset.pOfflineRefresh){await refreshDownloads();return}
+  if(button.dataset.pOfflineOpen){
+    const native=window.Capacitor?.Plugins?.TrekMapNativeGPS;
+    try{if(!native?.openOfflineRoute)throw Error('Fonction réservée à Android');
+      await native.openOfflineRoute({id:button.dataset.pOfflineOpen})}
+    catch(err){announce('Ouverture indisponible : '+(err.message||err))}
+    return;
+  }
+  if(button.dataset.pOfflineDownload){
+    const native=window.Capacitor?.Plugins?.TrekMapNativeGPS;
+    try{if(!native?.openOfflineDownload)throw Error('Fonction réservée à Android');
+      await native.openOfflineDownload({id:button.dataset.pOfflineDownload})}
+    catch(err){announce('Téléchargement indisponible : '+(err.message||err))}
+    return;
+  }
  if(button.dataset.pSelect){selected=Number(button.dataset.pSelect);tab='projects';plan=null;render();revealPanel('tm-p-journey-card');return}
  if(button.dataset.pCollection){selected=Number(button.dataset.pCollection);tab='collections';render();revealPanel('tm-p-collection-content');return}
  if(button.dataset.pCollectionManage){selected=Number(button.dataset.pCollectionManage);tab='projects';plan=null;render();revealPanel('tm-p-journey-card');return}
