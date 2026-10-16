@@ -16,6 +16,14 @@ const backend=fs.readFileSync('backend/main.py','utf8');
 const unified=fs.readFileSync(path('apply_unified_experience.py'),'utf8');
 const workspace=fs.readFileSync(path('apply_trekbrain_map_workspace.py'),'utf8');
 const site=fs.readFileSync(path('apply_sitewide_ux.py'),'utf8');
+assert.ok(all[1].includes('flex:0 0 20px!important') && all[1].includes('flex:1 1 0%!important'),
+  'global full-width input rule must not squeeze text fields into the right edge');
+assert.ok(all[0].includes('window.innerWidth>820?desktop:mobile'),
+  'active filter pills belong in the compact desktop bar');
+assert.ok(all[0].includes("id==='tm-rating-filter'"),
+  'default Avis Toutes must not appear as a selected filter');
+assert.ok(js[3].includes("pop.id='tm-quick-pace-popover'") && !js[3].includes("quick.click()"),
+  'Km/jour needs isolated popover rather than opening all filters');
 assert.ok(!all[1].includes("new MutationObserver(function(){enhance();progress()}"),'no modal mutation observer while typing');
 assert.ok(core.includes("TrekMapJourneyPlanner?.refresh?.()"),'enhancer explicitly installed when the actual fiche opens');
 assert.ok(all[1].includes('out.firstChild.textContent!==label'),'no continuous child text mutation');
