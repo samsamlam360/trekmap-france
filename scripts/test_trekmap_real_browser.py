@@ -817,7 +817,10 @@ try:
     assert "avant de partir" in saved["checklist"][0]["text"], saved
     assert saved["checklist"][1]["text"]=="Vérifier la météo", saved
     assert saved["days"][0]["water"]=="Point d’eau à vérifier", "Profile save erased per-day planning"
-    wait.until(lambda d:d.find_element(By.CSS_SELECTOR,'[data-p-checktext="1"]').get_attribute("value")=="Vérifier la météo")
+    wait.until(lambda d:d.execute_script(
+        "const x=document.querySelector('[data-p-checktext=\\\"1\\\"]');"
+        "return !!x&&x.value==='Vérifier la météo';"
+    ))
     # Reopen via the *real* user navigation, rather than calling the planner internally.
     driver.find_element(By.CSS_SELECTOR,'[data-p-tab="home"]').click()
     driver.find_element(By.CSS_SELECTOR,'[data-p-tab="projects"]').click()
