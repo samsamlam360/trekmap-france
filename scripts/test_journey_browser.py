@@ -20,6 +20,7 @@ try:
     wait=WebDriverWait(driver,20)
     wait.until(lambda d:d.execute_script("return !!window.TrekMapJourneyPlanner && document.readyState==='complete'"))
 
+    driver.execute_script("document.getElementById('tm-home')?.classList.add('tm-hidden')")
     # Real shortcut: only the km/day selector opens, not the entire advanced pane.
     button=wait.until(lambda d:d.find_element(By.ID,"tm-inline-pace"))
     button.click()
