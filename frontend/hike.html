@@ -122,7 +122,7 @@ function formatKm(m){return (Math.max(0,m)/1000).toFixed(2).replace('.',',')+' k
 function formatTime(ms){
  const m=Math.floor(Math.max(0,ms)/60000);return String(Math.floor(m/60)).padStart(2,'0')+':'+String(m%60).padStart(2,'0');
 }
-let route=null,coords=[],map=null,active=false,paused=false,watch=null,wake=null,mapFollowing=true,lastGPS=null;
+let route=null,coords=[],map=null,active=false,paused=false,watch=null,wake=null,mapFollowing=true,lastGPS=null,distanceAnchor=null;
 let saved={points:[],walked:0,elapsed:0,startedAt:null,pausedAt:null,finished:false,summaryAt:null};
 let key='';
 try{
@@ -235,16 +235,19 @@ function gpsPosition(pos){
   state('GPS imprécis ('+Math.round(accuracy)+' m). Attends une meilleure position.','warning');
   update();return;
  }
- const last=saved.points[saved.points.length-1];
+ const last=distanceAnchor;
  const step=last?dist([last[0],last[1]],lastGPS):0;
  const seconds=last?Math.max(1,(now-last[2])/1000):10;
- const good= !last || (step>=Math.max(5,accuracy*.55)&&step/seconds<=6);
+ const badJump=last&&step/seconds>6;
+ const good= !last || (step>=Math.max(7,accuracy*.65,last[3]*.65)&&!badJump);
  if(good){
   if(last)saved.walked+=step;
+  distanceAnchor=[latitude,longitude,now,Math.round(accuracy)];
   saved.points.push([latitude,longitude,now,Math.round(accuracy)]);
   if(saved.points.length>15000)saved.points.splice(1,Math.floor(saved.points.length/3));
   persist();refreshMap();
  }
+ if(badJump){state('Déplacement GPS trop rapide ou incohérent : point ignoré.','warning');update();return}
  const nearest=projected(lastGPS,coords);
  if(nearest.meters>Math.max(45,accuracy*1.8)){
    state('⚠ Tu es à environ '+Math.round(nearest.meters)+' m du tracé. Vérifie le terrain et ta position avant de continuer.','danger');
@@ -262,7 +265,7 @@ async function start(){
   if(!confirm('Créer une nouvelle randonnée ? L’ancienne trace sera remplacée. Exporte-la avant si tu souhaites la garder.'))return;
   saved={points:[],walked:0,elapsed:0,startedAt:null,pausedAt:null,finished:false,summaryAt:null};
  }
- active=true;paused=false;saved.startedAt=Date.now();persist();
+ active=true;paused=false;distanceAnchor=null;saved.startedAt=Date.now();persist();
  try{watch=navigator.geolocation.watchPosition(gpsPosition,gpsError,{enableHighAccuracy:true,maximumAge:3000,timeout:16000})}
  catch(e){active=false;state('Impossible de démarrer le GPS : '+e.message,'danger');update();return}
  try{if(navigator.wakeLock)wake=await navigator.wakeLock.request('screen')}catch(_){}
@@ -273,7 +276,7 @@ function pause(){
  if(!paused){
   saved.elapsed=elapsed();saved.startedAt=null;paused=true;releaseWatch();state('Randonnée en pause.','warning');
  }else{
-  paused=false;saved.startedAt=Date.now();
+  paused=false;distanceAnchor=null;saved.startedAt=Date.now();
   watch=navigator.geolocation.watchPosition(gpsPosition,gpsError,{enableHighAccuracy:true,maximumAge:3000,timeout:16000});
   state('Suivi repris.','warning');
  }
