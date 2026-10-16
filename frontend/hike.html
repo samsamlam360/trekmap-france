@@ -1,0 +1,365 @@
+<!doctype html>
+<html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#0c5136"><title>Navigation randonnée | TrekMap France</title>
+<link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css">
+<style>
+*{box-sizing:border-box}html,body{margin:0;min-height:100%;font-family:system-ui,-apple-system,Segoe UI,sans-serif;background:#f2f8f4;color:#153a28}
+button,select{font:inherit}button{cursor:pointer;min-height:44px}button:disabled{opacity:.55;cursor:not-allowed}
+header{display:flex;align-items:center;gap:10px;background:#0a5338;color:white;min-height:58px;padding:9px 14px}
+header a{color:white;text-decoration:none;font-weight:750}header strong{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+header button{background:#ffffff22;color:white;border:1px solid #ffffff70;border-radius:10px;padding:9px}
+main{display:grid;grid-template-columns:minmax(0,1fr) 340px;height:calc(100dvh - 58px);min-height:500px}
+#mapwrap{position:relative;min-height:280px;background:#e1ebe4}#nav-map{height:100%;width:100%}
+#map-fallback{display:none;position:absolute;inset:0;z-index:2;background:#e5f0e7;align-items:center;justify-content:center;padding:20px;flex-direction:column;gap:10px;text-align:center}
+#map-fallback svg{width:100%;height:70%;max-height:500px}
+#map-legend{position:absolute;bottom:12px;left:12px;z-index:3;border-radius:9px;padding:7px 10px;font-size:11px;background:#fffffff0;box-shadow:0 2px 12px #0f362031}
+#map-legend i{display:inline-block;width:18px;height:4px;background:#e36124;vertical-align:middle;margin:0 5px}
+#map-legend i.route{background:#087e55}
+aside{padding:15px;overflow-y:auto;min-height:0;border-left:1px solid #dbe8df;background:white}
+h1{font-size:20px;margin:0 0 6px}h2{font-size:15px;margin:18px 0 8px}
+p{line-height:1.5}.muted{font-size:12px;color:#5a7465}.notice{font-size:12px;color:#445e50;background:#edf6ee;border-radius:11px;padding:10px 12px}
+#state{padding:11px 12px;border:1px solid #c7d9ca;background:#f3f9f4;border-radius:12px;font-weight:730;line-height:1.4}
+#state[data-kind="warning"]{background:#fff3df;border-color:#e9c27a;color:#77430b}
+#state[data-kind="danger"]{background:#ffe7e1;border-color:#e79b91;color:#902c25}
+#state[data-kind="ok"]{background:#dcf5e4;border-color:#97d9ae;color:#145338}
+.stats{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px;margin-top:13px}
+.stat{border-radius:13px;background:#f3f8f4;border:1px solid #dbe8df;padding:12px;min-width:0}
+.stat b{display:block;font-size:22px;white-space:nowrap}.stat small{font-size:11px;color:#627669}
+.actions{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:12px 0}
+.actions button{border:1px solid #c9dfd0;background:#f0f7f2;border-radius:10px;padding:9px;color:#17543a;font-weight:730}
+.actions button.primary{background:#116d4b;color:white}
+.actions button.alert{background:#fff1ed;color:#823429;border-color:#eaccc5}
+.actions button:focus-visible,select:focus-visible{outline:3px solid #e8b83b;outline-offset:2px}
+#offline-zoom{width:100%;min-height:44px;padding:8px;border-radius:9px;border:1px solid #b5d0be;background:white}
+progress{width:100%;height:15px;accent-color:#12875b}
+#offline-status{min-height:38px;font-size:12px;line-height:1.55;color:#355c44}
+#empty{padding:16px;color:#a62c22;font-weight:750;display:none}
+a.link{color:#115d40}
+@media(max-width:850px){header{min-height:54px}main{display:flex;flex-direction:column;height:auto;min-height:calc(100dvh - 54px)}
+#mapwrap{height:min(55dvh,580px);min-height:300px;flex:none}
+aside{height:auto;overflow:visible;padding-bottom:calc(32px + env(safe-area-inset-bottom))}
+.stats .stat b{font-size:20px}}
+@media(max-width:400px){.actions{gap:6px}.actions button{font-size:12px;padding:6px}}
+</style></head><body>
+<header><a href="/" id="back">← TrekMap</a><strong id="header-title">Mode randonnée</strong><button id="center">◎ Me centrer</button></header>
+<main><div id="mapwrap"><div id="nav-map" aria-label="Carte interactive de la randonnée"></div><div id="map-fallback"><strong>Tracé conservé hors connexion</strong><svg id="fallback-svg" viewBox="0 0 500 450" role="img" aria-label="Tracé de secours sans fond de carte"></svg><small>Le fond cartographique est indisponible. Suis seulement des chemins reconnus et vérifie ta position.</small></div><div id="map-legend"><i class="route"></i>Parcours prévu <i></i>Marche enregistrée</div></div>
+<aside><h1 id="title">Préparer ma randonnée</h1><p class="muted" id="route-info"></p><div id="state" data-kind="warning" role="status">En attente du tracé.</div>
+<div class="stats"><div class="stat"><b id="walked">0,00 km</b><small>Distance réellement parcourue</small></div><div class="stat"><b id="remaining">–</b><small>Restant sur le parcours (estimé)</small></div><div class="stat"><b id="deviation">–</b><small>Écart au tracé</small></div><div class="stat"><b id="elapsed">00:00</b><small>Temps depuis le départ (hors pause)</small></div></div>
+<h2>Navigation GPS</h2><div class="actions"><button class="primary" id="start">▶ Démarrer</button><button id="pause" disabled>⏸ Pause</button><button id="finish" disabled class="alert">■ Terminer</button><button id="export">↓ Exporter mon GPX</button></div>
+<p class="muted" id="gps-accuracy">Précision : aucune position pour le moment.</p>
+<h2>Préparer le hors-ligne</h2>
+<p class="muted">À effectuer avec du réseau et avant le départ. Les cartes téléchargées restent dans le stockage de ce navigateur sur cet appareil.</p>
+<label class="muted" for="offline-zoom">Niveau de détail</label>
+<select id="offline-zoom"><option value="13">Standard (zoom 10 à 13, plus léger)</option><option value="14" selected>Détaillé (zoom 10 à 14)</option></select>
+<div class="actions"><button class="primary" id="download">↓ Télécharger la carte</button><button id="checkoffline">Vérifier le hors-ligne</button></div>
+<progress id="download-progress" max="100" value="0" hidden></progress>
+<div id="offline-status" role="status" aria-live="polite">Pas encore préparé.</div>
+<div class="notice">Le fond de carte utilise des données OpenStreetMap via OpenFreeMap (licence ODbL). Il affiche les chemins, l’eau et les zones boisées, mais ce n’est pas une carte IGN ni un système de guidage virage par virage. Le téléchargement est limité pour rester sur un service gratuit.</div>
+<h2>Sécurité</h2><p class="muted">Le GPS peut être imprécis sous les arbres ou en montagne. Il faut garder cet écran ouvert : le navigateur peut interrompre le suivi quand le téléphone se verrouille. Emporte une batterie, une carte ou GPX de secours, et ne coupe pas hors sentier pour rejoindre le tracé. La position reste sur cet appareil, jamais transmise au compte TrekMap.</p>
+<div id="empty"></div></aside></main>
+<script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+<script>
+(function(){
+'use strict';
+const el=id=>document.getElementById(id);
+const ROUTE_KEY='tm-navigation-route-v1',CACHE_APP='tm-hike-app-v1',CACHE_TILES='tm-hike-tiles-v1';
+const TILE_CAP=480,BYTE_CAP=30*1024*1024;
+const TILE_PATH='/offline-tiles/';
+const RAD=Math.PI/180;
+const $state=el('state');
+function state(txt,kind='warning'){$state.textContent=txt;$state.dataset.kind=kind}
+function dist(a,b){
+ const d1=(b[0]-a[0])*RAD,d2=(b[1]-a[1])*RAD;
+ const q=Math.sin(d1/2)**2+Math.cos(a[0]*RAD)*Math.cos(b[0]*RAD)*Math.sin(d2/2)**2;
+ return 12742000*Math.atan2(Math.sqrt(q),Math.sqrt(Math.max(0,1-q)));
+}
+function validCoords(x){
+ if(!Array.isArray(x)||x.length<2||x.length>60000)return null;
+ if(!x.every(p=>Array.isArray(p)&&p.length>=2&&typeof p[0]==='number'&&typeof p[1]==='number'&&
+  Number.isFinite(p[0])&&Number.isFinite(p[1])&&Math.abs(p[0])<=85&&Math.abs(p[1])<=180))return null;
+ return x.map(p=>[p[0],p[1]]);
+}
+function projected(point,line){
+ let best={meters:Infinity,along:0,total:0};
+ let total=0;
+ for(let i=1;i<line.length;i++){
+   const a=line[i-1],b=line[i],len=dist(a,b);if(len<.01)continue;
+   const c=Math.cos(((a[0]+b[0]+point[0])/3)*RAD);
+   const ax=a[1]*c,ay=a[0],bx=b[1]*c,by=b[0],px=point[1]*c,py=point[0];
+   const dx=bx-ax,dy=by-ay,den=dx*dx+dy*dy;
+   const t=Math.max(0,Math.min(1,((px-ax)*dx+(py-ay)*dy)/den));
+   const near=[a[0]+(b[0]-a[0])*t,a[1]+(b[1]-a[1])*t];
+   const d=dist(point,near);
+   if(d<best.meters)best={meters:d,along:total+t*len,total:0};
+   total+=len;
+ }
+ best.total=total;best.remaining=Math.max(0,total-best.along);
+ return best;
+}
+function tileXY(lat,lon,z){
+ const n=2**z;
+ const y=(1-Math.asinh(Math.tan(Math.max(-85,Math.min(85,lat))*RAD))/Math.PI)/2*n;
+ return [Math.floor((lon+180)/360*n),Math.floor(y)];
+}
+function tilesForLine(coords,zmax){
+ const tiles=new Set(),degrees=[10,11,12,13,14].filter(z=>z<=zmax);
+ for(const z of degrees){
+  const n=2**z;
+  for(let k=1;k<coords.length;k++){
+   const a=tileXY(coords[k-1][0],coords[k-1][1],z),b=tileXY(coords[k][0],coords[k][1],z);
+   const delta=Math.max(Math.abs(a[0]-b[0]),Math.abs(a[1]-b[1]));
+   const steps=Math.min(512,Math.max(1,Math.ceil(delta*3)));
+   for(let step=0;step<=steps;step++){
+    const t=step/steps,x=Math.floor(a[0]+t*(b[0]-a[0])),y=Math.floor(a[1]+t*(b[1]-a[1]));
+    for(let dx=-1;dx<=1;dx++)for(let dy=-1;dy<=1;dy++){
+      if(x+dx>=0&&x+dx<n&&y+dy>=0&&y+dy<n)tiles.add(z+'/'+(x+dx)+'/'+(y+dy));
+    }
+   }
+  }
+ }
+ return [...tiles].map(x=>TILE_PATH+x+'.pbf');
+}
+function formatKm(m){return (Math.max(0,m)/1000).toFixed(2).replace('.',',')+' km'}
+function formatTime(ms){
+ const m=Math.floor(Math.max(0,ms)/60000);return String(Math.floor(m/60)).padStart(2,'0')+':'+String(m%60).padStart(2,'0');
+}
+let route=null,coords=[],map=null,active=false,paused=false,watch=null,wake=null,mapFollowing=true,lastGPS=null;
+let saved={points:[],walked:0,elapsed:0,startedAt:null,pausedAt:null,finished:false,summaryAt:null};
+let key='';
+try{
+ const r=JSON.parse(localStorage.getItem(ROUTE_KEY)||'null');
+ if(!r||typeof r!=='object')throw Error('Aucun trek sélectionné.');
+ const parsed=validCoords(r.coords);if(!parsed)throw Error('Tracé GPS manquant ou invalide.');
+ route={id:String(r.id).slice(0,70),name:String(r.name||'Randonnée').slice(0,120),region:String(r.region||'').slice(0,100)};
+ coords=parsed;
+}catch(e){
+ el('empty').textContent=e.message+' Retourne sur une fiche TrekMap et clique sur « Naviguer ».';
+ el('empty').style.display='block';state('Impossible de démarrer : sélectionne un trek valide.','danger');
+ ['start','download','pause','finish','export'].forEach(id=>el(id).disabled=true);
+ return;
+}
+let routeLength=0;
+for(let i=1;i<coords.length;i++)routeLength+=dist(coords[i-1],coords[i]);
+key='tm-hike-progress-v1-'+route.id+'-'+coords.length+'-'+coords[0].map(n=>n.toFixed(4)).join('-');
+try{
+ const r=JSON.parse(localStorage.getItem(key)||'null');
+ if(r&&Array.isArray(r.points)&&r.points.length<=18000&&r.points.every(x=>Array.isArray(x)&&x.length>=3))saved={
+  points:r.points,walked:Number(r.walked)||0,elapsed:Number(r.elapsed)||0,
+  startedAt:null,pausedAt:null,finished:!!r.finished,summaryAt:r.summaryAt||null};
+}catch(_){}
+el('title').textContent=route.name;el('header-title').textContent=route.name;
+el('route-info').textContent=(route.region?route.region+' · ':'')+formatKm(routeLength)+' de parcours prévu';
+state(saved.finished?'Randonnée précédente terminée. Tu peux en commencer une nouvelle.':
+ 'Carte prête. Télécharge-la avant de partir, puis active le GPS.','warning');
+function coordinatesGeo(points){return {type:'FeatureCollection',features:[{type:'Feature',properties:{},geometry:{type:'LineString',coordinates:points.map(p=>[p[1],p[0]])}}]}}
+function pointGeo(p){return {type:'FeatureCollection',features:p?[{type:'Feature',properties:{},geometry:{type:'Point',coordinates:[p[1],p[0]]}}]:[]}}
+const style={version:8, name:'Navigation pédestre',sources:{
+ base:{type:'vector',tiles:[location.origin+TILE_PATH+'{z}/{x}/{y}.pbf'],minzoom:9,maxzoom:14},
+ planned:{type:'geojson',data:coordinatesGeo(coords)},
+ walked:{type:'geojson',data:coordinatesGeo([])},
+ position:{type:'geojson',data:pointGeo(null)}
+},layers:[
+ {id:'background',type:'background',paint:{'background-color':'#e9f1e6'}},
+ {id:'landcover',type:'fill',source:'base','source-layer':'landcover',filter:['==','class','wood'],paint:{'fill-color':'#bad6ac'}},
+ {id:'park',type:'fill',source:'base','source-layer':'landuse',filter:['in','class','park','cemetery','grass'],paint:{'fill-color':'#cfe7bf'}},
+ {id:'water',type:'fill',source:'base','source-layer':'water',paint:{'fill-color':'#a4d5e9'}},
+ {id:'waterway',type:'line',source:'base','source-layer':'waterway',paint:{'line-color':'#81bfdc','line-width':2}},
+ {id:'roads',type:'line',source:'base','source-layer':'transportation',filter:['!in','class','path','track'],
+  paint:{'line-color':'#c8bda5','line-width':['interpolate',['linear'],['zoom'],10,.7,14,3]}},
+ {id:'paths',type:'line',source:'base','source-layer':'transportation',filter:['in','class','path','track'],
+  paint:{'line-color':'#b09361','line-width':['interpolate',['linear'],['zoom'],10,.9,14,2.1],'line-dasharray':[2,1]}},
+ {id:'route-shadow',type:'line',source:'planned',paint:{'line-color':'white','line-width':9}},
+ {id:'route',type:'line',source:'planned',paint:{'line-color':'#087c52','line-width':5}},
+ {id:'my-walk-shadow',type:'line',source:'walked',paint:{'line-color':'white','line-width':8}},
+ {id:'my-walk',type:'line',source:'walked',paint:{'line-color':'#ef712e','line-width':4}},
+ {id:'position-halo',type:'circle',source:'position',paint:{'circle-radius':15,'circle-color':'#2988d3','circle-opacity':.17}},
+ {id:'my-position',type:'circle',source:'position',paint:{'circle-radius':8,'circle-color':'#1269b6','circle-stroke-width':3,'circle-stroke-color':'white'}}
+]};
+function routeBounds(){
+ const bounds=new maplibregl.LngLatBounds();
+ coords.forEach(p=>bounds.extend([p[1],p[0]]));return bounds;
+}
+function svgBackup(){
+ const svg=el('fallback-svg');
+ const lat=coords.map(p=>p[0]),lon=coords.map(p=>p[1]),c=Math.cos((lat[0]||45)*RAD);
+ const west=Math.min(...lon),east=Math.max(...lon),south=Math.min(...lat),north=Math.max(...lat);
+ const w=Math.max(.00001,(east-west)*c),h=Math.max(.00001,north-south),scale=Math.min(450/w,395/h);
+ const px=p=>25+((p[1]-west)*c)*scale,py=p=>425-(p[0]-south)*scale;
+ const path=coords.map((p,i)=>(i===0?'M':'L')+px(p).toFixed(1)+','+py(p).toFixed(1)).join(' ');
+ svg.innerHTML='<path d="'+path+'" fill="none" stroke="#107c52" stroke-width="5" stroke-linecap="round"/>';
+}
+svgBackup();
+if(typeof maplibregl!=='undefined'){
+ try{
+ map=new maplibregl.Map({container:'nav-map',style,center:[coords[0][1],coords[0][0]],
+  zoom:12,maxZoom:18,attributionControl:true});
+ map.on('load',()=>{
+  map.fitBounds(routeBounds(),{padding:40,maxZoom:14,duration:0});
+  refreshMap();
+ });
+ map.on('dragstart',()=>{mapFollowing=false});
+ map.on('error',event=>{if(!navigator.onLine)el('offline-status').textContent='Une partie des tuiles manque. Reviens en ligne pour compléter le téléchargement.'});
+ }catch(e){el('map-fallback').style.display='flex'}
+}else{el('map-fallback').style.display='flex'}
+function refreshMap(){
+ if(!map||!map.isStyleLoaded())return;
+ map.getSource('walked')?.setData(coordinatesGeo(saved.points.map(p=>[p[0],p[1]])));
+ if(lastGPS)map.getSource('position')?.setData(pointGeo(lastGPS));
+}
+function persist(){
+ try{localStorage.setItem(key,JSON.stringify({...saved,startedAt:null,pausedAt:null}))}
+ catch(_){state('Stockage saturé : exporte ta trace GPX dès que possible.','danger')}
+}
+function elapsed(){return saved.elapsed+(active&&!paused&&saved.startedAt?Date.now()-saved.startedAt:0)}
+function update(){
+ el('walked').textContent=formatKm(saved.walked);
+ el('elapsed').textContent=formatTime(elapsed());
+ const nearest=lastGPS?projected(lastGPS,coords):null;
+ el('remaining').textContent=nearest?formatKm(nearest.remaining):formatKm(routeLength);
+ el('deviation').textContent=nearest?Math.round(nearest.meters)+' m':'–';
+ el('start').disabled=active;
+ el('pause').disabled=!active;
+ el('pause').textContent=paused?'▶ Reprendre':'⏸ Pause';
+ el('finish').disabled=!active;
+}
+function gpsPosition(pos){
+ if(!active||paused)return;
+ const {latitude,longitude,accuracy}=pos.coords,now=Date.now();
+ if(!Number.isFinite(latitude)||!Number.isFinite(longitude))return;
+ lastGPS=[latitude,longitude];
+ el('gps-accuracy').textContent='Précision GPS : environ '+Math.round(accuracy)+' m';
+ if(map&&map.isStyleLoaded()){
+   map.getSource('position')?.setData(pointGeo(lastGPS));
+   if(mapFollowing)map.easeTo({center:[longitude,latitude],duration:200});
+ }
+ if(!Number.isFinite(accuracy)||accuracy>60){
+  state('GPS imprécis ('+Math.round(accuracy)+' m). Attends une meilleure position.','warning');
+  update();return;
+ }
+ const last=saved.points[saved.points.length-1];
+ const step=last?dist([last[0],last[1]],lastGPS):0;
+ const seconds=last?Math.max(1,(now-last[2])/1000):10;
+ const good= !last || (step>=Math.max(5,accuracy*.55)&&step/seconds<=6);
+ if(good){
+  if(last)saved.walked+=step;
+  saved.points.push([latitude,longitude,now,Math.round(accuracy)]);
+  if(saved.points.length>15000)saved.points.splice(1,Math.floor(saved.points.length/3));
+  persist();refreshMap();
+ }
+ const nearest=projected(lastGPS,coords);
+ if(nearest.meters>Math.max(45,accuracy*1.8)){
+   state('⚠ Tu es à environ '+Math.round(nearest.meters)+' m du tracé. Vérifie le terrain et ta position avant de continuer.','danger');
+ }else state('✓ Tu sembles suivre le parcours ('+Math.round(nearest.meters)+' m du tracé).','ok');
+ update();
+}
+function gpsError(err){state('GPS indisponible : '+(err?.message||'vérifie les autorisations de localisation.'),'warning')}
+function releaseWatch(){
+ if(watch!==null&&'geolocation' in navigator){navigator.geolocation.clearWatch(watch);watch=null}
+ if(wake){wake.release().catch(()=>{});wake=null}
+}
+async function start(){
+ if(!isSecureContext||!navigator.geolocation){state('Le GPS nécessite HTTPS et un navigateur autorisant la géolocalisation.','danger');return}
+ if(saved.finished){
+  if(!confirm('Créer une nouvelle randonnée ? L’ancienne trace sera remplacée. Exporte-la avant si tu souhaites la garder.'))return;
+  saved={points:[],walked:0,elapsed:0,startedAt:null,pausedAt:null,finished:false,summaryAt:null};
+ }
+ active=true;paused=false;saved.startedAt=Date.now();persist();
+ try{watch=navigator.geolocation.watchPosition(gpsPosition,gpsError,{enableHighAccuracy:true,maximumAge:3000,timeout:16000})}
+ catch(e){active=false;state('Impossible de démarrer le GPS : '+e.message,'danger');update();return}
+ try{if(navigator.wakeLock)wake=await navigator.wakeLock.request('screen')}catch(_){}
+ state('Suivi démarré : en attente du premier point GPS.','warning');update();
+}
+function pause(){
+ if(!active)return;
+ if(!paused){
+  saved.elapsed=elapsed();saved.startedAt=null;paused=true;releaseWatch();state('Randonnée en pause.','warning');
+ }else{
+  paused=false;saved.startedAt=Date.now();
+  watch=navigator.geolocation.watchPosition(gpsPosition,gpsError,{enableHighAccuracy:true,maximumAge:3000,timeout:16000});
+  state('Suivi repris.','warning');
+ }
+ persist();update();
+}
+function finish(){
+ if(!active||!confirm('Terminer le suivi ? La trace restera enregistrée sur cet appareil.'))return;
+ saved.elapsed=elapsed();saved.startedAt=null;saved.finished=true;saved.summaryAt=Date.now();
+ active=false;paused=false;releaseWatch();persist();update();state('Randonnée terminée. Exporte ton GPX pour le conserver.','ok');
+}
+function exportTrace(){
+ if(saved.points.length<2){state('Il faut au moins deux positions enregistrées pour exporter la marche.','warning');return}
+ const xml=s=>String(s).replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;');
+ const pts=saved.points.map(p=>'<trkpt lat="'+p[0].toFixed(7)+'" lon="'+p[1].toFixed(7)+'"><time>'+new Date(p[2]).toISOString()+'</time></trkpt>').join('');
+ const gpx='<?xml version="1.0" encoding="utf-8"?><gpx version="1.1" creator="TrekMap France" xmlns="http://www.topografix.com/GPX/1/1"><trk><name>'+xml(route.name)+'</name><trkseg>'+pts+'</trkseg></trk></gpx>';
+ const url=URL.createObjectURL(new Blob([gpx],{type:'application/gpx+xml'}));
+ const a=document.createElement('a');a.href=url;a.download='marche-'+route.id+'.gpx';a.click();setTimeout(()=>URL.revokeObjectURL(url),2000);
+}
+async function prepare(){
+ if(!navigator.onLine){el('offline-status').textContent='Connecte-toi à Internet avant de télécharger la carte.';return}
+ if(!('caches' in window)||!('serviceWorker' in navigator)){el('offline-status').textContent='Ton navigateur ne permet pas le téléchargement hors connexion.';return}
+ const z=Number(el('offline-zoom').value),files=tilesForLine(coords,z);
+ if(files.length>TILE_CAP){
+  el('offline-status').textContent='Zone trop vaste ('+files.length+' tuiles). Choisis « Standard » ou prépare une étape plus courte.';
+  return;
+ }
+ el('download').disabled=true;el('download-progress').hidden=false;el('download-progress').value=0;
+ const bar=el('download-progress'),info=el('offline-status');let bytes=0,done=0,failed=0,success=0;
+ try{
+  await navigator.serviceWorker.register('/navigation-worker.js',{scope:'/'});
+  const app=await caches.open(CACHE_APP);
+  const main=await fetch('/randonnee',{cache:'no-store'});
+  if(!main.ok)throw Error('Page de navigation inaccessible');
+  await app.put('/randonnee',main);
+  for(const lib of ['https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js','https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css']){
+    const a=await fetch(lib);if(!a.ok)throw Error('Bibliothèque cartographique inaccessible : '+lib);
+    await app.put(lib,a);
+  }
+  const tiles=await caches.open(CACHE_TILES);
+  let index=0,over=false;
+  async function worker(){
+   while(index<files.length&&!over){
+    const path=files[index++];
+    try{
+     const found=await tiles.match(path);
+     if(found){success++;continue}
+     const response=await fetch(path);
+     if(!response.ok)throw Error('HTTP '+response.status);
+     const blob=await response.blob();
+     if(bytes+blob.size>BYTE_CAP){over=true;throw Error('30 Mo atteints')}
+     bytes+=blob.size;
+     await tiles.put(path,new Response(blob,{status:200,headers:{'Content-Type':'application/x-protobuf','Cache-Control':'public, max-age=604800'}}));
+     success++;
+    }catch(_){failed++}
+    finally{done++;bar.value=Math.round(done/files.length*100);
+      info.textContent=done+'/'+files.length+' tuiles vérifiées · '+Math.round(bytes/1024/1024*10)/10+' Mo téléchargés'+(failed?' · '+failed+' manquantes':'');}
+   }
+  }
+  await Promise.all([worker(),worker(),worker()]);
+  const complete=success===files.length&&!over;
+  localStorage.setItem('tm-hike-offline-v1-'+route.id,JSON.stringify({complete,tiles:files.length,zoom:z,stamp:Date.now()}));
+  info.textContent=complete?'✓ Carte et application disponibles hors connexion : '+success+' tuiles enregistrées. Teste en mode avion avant de partir.':
+    '⚠ Téléchargement partiel : '+success+'/'+files.length+' tuiles. Réessaie en Wi-Fi ou choisis Standard. Ne pars pas sans carte de secours.';
+ }catch(e){info.textContent='Échec de préparation : '+(e.message||e)+'. La carte n’est pas prête hors connexion.'}
+ finally{el('download').disabled=false}
+}
+async function checkOffline(){
+ if(!('caches' in window)){el('offline-status').textContent='Stockage hors ligne indisponible.';return}
+ const a=await caches.open(CACHE_APP),t=await caches.open(CACHE_TILES),z=Number(el('offline-zoom').value);
+ const files=tilesForLine(coords,z);
+ const samples=files.slice(0,Math.min(20,files.length));
+ let ok=0;for(const path of samples){if(await t.match(path))ok++}
+ const shell=!!(await a.match('/randonnee'))&&!!(await a.match('https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js'));
+ el('offline-status').textContent=(shell&&ok===samples.length?'✓ Contrôle rapide réussi. ':'⚠ Carte incomplète. ')+
+   ok+'/'+samples.length+' tuiles d’échantillon présentes. Coupe le réseau et ouvre « Mode randonnée » pour une vérification réelle.';
+}
+el('start').addEventListener('click',start);el('pause').addEventListener('click',pause);
+el('finish').addEventListener('click',finish);el('export').addEventListener('click',exportTrace);
+el('download').addEventListener('click',prepare);el('checkoffline').addEventListener('click',checkOffline);
+el('center').addEventListener('click',()=>{
+ if(map){mapFollowing=true;if(lastGPS)map.easeTo({center:[lastGPS[1],lastGPS[0]],zoom:15});
+ else map.fitBounds(routeBounds(),{padding:35,duration:0})}
+});
+window.addEventListener('pagehide',()=>{if(active){saved.elapsed=elapsed();saved.startedAt=null;active=false;persist()}releaseWatch()});
+setInterval(update,10000);
+update();
+window.TrekMapHikeCore={dist,projected,tileXY,tilesForLine,validCoords};
+})();
+</script></body></html>
