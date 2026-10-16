@@ -30,6 +30,12 @@ padding:9px 12px;min-height:42px;font-weight:700;font-size:12px}
 #tm-journey-days :is(input,textarea):focus-visible{outline:3px solid #e6a933;outline-offset:2px}
 @media(max-width:560px){#tm-journey-days .tm-j-day-fields{grid-template-columns:1fr}
 #tm-journey-days .tm-j-day-fields label.tm-j-wide{grid-column:span 1}}
+
+#modal .planner #checklist .check-row{display:flex!important;align-items:center!important;gap:10px!important;width:100%!important;min-width:0!important;max-width:100%!important;box-sizing:border-box!important}
+#modal .planner #checklist .check-row>input[type=checkbox]{width:20px!important;min-width:20px!important;max-width:20px!important;height:20px!important;min-height:20px!important;max-height:20px!important;flex:0 0 20px!important;padding:0!important;margin:0!important}
+#modal .planner #checklist .check-row>input[type=text]{flex:1 1 0%!important;width:0!important;min-width:0!important;max-width:100%!important;min-height:46px!important;box-sizing:border-box!important;font-size:16px!important}
+#modal .planner #checklist .check-row>button{flex:0 0 42px!important;width:42px!important;min-width:42px!important;height:44px!important;padding:0!important}
+#modal .planner,#modal .planner .form-field,#modal .planner #checklist,#modal .planner #tm-journey-days,#modal .planner #tm-journey-plan-tools{min-width:0!important;max-width:100%!important;box-sizing:border-box!important}
 </style>
 <script id="tm-journey-plan-js">
 (function(){
