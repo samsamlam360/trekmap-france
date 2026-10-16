@@ -53,7 +53,7 @@ block=r'''<!-- TM_JOURNEY_PHASE1_START -->
    if(!el)return false;
    var v=String(el.value||'').trim();
    if(!v)return false;
-   if(id==='distance-range'||id==='elevation-range')return Number(v)>0;
+   if(id==='distance-range'||id==='elevation-range'||id==='tm-rating-filter')return Number(v)>0;
    return true;
  }
  function textFor(el,id){
