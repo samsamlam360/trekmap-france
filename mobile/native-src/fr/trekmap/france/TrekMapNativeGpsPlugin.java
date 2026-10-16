@@ -35,9 +35,59 @@ public class TrekMapNativeGpsPlugin extends Plugin {
         result.put("count",OfflineRouteStore.list(getContext()).length());
         call.resolve(result);
     }
+    private boolean trustedTrekMapPage(){
+        String url=getBridge().getWebView().getUrl();
+        Uri u=Uri.parse(url==null?"":url);
+        return "https".equals(u.getScheme()) &&
+                "trekmap-france.onrender.com".equals(u.getHost()) &&
+                ("/".equals(u.getPath())||"/randonnee".equals(u.getPath()))&&u.getPort()==-1;
+    }
+    @PluginMethod
+    public void listOfflineRoutes(PluginCall call){
+        if(!trustedTrekMapPage()){call.reject("Origine non autorisée.");return;}
+        org.json.JSONArray all=OfflineRouteStore.list(getContext());
+        org.json.JSONArray publicList=new org.json.JSONArray();
+        for(int i=0;i<all.length();i++){
+            org.json.JSONObject r=all.optJSONObject(i);
+            if(r==null)continue;
+            org.json.JSONObject item=new org.json.JSONObject();
+            try{
+                item.put("id",r.optString("id"));
+                item.put("name",r.optString("name"));
+                item.put("region",r.optString("region"));
+                item.put("sections",OfflineTileStore.stages(r));
+                publicList.put(item);
+            }catch(org.json.JSONException ignored){}
+        }
+        JSObject res=new JSObject();res.put("routes",publicList);call.resolve(res);
+    }
+    @PluginMethod
+    public void openOfflineRoute(PluginCall call){
+        if(!trustedTrekMapPage()){call.reject("Origine non autorisée.");return;}
+        String id=call.getString("id","");
+        if(OfflineRouteStore.find(getContext(),id)==null){
+            call.reject("Trek hors ligne introuvable.");return;
+        }
+        Intent intent=new Intent(getActivity(),OfflineRouteActivity.class);
+        intent.putExtra("route_id",id);
+        getActivity().runOnUiThread(()->getActivity().startActivity(intent));
+        call.resolve();
+    }
+    @PluginMethod
+    public void openOfflineDownload(PluginCall call){
+        if(!trustedHikePage()){call.reject("Origine non autorisée.");return;}
+        String id=call.getString("id","");
+        if(OfflineRouteStore.find(getContext(),id)==null){
+            call.reject("Enregistre d'abord le trek dans Android.");return;
+        }
+        Intent intent=new Intent(getActivity(),OfflineDownloadActivity.class);
+        intent.putExtra("route_id",id);
+        getActivity().runOnUiThread(()->getActivity().startActivity(intent));
+        call.resolve();
+    }
     @PluginMethod
     public void openOfflineRoutes(PluginCall call){
-        if(!trustedHikePage()){call.reject("Action réservée à TrekMap.");return;}
+        if(!trustedTrekMapPage()){call.reject("Action réservée à TrekMap.");return;}
         Intent intent=new Intent(getActivity(),OfflineTreksActivity.class);
         getActivity().runOnUiThread(()->getActivity().startActivity(intent));
         call.resolve();

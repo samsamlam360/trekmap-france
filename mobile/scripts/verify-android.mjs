@@ -23,14 +23,20 @@ assert.ok(xml.includes('android.permission.REQUEST_INSTALL_PACKAGES'),'Update in
 assert.ok(xml.includes('androidx.core.content.FileProvider'),'Private APK FileProvider');
 assert.ok(xml.includes('TrekMapUpdateActivity'),'Native update flow');
 assert.ok(xml.includes('OfflineTreksActivity')&&xml.includes('OfflineRouteActivity'),'Offline Android activities');
+assert.ok(xml.includes('OfflineDownloadActivity')&&xml.includes('OfflineVectorMapActivity'),'Map and download activities');
 assert.ok(fs.existsSync('android/app/src/main/res/xml/trekmap_update_paths.xml'));
-for(const f of ['TrekMapNativeGpsPlugin.java','GpsTrackStore.java','GpsTrackService.java','GpsTrackActivity.java','TrekMapUpdateManager.java','TrekMapUpdateActivity.java','OfflineRouteStore.java','OfflineTreksActivity.java','OfflineRouteActivity.java','MainActivity.java'])
+for(const f of ['TrekMapNativeGpsPlugin.java','GpsTrackStore.java','GpsTrackService.java','GpsTrackActivity.java','TrekMapUpdateManager.java','TrekMapUpdateActivity.java','OfflineRouteStore.java','OfflineTreksActivity.java','OfflineRouteActivity.java','OfflineTileStore.java','OfflineDownloadActivity.java','OfflineVectorMapActivity.java','MainActivity.java'])
  assert.ok(fs.existsSync('android/app/src/main/java/fr/trekmap/france/'+f), f);
 assert.ok(fs.existsSync('android/app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml'));
 const appgradle=fs.readFileSync('android/app/build.gradle','utf8');
 assert.ok(appgradle.includes('fr.trekmap.france'),'applicationId mismatch');
 assert.ok(appgradle.includes('// TrekMap stable version and signing configuration'));
 assert.ok(appgradle.includes('trekmapRelease'));
+assert.ok(appgradle.includes('androidx.webkit:webkit:1.12.1'));
+for(const f of ['offline-map.html','vendor/maplibre-gl.js','vendor/maplibre-gl.css']){
+ assert.ok(fs.existsSync('www/'+f),'Missing offline resource '+f);
+ assert.ok(fs.existsSync('android/app/src/main/assets/public/'+f),'Missing APK asset '+f);
+}
 const main=fs.readFileSync('android/app/src/main/java/fr/trekmap/france/MainActivity.java','utf8');
 assert.ok(main.includes('NET_CAPABILITY_VALIDATED')&&main.includes('showNativeOffline'));
 assert.ok(main.includes('RELOAD_ONLINE'));

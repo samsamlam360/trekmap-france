@@ -24,6 +24,8 @@ if(!xml.includes('fr.trekmap.france.GpsTrackService')){
         <activity android:name="fr.trekmap.france.GpsTrackActivity" android:exported="false" />
         <activity android:name="fr.trekmap.france.OfflineTreksActivity" android:exported="false" />
         <activity android:name="fr.trekmap.france.OfflineRouteActivity" android:exported="false" />
+        <activity android:name="fr.trekmap.france.OfflineDownloadActivity" android:exported="false" />
+        <activity android:name="fr.trekmap.france.OfflineVectorMapActivity" android:exported="false" />
         <activity android:name="fr.trekmap.france.TrekMapUpdateActivity" android:exported="false" />
         <provider android:name="androidx.core.content.FileProvider"
             android:authorities="fr.trekmap.france.apkprovider"
@@ -39,7 +41,7 @@ fs.writeFileSync(manifest,xml);
 const javaDest=path.join(root,'java/fr/trekmap/france');
 const nativeSrc=path.resolve('native-src/fr/trekmap/france');
 fs.mkdirSync(javaDest,{recursive:true});
-for(const file of ['TrekMapNativeGpsPlugin.java','GpsTrackStore.java','GpsTrackService.java','GpsTrackActivity.java','TrekMapUpdateManager.java','TrekMapUpdateActivity.java','OfflineRouteStore.java','OfflineTreksActivity.java','OfflineRouteActivity.java']){
+for(const file of ['TrekMapNativeGpsPlugin.java','GpsTrackStore.java','GpsTrackService.java','GpsTrackActivity.java','TrekMapUpdateManager.java','TrekMapUpdateActivity.java','OfflineRouteStore.java','OfflineTreksActivity.java','OfflineRouteActivity.java','OfflineTileStore.java','OfflineDownloadActivity.java','OfflineVectorMapActivity.java']){
   fs.copyFileSync(path.join(nativeSrc,file),path.join(javaDest,file));
 }
 // Register only an explicit native tracker launcher. No direct GPS data sent to the WebView.
@@ -116,8 +118,12 @@ fs.mkdirSync(updateXml,{recursive:true});
 fs.writeFileSync(path.join(updateXml,'trekmap_update_paths.xml'),
   '<?xml version="1.0" encoding="utf-8"?>\n<paths xmlns:android="http://schemas.android.com/apk/res/android">'+
   '<cache-path name="signed-update" path="updates/" /></paths>\n');
+// Extra WebView asset routing is AndroidX WebKit, maintained by Google.
 const gradle=path.resolve('android/app/build.gradle');
 let groovy=fs.readFileSync(gradle,'utf8');
+if(!groovy.includes('androidx.webkit:webkit:')){
+ groovy+='\n'+'dependencies { implementation "androidx.webkit:webkit:1.12.1" }'+'\n';
+}
 if(!groovy.includes('// TrekMap stable version and signing configuration')) {
  const version=Number(process.env.TREKMAP_VERSION_CODE||1000);
  if(!Number.isSafeInteger(version)||version<2||version>2147483647)throw Error('Invalid APK versionCode');

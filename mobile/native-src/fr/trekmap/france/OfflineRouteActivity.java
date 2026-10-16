@@ -46,6 +46,20 @@ public class OfflineRouteActivity extends Activity {
         root.addView(diagram,new LinearLayout.LayoutParams(-1,dp(370)));
         info=new TextView(this);info.setTextSize(16);info.setTextColor(Color.rgb(12,73,47));
         info.setPadding(0,dp(14),0,dp(14));root.addView(info);
+        Button detailed=new Button(this);detailed.setAllCaps(false);
+        detailed.setText("🗺️ Afficher la vraie carte hors ligne");
+        root.addView(detailed,new LinearLayout.LayoutParams(-1,dp(56)));
+        detailed.setOnClickListener(v->{
+            Intent i=new Intent(this,OfflineVectorMapActivity.class);
+            i.putExtra("route_id",route.optString("id"));startActivity(i);
+        });
+        Button tiles=new Button(this);tiles.setAllCaps(false);
+        tiles.setText("↓ Télécharger / compléter les sections de carte");
+        root.addView(tiles,new LinearLayout.LayoutParams(-1,dp(54)));
+        tiles.setOnClickListener(v->{
+            Intent i=new Intent(this,OfflineDownloadActivity.class);
+            i.putExtra("route_id",route.optString("id"));startActivity(i);
+        });
         Button go=new Button(this);go.setAllCaps(false);go.setText("📍 Ouvrir le suivi GPS Android");
         root.addView(go,new LinearLayout.LayoutParams(-1,dp(54)));
         go.setOnClickListener(v->{
