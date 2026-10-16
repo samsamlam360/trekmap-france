@@ -15,8 +15,13 @@ for(const permission of ['INTERNET','ACCESS_COARSE_LOCATION','ACCESS_FINE_LOCATI
  assert.ok(xml.includes('android.permission.'+permission),permission+' not declared');
 assert.ok(xml.includes('android:usesCleartextTraffic="false"'),'HTTP must remain disabled');
 assert.ok(!xml.includes('android.permission.ACCESS_BACKGROUND_LOCATION'),'do not promise background GPS');
-assert.ok(!xml.includes('android.permission.FOREGROUND_SERVICE_LOCATION'),'do not enable unimplemented GPS service');
+assert.ok(xml.includes('android.permission.FOREGROUND_SERVICE_LOCATION'),'Native location service permission required');
+assert.ok(xml.includes('android:foregroundServiceType="location"'),'Foreground location service declaration required');
+assert.ok(xml.includes('android.permission.FOREGROUND_SERVICE'),'Foreground service permission required');
+assert.ok(xml.includes('android.permission.POST_NOTIFICATIONS'),'Visible tracking notification');
+for(const f of ['TrekMapNativeGpsPlugin.java','GpsTrackStore.java','GpsTrackService.java','GpsTrackActivity.java','MainActivity.java'])
+ assert.ok(fs.existsSync('android/app/src/main/java/fr/trekmap/france/'+f), f);
 assert.ok(fs.existsSync('android/app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml'));
 const appgradle=fs.readFileSync('android/app/build.gradle','utf8');
 assert.ok(appgradle.includes('fr.trekmap.france'),'applicationId mismatch');
-console.log('ANDROID CONFIG PASS: pinned runtime, production origin, foreground GPS, secure transport, icon.');
+console.log('ANDROID CONFIG PASS: native GPS recording, explicit foreground service, permissions, protected HTTPS origin, icon.');
