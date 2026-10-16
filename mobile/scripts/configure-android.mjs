@@ -69,7 +69,7 @@ public class MainActivity extends BridgeActivity {
         registerPlugin(TrekMapNativeGpsPlugin.class);
         super.onCreate(savedInstanceState);
     }
-    @Override protected void onNewIntent(Intent intent) {
+    @Override public void onNewIntent(Intent intent) {
         super.onNewIntent(intent);
         setIntent(intent);
         if("fr.trekmap.france.RELOAD_ONLINE".equals(intent.getAction()) && hasNetwork()){
