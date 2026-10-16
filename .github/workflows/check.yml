@@ -105,6 +105,8 @@ jobs:
         run: node scripts/test_journey_phases.mjs
       - name: Tester la saisie et les données du parcours randonneur
         run: node scripts/test_hiker_finish.mjs
+      - name: Tester le mode navigation GPS hors connexion
+        run: node scripts/test_hike_navigation.mjs
       - name: Tester les intervalles de durée du catalogue
         run: node scripts/test_duration_filter_ranges.mjs
       - name: Vérifier les 9 itinérances en Centre-Val de Loire
