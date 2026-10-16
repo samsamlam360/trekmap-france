@@ -238,7 +238,7 @@ function gpsPosition(pos){
  const last=distanceAnchor;
  const step=last?dist([last[0],last[1]],lastGPS):0;
  const seconds=last?Math.max(1,(now-last[2])/1000):10;
- const badJump=last&&step/seconds>6;
+ const badJump=last&&step/seconds>4.4;
  const good= !last || (step>=Math.max(7,accuracy*.65,last[3]*.65)&&!badJump);
  if(good){
   if(last)saved.walked+=step;
