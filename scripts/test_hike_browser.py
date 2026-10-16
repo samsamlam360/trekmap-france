@@ -87,6 +87,44 @@ try:
     browser.get(BASE+'/randonnee')
     wait.until(lambda d:d.execute_script("return !!window.TrekMapHikeCore"))
     assert browser.find_element(By.ID,'walked').text==before_reload,'walked distance lost on reload'
-    print('HIKING CHROME PASS: fiche, route transfer, GPS, off-route, pause, persistence, responsive mode')
+    # Prepare a deterministic short offline package. Vector tile requests are
+    # mocked, but the app shell and real MapLibre library must be cached.
+    browser.execute_script("""
+      window.__realFetch=window.fetch.bind(window);
+      window.fetch=(input,options)=>String(input).startsWith('/offline-tiles/')
+        ?Promise.resolve(new Response(new Uint8Array([26,0]),{
+          status:200,headers:{'content-type':'application/x-protobuf'}}))
+        :window.__realFetch(input,options);
+    """)
+    browser.find_element(By.ID,'download').click()
+    wait_long=WebDriverWait(browser,95)
+    wait_long.until(lambda d: 'tuiles enregistrées' in d.find_element(By.ID,'offline-status').text
+        or 'Échec' in d.find_element(By.ID,'offline-status').text
+        or 'partiel' in d.find_element(By.ID,'offline-status').text)
+    outcome=browser.find_element(By.ID,'offline-status').text
+    assert 'tuiles enregistrées' in outcome,'offline package not complete: '+outcome
+    saved=browser.execute_async_script("""
+      const done=arguments[0];
+      Promise.all([caches.open('tm-hike-app-v1'),caches.open('tm-hike-tiles-v1')])
+        .then(async ([app,tiles])=>done({
+          shell:!!(await app.match('/randonnee')),
+          maplibre:!!(await app.match('https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js')),
+          tiles:(await tiles.keys()).length
+        })).catch(e=>done({error:String(e)}));
+    """)
+    assert saved.get('shell') and saved.get('maplibre') and saved.get('tiles',0)>10,saved
+    # A route reload without network must still work from Cache API.
+    browser.execute_cdp_cmd('Network.enable',{})
+    browser.execute_cdp_cmd('Network.emulateNetworkConditions',{
+      'offline':True,'latency':0,'downloadThroughput':0,'uploadThroughput':0})
+    try:
+      browser.get(BASE+'/randonnee')
+      wait.until(lambda d:d.execute_script("return !!window.TrekMapHikeCore"))
+      assert browser.find_element(By.ID,'title').text=='Sentier de vérification GPS'
+      assert browser.find_element(By.ID,'walked').text==before_reload
+    finally:
+      browser.execute_cdp_cmd('Network.emulateNetworkConditions',{
+        'offline':False,'latency':0,'downloadThroughput':-1,'uploadThroughput':-1})
+    print('HIKING CHROME PASS: fiche, GPS, deviation, pause, GPX, persistence, responsive, offline package and airplane-mode page')
 finally:
     browser.quit()
