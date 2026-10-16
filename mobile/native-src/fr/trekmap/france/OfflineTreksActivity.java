@@ -25,7 +25,11 @@ public class OfflineTreksActivity extends Activity {
         t.setPadding(0,dp(7),0,dp(7));return t;
     }
     @Override public void onCreate(Bundle b){
-        super.onCreate(b);showRoutes();
+        super.onCreate(b);
+        showRoutes();
+        if(!getIntent().getBooleanExtra("list_only",false) && OfflineRouteStore.list(this).length()>0){
+            startActivity(new Intent(this,OfflineVectorMapActivity.class));
+        }
     }
     @Override protected void onResume(){
         super.onResume();

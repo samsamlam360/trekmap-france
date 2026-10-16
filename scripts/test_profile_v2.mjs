@@ -26,6 +26,8 @@ assert.ok(api.includes("Une seule photo locale"),'no unlimited database photo st
 
 assert.ok(ui.includes('data-p-tab="downloads"') && js.includes('function downloads()'), 'downloaded treks tab must exist in actual profile v2');
 assert.ok(ui.includes('data-p-go="downloads"'), 'downloaded routes must have a prominent shortcut in Mes aventures');
+assert.ok(js.includes('data-p-offline-map')&&js.includes('openOfflineMap'),'profile must show all downloads on the actual TrekMap map');
+assert.ok(js.includes('data-p-offline-journal')&&js.includes('openOfflineJournal'),'profile local GPX + photo journal accessible');
 assert.ok(js.includes('native.listOfflineRoutes()') && js.includes('native.openOfflineRoute('), 'profile v2 reads and opens local Android treks');
 assert.ok(js.includes('native.openOfflineDownload('), 'profile v2 downloads maps from inside profile');
 assert.ok(css.includes('env(safe-area-inset-top') && css.includes('max(48px'), 'mobile tabs must clear the Android status bar');

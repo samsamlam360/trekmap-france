@@ -69,6 +69,25 @@ public class OfflineVectorMapActivity extends Activity {
             .addPathHandler("/data/",path->{
                 if("route.json".equals(path))return json(route.toString());
                 if("routes.json".equals(path))return json(OfflineRouteStore.list(this).toString());
+                if("waypoints.json".equals(path)){
+                    org.json.JSONArray result=new org.json.JSONArray();
+                    org.json.JSONArray all=OfflineRouteStore.list(this);
+                    for(int i=0;i<all.length();i++){
+                        JSONObject r=all.optJSONObject(i);
+                        if(r==null)continue;
+                        org.json.JSONArray pts=OfflineWaypointStore.list(this,r.optString("id"));
+                        for(int j=0;j<pts.length();j++){
+                            JSONObject p=pts.optJSONObject(j);
+                            if(p==null)continue;
+                            try{
+                                JSONObject item=new JSONObject(p.toString());
+                                item.put("routeId",r.optString("id"));
+                                result.put(item);
+                            }catch(org.json.JSONException ignored){}
+                        }
+                    }
+                    return json(result.toString());
+                }
                 if("session.json".equals(path))return json(GpsTrackStore.read(this).toString());
                 return denied();
             })

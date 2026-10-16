@@ -19,7 +19,7 @@ import java.text.DateFormat;
 import java.util.Date;
 /** Local hiking journal: saved GPX survives subsequent recordings and network loss. */
 public class TrackArchiveActivity extends Activity {
-    private long chosenDate=0;
+    private long chosenDate=0,photoDate=0;
     private int dp(int x){return Math.round(x*getResources().getDisplayMetrics().density);}
     @Override public void onCreate(Bundle b){super.onCreate(b);refresh();}
     private void refresh(){
@@ -57,6 +57,24 @@ public class TrackArchiveActivity extends Activity {
                 intent.putExtra(Intent.EXTRA_TITLE,"trekmap-"+date+".gpx");
                 startActivityForResult(intent,80);
             });
+            Button addPhoto=new Button(this);addPhoto.setText("＋ Ajouter / remplacer une photo");addPhoto.setAllCaps(false);
+            root.addView(addPhoto);
+            addPhoto.setOnClickListener(v->{
+                photoDate=date;
+                Intent pick=new Intent(Intent.ACTION_OPEN_DOCUMENT);
+                pick.setType("image/*");pick.addCategory(Intent.CATEGORY_OPENABLE);
+                startActivityForResult(pick,81);
+            });
+            File photo=TrackArchive.photo(this,date);
+            if(photo.isFile()){
+                android.widget.ImageView view=new android.widget.ImageView(this);
+                view.setAdjustViewBounds(true);view.setMaxHeight(dp(210));
+                view.setScaleType(android.widget.ImageView.ScaleType.CENTER_CROP);
+                android.graphics.BitmapFactory.Options opts=new android.graphics.BitmapFactory.Options();
+                opts.inSampleSize=4;
+                view.setImageBitmap(android.graphics.BitmapFactory.decodeFile(photo.getAbsolutePath(),opts));
+                root.addView(view);
+            }
             String id=item.optString("routeId");
             if(OfflineRouteStore.find(this,id)!=null){
                 Button map=new Button(this);map.setText("🗺️ Voir ce trek sur ma carte");
@@ -71,6 +89,33 @@ public class TrackArchiveActivity extends Activity {
     }
     @Override protected void onActivityResult(int request,int result,Intent data){
         super.onActivityResult(request,result,data);
+        if(request==81&&result==RESULT_OK&&data!=null&&data.getData()!=null&&photoDate>0){
+            Uri uri=data.getData();
+            String mime=getContentResolver().getType(uri);
+            if(mime==null||!(mime.equals("image/jpeg")||mime.equals("image/png")||mime.equals("image/webp"))){
+                android.widget.Toast.makeText(this,"Choisis une image JPG, PNG ou WebP.",android.widget.Toast.LENGTH_LONG).show();return;
+            }
+            File dest=TrackArchive.photo(this,photoDate);
+            if(!dest.getParentFile().exists()&&!dest.getParentFile().mkdirs())return;
+            File temp=new File(dest.getParentFile(),dest.getName()+".part");
+            long bytes=0;
+            try(InputStream in=getContentResolver().openInputStream(uri);
+                java.io.FileOutputStream out=new java.io.FileOutputStream(temp)){
+                if(in==null)throw new Exception("Fichier inaccessible");
+                byte[] block=new byte[8192];int n;
+                while((n=in.read(block))>=0){bytes+=n;
+                    if(bytes>5*1024*1024)throw new Exception("Image de plus de 5 Mo");
+                    out.write(block,0,n);
+                }
+                out.getFD().sync();
+                if(bytes<100||!temp.renameTo(dest))throw new Exception("Impossible d'enregistrer la photo");
+                android.widget.Toast.makeText(this,"Photo ajoutée au carnet local",android.widget.Toast.LENGTH_LONG).show();
+                refresh();
+            }catch(Exception e){
+                android.widget.Toast.makeText(this,"Photo refusée : "+e.getMessage(),android.widget.Toast.LENGTH_LONG).show();
+            }finally{temp.delete();}
+            return;
+        }
         if(request!=80||result!=RESULT_OK||data==null||data.getData()==null||chosenDate<=0)return;
         File src=TrackArchive.file(this,chosenDate);
         try(InputStream in=new FileInputStream(src);

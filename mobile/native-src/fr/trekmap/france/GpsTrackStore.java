@@ -15,7 +15,7 @@ final class GpsTrackStore {
     private static final String PREF = "trekmap_native_gps_v1";
     private static final String SESSION = "session";
     static final int MAX_ROUTE_POINTS = 6000;
-    private static final int MAX_TRACK_POINTS = 75000;
+    private static final int MAX_TRACK_POINTS = 35000;
     private GpsTrackStore() {}
 
     static boolean isValidRoute(JSONObject route) {
@@ -111,8 +111,8 @@ final class GpsTrackStore {
                     session.put("distance",session.optDouble("distance")+step);
                     if(step/seconds>.45)session.put("movingMs",session.optLong("movingMs")+Math.min(60000,Math.round(seconds*1000)));
                     if(last.hasAltitude()&&loc.hasAltitude() &&
-                        (!loc.hasVerticalAccuracy()||loc.getVerticalAccuracy()<12f) &&
-                        (!last.hasVerticalAccuracy()||last.getVerticalAccuracy()<12f)){
+                        (android.os.Build.VERSION.SDK_INT<26||!loc.hasVerticalAccuracy()||loc.getVerticalAccuracy()<12f) &&
+                        (android.os.Build.VERSION.SDK_INT<26||!last.hasVerticalAccuracy()||last.getVerticalAccuracy()<12f)){
                         double climb=loc.getAltitude()-last.getAltitude();
                         if(climb>3 && climb<35)
                             session.put("ascent",session.optDouble("ascent")+climb);

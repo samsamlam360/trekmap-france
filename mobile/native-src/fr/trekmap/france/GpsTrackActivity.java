@@ -31,7 +31,7 @@ public class GpsTrackActivity extends Activity {
     private static final int REQUEST_GPS=41, REQUEST_EXPORT=42;
     private JSONObject requestedRoute;
     private TextView title, details, state, stats;
-    private Button start, pause, finish, export, nextDay, openMap, journal;
+    private Button start, pause, finish, export, nextDay, openMap, journal, waypoint;
     private final Handler handler=new Handler(Looper.getMainLooper());
     private final Runnable redraw=new Runnable(){
         @Override public void run(){refresh();handler.postDelayed(this,1500);}
@@ -66,6 +66,7 @@ public class GpsTrackActivity extends Activity {
         finish=button("■ Terminer la randonnée",root);
         nextDay=button("☀ Passer au jour suivant",root);
         openMap=button("🗺️ Ouvrir la carte TrekMap hors ligne",root);
+        waypoint=button("＋ Ajouter un repère à ma position",root);
         journal=button("▤ Mon carnet GPS (sorties terminées)",root);
         export=button("↓ Exporter mon GPX",root);
         TextView notice=label("La position est enregistrée uniquement sur cet appareil. Une notification indique quand le GPS fonctionne écran verrouillé. Le suivi peut néanmoins être interrompu par Android ou l'économie d'énergie. Une carte de secours reste indispensable.",13,Color.DKGRAY);
@@ -83,6 +84,7 @@ public class GpsTrackActivity extends Activity {
             }else Toast.makeText(this,"Enregistre d'abord ce trek pour Android hors réseau.",Toast.LENGTH_LONG).show();
         });
         journal.setOnClickListener(v->startActivity(new Intent(this,TrackArchiveActivity.class)));
+        waypoint.setOnClickListener(v->addWaypoint());
         setContentView(scroll);
         refresh();
     }
@@ -154,6 +156,7 @@ public class GpsTrackActivity extends Activity {
         finish.setEnabled(active||paused);
         nextDay.setEnabled(active||paused);
         openMap.setEnabled(route!=null);
+        waypoint.setEnabled(route!=null && session.has("lastLat") && session.has("lastLon"));
         export.setEnabled(session.optJSONArray("points")!=null &&
                 session.optJSONArray("points").length()>=2);
         if((active||paused) && !same) {
@@ -238,6 +241,34 @@ public class GpsTrackActivity extends Activity {
             startNativeService(i);
         }
         handler.postDelayed(this::refresh,300);
+    }
+    private void addWaypoint(){
+        JSONObject session=GpsTrackStore.read(this);
+        JSONObject r=shownRoute(session);
+        if(r==null||!session.has("lastLat")||!session.has("lastLon")){
+            Toast.makeText(this,"Attends une position GPS fiable.",Toast.LENGTH_LONG).show();return;
+        }
+        if(!r.optString("id").equals(session.optJSONObject("route")==null?"":session.optJSONObject("route").optString("id"))){
+            Toast.makeText(this,"Le dernier GPS concerne un autre trek.",Toast.LENGTH_LONG).show();return;
+        }
+        String[] cats={"Point d'eau","Ravitaillement","Refuge","Camping","Point de vue","Transport","Autre"};
+        new AlertDialog.Builder(this)
+            .setTitle("Ajouter un repère personnel")
+            .setMessage("Ces repères sont personnels : TrekMap ne garantit pas que l'eau ou le ravitaillement est disponible.")
+            .setItems(cats,(d,which)->{
+                android.widget.EditText field=new android.widget.EditText(this);
+                field.setSingleLine(true);
+                field.setHint("Nom du repère (facultatif)");
+                new AlertDialog.Builder(this).setTitle(cats[which]).setView(field)
+                  .setNegativeButton("Annuler",null)
+                  .setPositiveButton("Enregistrer",(a,b)->{
+                    boolean ok=OfflineWaypointStore.add(this,r.optString("id"),cats[which],
+                        field.getText().toString().trim().isEmpty()?cats[which]:field.getText().toString().trim(),
+                        session.optDouble("lastLat"),session.optDouble("lastLon"));
+                    Toast.makeText(this,ok?"Repère enregistré localement.":"Enregistrement impossible.",
+                        Toast.LENGTH_LONG).show();
+                  }).show();
+            }).show();
     }
     private void newDayPressed(){
         JSONObject s=GpsTrackStore.read(this);

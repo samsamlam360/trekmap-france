@@ -86,9 +86,26 @@ public class TrekMapNativeGpsPlugin extends Plugin {
         call.resolve();
     }
     @PluginMethod
+    public void openOfflineJournal(PluginCall call){
+        if(!trustedTrekMapPage()){call.reject("Origine non autorisée.");return;}
+        Intent intent=new Intent(getActivity(),TrackArchiveActivity.class);
+        getActivity().runOnUiThread(()->getActivity().startActivity(intent));
+        call.resolve();
+    }
+    @PluginMethod
+    public void openOfflineMap(PluginCall call){
+        if(!trustedTrekMapPage()){call.reject("Origine non autorisée.");return;}
+        Intent intent=new Intent(getActivity(),OfflineVectorMapActivity.class);
+        String id=call.getString("id","");
+        if(OfflineRouteStore.find(getContext(),id)!=null)intent.putExtra("route_id",id);
+        getActivity().runOnUiThread(()->getActivity().startActivity(intent));
+        call.resolve();
+    }
+    @PluginMethod
     public void openOfflineRoutes(PluginCall call){
         if(!trustedTrekMapPage()){call.reject("Action réservée à TrekMap.");return;}
         Intent intent=new Intent(getActivity(),OfflineTreksActivity.class);
+        intent.putExtra("list_only",true);
         getActivity().runOnUiThread(()->getActivity().startActivity(intent));
         call.resolve();
     }

@@ -15,6 +15,9 @@ final class TrackArchive {
         try{return new JSONArray(c.getSharedPreferences(PREF,Context.MODE_PRIVATE).getString(KEY,"[]"));}
         catch(Exception e){return new JSONArray();}
     }
+    static File photo(Context c,long date){
+        return new File(new File(c.getFilesDir(),"photos"),"hike-"+date+".photo");
+    }
     static File file(Context c,long date){
         return new File(new File(c.getFilesDir(),"tracks"),"hike-"+date+".gpx");
     }
@@ -44,7 +47,10 @@ final class TrackArchive {
             for(int i=0;i<original.length();i++){
                 JSONObject old=original.optJSONObject(i);
                 if(old!=null&&old.optLong("date")!=timestamp&&saved.length()<MAX)saved.put(old);
-                else if(old!=null&&saved.length()>=MAX)file(c,old.optLong("date")).delete();
+                else if(old!=null&&saved.length()>=MAX){
+                    file(c,old.optLong("date")).delete();
+                    photo(c,old.optLong("date")).delete();
+                }
             }
             c.getSharedPreferences(PREF,Context.MODE_PRIVATE).edit().putString(KEY,saved.toString()).commit();
         }catch(Exception ignored){}

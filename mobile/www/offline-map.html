@@ -94,7 +94,7 @@ function start(){
   routes=(Array.isArray(r)?r:[]).filter(x=>x&&Array.isArray(x.coords)&&x.coords.length>=2);
   $('route-total').textContent='('+routes.length+')';
   renderList();
-  if(!maplibregl||!routes.length){$('fallback').style.display='flex';if(!routes.length)note('Prépare un trek avec Internet avant ton départ.');return}
+  if(typeof maplibregl==='undefined'||!routes.length){$('fallback').style.display='flex';if(!routes.length)note('Prépare un trek avec Internet avant ton départ.');return}
   let features=routes.map((r,i)=>({...line(r.coords),properties:{id:String(r.id),index:i,name:r.name||'Randonnée'}}));
   const style={version:8,name:'TrekMap France · local',sources:{
    base:{type:'vector',tiles:['https://appassets.androidplatform.net/tiles/{z}/{x}/{y}.pbf'],minzoom:9,maxzoom:14,attribution:'© OpenStreetMap contributors / OpenFreeMap'},

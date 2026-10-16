@@ -293,7 +293,9 @@ function projects(){
 }
 function journal(){
   const rows=model.journeys.filter(function(j){return j.status==='completed'});
-  return '<h2 class="tm-p-heading">Mon carnet de randonnée</h2><div class="tm-p-card">'+
+  return '<div class="tm-p-inline" style="justify-content:space-between;gap:10px;margin-bottom:16px"><h2 class="tm-p-heading" style="margin:0">Mon carnet de randonnée</h2>'+
+    '<button type="button" class="tm-p-btn primary" data-p-offline-journal="1">▤ Mes traces GPS et photos Android</button></div>'+
+    '<div class="tm-p-card">'+
     '<p class="tm-p-muted">Ce carnet est privé par défaut. Les kilomètres et dénivelés reposent sur tes relevés, pas sur les estimations du planificateur.</p>'+
     '<div class="tm-p-list" style="margin-top:15px">'+(rows.length?rows.map(function(j){
       return '<div class="tm-p-item"><div><b>'+e(j.name)+'</b><small>'+e(j.region)+' · '+e(j.completed_on||'Date non indiquée')+' · '+
@@ -373,7 +375,7 @@ function downloads(){
     }).join('')+'</div>';
   }
   return '<h2 class="tm-p-heading">Treks téléchargés</h2><div class="tm-p-card">'+
-    '<h3>Mes randonnées hors connexion</h3><p class="tm-p-muted">Les fichiers restent sur cet appareil, sans synchronisation Neon. Pour les grands treks, prépare la carte section par section, avant d’activer le mode avion.</p>'+
+    '<h3>Mes randonnées hors connexion</h3><button type="button" class="tm-p-btn primary" data-p-offline-map="1">🗺️ Ouvrir la carte de tous mes treks</button><p class="tm-p-muted">Les fichiers restent sur cet appareil, sans synchronisation Neon. Pour les grands treks, prépare la carte section par section, avant d’activer le mode avion.</p>'+
     body+'<div style="margin-top:14px"><button type="button" class="tm-p-btn" data-p-offline-refresh="1">↻ Actualiser la liste</button></div></div>';
 }
 async function refreshDownloads(){
@@ -485,11 +487,25 @@ root.addEventListener('click',async function(event){
  if(button.id==='tm-p-exit'){close();return}
  if(button.dataset.pGo){tab=button.dataset.pGo;selected=null;render();if(tab==='downloads')await refreshDownloads();return}
  if(button.dataset.pRetry){await open();return}
+  if(button.dataset.pOfflineMap){
+    const native=window.Capacitor?.Plugins?.TrekMapNativeGPS;
+    try{if(!native?.openOfflineMap)throw Error('Mets à jour l’application Android');
+      await native.openOfflineMap()}
+    catch(err){announce('Carte indisponible : '+(err.message||err))}
+    return;
+  }
+  if(button.dataset.pOfflineJournal){
+    const native=window.Capacitor?.Plugins?.TrekMapNativeGPS;
+    try{if(!native?.openOfflineJournal)throw Error('Mets à jour l’application Android');
+      await native.openOfflineJournal()}
+    catch(err){announce('Carnet GPS indisponible : '+(err.message||err))}
+    return;
+  }
   if(button.dataset.pOfflineRefresh){await refreshDownloads();return}
   if(button.dataset.pOfflineOpen){
     const native=window.Capacitor?.Plugins?.TrekMapNativeGPS;
     try{if(!native?.openOfflineRoute)throw Error('Fonction réservée à Android');
-      await native.openOfflineRoute({id:button.dataset.pOfflineOpen})}
+      await (native.openOfflineMap?.({id:button.dataset.pOfflineOpen})||native.openOfflineRoute({id:button.dataset.pOfflineOpen}))}
     catch(err){announce('Ouverture indisponible : '+(err.message||err))}
     return;
   }

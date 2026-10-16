@@ -134,6 +134,9 @@ public class GpsTrackService extends Service implements LocationListener {
             set("note","Recherche du signal GPS…");
             set("liveSinceEpoch",System.currentTimeMillis());
             GpsTrackStore.save(this,session);
+            // Refresh the action now that status has changed to "active".
+            getSystemService(NotificationManager.class).notify(NOTIFICATION_ID,
+                    notification("Suivi actif · Pause disponible dans la notification"));
             activeSince=SystemClock.elapsedRealtime();
             previous=null;lastSampleTime=0;startGps();
         }catch(Exception e){
