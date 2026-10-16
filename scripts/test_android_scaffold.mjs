@@ -26,6 +26,10 @@ assert.ok(svc.includes('startForeground(')&&svc.includes('removeUpdates('));
 assert.ok(!svc.includes('HttpURLConnection')&&!svc.includes('new URL('));
 const bridge=fs.readFileSync('mobile/native-src/fr/trekmap/france/TrekMapNativeGpsPlugin.java','utf8');
 assert.ok(bridge.includes('"/randonnee"')&&bridge.includes('"https"')&&bridge.includes('openTracker'));
+assert.ok(bridge.includes('public void listOfflineRoutes(') && bridge.includes('public void openOfflineDownload('),'profile offline bridge exists');
+assert.ok(bridge.includes('public void openOfflineDownload(PluginCall call){\n        if(!trustedHikePage()')===false,
+  'map downloading must work from the actual root profile');
+assert.ok(bridge.includes('if(!trustedTrekMapPage()){call.reject("Origine non autorisée.");return;}'),'root profile bridge validated');
 const mgr=fs.readFileSync('mobile/native-src/fr/trekmap/france/TrekMapUpdateManager.java','utf8');
 assert.ok(mgr.includes('github.com/samsamlam360/trekmap-france/releases/download/') &&
           mgr.includes('sha256:') && mgr.includes('MAX_APK_BYTES'));
