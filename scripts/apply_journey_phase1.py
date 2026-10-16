@@ -28,6 +28,11 @@ block=r'''<!-- TM_JOURNEY_PHASE1_START -->
   left:clamp(218px,18vw,304px);max-width:calc(100vw - clamp(218px,18vw,304px) - 26px);
   max-height:86px;overflow-y:auto;pointer-events:auto}
  @media(max-width:1239px){body > #tm-journey-active-filters:not(:empty){left:14px;max-width:calc(100vw - 28px)}}
+ body.tm-filterstrip-closed > #tm-journey-active-filters:not(:empty){
+   top:calc(var(--tm-top) + 8px);
+   left:clamp(218px,18vw,304px);
+ }
+
 }
 @media(max-width:820px){
  #tm-journey-active-filters{padding:6px 0}
@@ -46,7 +51,7 @@ block=r'''<!-- TM_JOURNEY_PHASE1_START -->
  function holder(){
    var desktop=document.getElementById('tm-inline-filters');
    var mobile=document.querySelector('#sidebar .filters');
-   var target=window.innerWidth>820?desktop:mobile;
+   var target=window.innerWidth>820?document.body:mobile;
    if(target&&group.parentNode!==target)target.appendChild(group);
  }
  function active(el,id){
