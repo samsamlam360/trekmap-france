@@ -90,6 +90,17 @@ jobs:
           python scripts/apply_language_learning_ui.py
           python scripts/apply_reasoning_agent_ui.py
           python scripts/apply_trekbrain_ui.py
+          python scripts/apply_selected_trekbrain_ui.py
+          python scripts/apply_route_day_visuals.py
+          python scripts/apply_route_day_clarity.py
+          python scripts/apply_trekbrain_scroll_ui.py
+          python scripts/apply_trekbrain_ux_refresh.py
+          python scripts/apply_trekbrain_map_mobile.py
+          python scripts/apply_trekbrain_scenic_photos.py
+          python scripts/apply_trekbrain_desktop_experience.py
+          python scripts/apply_trekbrain_map_workspace.py
+      - name: Tester les trois phases du parcours randonneur
+        run: node scripts/test_journey_phases.mjs
       - name: Tester les intervalles de durée du catalogue
         run: node scripts/test_duration_filter_ranges.mjs
       - name: Vérifier les 9 itinérances en Centre-Val de Loire
