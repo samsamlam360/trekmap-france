@@ -79,6 +79,8 @@ jobs:
           print('Clarification/recherche Web: OK')
           PY
       - name: Construire le frontend complet
+        env:
+          TREKBRAIN_VERSION: v9
         run: |
           python scripts/apply_ui_remodel.py
           python scripts/apply_unified_experience.py
