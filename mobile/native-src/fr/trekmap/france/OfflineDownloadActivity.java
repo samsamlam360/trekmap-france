@@ -19,7 +19,7 @@ public class OfflineDownloadActivity extends Activity {
     private JSONObject route;
     private int stage=0;
     private TextView heading,details,state;
-    private Button previous,next,download;
+    private Button previous,next,download,all,verify;
     private ProgressBar progress;
     private AtomicBoolean cancelled=new AtomicBoolean(false);
     private boolean working=false;
@@ -47,6 +47,12 @@ public class OfflineDownloadActivity extends Activity {
         next=new Button(this);next.setAllCaps(false);next.setText("Étape suivante →");root.addView(next);
         download=new Button(this);download.setAllCaps(false);download.setText("↓ Télécharger ou reprendre cette étape");
         root.addView(download,new LinearLayout.LayoutParams(-1,dp(58)));
+        all=new Button(this);all.setAllCaps(false);
+        all.setText("✂ Préparer toutes les sections et assembler");
+        root.addView(all,new LinearLayout.LayoutParams(-1,dp(58)));
+        verify=new Button(this);verify.setAllCaps(false);
+        verify.setText("✓ Vérifier le parcours complet");
+        root.addView(verify,new LinearLayout.LayoutParams(-1,dp(54)));
         root.addView(label("Un lot télécharge au plus 320 tuiles et 24 Mo à la fois. La limite horaire du serveur est conservée : si elle est atteinte, reprends plus tard. Les grands treks n'ont pas de limite de durée : télécharge leurs étapes successivement, idéalement en Wi-Fi.",13));
         Button map=new Button(this);map.setText("🗺️ Ouvrir la carte hors ligne");map.setAllCaps(false);root.addView(map);
         map.setOnClickListener(v->{
@@ -55,7 +61,9 @@ public class OfflineDownloadActivity extends Activity {
         });
         previous.setOnClickListener(v->{if(!working&&stage>0){stage--;refresh();}});
         next.setOnClickListener(v->{if(!working&&stage+1<OfflineTileStore.stages(route)){stage++;refresh();}});
-        download.setOnClickListener(v->startDownload());
+        download.setOnClickListener(v->startDownload(false));
+        all.setOnClickListener(v->startDownload(true));
+        verify.setOnClickListener(v->verifyAll());
         refresh();setContentView(scroll);
     }
     private void refresh(){
@@ -71,29 +79,72 @@ public class OfflineDownloadActivity extends Activity {
             "\nEspace occupé par les cartes : "+Math.round(OfflineTileStore.cachedSize(this)/1048576d)+" Mo");
         previous.setEnabled(!working&&stage>0);next.setEnabled(!working&&stage+1<stages);
         download.setEnabled(!working&&p.present<p.total);
+        all.setEnabled(!working);verify.setEnabled(!working);
         download.setText(working?"Téléchargement en cours…":
             (p.present>0?"↻ Compléter cette section":"↓ Télécharger cette section"));
     }
-    private void startDownload(){
+    private String summaryAll(){
+        int present=0,required=0,ready=0,n=OfflineTileStore.stages(route);
+        for(int i=0;i<n;i++){
+            OfflineTileStore.Progress p=OfflineTileStore.progress(this,route,i);
+            present+=p.present;required+=p.total;
+            if(p.total>0&&p.present==p.total)ready++;
+        }
+        return ready+"/"+n+" sections complètes · "+present+"/"+required+
+             " références de tuiles présentes (tuiles communes réutilisées).";
+    }
+    private void verifyAll(){
         if(working)return;
-        working=true;cancelled=new AtomicBoolean(false);refresh();
-        int target=stage;
+        state.setText("Vérification complète de toutes les sections…");
         new Thread(()->{
-            OfflineTileStore.download(this,route,target,new OfflineTileStore.Reporter(){
-                @Override public boolean isCancelled(){return cancelled.get();}
-                @Override public void report(int done,int total,int downloaded,String message){
-                    runOnUiThread(()->{
-                        if(isFinishing()||isDestroyed())return;
-                        state.setText(done+"/"+total+" tuiles · "+downloaded+" nouvelles\n"+message);
-                        progress.setProgress(total==0?0:(int)(100L*done/total));
-                    });
-                }
-            });
+            String result=summaryAll();
             runOnUiThread(()->{
                 if(isFinishing()||isDestroyed())return;
-                String status=state.getText().toString();
+                state.setText(result+"\nLes sections complètes forment la carte continue du trek sans modifier le tracé original.");
+            });
+        },"trekmap-check-complete").start();
+    }
+    private void startDownload(boolean allStages){
+        if(working)return;
+        working=true;cancelled=new AtomicBoolean(false);refresh();
+        final int target=stage;
+        new Thread(()->{
+            int from=allStages?0:target,to=allStages?OfflineTileStore.stages(route):target+1;
+            int totalNew=0;long totalBytes=0;
+            for(int index=from;index<to;index++){
+                if(cancelled.get())break;
+                OfflineTileStore.Progress before=OfflineTileStore.progress(this,route,index);
+                if(before.total==0||before.present==before.total)continue;
+                // The server has an hourly quota. Keep an ENTIRE click bounded,
+                // even when several sections are being assembled.
+                if(totalNew>=320||totalBytes>=24L*1024*1024)break;
+                final int sec=index;long sizeBefore=OfflineTileStore.cachedSize(this);
+                final int[] newTiles={0};final String[] message={""};
+                OfflineTileStore.download(this,route,index,new OfflineTileStore.Reporter(){
+                    @Override public boolean isCancelled(){return cancelled.get();}
+                    @Override public void report(int done,int total,int downloaded,String result){
+                        newTiles[0]=downloaded;message[0]=result;
+                        runOnUiThread(()->{
+                            if(isFinishing()||isDestroyed())return;
+                            state.setText("Section "+(sec+1)+"/"+OfflineTileStore.stages(route)+
+                                " · "+done+"/"+total+" tuiles\n"+result);
+                            progress.setProgress(total==0?0:(int)(100L*done/total));
+                        });
+                    }
+                },320-totalNew,24L*1024*1024-totalBytes);
+                totalNew+=newTiles[0];
+                totalBytes+=Math.max(0,OfflineTileStore.cachedSize(this)-sizeBefore);
+                if(message[0].contains("Limite horaire")||message[0].contains("650 Mo")||
+                   message[0].contains("24 Mo")||message[0].contains("Lot terminé"))break;
+            }
+            String summary=summaryAll();
+            runOnUiThread(()->{
+                if(isFinishing()||isDestroyed())return;
                 working=false;refresh();
-                state.setText(status+"\n"+details.getText());
+                state.setText(summary+"\n"+
+                  (cancelled.get()?"Téléchargement interrompu. Reprends quand tu veux.":
+                   "Lot terminé. Appuie à nouveau sur « Préparer toutes les sections » pour compléter les morceaux restants." )+
+                  "\nLe parcours complet reste intact, les tuiles téléchargées sont automatiquement réunies.");
             });
         },"trekmap-offline-tiles").start();
     }

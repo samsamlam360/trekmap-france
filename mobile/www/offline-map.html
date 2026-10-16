@@ -8,7 +8,7 @@
 #map{position:absolute;inset:0}button{font:inherit;touch-action:manipulation;cursor:pointer}
 #top{position:absolute;z-index:3;top:0;left:0;right:0;padding:calc(var(--safe-top) + 9px) 13px 13px;background:linear-gradient(125deg,#09503b,#17785b);color:white;border-radius:0 0 20px 20px;box-shadow:0 4px 18px #092b1a24}
 .headline{display:flex;align-items:center;gap:9px;min-width:0}.mark{font-size:27px;border-radius:11px;background:#ffffff25;padding:6px 10px;line-height:1}.name{font-size:19px;font-weight:850;letter-spacing:-.4px}.sub{font-size:12px;color:#caeadd;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:66vw}
-.pill{border:1px solid #ffffff6b;background:#ffffff24;border-radius:100px;padding:6px 9px;font-size:11px;white-space:nowrap;margin-left:auto}
+.pill{border:1px solid #ffffff6b;background:#ffffff24;border-radius:100px;padding:6px 9px;font-size:11px;white-space:nowrap;margin-left:auto;color:#fff;font:inherit;cursor:pointer;min-height:40px}
 #notice{margin:9px 0 0;font-size:12px;background:#fff7da;color:#76481d;border-radius:8px;padding:7px 9px;display:none}
 #top .tiny{font-size:11px;color:#d3efdd;margin:8px 0 0}
 #trek-panel{position:absolute;z-index:4;top:calc(var(--safe-top) + 106px);left:12px;width:min(332px,calc(100vw - 24px));max-height:45vh;overflow:auto;border:1px solid #d5e8d9;background:#f9fffbf7;border-radius:15px;box-shadow:0 6px 28px #17472b30;display:none}
@@ -35,8 +35,8 @@
 @media(prefers-reduced-motion:reduce){*{scroll-behavior:auto!important}}
 </style></head><body>
 <div id="map" aria-label="Carte interactive des treks téléchargés"></div>
-<div id="fallback"><div id="empty">Carte locale indisponible. Les tracés restent consultables dans la liste des treks Android. Ne pars pas sans carte de secours.</div></div>
-<header id="top"><div class="headline"><div class="mark" aria-hidden="true">⌖</div><div style="flex:1;min-width:0"><div class="name">TrekMap France</div><div class="sub" id="subtitle">Mes randonnées téléchargées</div></div><span class="pill">HORS LIGNE</span></div>
+<div id="fallback"><div id="empty">Aucun trek hors ligne pour le moment, ou carte indisponible.<br>Reconnecte-toi et enregistre un itinéraire depuis « Mode randonnée ». Tu pourras ensuite retrouver ici tous tes treks préparés.<p>Appuie sur « ↻ Actualiser » en haut pour revenir à TrekMap quand Internet sera rétabli.</p></div></div>
+<header id="top"><div class="headline"><div class="mark" aria-hidden="true">⌖</div><div style="flex:1;min-width:0"><div class="name">TrekMap France</div><div class="sub" id="subtitle">Mes randonnées téléchargées</div></div><button id="go-online" class="pill" type="button" title="HORS LIGNE : vérifier la connexion et revenir à TrekMap en ligne">↻ Actualiser</button></div>
 <p class="tiny" id="coverage">La carte utilise uniquement les fichiers enregistrés sur ce téléphone.</p><p id="notice" role="status"></p></header>
 <div id="map-tools"><button id="routes-toggle" class="round" aria-label="Voir les treks téléchargés" title="Mes treks téléchargés">☰</button><button id="center" class="round" aria-label="Centrer sur ma position" title="Me centrer">◎</button><button id="heading" class="round" aria-label="Orienter la carte dans le sens de la marche" title="Sens de la marche">↗</button><button id="full" class="round" aria-label="Voir tout le trek" title="Voir le parcours">⌗</button></div>
 <section id="trek-panel" aria-label="Choisir un trek téléchargé"><div class="panel-title">Treks téléchargés <span id="route-total"></span></div><div id="routes"></div></section>
@@ -101,7 +101,7 @@ function start(){
   routes=(Array.isArray(r)?r:[]).filter(x=>x&&Array.isArray(x.coords)&&x.coords.length>=2);
   $('route-total').textContent='('+routes.length+')';
   renderList();
-  if(typeof maplibregl==='undefined'||!routes.length){$('fallback').style.display='flex';if(!routes.length)note('Prépare un trek avec Internet avant ton départ.');return}
+  if(typeof maplibregl==='undefined'||!routes.length){$('fallback').style.display='flex';if(!routes.length)note('Aucun trek enregistré sur cet appareil. Retrouve Internet, prépare puis enregistre un trek.');return}
   waypoints=await fetch('/data/waypoints.json',{cache:'no-store'}).then(r=>r.ok?r.json():[]).catch(()=>[]);
   let features=routes.map((r,i)=>({...line(r.coords),properties:{id:String(r.id),index:i,name:r.name||'Randonnée'}}));
   const style={version:8,name:'TrekMap France · local',sources:{
@@ -182,6 +182,7 @@ function native(action){
  // WebViewAssetLoader client intercepts this native-only navigation.
  window.location.assign(url);
 }
+$('go-online').onclick=()=>{window.location.assign('/native/online')};
 $('routes-toggle').onclick=()=>{panelOpen=!panelOpen;$('trek-panel').classList.toggle('show',panelOpen)};
 $('center').onclick=()=>{follow=true;$('center').classList.add('selected');if(lastGPS&&map)map.easeTo({center:[lastGPS[1],lastGPS[0]],zoom:15})};
 $('heading').onclick=()=>{headingMode=!headingMode;$('heading').classList.toggle('selected',headingMode);follow=true;if(!headingMode&&map)map.easeTo({bearing:0})};
