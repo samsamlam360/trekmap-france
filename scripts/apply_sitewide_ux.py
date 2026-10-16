@@ -298,8 +298,10 @@ button:disabled { cursor:not-allowed;opacity:.60 }
       if(!t)return;
       var day=t.getAttribute('data-tm-adjust-day');
       if(day&&window.TrekBrainMapWorkspace?.isActive?.()){
-        // Activate the existing Modify action with its original, real plan.
+        // Personal stage notes are editable locally without any reroute.
         e.preventDefault();
+        if(window.TrekMapStageEdit?.open?.(Number(day)))return;
+        // If note UI is unavailable, preserve the original Modify action.
         var panel=document.getElementById('tm-brain-route-panel');
         var modify=panel&&panel.querySelector('[data-workspace-action="modify"]');
         if(!modify)return;
