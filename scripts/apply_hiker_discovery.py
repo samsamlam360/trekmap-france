@@ -12,6 +12,17 @@ block=r'''<!-- TM_HIKER_DISCOVERY_START -->
 #tm-daily-pace-wrap label{font-size:12px;font-weight:800;color:#28573c}
 #tm-daily-pace-filter{width:100%;min-height:44px;padding:9px;border-radius:10px;border:1px solid #b7ccbb;
   font-size:14px;color:#194d33;background:#fff}
+#tm-quick-pace-popover[hidden]{display:none!important}
+#tm-quick-pace-popover{position:fixed;z-index:11800;width:min(315px,calc(100vw - 16px));padding:15px;
+  border:1px solid #c9e1d3;border-radius:16px;background:#fff;color:#183d2a;
+  box-shadow:0 15px 48px rgba(5,45,24,.25);box-sizing:border-box}
+#tm-quick-pace-popover .tm-quick-pace-head{display:flex;justify-content:space-between;align-items:center;gap:12px}
+#tm-quick-pace-popover label{font-size:14px;font-weight:800;color:#24543b}
+#tm-quick-pace-popover select{display:block;width:100%;min-height:48px;margin-top:11px;padding:9px;
+  border:1px solid #a4c5af;border-radius:10px;font-size:16px;background:#fff;color:#16432b}
+#tm-quick-pace-close{min-width:44px;min-height:44px;border:1px solid #c5dccb;border-radius:10px;
+  background:#eff7f2;color:#20523b;cursor:pointer}
+#tm-quick-pace-popover p{font-size:12px;color:#557363;line-height:1.5;margin:9px 0 0}
 #tm-hiker-detail{border:1px solid #d2e2d8;border-radius:14px;padding:13px;margin:14px 0;background:#f5faf6;color:#1b4734}
 #tm-hiker-detail h3{font-size:17px;margin:0 0 7px}
 #tm-hiker-detail p{margin:5px 0;font-size:13px;line-height:1.5}
@@ -70,10 +81,53 @@ block=r'''<!-- TM_HIKER_DISCOVERY_START -->
    if(quick&&!document.getElementById('tm-inline-pace')){
      var b=document.createElement('button');b.id='tm-inline-pace';b.type='button';b.textContent='⌁ Km / jour';
      b.title='Filtrer par moyenne de kilomètres par jour';
+     var pop=document.createElement('div');
+     pop.id='tm-quick-pace-popover';
+     pop.hidden=true;pop.setAttribute('role','dialog');pop.setAttribute('aria-labelledby','tm-quick-pace-heading');
+     var head=document.createElement('div');head.className='tm-quick-pace-head';
+     var caption=document.createElement('label');caption.id='tm-quick-pace-heading';
+     caption.htmlFor='tm-quick-pace-select';caption.textContent='Distance moyenne par jour';
+     var dismiss=document.createElement('button');dismiss.type='button';dismiss.id='tm-quick-pace-close';
+     dismiss.textContent='×';dismiss.setAttribute('aria-label','Fermer le filtre Km par jour');
+     head.append(caption,dismiss);
+     var quickSelect=document.createElement('select');quickSelect.id='tm-quick-pace-select';
+     [...select.options].forEach(function(option){quickSelect.appendChild(option.cloneNode(true))});
+     var note=document.createElement('p');note.textContent='Ce filtre s’applique immédiatement à la carte et aux treks affichés.';
+     pop.append(head,quickSelect,note);document.body.appendChild(pop);
+     b.setAttribute('aria-haspopup','dialog');
+     b.setAttribute('aria-controls','tm-quick-pace-popover');
+     b.setAttribute('aria-expanded','false');
+     function close(){
+       if(pop.hidden)return;
+       pop.hidden=true;b.setAttribute('aria-expanded','false');
+     }
+     function position(){
+       var rect=b.getBoundingClientRect(),w=pop.getBoundingClientRect().width||315;
+       pop.style.left=Math.max(8,Math.min(rect.left,window.innerWidth-w-8))+'px';
+       var height=pop.getBoundingClientRect().height||190;
+       pop.style.top=Math.max(8,Math.min(rect.bottom+8,window.innerHeight-height-8))+'px';
+     }
      b.addEventListener('click',function(){
-       if(quick.getAttribute('aria-expanded')!=='true')quick.click();
-       setTimeout(function(){select.focus();select.scrollIntoView({block:'nearest'})},80);
+       if(!pop.hidden){close();return}
+       quickSelect.value=select.value;
+       pop.hidden=false;b.setAttribute('aria-expanded','true');position();
+       quickSelect.focus({preventScroll:true});
      });
+     dismiss.addEventListener('click',function(){close();b.focus({preventScroll:true})});
+     quickSelect.addEventListener('change',function(){
+       select.value=quickSelect.value;
+       select.dispatchEvent(new Event('change',{bubbles:true}));
+       close();b.focus({preventScroll:true});
+     });
+     select.addEventListener('change',function(){quickSelect.value=select.value});
+     document.addEventListener('pointerdown',function(e){
+       if(!pop.hidden&&!pop.contains(e.target)&&!b.contains(e.target))close();
+     },true);
+     document.addEventListener('keydown',function(e){
+       if(!pop.hidden&&e.key==='Escape'){e.preventDefault();close();b.focus({preventScroll:true})}
+     });
+     window.addEventListener('resize',function(){if(!pop.hidden)position()});
+     window.TrekMapDailyPaceQuick={open:function(){b.click()},close:close,select:quickSelect};
      quick.parentNode.insertBefore(b,quick);
    }
  }
