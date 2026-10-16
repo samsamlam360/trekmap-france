@@ -8,7 +8,7 @@ const manifest=path.join(root,'AndroidManifest.xml');
 if(!fs.existsSync(manifest)) throw Error('Projet natif absent : lance npm run android:add');
 let xml=fs.readFileSync(manifest,'utf8');
 if(!xml.includes('<manifest') || !xml.includes('<application')) throw Error('AndroidManifest.xml inattendu');
-for(const permission of ['android.permission.INTERNET','android.permission.ACCESS_COARSE_LOCATION','android.permission.ACCESS_FINE_LOCATION','android.permission.FOREGROUND_SERVICE','android.permission.FOREGROUND_SERVICE_LOCATION','android.permission.POST_NOTIFICATIONS']){
+for(const permission of ['android.permission.INTERNET','android.permission.ACCESS_COARSE_LOCATION','android.permission.ACCESS_FINE_LOCATION','android.permission.FOREGROUND_SERVICE','android.permission.FOREGROUND_SERVICE_LOCATION','android.permission.POST_NOTIFICATIONS','android.permission.REQUEST_INSTALL_PACKAGES']){
   if(!xml.includes('android:name="'+permission+'"')){
     xml=xml.replace(/(<application\b)/, '    <uses-permission android:name="'+permission+'" />\n\n    $1');
   }
@@ -22,6 +22,13 @@ if(!xml.includes('android:usesCleartextTraffic="false"')){
 if(!xml.includes('fr.trekmap.france.GpsTrackService')){
   xml=xml.replace('</application>', `
         <activity android:name="fr.trekmap.france.GpsTrackActivity" android:exported="false" />
+        <activity android:name="fr.trekmap.france.TrekMapUpdateActivity" android:exported="false" />
+        <provider android:name="androidx.core.content.FileProvider"
+            android:authorities="fr.trekmap.france.apkprovider"
+            android:grantUriPermissions="true" android:exported="false">
+            <meta-data android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/trekmap_update_paths"/>
+        </provider>
         <service android:name="fr.trekmap.france.GpsTrackService"
             android:exported="false" android:foregroundServiceType="location" />
     </application>`);
@@ -30,20 +37,76 @@ fs.writeFileSync(manifest,xml);
 const javaDest=path.join(root,'java/fr/trekmap/france');
 const nativeSrc=path.resolve('native-src/fr/trekmap/france');
 fs.mkdirSync(javaDest,{recursive:true});
-for(const file of ['TrekMapNativeGpsPlugin.java','GpsTrackStore.java','GpsTrackService.java','GpsTrackActivity.java']){
+for(const file of ['TrekMapNativeGpsPlugin.java','GpsTrackStore.java','GpsTrackService.java','GpsTrackActivity.java','TrekMapUpdateManager.java','TrekMapUpdateActivity.java']){
   fs.copyFileSync(path.join(nativeSrc,file),path.join(javaDest,file));
 }
 // Register only an explicit native tracker launcher. No direct GPS data sent to the WebView.
 fs.writeFileSync(path.join(javaDest,'MainActivity.java'), `package fr.trekmap.france;
+import android.app.AlertDialog;
+import android.content.Intent;
 import android.os.Bundle;
 import com.getcapacitor.BridgeActivity;
 public class MainActivity extends BridgeActivity {
+    private boolean updateCheckStarted = false;
     @Override public void onCreate(Bundle savedInstanceState) {
         registerPlugin(TrekMapNativeGpsPlugin.class);
         super.onCreate(savedInstanceState);
     }
+    @Override protected void onResume() {
+        super.onResume();
+        if(updateCheckStarted) return;
+        updateCheckStarted = true;
+        long previous = getSharedPreferences("tm_android_updates",MODE_PRIVATE).getLong("checked_at",0);
+        long now = System.currentTimeMillis();
+        if(now-previous<6*60*60*1000L) return;
+        getSharedPreferences("tm_android_updates",MODE_PRIVATE).edit().putLong("checked_at",now).apply();
+        new Thread(()->{
+            try {
+                TrekMapUpdateManager.Release r=TrekMapUpdateManager.latest();
+                if(r==null||r.version<=TrekMapUpdateManager.installedVersion(this))return;
+                runOnUiThread(()->{
+                    if(isFinishing()||isDestroyed())return;
+                    new AlertDialog.Builder(this)
+                        .setTitle("Mise à jour TrekMap disponible")
+                        .setMessage("Une nouvelle version Android est disponible. Tes données sont conservées si l'application est mise à jour sans être désinstallée.")
+                        .setNegativeButton("Plus tard",null)
+                        .setPositiveButton("Mettre à jour",(d,w)->
+                            startActivity(new Intent(this,TrekMapUpdateActivity.class))).show();
+                });
+            } catch(Exception ignored) {
+                // Network might be unavailable when hiking. No intrusive pop-up.
+            }
+        }).start();
+    }
 }
 `);
+const updateXml=path.join(root,'res/xml');
+fs.mkdirSync(updateXml,{recursive:true});
+fs.writeFileSync(path.join(updateXml,'trekmap_update_paths.xml'),
+  '<?xml version="1.0" encoding="utf-8"?>\n<paths xmlns:android="http://schemas.android.com/apk/res/android">'+
+  '<cache-path name="signed-update" path="updates/" /></paths>\n');
+const gradle=path.resolve('android/app/build.gradle');
+let groovy=fs.readFileSync(gradle,'utf8');
+if(!groovy.includes('// TrekMap stable version and signing configuration')) {
+ const version=Number(process.env.TREKMAP_VERSION_CODE||1000);
+ if(!Number.isSafeInteger(version)||version<2||version>2147483647)throw Error('Invalid APK versionCode');
+ groovy+=`
+\n// TrekMap stable version and signing configuration.
+android.defaultConfig.versionCode = ${version}
+android.defaultConfig.versionName = "1.0.${version}"
+if(System.getenv('TREKMAP_KEYSTORE_PATH')) {
+  android.signingConfigs.create('trekmapRelease') {
+    storeFile file(System.getenv('TREKMAP_KEYSTORE_PATH'))
+    storePassword System.getenv('TREKMAP_KEYSTORE_PASSWORD')
+    keyAlias System.getenv('TREKMAP_KEY_ALIAS')
+    keyPassword System.getenv('TREKMAP_KEY_PASSWORD')
+  }
+  android.buildTypes.getByName('release').signingConfig =
+       android.signingConfigs.getByName('trekmapRelease')
+}
+`;
+ fs.writeFileSync(gradle,groovy);
+}
 
 
 // Brand the adaptive Android icon (no external image/font dependencies).
