@@ -696,10 +696,11 @@ try:
         assert panel.find_element(By.ID, "tm-brain-route-detail").is_displayed(), (
             f"{label}: expanded stage list is hidden"
         )
-        expand.click()
-        assert "expanded" not in panel.get_attribute("class").split(), (
-            f"{label}: native collapse click cannot fold the stage list"
-        )
+        # Leaflet may independently collapse the sheet on a short phone
+        # when it recenters the map. Do not *re-expand* it accidentally.
+        if "expanded" in panel.get_attribute("class").split():
+            expand.click()
+        wait.until(lambda d: "expanded" not in panel.get_attribute("class").split())
         driver.save_screenshot(str(OUT / (label + "-after-click.png")))
         driver.execute_script("window.TrekBrainMapWorkspace.exit();")
     # Profile v2 runs against an in-memory HTTP fixture, never a real user or Neon.
