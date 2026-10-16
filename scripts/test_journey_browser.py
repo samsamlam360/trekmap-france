@@ -41,11 +41,25 @@ try:
         }
         return original(input,init);
       };
-      openPlan(900001);
+      openDetail(900001);
     """)
+    wait.until(lambda d:d.find_element(By.ID,"plan-detail").is_displayed())
+    driver.find_element(By.ID,"plan-detail").click()
     wait.until(lambda d:d.find_element(By.ID,"tm-journey-days"))
+    assert driver.find_element(By.CSS_SELECTOR,"#modal h2").text=="Préparer le trek", (
+        "The trek fiche's real Préparer button did not open the planner"
+    )
     first=driver.find_element(By.CSS_SELECTOR,"#checklist .check-row input[type=text]")
     first.click()
+    is_clickable=driver.execute_script("""
+      const i=arguments[0],r=i.getBoundingClientRect(),x=r.left+r.width/2,y=r.top+r.height/2;
+      const top=document.elementFromPoint(x,y);
+      return {reachable:top===i||i.contains(top),blocker:top?.id||top?.className||top?.tagName,
+              focused:document.activeElement===i,rect:{x,y,w:r.width,h:r.height}};
+    """,first)
+    assert is_clickable["reachable"] and is_clickable["focused"], (
+        f"The fiche's checkbox text field is obstructed: {is_clickable}"
+    )
     first.send_keys(Keys.END," et potabilité")
     assert first.get_attribute("value")=="Eau avant le départ et potabilité",first.get_attribute("value")
     driver.find_element(By.ID,"add-check").click()
@@ -69,7 +83,9 @@ try:
     assert any(x["text"]=="Eau avant le départ et potabilité" and x["done"] for x in body["checklist"])
     assert any(x["text"]=="Ma réserve 2 litres" for x in body["checklist"])
     assert body["days"][1]["water"]=="Source à vérifier et débit",body["days"]
-    driver.execute_script("openPlan(900001)")
+    driver.execute_script("openDetail(900001)")
+    wait.until(lambda d:d.find_element(By.ID,"plan-detail").is_displayed())
+    driver.find_element(By.ID,"plan-detail").click()
     wait.until(lambda d:d.find_element(By.ID,"tm-journey-days"))
     assert driver.find_element(By.CSS_SELECTOR,'#tm-journey-days details[data-day="2"] [data-day-field="water"]').get_attribute("value")=="Source à vérifier et débit"
     driver.set_window_size(390,844)
