@@ -111,8 +111,8 @@ final class GpsTrackStore {
                     session.put("distance",session.optDouble("distance")+step);
                     if(step/seconds>.45)session.put("movingMs",session.optLong("movingMs")+Math.min(60000,Math.round(seconds*1000)));
                     if(last.hasAltitude()&&loc.hasAltitude() &&
-                        (android.os.Build.VERSION.SDK_INT<26||!loc.hasVerticalAccuracy()||loc.getVerticalAccuracy()<12f) &&
-                        (android.os.Build.VERSION.SDK_INT<26||!last.hasVerticalAccuracy()||last.getVerticalAccuracy()<12f)){
+                        (android.os.Build.VERSION.SDK_INT<26||!loc.hasVerticalAccuracy()||loc.getVerticalAccuracyMeters()<12f) &&
+                        (android.os.Build.VERSION.SDK_INT<26||!last.hasVerticalAccuracy()||last.getVerticalAccuracyMeters()<12f)){
                         double climb=loc.getAltitude()-last.getAltitude();
                         if(climb>3 && climb<35)
                             session.put("ascent",session.optDouble("ascent")+climb);
