@@ -696,10 +696,11 @@ try:
         assert panel.find_element(By.ID, "tm-brain-route-detail").is_displayed(), (
             f"{label}: expanded stage list is hidden"
         )
-        expand.click()
-        assert "expanded" not in panel.get_attribute("class").split(), (
-            f"{label}: native collapse click cannot fold the stage list"
-        )
+        # Leaflet may independently collapse the sheet on a short phone
+        # when it recenters the map. Do not *re-expand* it accidentally.
+        if "expanded" in panel.get_attribute("class").split():
+            expand.click()
+        wait.until(lambda d: "expanded" not in panel.get_attribute("class").split())
         driver.save_screenshot(str(OUT / (label + "-after-click.png")))
         driver.execute_script("window.TrekBrainMapWorkspace.exit();")
     # Profile v2 runs against an in-memory HTTP fixture, never a real user or Neon.
@@ -725,6 +726,9 @@ try:
           {id:910099,name:'Parcours de collection',region:'Vosges'}]}]
       };
       currentUser=window.__profileFixture.user;
+      window.__profileSavedPlan={notes:'Préparation existante',
+        checklist:[{text:'Remplir gourde',done:false}],
+        days:[{day:1,water:'Point d’eau à vérifier',sleep:'Gîte prévu'}]};
       window.__profileRealFetch=window.fetch;
       window.fetch=function(url,init){
         const u=String(url);
@@ -738,8 +742,10 @@ try:
           if(u.indexOf('/profile/public/')===0)body={
              username:'ChromeTest',avatar:'compass',bio:'Marche en montagne',
              treks:window.__profileFixture.treks,completed:[]};
-          if(u.endsWith('/treks/910001/plan'))body={notes:'Préparation existante',
-             checklist:[{text:'Remplir gourde',done:false}]};
+          if(u.endsWith('/treks/910001/plan')){
+            if(init&&init.method==='PUT')window.__profileSavedPlan=JSON.parse(init.body);
+            body=window.__profileSavedPlan;
+          }
           if(u==='/profile/v2/collections'&&init&&init.method==='POST')body={id:2};
           return Promise.resolve(new Response(JSON.stringify(body),{
             status:200,headers:{'Content-Type':'application/json'}}));
@@ -782,10 +788,58 @@ try:
     assert driver.find_element(By.ID, "tm-p-journey-form").is_displayed()
     driver.find_element(By.CSS_SELECTOR, '[data-p-plan="910001"]').click()
     wait.until(lambda d: d.find_element(By.ID, "tm-p-plan-editor").is_displayed())
-    assert "Remplir gourde" in driver.find_element(By.ID, "tm-p-plan-editor").text
+    original=driver.find_element(By.CSS_SELECTOR,'[data-p-checktext="0"]')
+    assert original.get_attribute("value")=="Remplir gourde", "Existing line not editable"
+    original.click()
+    original.send_keys(" avant de partir")
+    assert "avant de partir" in original.get_attribute("value"), "Cannot type into existing profile checklist"
+    check=driver.find_element(By.CSS_SELECTOR,'[data-p-checkindex="0"]')
+    check.click()
+    entry=driver.find_element(By.ID,'tm-p-new-item')
+    entry.send_keys("Réserver le refuge")
+    driver.find_element(By.CSS_SELECTOR,'[data-p-checklist-add]').click()
+    assert driver.find_element(By.CSS_SELECTOR,'[data-p-checktext="1"]').get_attribute("value")=="Réserver le refuge"
+    assert "avant de partir" in driver.find_element(By.CSS_SELECTOR,'[data-p-checktext="0"]').get_attribute("value"), (
+        "Adding a checklist item discarded unsaved edits"
+    )
+    # Deleting one item must not alter the remaining text or its checked state.
+    driver.find_element(By.CSS_SELECTOR,'[data-p-checkremove="1"]').click()
+    assert len(driver.find_elements(By.CSS_SELECTOR,'[data-p-checktext]'))==1
+    assert "avant de partir" in driver.find_element(By.CSS_SELECTOR,'[data-p-checktext="0"]').get_attribute("value")
+    entry=driver.find_element(By.ID,'tm-p-new-item')
+    entry.send_keys("Vérifier la météo")
+    driver.find_element(By.CSS_SELECTOR,'[data-p-checklist-add]').click()
     driver.find_element(By.CSS_SELECTOR, '[data-p-checklist-save]').click()
     wait.until(lambda d: d.execute_script(
         "return window.__profileCalls.some(x=>x.url.endsWith('/treks/910001/plan')&&x.method==='PUT')"))
+    saved=driver.execute_script("return window.__profileSavedPlan")
+    assert saved["checklist"][0]["done"] is True, saved
+    assert "avant de partir" in saved["checklist"][0]["text"], saved
+    assert saved["checklist"][1]["text"]=="Vérifier la météo", saved
+    assert saved["days"][0]["water"]=="Point d’eau à vérifier", "Profile save erased per-day planning"
+    wait.until(lambda d:d.execute_script(
+        "const fields=document.querySelectorAll('#tm-p-plan-editor input[data-p-checktext]');"
+        "return fields.length>=2&&fields[1].value==='Vérifier la météo';"
+    ))
+    # Reopen via the *real* user navigation, rather than calling the planner internally.
+    driver.find_element(By.CSS_SELECTOR,'[data-p-tab="home"]').click()
+    driver.find_element(By.CSS_SELECTOR,'[data-p-tab="projects"]').click()
+    driver.find_element(By.CSS_SELECTOR,'[data-p-select="910001"]').click()
+    driver.find_element(By.CSS_SELECTOR,'[data-p-plan="910001"]').click()
+    wait.until(lambda d:d.execute_script(
+        "const fields=document.querySelectorAll('#tm-p-plan-editor input[data-p-checktext]');"
+        "return fields.length>=2&&fields[1].value==='Vérifier la météo';"
+    ))
+    driver.set_window_size(390,844)
+    mobile_input=driver.find_element(By.CSS_SELECTOR,'[data-p-checktext="0"]')
+    driver.execute_script("arguments[0].scrollIntoView({block:'center'})",mobile_input)
+    mobile_input.send_keys(" (mobile)")
+    assert "(mobile)" in mobile_input.get_attribute("value"), "Phone profile checklist is not editable"
+    width=driver.execute_script("const x=document.querySelector('#tm-p-plan-editor .tm-p-checkline');return {actual:x.scrollWidth,available:x.clientWidth};")
+    assert width["actual"]<=width["available"]+2, f"Mobile profile checklist overflows: {width}"
+    driver.find_element(By.CSS_SELECTOR,'[data-p-checklist-save]').click()
+    wait.until(lambda d:d.execute_script("return window.__profileSavedPlan.checklist[0].text.includes('(mobile)')"))
+    driver.set_window_size(1440,900)
     driver.find_element(By.CSS_SELECTOR, '[data-p-tab="preferences"]').click()
     form=driver.find_element(By.ID, "tm-p-settings-form")
     assert form.is_displayed()

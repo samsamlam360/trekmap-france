@@ -79,8 +79,11 @@ block=r'''<!-- TREKMAP_PROFILE_V2_START -->
 .tm-p-card .tm-p-save-msg{margin-top:8px;font-size:12px;color:#155f40}
 .tm-p-callout{background:#edf7ef;border:1px solid #cfe5d3;padding:12px 14px;border-radius:12px;
   color:#416b52;font-size:12px;line-height:1.5;margin:12px 0}
-.tm-p-checkline{display:flex;align-items:center;gap:8px;min-height:36px;border-bottom:1px solid #e9f0ea}
-.tm-p-checkline input{accent-color:#14885d;width:18px;height:18px}
+.tm-p-checkline{display:flex;align-items:center;gap:9px;min-height:46px;padding:5px 0;border-bottom:1px solid #e9f0ea;min-width:0}
+.tm-p-checkline input[type=checkbox]{accent-color:#14885d;width:20px;height:20px;flex:none;cursor:pointer}
+.tm-p-checkline input[type=text]{min-width:0;flex:1;width:auto;padding:10px 11px;min-height:44px;border-radius:9px;border:1px solid #bad5c5;background:#fff;color:#16462f;font:inherit;font-size:14px;box-sizing:border-box}
+.tm-p-checkline button{min-height:44px;min-width:44px;flex:none;border:1px solid #d8e6dc;border-radius:9px;background:#fff;color:#9e3030;cursor:pointer;font-size:19px}
+.tm-p-checkline :is(input,button):focus-visible{outline:3px solid #d7a11c;outline-offset:2px}
 .tm-p-badges{display:flex;gap:8px;flex-wrap:wrap}
 .tm-p-badges span{border:1px solid #cce6d4;background:#eaf8ed;color:#226e4c;
   padding:9px 12px;border-radius:10px;font-size:12px}
@@ -448,8 +451,37 @@ root.addEventListener('click',async function(event){
  if(button.dataset.pPreview){await publicOpen(model.user.username);return}
  try{
   if(button.dataset.pPlan){await planOpen(Number(button.dataset.pPlan));return}
-  if(button.dataset.pChecklistAdd){const i=el('tm-p-new-item');if(i&&i.value.trim()){plan.checklist.push({text:i.value.trim().slice(0,200),done:false});drawPlan()}return}
-  if(button.dataset.pChecklistSave){await request('/treks/'+Number(selected)+'/plan','PUT',plan);announce('Préparation enregistrée.');return}
+  if(button.dataset.pCheckremove!==undefined){
+   const idx=Number(button.dataset.pCheckremove);
+   if(plan&&Number.isInteger(idx)&&idx>=0&&idx<plan.checklist.length){
+     plan.checklist.splice(idx,1);drawPlan();
+   }
+   return;
+  }
+  if(button.dataset.pChecklistAdd){
+   const i=el('tm-p-new-item');
+   if(!plan||!i)return;
+   const text=i.value.trim().slice(0,200);
+   if(!text){i.focus();announce('Écris un élément avant de l’ajouter.');return}
+   if(plan.checklist.length>=100){announce('La checklist ne peut pas dépasser 100 éléments.');return}
+   plan.checklist.push({text:text,done:false});drawPlan();
+   const entry=el('tm-p-plan-editor')?.querySelector('[data-p-checktext="'+(plan.checklist.length-1)+'"]');
+   entry?.focus();return;
+  }
+  if(button.dataset.pChecklistSave){
+   if(!plan)return;
+   const savedId=Number(selected);
+   button.disabled=true;
+   try{
+     const body={notes:plan.notes||'',checklist:plan.checklist,days:plan.days===undefined?null:plan.days};
+     await request('/treks/'+savedId+'/plan','PUT',body);
+     // Round-trip the actual stored state; confirm edits remain when reopened.
+     const saved=await request('/treks/'+savedId+'/plan','GET');
+     if(!Array.isArray(saved.checklist))throw Error('Impossible de relire la checklist enregistrée.');
+     plan=saved;drawPlan();announce('Checklist enregistrée et vérifiée.');
+   }finally{button.disabled=false}
+   return;
+  }
   if(button.dataset.pDeleteCollection){
    if(!confirm('Supprimer cette collection ? Les treks resteront enregistrés.'))return;
    await api('v2/collections/'+button.dataset.pDeleteCollection,'DELETE');selected=null;await load();render();return;
@@ -480,7 +512,24 @@ root.addEventListener('change',function(ev){
   img.src=url;preview.replaceChildren(img);
  }
  if(ev.target.matches('[data-p-checkindex]')&&plan){
-   plan.checklist[Number(ev.target.dataset.pCheckindex)].done=ev.target.checked;
+   const idx=Number(ev.target.dataset.pCheckindex);
+   if(Number.isInteger(idx)&&idx>=0&&idx<plan.checklist.length)
+     plan.checklist[idx].done=ev.target.checked;
+ }
+});
+// Update the draft as the user types. Never redraw during input, which would
+// destroy focus, the caret position or a phone's composing keyboard.
+root.addEventListener('input',function(ev){
+ const field=ev.target.closest?.('[data-p-checktext]');
+ if(!field||!plan)return;
+ const idx=Number(field.dataset.pChecktext);
+ if(Number.isInteger(idx)&&idx>=0&&idx<plan.checklist.length)
+   plan.checklist[idx].text=String(field.value||'').slice(0,200);
+});
+root.addEventListener('keydown',function(ev){
+ if(ev.key==='Enter'&&ev.target.id==='tm-p-new-item'){
+   ev.preventDefault();
+   root.querySelector('[data-p-checklist-add]')?.click();
  }
 });
 root.addEventListener('submit',async function(ev){
@@ -524,10 +573,13 @@ function drawPlan(){
  const area=el('tm-p-plan-editor');if(!area||!plan)return;
  area.innerHTML='<div class="tm-p-card" style="margin-top:12px;padding:12px"><h3>Checklist de préparation</h3>'+
  '<div class="tm-p-list">'+plan.checklist.map(function(x,i){
-  return '<label class="tm-p-checkline"><input type="checkbox" data-p-checkindex="'+i+'" '+(x.done?'checked':'')+'><span>'+e(x.text)+'</span></label>';
+  return '<div class="tm-p-checkline">'+
+    '<input type="checkbox" data-p-checkindex="'+i+'" aria-label="Élément terminé : '+e(x.text||'')+'" '+(x.done?'checked':'')+'>'+
+    '<input type="text" data-p-checktext="'+i+'" value="'+e(x.text||'')+'" maxlength="200" aria-label="Modifier l’élément '+(i+1)+'" autocomplete="off" placeholder="Écris ici…">'+
+    '<button type="button" data-p-checkremove="'+i+'" aria-label="Supprimer l’élément '+(i+1)+'">×</button></div>';
  }).join('')+'</div><div class="tm-p-inline" style="margin-top:12px"><input id="tm-p-new-item" placeholder="Ajouter un élément" maxlength="200">'+
  '<button class="tm-p-btn" data-p-checklist-add="1">Ajouter</button><button class="tm-p-btn primary" data-p-checklist-save="1">Enregistrer la checklist</button></div>'+
- '<p class="tm-p-muted">C’est la même checklist que celle de la fiche trek, sans création de doublon.</p></div>';
+ '<p class="tm-p-muted">Modifie directement le texte des lignes, coche les éléments terminés, puis enregistre. La liste est personnelle et synchronisée avec la fiche trek.</p></div>';
 }
 async function publicOpen(username){
  try{
