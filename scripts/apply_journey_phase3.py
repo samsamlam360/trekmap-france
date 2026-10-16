@@ -140,7 +140,7 @@ block=r'''<!-- TM_JOURNEY_PHASE3_START -->
    var desc=escapeHTML(t.description||'Aucune description');
    var distance=Number.isFinite(Number(t.distance))&&t.distance!=null?Number(t.distance).toFixed(1)+' km':'Non renseignée';
    var days=Number.isFinite(Number(t.duration_days))&&t.duration_days!=null?String(t.duration_days)+' jours':'Non renseignée';
-   return '<!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>'+title+' · carnet hors connexion</title>'+
+   return '<!doctype html><'+'html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>'+title+' · carnet hors connexion</title>'+
     '<style>body{font-family:system-ui;max-width:800px;margin:2rem auto;padding:0 1rem;color:#153e2b;background:#f4f8f5}main{background:white;border-radius:18px;padding:20px}svg{width:100%;height:auto;background:#e9f3ed;border:1px solid #bdd7c6;border-radius:12px}p{line-height:1.5}small{color:#5c6c62}</style></head><body><main>'+
     '<h1>'+title+'</h1><p>'+region+' · '+distance+' · '+escapeHTML(days)+'</p>'+
     '<h2>Tracé schématique, nord en haut</h2><svg viewBox="0 0 400 400" role="img" aria-label="Tracé géographique schématique sans fond topographique"><polyline fill="none" stroke="#146945" stroke-width="3" stroke-linejoin="round" stroke-linecap="round" points="'+points+'"/>'+
@@ -150,7 +150,7 @@ block=r'''<!-- TM_JOURNEY_PHASE3_START -->
     '<h2>Coordonnées</h2><p>Départ : '+route[0].map(function(n){return n.toFixed(6)}).join(', ')+
     '<br>Arrivée : '+route[route.length-1].map(function(n){return n.toFixed(6)}).join(', ')+'</p>'+
     '<p><strong>Avant de partir :</strong> confirmer météo, eau potable, fermetures, nuitées et transports. Les informations peuvent évoluer.</p>'+
-    '</main></body></html>';
+    '</main></body></'+'html>';
  }
  function offline(t){
    try{
