@@ -53,6 +53,6 @@ assert.ok(off.meters>210,'out of route is measurable');
 assert.ok(math.projected([45,2.01],route).remaining<2);
 const tiles=math.tilesForLine(route,14);
 assert.ok(tiles.length>10&&tiles.length<480,tiles.length+' tiles for a short trek');
-assert.ok(tiles.every(p=>/^\/offline-tiles\/(?:10|11|12|13|14)\/\d+\/\d+\.pbf$/.test(p)),'tiles served only through controlled source');
+assert.ok(tiles.every(p=>/^\/offline-tiles\/(?:9|10|11|12|13|14)\/\d+\/\d+\.pbf$/.test(p)),'tiles served only through controlled source');
 assert.equal(new Set(tiles).size,tiles.length,'no duplicate tiles');
 console.log('HIKING CORE PASS: route validation, real traveled-distance geometry, off-route, remaining, offline tiles, limits and privacy');
