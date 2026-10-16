@@ -50,7 +50,13 @@
 'use strict';
 const $=id=>document.getElementById(id);
 const EMPTY={type:'FeatureCollection',features:[]};
-let map=null,routes=[],selected=null,current=null,headingMode=false,follow=true,lastGPS=null,panelOpen=false,mapReady=false;
+function poiCollection(id){
+ return {type:'FeatureCollection',features:waypoints.filter(p=>String(p.routeId)===String(id))
+   .filter(p=>Number.isFinite(Number(p.lat))&&Number.isFinite(Number(p.lon)))
+   .map(p=>({type:'Feature',properties:{label:p.label||p.category||'Repère personnel',category:p.category||'Repère personnel'},
+      geometry:{type:'Point',coordinates:[Number(p.lon),Number(p.lat)]}}))};
+}
+let map=null,routes=[],waypoints=[],selected=null,current=null,headingMode=false,follow=true,lastGPS=null,panelOpen=false,mapReady=false;
 const locale=n=>Number(n).toLocaleString('fr-FR',{maximumFractionDigits:2,minimumFractionDigits:2});
 const line=coords=>({type:'Feature',properties:{},geometry:{type:'LineString',coordinates:coords.map(p=>[p[1],p[0]])}});
 function bbox(coords){const b=new maplibregl.LngLatBounds();coords.forEach(p=>b.extend([p[1],p[0]]));return b}
@@ -63,6 +69,7 @@ function choose(id,zoom=true){
  $('day').textContent='1/'+Math.max(1,Math.ceil(routeMeters(r.coords)/25000));
  if(mapReady){
   map.getSource('selected').setData({type:'FeatureCollection',features:[line(r.coords)]});
+  updateLayer('waypoints',poiCollection(r.id));
   if(zoom)fit(r.coords);
  }
  panelOpen=false;$('trek-panel').classList.remove('show');
@@ -95,10 +102,12 @@ function start(){
   $('route-total').textContent='('+routes.length+')';
   renderList();
   if(typeof maplibregl==='undefined'||!routes.length){$('fallback').style.display='flex';if(!routes.length)note('Prépare un trek avec Internet avant ton départ.');return}
+  waypoints=await fetch('/data/waypoints.json',{cache:'no-store'}).then(r=>r.ok?r.json():[]).catch(()=>[]);
   let features=routes.map((r,i)=>({...line(r.coords),properties:{id:String(r.id),index:i,name:r.name||'Randonnée'}}));
   const style={version:8,name:'TrekMap France · local',sources:{
    base:{type:'vector',tiles:['https://appassets.androidplatform.net/tiles/{z}/{x}/{y}.pbf'],minzoom:9,maxzoom:14,attribution:'© OpenStreetMap contributors / OpenFreeMap'},
    downloaded:{type:'geojson',data:{type:'FeatureCollection',features}},
+   waypoints:{type:'geojson',data:EMPTY},
    selected:{type:'geojson',data:EMPTY},walk:{type:'geojson',data:EMPTY},gps:{type:'geojson',data:EMPTY},
    starts:{type:'geojson',data:{type:'FeatureCollection',features:routes.map(r=>({type:'Feature',properties:{id:r.id,name:r.name},geometry:{type:'Point',coordinates:[r.coords[0][1],r.coords[0][0]]}}))}}
   },layers:[
@@ -115,6 +124,8 @@ function start(){
    {id:'walked',type:'line',source:'walk',paint:{'line-color':'#ea8b33','line-width':4}},
    {id:'start-halo',type:'circle',source:'starts',paint:{'circle-radius':9,'circle-color':'#fff'}},
    {id:'start-dot',type:'circle',source:'starts',paint:{'circle-radius':6,'circle-color':'#0d7651','circle-stroke-width':1,'circle-stroke-color':'#fff'}},
+   {id:'wp-halo',type:'circle',source:'waypoints',paint:{'circle-radius':9,'circle-color':'#fff'}},
+   {id:'wp-dot',type:'circle',source:'waypoints',paint:{'circle-radius':6,'circle-color':'#b86822'}},
    {id:'gps-halo',type:'circle',source:'gps',paint:{'circle-radius':12,'circle-color':'#fff'}},
    {id:'gps-dot',type:'circle',source:'gps',paint:{'circle-radius':8,'circle-color':'#2766d2'}}
   ]};
@@ -124,6 +135,21 @@ function start(){
   map.on('error',()=>note('Certaines zones ne sont pas téléchargées. Complète les sections en Wi-Fi avant le départ.'));
   map.on('dragstart',()=>follow=false);map.on('zoomstart',()=>{if(mapReady)follow=false});
   map.on('click','start-dot',ev=>{const id=ev.features?.[0]?.properties?.id;if(id)choose(id)});
+  map.on('click','wp-dot',ev=>{
+    const f=ev.features?.[0];if(!f)return;
+    const label=String(f.properties?.label||'Repère personnel');
+    const box=document.createElement('div');box.style.cssText='font-size:13px;color:#144732';
+    const h=document.createElement('b');h.textContent=label;box.appendChild(h);
+    const txt=document.createElement('p');txt.textContent='Repère personnel · disponibilité non vérifiée';
+    box.appendChild(txt);
+    if(lastGPS){
+      const c=f.geometry.coordinates,lat=(lastGPS[0]+c[1])/2*Math.PI/180;
+      const m=Math.hypot((lastGPS[0]-c[1])*111195,(lastGPS[1]-c[0])*111195*Math.cos(lat));
+      const d=document.createElement('small');d.textContent='À environ '+Math.round(m)+' m à vol d’oiseau';
+      box.appendChild(d);
+    }
+    new maplibregl.Popup({closeButton:true}).setLngLat(f.geometry.coordinates).setDOMContent(box).addTo(map);
+  });
   refreshSession();setInterval(refreshSession,2000);
  }).catch(e=>{note('Impossible de lire la carte locale : '+String(e.message||e));$('fallback').style.display='flex'});
 }
