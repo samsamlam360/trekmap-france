@@ -30,7 +30,25 @@ assert.ok(bridge.includes('"/randonnee"')&&bridge.includes('"https"')&&bridge.in
 assert.ok(bridge.includes('public void listOfflineRoutes(') && bridge.includes('public void openOfflineDownload('),'profile offline bridge exists');
 assert.ok(bridge.includes('public void openOfflineDownload(PluginCall call){\n        if(!trustedHikePage()')===false,
   'map downloading must work from the actual root profile');
-assert.ok(bridge.includes('if(!trustedTrekMapPage()){call.reject("Origine non autorisée.");return;}'),'root profile bridge validated');
+assert.ok(bridge.includes('private void permitted(PluginCall call,boolean hikeOnly,Task action)'),
+  'all native actions must share an origin gate');
+assert.ok(bridge.includes('activity.runOnUiThread(()->{') &&
+  bridge.includes('web.getUrl()') &&
+  bridge.indexOf('activity.runOnUiThread(()->{') < bridge.indexOf('web.getUrl()'),
+  'WebView.getUrl must only be called from Android main UI thread');
+assert.ok(bridge.includes('IO.execute(()->{') &&
+  bridge.includes('newSingleThreadExecutor'),
+  'slow native route writes must not block UI');
+assert.ok(bridge.includes('activity.startActivity(intent)') &&
+  bridge.includes('catch(Exception e)') &&
+  bridge.includes('call.reject('),
+  'activity starts and failures need explicit user-visible error handling');
+for(const m of ['saveOfflineRoute','listOfflineRoutes','openOfflineRoute','openOfflineDownload',
+  'openOfflineJournal','openOfflineMap','openOfflineRoutes','openTracker']){
+ const body=bridge.split('public void '+m+'(PluginCall call)')[1]?.split('@PluginMethod')[0];
+ assert.ok(body?.includes('permitted(call,'),'method '+m+' bypassed native origin validation');
+}
+assert.ok(!bridge.includes('getWebView().getUrl()'),'never read WebView URL directly on plugin worker');
 const mgr=fs.readFileSync('mobile/native-src/fr/trekmap/france/TrekMapUpdateManager.java','utf8');
 assert.ok(mgr.includes('github.com/samsamlam360/trekmap-france/releases/download/') &&
           mgr.includes('sha256:') && mgr.includes('MAX_APK_BYTES'));
