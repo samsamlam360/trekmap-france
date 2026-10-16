@@ -27,13 +27,19 @@ block=r'''<!-- TM_JOURNEY_PHASE3_START -->
 (function(){
  "use strict";
  if(window.TrekMapJourneyTerrain)return;
- var watchId=null,followId=null,marker=null,accuracyCircle=null;
+ var watchId=null,followId=null,marker=null,accuracyCircle=null,lastLoc=null,following=true;
  var currentCoords=[],hud=document.createElement('aside');
  hud.id='tm-journey-gps-hud';hud.hidden=true;hud.setAttribute('role','status');hud.setAttribute('aria-live','polite');
  var status=document.createElement('div');status.id='tm-journey-gps-status';
  var stopButton=document.createElement('button');stopButton.id='tm-journey-gps-stop';
  stopButton.type='button';stopButton.textContent='Arrêter';
- hud.append(status,stopButton);document.body.appendChild(hud);
+ var centerButton=document.createElement('button');centerButton.id='tm-journey-gps-center';
+ centerButton.type='button';centerButton.textContent='Centrer';centerButton.title='Recentrer la carte sur ma position GPS';
+ hud.append(status,centerButton,stopButton);document.body.appendChild(hud);
+ centerButton.addEventListener('click',function(){
+   following=true;centerButton.textContent='Centrer';
+   try{if(lastLoc&&typeof map!=='undefined'&&map)map.panTo(lastLoc,{animate:false})}catch(_){}
+ });
  function coordsOf(t){
    var coords=t&&t.coords;
    if(!Array.isArray(coords)||coords.length<2||coords.length>50000)return [];
@@ -61,7 +67,7 @@ block=r'''<!-- TM_JOURNEY_PHASE3_START -->
      var vx=bx-ax,vy=by-ay,den=vx*vx+vy*vy;
      var t=den?Math.max(0,Math.min(1,-(ax*vx+ay*vy)/den)):0;
      var dist=Math.hypot(ax+t*vx,ay+t*vy);
-     if(dist<best.distance)best={distance:dist,remaining:suffix+(1-t)*segments[j]};
+     if(dist<best.distance)best={distance:dist,remaining:suffix+(1-t)*segments[j],nextPoint:sampled[j+1]};
      suffix+=segments[j];
    }
    return best;
@@ -79,29 +85,38 @@ block=r'''<!-- TM_JOURNEY_PHASE3_START -->
  }
  function stop(){
    if(watchId!==null&&navigator.geolocation)navigator.geolocation.clearWatch(watchId);
-   watchId=null;followId=null;currentCoords=[];clearGPSLayer();hud.hidden=true;
+   watchId=null;followId=null;currentCoords=[];lastLoc=null;following=true;centerButton.textContent='Centrer';clearGPSLayer();hud.hidden=true;
  }
  stopButton.addEventListener('click',stop);
  function onPosition(position){
    if(followId===null)return;
    var loc=[position.coords.latitude,position.coords.longitude];
+   lastLoc=loc;
    if(!loc.every(Number.isFinite))return;
    var accuracy=Math.max(0,Number(position.coords.accuracy)||0);
    var target=nearestRoute(loc,currentCoords);
    if(!target)return;
    var tolerance=Math.max(100,accuracy*2);
    var away=target.distance>tolerance;
-   setStatus(away?'Écart possible du tracé':'Suivi GPS actif',
+   var bearing=null;
+   if(Array.isArray(target.nextPoint)&&target.nextPoint.length===2){
+     var to=target.nextPoint,radians=Math.PI/180,dy=(to[1]-loc[1])*Math.cos(loc[0]*radians),dx=to[0]-loc[0];
+     if(Math.abs(dy)+Math.abs(dx)>1e-8)bearing=(Math.atan2(dy,dx)*180/Math.PI+360)%360;
+   }
+   var cardinal=bearing===null?'':(['N','NE','E','SE','S','SO','O','NO'][Math.round(bearing/45)%8]);
+   setStatus(accuracy>150?'Position GPS imprécise':away?'Écart possible du tracé':'Suivi GPS actif',
      'Distance au tracé ≈ '+Math.round(target.distance)+' m · Fin du tracé ≈ '+
        (target.remaining/1000).toFixed(1)+' km'+(accuracy>0?' · Précision GPS ≈ '+Math.round(accuracy)+' m':'')+
-       (away?' · Vérifie ta position sur une carte fiable.':''));
+       (bearing!==null?' · Direction indicative du prochain segment : '+cardinal+' ('+Math.round(bearing)+'°)':'')+
+       (away?' · Vérifie ta position sur une carte fiable, sans couper hors sentier.':'')+
+       (accuracy>150?' · Écarte-toi des obstacles et vérifie la position.':''));
    try{
      if(typeof L==='undefined'||typeof map==='undefined'||!map)return;
      if(!marker)marker=L.circleMarker(loc,{radius:8,color:'#fff',weight:3,fillColor:'#0d7955',fillOpacity:1}).addTo(map);
      else marker.setLatLng(loc);
      if(!accuracyCircle)accuracyCircle=L.circle(loc,{radius:accuracy,color:'#268a61',weight:1,fillOpacity:.08}).addTo(map);
      else accuracyCircle.setLatLng(loc).setRadius(accuracy);
-     if(window.innerWidth<=820)map.panTo(loc,{animate:false});
+     if(window.innerWidth<=820&&following)map.panTo(loc,{animate:false});
    }catch(_){}
  }
  function start(t){
@@ -109,6 +124,12 @@ block=r'''<!-- TM_JOURNEY_PHASE3_START -->
    if(coords.length<2){notify('Ce trek ne possède pas de tracé GPS exploitable.');return false}
    if(!window.isSecureContext||!navigator.geolocation){notify('GPS indisponible : HTTPS et autorisation de localisation sont nécessaires.');return false}
    stop();followId=Number(t.id);currentCoords=coords;
+   try{
+     if(typeof map!=='undefined'&&map&&!map._trekmapFollowBound){
+       map._trekmapFollowBound=true;
+       map.on('dragstart',function(){if(followId!==null){following=false;centerButton.textContent='Recentrer'}});
+     }
+   }catch(_){}
    hud.hidden=false;setStatus('Localisation en cours…','Autorise le GPS pour suivre ta position. Aucune position n’est transmise à TrekMap.');
    try{
      watchId=navigator.geolocation.watchPosition(onPosition,function(error){
