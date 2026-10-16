@@ -56,7 +56,7 @@ try:
     assert km!='0,00 km', 'actual walked distance not recorded: '+km
     assert '✓' in browser.find_element(By.ID,'state').text,'near trail should be on-track'
     browser.execute_script("""
-      const real=Date.now;Date.now=()=>window.__testBaseTime+90000;
+      const real=Date.now;Date.now=()=>window.__testBaseTime+300000;
       window.__syntheticFix({coords:{latitude:45.004,longitude:2.0002,accuracy:5}});
       Date.now=real;
     """)
@@ -83,9 +83,10 @@ try:
     assert browser.find_element(By.ID,'nav-map').is_displayed()
     assert browser.find_element(By.ID,'download').is_displayed()
     assert browser.execute_script("return document.documentElement.scrollWidth<=window.innerWidth+2"),'nav viewport horizontally overflowing'
+    before_reload=browser.find_element(By.ID,'walked').text
     browser.get(BASE+'/randonnee')
     wait.until(lambda d:d.execute_script("return !!window.TrekMapHikeCore"))
-    assert browser.find_element(By.ID,'walked').text==km,'walked distance lost on reload'
+    assert browser.find_element(By.ID,'walked').text==before_reload,'walked distance lost on reload'
     print('HIKING CHROME PASS: fiche, route transfer, GPS, off-route, pause, persistence, responsive mode')
 finally:
     browser.quit()
