@@ -45,3 +45,23 @@ Si `mobile/android/` existe déjà, sauter `npm run android:add`. Les dossiers `
 4. Benchmarks batterie, précision, pertes de signal, longues marches et cartographie hors réseau.
 
 **Attention aux mises à jour de l'APK debug :** la clé est régénérée sur chaque runner GitHub et Android peut demander de désinstaller l'ancienne version. Exporte le GPX avant toute désinstallation : les traces du stockage privé seront effacées. Une signature stable devra être créée avec un secret GitHub avant les prochaines versions publiques.
+
+## Mise à jour native sans réinstallation
+
+La partie web de TrekMap France est mise à jour automatiquement via Render : aucun nouvel APK n'est nécessaire. Pour les changements Android, le système inclut désormais une vérification de version GitHub Releases et un installateur natif qui contrôle le SHA-256 avant de proposer l'installation.
+
+**Il manque une étape privée à faire une seule fois** : ajouter la même clé de signature dans les Secrets GitHub. Ne jamais la publier ni l'envoyer dans un chat.
+
+1. Sur un PC, générer et sauvegarder `trekmap-release.jks` avec `keytool -genkeypair -v -keystore trekmap-release.jks -alias trekmap -keyalg RSA -keysize 3072 -validity 10000`. Garder une sauvegarde hors ligne du fichier et des mots de passe.
+2. Convertir le fichier .jks en base64 localement (PowerShell : `[Convert]::ToBase64String([IO.File]::ReadAllBytes("trekmap-release.jks"))` ; Linux : `base64 -w0 trekmap-release.jks`).
+3. Dépôt GitHub → Settings → Secrets and variables → Actions : ajouter quatre secrets :
+   * `TREKMAP_ANDROID_KEYSTORE_BASE64` : chaîne base64 du fichier .jks.
+   * `TREKMAP_ANDROID_STORE_PASSWORD` : mot de passe du coffre.
+   * `TREKMAP_ANDROID_KEY_ALIAS` : `trekmap`.
+   * `TREKMAP_ANDROID_KEY_PASSWORD` : mot de passe de la clé privée.
+4. GitHub → Actions → TrekMap Android APK → Run workflow (branche main). Le pipeline publiera une release `android-vNNNN` contenant `trekmap-france.apk`, signée toujours avec la même clé.
+5. **Une dernière fois** : sauvegarder les GPX et désinstaller l'ancienne application *debug*, dont la signature ne correspond pas. Installer le premier APK signé. Pour les mises à jour suivantes, ne plus désinstaller : l'application signale la nouvelle version, télécharge son APK vérifié, puis Android demande de confirmer son installation par-dessus.
+
+Les mises à jour système ne peuvent pas être installées silencieusement sans un store ou des droits système spéciaux. L'installation garde les données personnelles de l'application seulement lorsque la signature et l'identifiant de paquet correspondent. Si la clé est perdue, cette continuité de mise à jour est impossible. Tant que les secrets ne sont pas configurés, seule la compilation *debug* est produite et aucune publication signée n'est annoncée.
+
+**Attention** : le code de l'installateur doit être compilé et testé en APK ; la vérification GPS et du téléchargement hors ligne nécessite toujours un essai réel sur le téléphone.

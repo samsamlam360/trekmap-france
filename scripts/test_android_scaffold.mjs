@@ -25,6 +25,18 @@ assert.ok(svc.includes('startForeground(')&&svc.includes('removeUpdates('));
 assert.ok(!svc.includes('HttpURLConnection')&&!svc.includes('new URL('));
 const bridge=fs.readFileSync('mobile/native-src/fr/trekmap/france/TrekMapNativeGpsPlugin.java','utf8');
 assert.ok(bridge.includes('"/randonnee"')&&bridge.includes('"https"')&&bridge.includes('openTracker'));
+const mgr=fs.readFileSync('mobile/native-src/fr/trekmap/france/TrekMapUpdateManager.java','utf8');
+assert.ok(mgr.includes('github.com/samsamlam360/trekmap-france/releases/download/') &&
+          mgr.includes('sha256:') && mgr.includes('MAX_APK_BYTES'));
+const activity=fs.readFileSync('mobile/native-src/fr/trekmap/france/TrekMapUpdateActivity.java','utf8');
+assert.ok(activity.includes('ACTION_MANAGE_UNKNOWN_APP_SOURCES') &&
+          activity.includes('FileProvider') && activity.includes('ACTION_VIEW'));
+assert.ok(patch.includes('TREKMAP_KEYSTORE_PATH') &&
+          patch.includes('TrekMapUpdateActivity') && patch.includes('trekmap_update_paths'));
+const workflow=fs.readFileSync('.github/workflows/android-apk.yml','utf8');
+assert.ok(workflow.includes('TREKMAP_ANDROID_KEYSTORE_BASE64') &&
+          workflow.includes('assembleRelease') && workflow.includes('gh release create'));
+
 assert.ok(fs.readFileSync('frontend/hike.html','utf8').includes("nativePlugin.openTracker"));
 
 assert.ok(fs.readFileSync('frontend/hike.html','utf8').includes('navigator.geolocation.watchPosition'));

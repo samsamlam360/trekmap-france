@@ -15,7 +15,7 @@ on:
       - 'scripts/test_android_scaffold.mjs'
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   build-apk:
@@ -42,6 +42,8 @@ jobs:
       - name: Generate native Android project
         working-directory: mobile
         run: npx cap add android
+      - name: Increment Android version
+        run: echo "TREKMAP_VERSION_CODE=$((1000 + GITHUB_RUN_NUMBER))" >> "$GITHUB_ENV"
       - name: Add native GPS permissions and branding
         working-directory: mobile
         run: node scripts/configure-android.mjs
@@ -63,3 +65,65 @@ jobs:
           path: mobile/android/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 14
+
+      - name: Test signed release with disposable CI key (never publish)
+        if: github.event_name == 'pull_request'
+        working-directory: mobile/android
+        shell: bash
+        run: |
+          keytool -genkeypair -noprompt -storetype PKCS12 \
+            -keystore "$RUNNER_TEMP/ci-disposable.p12" \
+            -alias ci -storepass temporaryCI123 -keypass temporaryCI123 \
+            -dname "CN=TrekMap CI, OU=Android test, O=CI, C=FR" \
+            -keyalg RSA -keysize 2048 -validity 3
+          export TREKMAP_KEYSTORE_PATH="$RUNNER_TEMP/ci-disposable.p12"
+          export TREKMAP_KEYSTORE_PASSWORD="temporaryCI123"
+          export TREKMAP_KEY_PASSWORD="temporaryCI123"
+          export TREKMAP_KEY_ALIAS="ci"
+          ./gradlew --no-daemon :app:assembleRelease
+          signed="app/build/outputs/apk/release/app-release.apk"
+          test -s "$signed"
+          verifier="$(find "$ANDROID_HOME/build-tools" -maxdepth 2 -name apksigner -type f | sort -V | tail -1)"
+          "$verifier" verify "$signed"
+      - name: Configure persistent Android signing
+        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+        shell: bash
+        env:
+          KEYSTORE_BASE64: ${{ secrets.TREKMAP_ANDROID_KEYSTORE_BASE64 }}
+          STORE_PASSWORD: ${{ secrets.TREKMAP_ANDROID_STORE_PASSWORD }}
+          KEY_PASSWORD: ${{ secrets.TREKMAP_ANDROID_KEY_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.TREKMAP_ANDROID_KEY_ALIAS }}
+        run: |
+          if [[ -z "$KEYSTORE_BASE64" || -z "$STORE_PASSWORD" || -z "$KEY_PASSWORD" || -z "$KEY_ALIAS" ]]; then
+            echo "Private signing secrets not configured: only debug APK generated."
+            exit 0
+          fi
+          umask 077
+          printf '%s' "$KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/trekmap-signing.jks"
+          echo "TREKMAP_KEYSTORE_PATH=$RUNNER_TEMP/trekmap-signing.jks" >> "$GITHUB_ENV"
+          echo "TREKMAP_KEYSTORE_PASSWORD=$STORE_PASSWORD" >> "$GITHUB_ENV"
+          echo "TREKMAP_KEY_PASSWORD=$KEY_PASSWORD" >> "$GITHUB_ENV"
+          echo "TREKMAP_KEY_ALIAS=$KEY_ALIAS" >> "$GITHUB_ENV"
+          echo "TREKMAP_RELEASE_ENABLED=1" >> "$GITHUB_ENV"
+      - name: Build stable signed APK
+        if: env.TREKMAP_RELEASE_ENABLED == '1'
+        working-directory: mobile/android
+        shell: bash
+        run: |
+          ./gradlew --no-daemon :app:assembleRelease
+          apk="app/build/outputs/apk/release/app-release.apk"
+          test -s "$apk"
+          verifier="$(find "$ANDROID_HOME/build-tools" -maxdepth 2 -name apksigner -type f | sort -V | tail -1)"
+          test -x "$verifier"
+          "$verifier" verify "$apk"
+          cp "$apk" "$RUNNER_TEMP/trekmap-france.apk"
+      - name: Publish stable signed update
+        if: env.TREKMAP_RELEASE_ENABLED == '1'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          gh release create "android-v$TREKMAP_VERSION_CODE" "$RUNNER_TEMP/trekmap-france.apk" \
+            --title "TrekMap Android $TREKMAP_VERSION_CODE" \
+            --notes "Version Android signée, à installer sans désinstaller la version précédente possédant la même signature." \
+            --latest

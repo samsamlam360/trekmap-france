@@ -19,9 +19,15 @@ assert.ok(xml.includes('android.permission.FOREGROUND_SERVICE_LOCATION'),'Native
 assert.ok(xml.includes('android:foregroundServiceType="location"'),'Foreground location service declaration required');
 assert.ok(xml.includes('android.permission.FOREGROUND_SERVICE'),'Foreground service permission required');
 assert.ok(xml.includes('android.permission.POST_NOTIFICATIONS'),'Visible tracking notification');
-for(const f of ['TrekMapNativeGpsPlugin.java','GpsTrackStore.java','GpsTrackService.java','GpsTrackActivity.java','MainActivity.java'])
+assert.ok(xml.includes('android.permission.REQUEST_INSTALL_PACKAGES'),'Update installer permission');
+assert.ok(xml.includes('androidx.core.content.FileProvider'),'Private APK FileProvider');
+assert.ok(xml.includes('TrekMapUpdateActivity'),'Native update flow');
+assert.ok(fs.existsSync('android/app/src/main/res/xml/trekmap_update_paths.xml'));
+for(const f of ['TrekMapNativeGpsPlugin.java','GpsTrackStore.java','GpsTrackService.java','GpsTrackActivity.java','TrekMapUpdateManager.java','TrekMapUpdateActivity.java','MainActivity.java'])
  assert.ok(fs.existsSync('android/app/src/main/java/fr/trekmap/france/'+f), f);
 assert.ok(fs.existsSync('android/app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml'));
 const appgradle=fs.readFileSync('android/app/build.gradle','utf8');
 assert.ok(appgradle.includes('fr.trekmap.france'),'applicationId mismatch');
-console.log('ANDROID CONFIG PASS: native GPS recording, explicit foreground service, permissions, protected HTTPS origin, icon.');
+assert.ok(appgradle.includes('// TrekMap stable version and signing configuration'));
+assert.ok(appgradle.includes('trekmapRelease'));
+console.log('ANDROID CONFIG PASS: GPS service, update prompt, restricted FileProvider, fixed Android version and optional stable signing.');
