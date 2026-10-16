@@ -23,7 +23,7 @@ assert.ok(phases[2].includes("navigator.geolocation.watchPosition"),'opt-in live
 assert.ok(phases[2].includes("navigator.geolocation.clearWatch"),'tracking can be stopped');
 assert.ok(phases[2].includes("window.addEventListener('pagehide',stop)"),'tracking stops on page hide');
 assert.ok(phases[2].includes("isSecureContext"),'HTTPS required');
-assert.ok(phases[2].includes("aucune position"),'privacy wording is explicit');
+assert.ok(phases[2].includes("Aucune position"),'privacy wording is explicit');
 assert.ok(phases[2].includes("sans fond topographique"),'offline map limitation is explicit');
 assert.ok(phases[2].includes("URL.revokeObjectURL"),'download object URLs are cleaned up');
 assert.ok(phases[0].includes('apply_journey_phase2.py'),'phase 2 is chained');
