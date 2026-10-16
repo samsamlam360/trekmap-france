@@ -15,6 +15,21 @@ assert.ok(html.includes('restant sur le parcours')||html.includes('Restant sur l
 assert.ok(html.includes('off-line')||html.includes('hors connexion'));
 assert.ok(html.includes('OpenFreeMap')&&html.includes('OpenStreetMap'),'attributions visible');
 assert.ok(html.includes('navigator.geolocation.watchPosition'),'real GPS watch');
+assert.ok(html.includes('id="gps-hud"') && html.includes('id="gps-map-controls"') &&
+  html.includes('id="hud-remaining"') && html.includes('id="hud-walked"') &&
+  html.includes('id="hud-time"'),'mobile map must expose real GPS stats');
+for(const id of ['quick-start','quick-pause','quick-tools','map-recenter','map-full','map-heading'])
+ assert.ok(html.includes('id="'+id+'"') &&
+   html.includes("el('"+id+"').addEventListener('click'"),
+   'mobile control '+id+' needs a working click handler');
+assert.ok(html.includes("el('quick-start').addEventListener('click',()=>el('start').click())") &&
+          html.includes("el('quick-pause').addEventListener('click',()=>el('pause').click())"),
+  'HUD must invoke the original GPS controls rather than a second tracking engine');
+assert.ok(html.includes("headingMode&&Number.isFinite(pos.coords.heading)") &&
+          html.includes("pos.coords.speed>=0.5"),'map heading only when moving and bearing is valid');
+assert.ok(html.includes('aria-valuenow')&&html.includes("remaining=nearest?"),
+  'on-map progress bar must follow remaining route distance');
+
 assert.ok(html.includes('id="android-diagnostic"')&&html.includes('nativePlugin.listOfflineRoutes()'),
  'visible bridge diagnosis is required to distinguish browser vs native storage');
 
