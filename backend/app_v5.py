@@ -212,3 +212,66 @@ def NumberSafe(value):
 # replacement pipeline: earlier router entries disrupt route replacement.
 from . import profile_v2
 app.router.routes.extend(profile_v2.router.routes)
+
+
+# Offline navigation: public, bounded vector map tiles from OpenFreeMap.
+# The proxy identifies the application via User-Agent (unlike browser fetch).
+# No positions, trek IDs or user credentials are sent to the provider.
+from pathlib import Path as _HikePath
+from fastapi import Request as _HikeRequest
+import requests as _hike_requests
+import time as _hike_time
+from threading import Lock as _HikeLock
+from collections import defaultdict as _HikeDefaultDict, deque as _HikeDeque
+
+_HIKE_ROOT = _HikePath(__file__).resolve().parents[1] / "frontend"
+_HIKE_TILE_LOCK = _HikeLock()
+_HIKE_TILE_ACCESS = _HikeDefaultDict(_HikeDeque)
+
+
+@app.get("/randonnee", include_in_schema=False)
+def hiking_navigation_page():
+    return Response(content=(_HIKE_ROOT / "hike.html").read_bytes(),
+                    media_type="text/html", headers={"Cache-Control":"public, max-age=180"})
+
+
+@app.get("/navigation-worker.js", include_in_schema=False)
+def hiking_navigation_worker():
+    return Response(content=(_HIKE_ROOT / "navigation-worker.js").read_bytes(),
+                    media_type="application/javascript",
+                    headers={"Cache-Control":"no-cache", "Service-Worker-Allowed":"/"})
+
+
+@app.get("/offline-tiles/{z}/{x}/{y}.pbf", include_in_schema=False)
+def hiking_vector_tile(z: int, x: int, y: int, request: _HikeRequest):
+    # Fixed provider, strict tile bounds and per-client caps: not an open proxy.
+    if not (9 <= z <= 14 and 0 <= x < (1 << z) and 0 <= y < (1 << z)):
+        raise HTTPException(status_code=404, detail="Tuile hors zone")
+    client = request.client.host if request.client else "unknown"
+    now = _hike_time.monotonic()
+    with _HIKE_TILE_LOCK:
+        visits = _HIKE_TILE_ACCESS[client]
+        while visits and now-visits[0] > 3600:
+            visits.popleft()
+        if len(visits) >= 900:
+            raise HTTPException(status_code=429, detail="Limite horaire de tuiles atteinte")
+        visits.append(now)
+        if len(_HIKE_TILE_ACCESS)>5000:
+            for key in list(_HIKE_TILE_ACCESS)[:500]:
+                if not _HIKE_TILE_ACCESS[key] or now-_HIKE_TILE_ACCESS[key][-1]>3600:
+                    del _HIKE_TILE_ACCESS[key]
+    url=f"https://tiles.openfreemap.org/planet/latest/{z}/{x}/{y}.pbf"
+    try:
+        upstream = _hike_requests.get(
+            url, timeout=9,
+            headers={"User-Agent": "TrekMapFrance-Navigation/1.0 (+https://trekmap-france.onrender.com)",
+                     "Accept": "application/x-protobuf"})
+    except _hike_requests.RequestException:
+        raise HTTPException(status_code=503, detail="Fond de carte temporairement indisponible")
+    if upstream.status_code == 404:
+        raise HTTPException(status_code=404, detail="Tuile non disponible")
+    if upstream.status_code != 200 or len(upstream.content)>350000:
+        raise HTTPException(status_code=502, detail="Serveur cartographique indisponible")
+    return Response(content=upstream.content, media_type="application/x-protobuf",
+                    headers={"Cache-Control":"public, max-age=604800",
+                             "X-Content-Type-Options":"nosniff"})

@@ -452,6 +452,7 @@ body.tm-brain-route-mode.tm-brain-show-resources .tm-v91-legend {display:block!i
         '</div>');
     }
     parts.push('</div></div><div class="tm-brain-actions">'+
+      '<button type="button" data-workspace-action="navigate">🥾 Mode randonnée</button>'+
       '<button type="button" data-workspace-action="modify">✏️ Modifier</button>'+
       '<button type="button" class="tm-brain-primary" data-workspace-action="save">✓ Enregistrer</button></div>');
     panel.innerHTML=parts.join('');
@@ -543,6 +544,14 @@ body.tm-brain-route-mode.tm-brain-show-resources .tm-v91-legend {display:block!i
       var show=!body.classList.contains('tm-brain-show-resources');
       body.classList.toggle('tm-brain-show-resources',show);
       button.setAttribute('aria-pressed',String(show));
+    }
+    else if(action==='navigate'){
+      var route=plan&&plan.route_preview;
+      if(!route||!Array.isArray(route.coords))return;
+      var coords=route.coords;
+      var data={id:'brain-'+String(plan.title||'trekbrain').slice(0,32),
+        name:plan.title||'TrekBrain',region:plan.region||'',coords:coords};
+      window.TrekMapHikingNavigation?.open(data);
     }
     else if(action==='modify'){
       if(window.TrekMapTripReadiness)window.TrekMapTripReadiness.edit(plan);

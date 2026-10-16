@@ -106,3 +106,6 @@ block=r'''<!-- TM_STAGE_NOTES_START -->
 if html.count("</body>")!=1:raise SystemExit("Unexpected HTML body")
 p.write_text(html.replace("</body>",block+"\n</body>",1),encoding="utf-8")
 print("TrekBrain personal day notes installed without recalculating GPS geometry")
+
+from runpy import run_path
+run_path(str(Path(__file__).with_name('apply_hike_navigation_entry.py')))

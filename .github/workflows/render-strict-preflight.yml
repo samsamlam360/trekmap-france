@@ -123,6 +123,7 @@ jobs:
       - name: Verify accessible TrekBrain UI redesign
         run: |
           node scripts/test_hiker_finish.mjs
+          node scripts/test_hike_navigation.mjs
           node scripts/test_trekbrain_ux_refresh.mjs
           node scripts/test_trekbrain_desktop_experience.mjs
           node scripts/test_trekbrain_map_workspace.mjs
@@ -267,6 +268,7 @@ jobs:
           python -m pip install 'selenium>=4.25,<5'
           python scripts/test_trekmap_real_browser.py
           python scripts/test_journey_browser.py
+          python scripts/test_hike_browser.py
 
       - name: Preserve PC and mobile browser screenshots
         if: always() && matrix.python-version == '3.11'
