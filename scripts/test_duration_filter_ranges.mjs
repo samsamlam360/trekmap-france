@@ -12,7 +12,7 @@ const options=[...select.matchAll(/<option value="([^"]*)">([^<]+)<\/option>/g)]
 const expected=['','1-2','3-5','6-7','8-14','15-30','31+'];
 assert.deepEqual(options.map(x=>x[1]),expected,'duration bins must cover all lengths, with no upper ceiling');
 assert.equal(options[0][2],'Toutes les durées');
-assert.ok(!html.includes('Durée max'),'the old cumulative-limit label must disappear');
+assert.ok(html.includes('<label for="duration-filter">Durée du trek</label>'), 'the catalog duration control must keep its precise interval label');
 assert.ok(!select.includes('≤'),'intervals must replace the old less-than-or-equal choices');
 
 const helper=html.match(/function matchesDurationRange\(durationDays,range\)\{[\s\S]*?\n\}/)?.[0];

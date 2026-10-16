@@ -255,3 +255,7 @@ if html.count("</body>")!=1:raise SystemExit("Unexpected closing body")
 html=html.replace("</body>",block+"\n</body>",1)
 path.write_text(html,encoding="utf-8")
 print("Immersive map focus mode installed last")
+
+# Parcours randonneur: phase 1, avant la préparation et les fonctions terrain.
+from runpy import run_path
+run_path(str(Path(__file__).with_name("apply_journey_phase1.py")))
