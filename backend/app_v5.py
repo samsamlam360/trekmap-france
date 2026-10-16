@@ -232,7 +232,7 @@ _HIKE_TILE_ACCESS = _HikeDefaultDict(_HikeDeque)
 @app.get("/randonnee", include_in_schema=False)
 def hiking_navigation_page():
     return Response(content=(_HIKE_ROOT / "hike.html").read_bytes(),
-                    media_type="text/html", headers={"Cache-Control":"public, max-age=180"})
+                    media_type="text/html", headers={"Cache-Control":"no-cache, no-store, must-revalidate", "X-TrekMap-Page":"randonnée-live"})
 
 
 @app.get("/navigation-worker.js", include_in_schema=False)
