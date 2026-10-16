@@ -133,4 +133,14 @@ assert.ok(installer.includes('/randonnee?fresh='),'old installed SW cache must b
 assert.ok(api.includes('no-cache, no-store, must-revalidate'),'HTML must not be cached by HTTP intermediaries');
 assert.ok(html.indexOf('nativePlugin?.openOfflineDownload')<html.indexOf("if(!('caches' in window)"),
   'native Android preparation must run before web cache API guards');
+// When navigation opens, do not eagerly prepare hundreds of tile groups or
+// marshal thousands of coordinates across the native Android bridge.
+const tail=html.slice(html.indexOf('window.addEventListener(\'pagehide\''));
+assert.ok(!tail.includes('try{setSections()}'),'tile planning must be lazy');
+const beforeFunctions=html.slice(html.indexOf('const nativePlugin='),html.indexOf('function nativeCoords()'));
+assert.ok(!beforeFunctions.includes('nativePlugin.saveOfflineRoute('),'no native storage writes on page opening');
+assert.ok(html.includes('function displayPoints(points,limit=5500)'),'large map preview must be bounded');
+assert.ok(html.includes('data:coordinatesGeo(displayPoints(coords))'),'large polyline preview uses a bounded source');
+assert.ok(html.includes('function showMapFallback()'),'fallback must be created only when needed');
+assert.ok(!html.includes('Math.min(...lon)')&&!html.includes('Math.max(...lat)'),'large coordinate spread can overflow mobile JS stack');
 console.log('HIKING CORE PASS: route validation, real traveled-distance geometry, off-route, remaining, offline tiles, limits and privacy');

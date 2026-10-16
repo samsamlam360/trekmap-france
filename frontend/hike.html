@@ -168,7 +168,7 @@ function coordinatesGeo(points){return {type:'FeatureCollection',features:[{type
 function pointGeo(p){return {type:'FeatureCollection',features:p?[{type:'Feature',properties:{},geometry:{type:'Point',coordinates:[p[1],p[0]]}}]:[]}}
 const style={version:8, name:'Navigation pédestre',sources:{
  base:{type:'vector',tiles:[location.origin+TILE_PATH+'{z}/{x}/{y}.pbf'],minzoom:9,maxzoom:14},
- planned:{type:'geojson',data:coordinatesGeo(coords)},
+ planned:{type:'geojson',data:coordinatesGeo(displayPoints(coords))},
  walked:{type:'geojson',data:coordinatesGeo([])},
  position:{type:'geojson',data:pointGeo(null)}
 },layers:[
@@ -192,16 +192,31 @@ function routeBounds(){
  const bounds=new maplibregl.LngLatBounds();
  coords.forEach(p=>bounds.extend([p[1],p[0]]));return bounds;
 }
+function displayPoints(points,limit=5500){
+ // The GPS and download calculations retain the full geometry; only the
+ // screen preview is bounded to keep WebView memory usage predictable.
+ if(points.length<=limit)return points;
+ const out=[];
+ for(let i=0;i<limit;i++)out.push(points[Math.round(i*(points.length-1)/(limit-1))]);
+ return out;
+}
 function svgBackup(){
- const svg=el('fallback-svg');
- const lat=coords.map(p=>p[0]),lon=coords.map(p=>p[1]),c=Math.cos((lat[0]||45)*RAD);
- const west=Math.min(...lon),east=Math.max(...lon),south=Math.min(...lat),north=Math.max(...lat);
- const w=Math.max(.00001,(east-west)*c),h=Math.max(.00001,north-south),scale=Math.min(450/w,395/h);
+ const svg=el('fallback-svg'),preview=displayPoints(coords,1250);
+ let south=Infinity,north=-Infinity,west=Infinity,east=-Infinity;
+ for(const p of coords){
+  if(p[0]<south)south=p[0];if(p[0]>north)north=p[0];
+  if(p[1]<west)west=p[1];if(p[1]>east)east=p[1];
+ }
+ const c=Math.cos((coords[0][0]||45)*RAD),w=Math.max(.00001,(east-west)*c);
+ const h=Math.max(.00001,north-south),scale=Math.min(450/w,395/h);
  const px=p=>25+((p[1]-west)*c)*scale,py=p=>425-(p[0]-south)*scale;
- const path=coords.map((p,i)=>(i===0?'M':'L')+px(p).toFixed(1)+','+py(p).toFixed(1)).join(' ');
+ const path=preview.map((p,i)=>(i===0?'M':'L')+px(p).toFixed(1)+','+py(p).toFixed(1)).join(' ');
  svg.innerHTML='<path d="'+path+'" fill="none" stroke="#107c52" stroke-width="5" stroke-linecap="round"/>';
 }
-svgBackup();
+function showMapFallback(){
+ try{svgBackup()}catch(_){}
+ el('map-fallback').style.display='flex';
+}
 if(typeof maplibregl!=='undefined'){
  try{
  map=new maplibregl.Map({container:'nav-map',style,center:[coords[0][1],coords[0][0]],
@@ -212,8 +227,8 @@ if(typeof maplibregl!=='undefined'){
  });
  map.on('dragstart',()=>{mapFollowing=false});
  map.on('error',event=>{if(!navigator.onLine)el('offline-status').textContent='Une partie des tuiles manque. Reviens en ligne pour compléter le téléchargement.'});
- }catch(e){el('map-fallback').style.display='flex'}
-}else{el('map-fallback').style.display='flex'}
+ }catch(e){showMapFallback()}
+}else{showMapFallback()}
 function refreshMap(){
  if(!map||!map.isStyleLoaded())return;
  map.getSource('walked')?.setData(coordinatesGeo(saved.points.map(p=>[p[0],p[1]])));
@@ -466,7 +481,11 @@ async function checkOffline(){
    (!shell?' Le moteur de carte doit encore être mis en cache.':'');
  }catch(e){info.textContent='Vérification impossible : '+String(e.message||e)}
 }
-el('offline-zoom').addEventListener('change',()=>{try{setSections()}catch(e){el('offline-status').textContent=e.message}});
+el('offline-zoom').addEventListener('change',()=>{// Computing a whole large map (thousands of tile references) at open time can
+// stall or exhaust a mobile WebView. Plan only after the user requests it.
+el('segment-overview').textContent='Parcours chargé ('+formatKm(routeLength)+'). Pour télécharger les cartes, touche « Découper mon trek en sections ».';
+if(coords.length>5500)
+ el('offline-status').textContent='Affichage cartographique simplifié pour économiser la mémoire. Tracé GPS et itinéraire téléchargé conservés complets.';});
 el('plan-sections').addEventListener('click',()=>{try{setSections()}catch(e){el('offline-status').textContent=e.message}});
 el('download-all').addEventListener('click',()=>prepare(true));
 el('start').addEventListener('click',start);el('pause').addEventListener('click',pause);
@@ -496,21 +515,12 @@ const nativePlugin=window.Capacitor?.Plugins?.TrekMapNativeGPS;
    navigator.serviceWorker.getRegistration('/').then(reg=>reg?.update()).catch(()=>{});
  }
 
- // Saving a trek for the Android offline list is NOT the same as downloading
- // its tiles. Distinguish the two explicitly and report storage failures.
- if(window.Capacitor?.getPlatform?.()==='android'){
-   if(!nativePlugin?.saveOfflineRoute){
-     el('offline-status').textContent='⚠ Pont Android absent : les cartes du navigateur ne seront pas visibles dans le GPS hors ligne. Vérifie la version de l’application.';
-   }else {
-     nativePlugin.saveOfflineRoute({route:{id:route.id,name:route.name,region:route.region,
-       coords:coords.length<=6000?coords:coords.filter((_,i)=>i===0||i===coords.length-1||i%Math.ceil(coords.length/5998)===0)}})
-       .then(()=>{if(el('offline-status').textContent==='Pas encore préparé.')
-         el('offline-status').textContent='✓ Trek enregistré pour Android (tracé uniquement). Télécharge encore ses sections de carte avant le mode avion.'})
-       .catch(e=>{el('offline-status').textContent='⚠ Enregistrement du trek Android impossible : '+String(e?.message||e)});
-   }
+ // Never perform a large native bridge write as a side-effect of opening a
+ // page. Explicit Save or Download handles persistence with a visible result.
+ if(window.Capacitor?.getPlatform?.()==='android' && !nativePlugin?.saveOfflineRoute){
+   el('offline-status').textContent='⚠ Pont Android absent. Le suivi web reste accessible ; vérifie la version Android avant de télécharger.';
  }
-
-function nativeCoords(){
+ function nativeCoords(){
  if(coords.length<=6000)return coords;
  const reduced=[];
  for(let i=0;i<6000;i++)reduced.push(coords[Math.round(i*(coords.length-1)/5999)]);

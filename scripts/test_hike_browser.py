@@ -125,6 +125,34 @@ try:
     finally:
       browser.execute_cdp_cmd('Network.emulateNetworkConditions',{
         'offline':False,'latency':0,'downloadThroughput':-1,'uploadThroughput':-1})
+    # Regression: opening a substantial trek in the Android WebView must not
+    # synchronously prefetch thousands of tile coordinates or write to native
+    # storage before a deliberate tap. This was introduced in the cache fix.
+    browser.execute_cdp_cmd('Page.addScriptToEvaluateOnNewDocument',{'source':"""
+      window.__nativeWrites=0;
+      window.Capacitor={getPlatform:()=> 'android',Plugins:{
+        TrekMapNativeGPS:{
+          saveOfflineRoute:()=>{window.__nativeWrites++;return Promise.resolve({saved:true})},
+          listOfflineRoutes:()=>Promise.resolve({routes:[]}),
+          openTracker:()=>Promise.resolve(),
+          openOfflineDownload:()=>Promise.resolve()
+        }
+      }};
+    """})
+    browser.execute_script("""
+      const coords=Array.from({length:16000},(_,i)=>[45+i*0.000007,2+i*0.000012]);
+      localStorage.setItem('tm-navigation-route-v1',JSON.stringify({
+        id:'very-long-16000',name:'Grand trek de validation',region:'Test',
+        coords:coords
+      }));
+    """)
+    browser.get(BASE+'/randonnee?large-route-e2e=1')
+    wait.until(lambda d:d.execute_script("return !!window.TrekMapHikeCore"))
+    assert browser.find_element(By.ID,'title').text=='Grand trek de validation'
+    assert browser.execute_script("return window.__nativeWrites") == 0,'unexpected automatic Android storage call on page entry'
+    assert browser.execute_script("return document.getElementById('section-picker').options.length") == 0, 'tile planning started before user requested it'
+    assert browser.execute_script("return document.documentElement.scrollWidth<=window.innerWidth+2"), 'large trek broke mobile viewport'
+    print('HIKING LONG ROUTE PASS: no auto Android calls, no expensive eager tile planning')
     print('HIKING CHROME PASS: fiche, GPS, deviation, pause, GPX, persistence, responsive, offline package and airplane-mode page')
 finally:
     browser.quit()
