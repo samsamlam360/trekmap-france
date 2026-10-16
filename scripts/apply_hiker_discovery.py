@@ -143,3 +143,6 @@ block=r'''<!-- TM_HIKER_DISCOVERY_START -->
 if html.count("</body>")!=1:raise SystemExit("Unexpected closing body marker")
 p.write_text(html.replace("</body>",block+"\n</body>",1),encoding="utf-8")
 print("Discovery: average daily km filter and route-backed detailed trek facts")
+
+from runpy import run_path
+run_path(str(Path(__file__).with_name('apply_trekbrain_stage_notes.py')))
