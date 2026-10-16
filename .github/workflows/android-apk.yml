@@ -1,0 +1,65 @@
+name: TrekMap Android APK
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'mobile/**'
+      - '.github/workflows/android-apk.yml'
+      - 'scripts/test_android_scaffold.mjs'
+  push:
+    branches: [main]
+    paths:
+      - 'mobile/**'
+      - '.github/workflows/android-apk.yml'
+      - 'scripts/test_android_scaffold.mjs'
+
+permissions:
+  contents: read
+
+jobs:
+  build-apk:
+    name: Build Android debug APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Check TrekMap Android integration
+        run: node scripts/test_android_scaffold.mjs
+      - name: Install locked top-level Capacitor versions
+        working-directory: mobile
+        run: npm install --no-audit --no-fund
+      - name: Generate native Android project
+        working-directory: mobile
+        run: npx cap add android
+      - name: Add native GPS permissions and branding
+        working-directory: mobile
+        run: node scripts/configure-android.mjs
+      - name: Synchronize Capacitor Android
+        working-directory: mobile
+        run: npx cap sync android
+      - name: Validate generated Android project
+        working-directory: mobile
+        run: node scripts/verify-android.mjs
+      - name: Build installable APK (debug signing; test only)
+        working-directory: mobile/android
+        run: |
+          chmod +x gradlew
+          ./gradlew --no-daemon --stacktrace :app:assembleDebug
+      - name: Upload installable APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: trekmap-france-android-debug-${{ github.run_number }}
+          path: mobile/android/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+          retention-days: 14
