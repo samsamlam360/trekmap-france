@@ -33,7 +33,7 @@ async function start(){
   el('name').textContent=route.name||'Randonnée';
   if(typeof maplibregl==='undefined')throw Error('Moteur cartographique manquant');
   const style={version:8,name:'Carte TrekMap hors ligne',sources:{
-   base:{type:'vector',tiles:['https://appassets.androidplatform.net/tiles/{z}/{x}/{y}.pbf'],minzoom:9,maxzoom:14},
+   base:{type:'vector',tiles:['https://appassets.androidplatform.net/tiles/{z}/{x}/{y}.pbf'],minzoom:9,maxzoom:14,attribution:'© OpenStreetMap contributors · OpenFreeMap'},
    trek:{type:'geojson',data:{type:'FeatureCollection',features:[featureLine(points)]}},
    path:{type:'geojson',data:empty},
    gps:{type:'geojson',data:empty}
