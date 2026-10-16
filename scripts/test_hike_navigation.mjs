@@ -17,7 +17,9 @@ assert.ok(html.includes('OpenFreeMap')&&html.includes('OpenStreetMap'),'attribut
 assert.ok(html.includes('navigator.geolocation.watchPosition'),'real GPS watch');
 assert.ok(html.includes('navigator.wakeLock'),'keep display on if allowed');
 assert.ok(html.includes('localStorage.setItem(key'),'track saved locally');
-assert.ok(html.includes('download-progress')&&html.includes('tiles.put(path'),'tile cache download');
+assert.ok(html.includes('download-progress') && html.includes('cache.put(path') &&
+  html.includes('caches.open(CACHE_TILES)') && html.includes('new Set(chosen.flatMap(s=>s.files))'),
+  'all route sections must save tiles into one deduplicated offline cache');
 assert.ok(html.includes('save')||html.includes('saved.points.push('));
 assert.ok(html.includes("maximumAge:3000")&&html.includes("accuracy>60"),'accuracy gate and fresh high accuracy');
 assert.ok(html.includes('Math.max(45,accuracy*1.8)'),'off-route GPS precision guard');
