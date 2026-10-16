@@ -217,7 +217,7 @@ async function openPlan(id){
       <div class="planner">
         <div class="form-field"><label for="plan-notes">Notes</label><textarea id="plan-notes" autocomplete="off" placeholder="Météo, ravitaillement, horaires, points importants…">${esc(d.notes||'')}</textarea></div>
         <div class="form-field" style="margin-top:14px">
-          <label for="add-check">Checklist personnelle</label><p class="tm-checklist-help" style="font-size:13px;color:#365947;margin:2px 0 8px">Écris directement dans le <b>grand champ blanc</b> à droite de la case. La petite case sert uniquement à cocher l’élément terminé.</p>
+          <div class="tm-checklist-heading" style="font-size:14px;font-weight:800;color:#174b33;margin-bottom:6px">Checklist personnelle</div><p class="tm-checklist-help" style="font-size:13px;color:#365947;margin:2px 0 8px">Écris directement dans le <b>grand champ blanc</b> à droite de la case. La petite case sert uniquement à cocher l’élément terminé.</p>
           <div id="checklist" class="checklist-box"></div>
           <button type="button" class="ghost-btn" id="add-check" style="margin-top:8px">＋ Ajouter un élément</button>
           <div style="font-size:11px;color:#718078;margin-top:6px">Écris directement dans chaque ligne, puis coche les éléments terminés.</div>
