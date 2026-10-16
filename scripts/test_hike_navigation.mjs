@@ -135,8 +135,9 @@ assert.ok(html.indexOf('nativePlugin?.openOfflineDownload')<html.indexOf("if(!('
   'native Android preparation must run before web cache API guards');
 // When navigation opens, do not eagerly prepare hundreds of tile groups or
 // marshal thousands of coordinates across the native Android bridge.
-const tail=html.slice(html.indexOf('window.addEventListener(\'pagehide\''));
-assert.ok(!tail.includes('try{setSections()}'),'tile planning must be lazy');
+const finalSetup=html.slice(html.indexOf('setInterval(update,10000);'));
+assert.ok(finalSetup.includes('Parcours chargé ('),'route loads without eager tile preparation');
+assert.ok(!finalSetup.includes('try{setSections()}catch(e)'),'tile planning must be lazy');
 const beforeFunctions=html.slice(html.indexOf('const nativePlugin='),html.indexOf('function nativeCoords()'));
 assert.ok(!beforeFunctions.includes('nativePlugin.saveOfflineRoute('),'no native storage writes on page opening');
 assert.ok(html.includes('function displayPoints(points,limit=5500)'),'large map preview must be bounded');
