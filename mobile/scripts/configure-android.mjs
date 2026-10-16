@@ -8,7 +8,7 @@ const manifest=path.join(root,'AndroidManifest.xml');
 if(!fs.existsSync(manifest)) throw Error('Projet natif absent : lance npm run android:add');
 let xml=fs.readFileSync(manifest,'utf8');
 if(!xml.includes('<manifest') || !xml.includes('<application')) throw Error('AndroidManifest.xml inattendu');
-for(const permission of ['android.permission.INTERNET','android.permission.ACCESS_NETWORK_STATE','android.permission.ACCESS_COARSE_LOCATION','android.permission.ACCESS_FINE_LOCATION','android.permission.FOREGROUND_SERVICE','android.permission.FOREGROUND_SERVICE_LOCATION','android.permission.POST_NOTIFICATIONS','android.permission.REQUEST_INSTALL_PACKAGES']){
+for(const permission of ['android.permission.INTERNET','android.permission.ACCESS_NETWORK_STATE','android.permission.ACCESS_COARSE_LOCATION','android.permission.ACCESS_FINE_LOCATION','android.permission.FOREGROUND_SERVICE','android.permission.FOREGROUND_SERVICE_LOCATION','android.permission.POST_NOTIFICATIONS','android.permission.REQUEST_INSTALL_PACKAGES','android.permission.VIBRATE']){
   if(!xml.includes('android:name="'+permission+'"')){
     xml=xml.replace(/(<application\b)/, '    <uses-permission android:name="'+permission+'" />\n\n    $1');
   }
@@ -26,6 +26,7 @@ if(!xml.includes('fr.trekmap.france.GpsTrackService')){
         <activity android:name="fr.trekmap.france.OfflineRouteActivity" android:exported="false" />
         <activity android:name="fr.trekmap.france.OfflineDownloadActivity" android:exported="false" />
         <activity android:name="fr.trekmap.france.OfflineVectorMapActivity" android:exported="false" />
+        <activity android:name="fr.trekmap.france.TrackArchiveActivity" android:exported="false" />
         <activity android:name="fr.trekmap.france.TrekMapUpdateActivity" android:exported="false" />
         <provider android:name="androidx.core.content.FileProvider"
             android:authorities="fr.trekmap.france.apkprovider"
@@ -41,7 +42,7 @@ fs.writeFileSync(manifest,xml);
 const javaDest=path.join(root,'java/fr/trekmap/france');
 const nativeSrc=path.resolve('native-src/fr/trekmap/france');
 fs.mkdirSync(javaDest,{recursive:true});
-for(const file of ['TrekMapNativeGpsPlugin.java','GpsTrackStore.java','GpsTrackService.java','GpsTrackActivity.java','TrekMapUpdateManager.java','TrekMapUpdateActivity.java','OfflineRouteStore.java','OfflineTreksActivity.java','OfflineRouteActivity.java','OfflineTileStore.java','OfflineDownloadActivity.java','OfflineVectorMapActivity.java']){
+for(const file of ['TrekMapNativeGpsPlugin.java','GpsTrackStore.java','GpsTrackService.java','GpsTrackActivity.java','TrekMapUpdateManager.java','TrekMapUpdateActivity.java','OfflineRouteStore.java','OfflineTreksActivity.java','OfflineRouteActivity.java','OfflineTileStore.java','OfflineDownloadActivity.java','OfflineVectorMapActivity.java','TrackArchive.java','TrackArchiveActivity.java','OfflineWaypointStore.java']){
   fs.copyFileSync(path.join(nativeSrc,file),path.join(javaDest,file));
 }
 // Register only an explicit native tracker launcher. No direct GPS data sent to the WebView.

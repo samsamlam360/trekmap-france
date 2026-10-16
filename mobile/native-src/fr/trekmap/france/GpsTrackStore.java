@@ -15,7 +15,7 @@ final class GpsTrackStore {
     private static final String PREF = "trekmap_native_gps_v1";
     private static final String SESSION = "session";
     static final int MAX_ROUTE_POINTS = 6000;
-    private static final int MAX_TRACK_POINTS = 18000;
+    private static final int MAX_TRACK_POINTS = 35000;
     private GpsTrackStore() {}
 
     static boolean isValidRoute(JSONObject route) {
@@ -50,12 +50,19 @@ final class GpsTrackStore {
         o.put("status", "ready");
         o.put("distance", 0);
         o.put("elapsed", 0);
+        o.put("movingMs", 0);
+        o.put("ascent", 0);
+        o.put("dayIndex", 1);
+        o.put("dayStartDistance", 0);
+        o.put("dayStartEpoch", System.currentTimeMillis());
+        o.put("days", new JSONArray());
         o.put("startEpoch", System.currentTimeMillis());
         o.put("accuracy", -1);
         o.put("offtrack", -1);
         o.put("remaining", -1);
         o.put("note", "Démarre le suivi pour enregistrer ta marche.");
         o.put("points", new JSONArray());
+        o.put("offtrackFixes", 0);
         return o;
     }
     static double meters(double lat1,double lon1,double lat2,double lon2) {
@@ -100,7 +107,17 @@ final class GpsTrackStore {
                 return;
             }
             if(last==null || step>=Math.max(6,Math.max(acc,last.getAccuracy())*0.65)) {
-                if(last!=null) session.put("distance",session.optDouble("distance")+step);
+                if(last!=null) {
+                    session.put("distance",session.optDouble("distance")+step);
+                    if(step/seconds>.45)session.put("movingMs",session.optLong("movingMs")+Math.min(60000,Math.round(seconds*1000)));
+                    if(last.hasAltitude()&&loc.hasAltitude() &&
+                        (android.os.Build.VERSION.SDK_INT<26||!loc.hasVerticalAccuracy()||loc.getVerticalAccuracyMeters()<12f) &&
+                        (android.os.Build.VERSION.SDK_INT<26||!last.hasVerticalAccuracy()||last.getVerticalAccuracyMeters()<12f)){
+                        double climb=loc.getAltitude()-last.getAltitude();
+                        if(climb>3 && climb<35)
+                            session.put("ascent",session.optDouble("ascent")+climb);
+                    }
+                }
                 JSONArray points=session.optJSONArray("points");
                 if(points==null) {points=new JSONArray();session.put("points",points);}
                 if(points.length()>=MAX_TRACK_POINTS) {
@@ -113,6 +130,10 @@ final class GpsTrackStore {
                 points.put(point);
                 session.put("lastLat",loc.getLatitude());
                 session.put("lastLon",loc.getLongitude());
+                session.put("lastFixEpoch",System.currentTimeMillis());
+                session.put("lastAccuracy",acc);
+                if(loc.hasBearing()&&(!loc.hasSpeed()||loc.getSpeed()>=0.5f))
+                    session.put("bearing",loc.getBearing());
             }
             JSONObject route=session.optJSONObject("route");
             if(route!=null) {
@@ -120,10 +141,18 @@ final class GpsTrackStore {
                 if(coords!=null) {
                     double[] off=nearest(loc.getLatitude(),loc.getLongitude(),coords);
                     session.put("offtrack",off[0]);
-                    session.put("remaining",off[1]);
-                    session.put("note",off[0]>Math.max(45,acc*1.8)
-                            ? "Attention : tu sembles hors du tracé. Vérifie le terrain."
-                            : "Tu sembles suivre le tracé.");
+                    double previous=session.optDouble("remaining",-1);
+                    // Prevent false kilometre jumps when a loop crosses itself.
+                    if(previous>=0 && Math.abs(previous-off[1])>Math.max(600,step*8)){
+                        session.put("routeJumpIgnored",true);
+                    }else session.put("remaining",off[1]);
+                    boolean away=off[0]>Math.max(45,acc*1.8);
+                    int count=away?Math.min(9,session.optInt("offtrackFixes",0)+1):0;
+                    session.put("offtrackFixes",count);
+                    session.put("note",count>=3
+                            ? "Écart au tracé confirmé. Vérifie le terrain et ta carte."
+                            : away?"Écart possible : attente de confirmation GPS."
+                            :"Tu sembles suivre le tracé.");
                 }
             }
         } catch (JSONException e) {
@@ -131,6 +160,26 @@ final class GpsTrackStore {
         }
     }
 
+    static void nextDay(JSONObject session) throws JSONException {
+        long now=System.currentTimeMillis();
+        JSONArray days=session.optJSONArray("days");
+        if(days==null){days=new JSONArray();session.put("days",days);}
+        JSONObject completed=new JSONObject();
+        completed.put("day",session.optInt("dayIndex",1));
+        completed.put("startedAt",session.optLong("dayStartEpoch",now));
+        completed.put("endedAt",now);
+        completed.put("distanceMeters",Math.max(0,session.optDouble("distance")-
+                session.optDouble("dayStartDistance")));
+        days.put(completed);
+        session.put("dayIndex",session.optInt("dayIndex",1)+1);
+        session.put("dayStartEpoch",now);
+        session.put("dayStartDistance",session.optDouble("distance"));
+    }
+    static long elapsedWithLive(JSONObject session){
+        long sum=session.optLong("elapsed",0),live=session.optLong("liveSinceEpoch",0);
+        return sum+(("active".equals(session.optString("status"))&&live>0)
+          ?Math.max(0,System.currentTimeMillis()-live):0);
+    }
     static String toGpx(JSONObject session) {
         String name=session.optJSONObject("route")==null ? "Randonnée"
                 : session.optJSONObject("route").optString("name","Randonnée");

@@ -45,7 +45,11 @@ public class OfflineVectorMapActivity extends Activity {
     @Override public void onCreate(Bundle b){
         super.onCreate(b);
         route=OfflineRouteStore.find(this,getIntent().getStringExtra("route_id"));
-        if(route==null){Toast.makeText(this,"Trek enregistré introuvable",Toast.LENGTH_LONG).show();finish();return;}
+        if(route==null){
+            org.json.JSONArray saved=OfflineRouteStore.list(this);
+            route=saved.optJSONObject(0);
+        }
+        if(route==null){Toast.makeText(this,"Aucun trek téléchargé sur cet appareil",Toast.LENGTH_LONG).show();finish();return;}
         final WebViewAssetLoader loader=new WebViewAssetLoader.Builder()
             .setDomain(DOMAIN)
             .addPathHandler("/assets/",new WebViewAssetLoader.AssetsPathHandler(this))
@@ -64,6 +68,26 @@ public class OfflineVectorMapActivity extends Activity {
             })
             .addPathHandler("/data/",path->{
                 if("route.json".equals(path))return json(route.toString());
+                if("routes.json".equals(path))return json(OfflineRouteStore.list(this).toString());
+                if("waypoints.json".equals(path)){
+                    org.json.JSONArray result=new org.json.JSONArray();
+                    org.json.JSONArray all=OfflineRouteStore.list(this);
+                    for(int i=0;i<all.length();i++){
+                        JSONObject r=all.optJSONObject(i);
+                        if(r==null)continue;
+                        org.json.JSONArray pts=OfflineWaypointStore.list(this,r.optString("id"));
+                        for(int j=0;j<pts.length();j++){
+                            JSONObject p=pts.optJSONObject(j);
+                            if(p==null)continue;
+                            try{
+                                JSONObject item=new JSONObject(p.toString());
+                                item.put("routeId",r.optString("id"));
+                                result.put(item);
+                            }catch(org.json.JSONException ignored){}
+                        }
+                    }
+                    return json(result.toString());
+                }
                 if("session.json".equals(path))return json(GpsTrackStore.read(this).toString());
                 return denied();
             })
@@ -85,6 +109,23 @@ public class OfflineVectorMapActivity extends Activity {
             }
             @Override public boolean shouldOverrideUrlLoading(WebView view,WebResourceRequest request){
                 Uri u=request.getUrl();
+                if("https".equals(u.getScheme()) && DOMAIN.equals(u.getHost()) &&
+                   u.getPath()!=null && u.getPath().startsWith("/native/")){
+                    final String id=u.getQueryParameter("route");
+                    JSONObject saved=id==null?null:OfflineRouteStore.find(OfflineVectorMapActivity.this,id);
+                    if(saved!=null){
+                        Class<?> target=null;
+                        if("/native/gps".equals(u.getPath()))target=GpsTrackActivity.class;
+                        if("/native/download".equals(u.getPath()))target=OfflineDownloadActivity.class;
+                        if(target!=null){
+                            Intent intent=new Intent(OfflineVectorMapActivity.this,target);
+                            if(target==GpsTrackActivity.class)intent.putExtra("trekmap_route",saved.toString());
+                            else intent.putExtra("route_id",id);
+                            startActivity(intent);
+                        }
+                    }
+                    return true; // Never turn a native command into a web request.
+                }
                 return !("https".equals(u.getScheme())&&DOMAIN.equals(u.getHost()));
             }
         });

@@ -19,13 +19,15 @@ assert.ok(xml.includes('android.permission.FOREGROUND_SERVICE_LOCATION'),'Native
 assert.ok(xml.includes('android:foregroundServiceType="location"'),'Foreground location service declaration required');
 assert.ok(xml.includes('android.permission.FOREGROUND_SERVICE'),'Foreground service permission required');
 assert.ok(xml.includes('android.permission.POST_NOTIFICATIONS'),'Visible tracking notification');
+assert.ok(xml.includes('android.permission.VIBRATE'),'Opt-in off-route haptic warning');
 assert.ok(xml.includes('android.permission.REQUEST_INSTALL_PACKAGES'),'Update installer permission');
 assert.ok(xml.includes('androidx.core.content.FileProvider'),'Private APK FileProvider');
 assert.ok(xml.includes('TrekMapUpdateActivity'),'Native update flow');
 assert.ok(xml.includes('OfflineTreksActivity')&&xml.includes('OfflineRouteActivity'),'Offline Android activities');
 assert.ok(xml.includes('OfflineDownloadActivity')&&xml.includes('OfflineVectorMapActivity'),'Map and download activities');
+assert.ok(xml.includes('TrackArchiveActivity'),'Local multi-day journal declared');
 assert.ok(fs.existsSync('android/app/src/main/res/xml/trekmap_update_paths.xml'));
-for(const f of ['TrekMapNativeGpsPlugin.java','GpsTrackStore.java','GpsTrackService.java','GpsTrackActivity.java','TrekMapUpdateManager.java','TrekMapUpdateActivity.java','OfflineRouteStore.java','OfflineTreksActivity.java','OfflineRouteActivity.java','OfflineTileStore.java','OfflineDownloadActivity.java','OfflineVectorMapActivity.java','MainActivity.java'])
+for(const f of ['TrekMapNativeGpsPlugin.java','GpsTrackStore.java','GpsTrackService.java','GpsTrackActivity.java','TrekMapUpdateManager.java','TrekMapUpdateActivity.java','OfflineRouteStore.java','OfflineTreksActivity.java','OfflineRouteActivity.java','OfflineTileStore.java','OfflineDownloadActivity.java','OfflineVectorMapActivity.java','TrackArchive.java','TrackArchiveActivity.java','OfflineWaypointStore.java','MainActivity.java'])
  assert.ok(fs.existsSync('android/app/src/main/java/fr/trekmap/france/'+f), f);
 assert.ok(fs.existsSync('android/app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml'));
 const appgradle=fs.readFileSync('android/app/build.gradle','utf8');

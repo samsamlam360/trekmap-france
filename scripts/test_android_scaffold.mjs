@@ -1,6 +1,7 @@
 /* Smoke test independent from npm, Android SDK and production. */
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import vm from 'node:vm';
 const c=JSON.parse(fs.readFileSync('mobile/capacitor.config.json','utf8'));
 const p=JSON.parse(fs.readFileSync('mobile/package.json','utf8'));
 const w=fs.readFileSync('.github/workflows/android-apk.yml','utf8');
@@ -60,4 +61,30 @@ assert.ok(fs.readFileSync('frontend/hike.html','utf8').includes('nativePlugin.op
 
 assert.ok(fs.readFileSync('frontend/hike.html','utf8').includes('navigator.geolocation.watchPosition'));
 assert.ok(fs.readFileSync('mobile/www/offline.html','utf8').includes('Connexion indisponible'));
+// Full native offline TrekMap UI: all downloaded tracks in the same map, no network assets.
+const mapHtml=fs.readFileSync('mobile/www/offline-map.html','utf8');
+const appScript=mapHtml.match(/<script>\s*([\s\S]*?)<\/script>/)?.[1];
+assert.ok(appScript,'local map JavaScript must be in the APK');
+new vm.Script(appScript,{filename:'trekmap-offline-map.js'});
+for(const value of ['/data/routes.json','/data/session.json','/data/waypoints.json','data-p-tab','route-total']) {
+ if(value==='data-p-tab')continue;
+ assert.ok(mapHtml.includes(value),'Missing offline route browser: '+value);
+}
+assert.ok(mapHtml.includes('HORS LIGNE')&&mapHtml.includes('Treks téléchargés'),'offline branding and list');
+assert.ok(!/src=["']https?:\/\//.test(mapHtml),'offline map must not load remote scripts/styles');
+assert.ok(!/href=["']https?:\/\//.test(mapHtml),'offline map must not load remote CSS');
+const nativeMap=fs.readFileSync('mobile/native-src/fr/trekmap/france/OfflineVectorMapActivity.java','utf8');
+assert.ok(nativeMap.includes('"routes.json"')&&nativeMap.includes('"waypoints.json"')&&nativeMap.includes('"/native/gps"'));
+assert.ok(nativeMap.includes('if(!"https".equals(req.getUrl().getScheme()))')||
+          nativeMap.includes('!"https".equals(req.getUrl().getScheme())'),'non-HTTPS blocked by local map');
+const gpsStore=fs.readFileSync('mobile/native-src/fr/trekmap/france/GpsTrackStore.java','utf8');
+assert.ok(gpsStore.includes('nextDay(')&&gpsStore.includes('movingMs')&&gpsStore.includes('lastFixEpoch')&&gpsStore.includes('offtrackFixes'));
+assert.ok(svc.includes('NEXT_DAY')&&svc.includes('TrackArchive.add(')&&svc.includes('lastWarningEpoch'));
+for(const f of ['TrackArchive.java','TrackArchiveActivity.java','OfflineWaypointStore.java']) {
+ assert.ok(fs.readFileSync('mobile/native-src/fr/trekmap/france/'+f,'utf8').includes('package fr.trekmap.france;'));
+ assert.ok(patch.includes(f),'Native source missing from Android bundle: '+f);
+}
+assert.ok(patch.includes('android.permission.VIBRATE')&&patch.includes('TrackArchiveActivity'));
+assert.ok(fs.readFileSync('mobile/native-src/fr/trekmap/france/OfflineTreksActivity.java','utf8').includes('OfflineVectorMapActivity.class'));
+assert.ok(bridge.includes('openOfflineJournal(')&&bridge.includes('openOfflineMap('));
 console.log('ANDROID SCAFFOLD PASS: isolated Android workflow, transport, live backend, foreground GPS only, offline warning.');
