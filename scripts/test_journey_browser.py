@@ -83,7 +83,16 @@ try:
     assert any(x["text"]=="Eau avant le départ et potabilité" and x["done"] for x in body["checklist"])
     assert any(x["text"]=="Ma réserve 2 litres" for x in body["checklist"])
     assert body["days"][1]["water"]=="Source à vérifier et débit",body["days"]
-    driver.execute_script("openDetail(900001)")
+    # The PUT fixture resolves asynchronously. Wait for save to close the
+    # preceding modal before reopening the real fiche, as a human would.
+    wait.until(lambda d:d.execute_script(
+        "return document.getElementById('modal-backdrop').style.display==='none'"
+    ))
+    driver.execute_script("""
+      allTreks=[{id:900001,name:'Test privé préparation',region:'Test',is_public:true,
+        distance:39.3,duration_days:3,coords:[[45.0,2.0],[45.1,2.2]],difficulty:'medium'}];
+      openDetail(900001);
+    """)
     wait.until(lambda d:d.find_element(By.ID,"plan-detail").is_displayed())
     driver.find_element(By.ID,"plan-detail").click()
     wait.until(lambda d:d.find_element(By.ID,"tm-journey-days"))
