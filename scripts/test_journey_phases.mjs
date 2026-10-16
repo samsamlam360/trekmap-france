@@ -55,7 +55,7 @@ assert.ok(doc.includes('<svg'));
 assert.ok(doc.includes('&lt;script&gt;'));
 assert.ok(!doc.includes('<script>'));
 assert.ok(!doc.includes('https://'),'offline document must have no external resource');
-assert.ok(doc.includes('sans fond IGN/OSM'),'no implication of offline topographic tiles');
+assert.ok(doc.includes('ni fond IGN/OSM'),'no implication of offline topographic tiles');
 const built=fs.readFileSync('frontend/index.html','utf8');
 if(built.includes('TM_JOURNEY_PHASE1_START')){
  for(let n=1;n<=3;n++){
