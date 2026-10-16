@@ -634,10 +634,18 @@ try:
         By.CSS_SELECTOR, '#tm-brain-route-panel [data-tm-adjust-day="1"]'
     ))
     edit_day.click()
-    wait.until(lambda d: d.find_element(By.ID, "tm-ai-overlay").is_displayed())
-    assert "étape 1" in driver.find_element(By.ID, "tm-ai-prompt").get_attribute("value"), (
-        "Day edit did not prepare an editable TrekBrain request"
+    wait.until(lambda d: d.find_element(By.ID, "tm-stage-note-dialog").get_attribute("open") is not None)
+    note = driver.find_element(By.ID,"tm-stage-note-text")
+    note.send_keys("Réserver un refuge pour le jour 1")
+    driver.find_element(By.CSS_SELECTOR,'[data-stage-action="save"]').click()
+    wait.until(lambda d: "Réserver un refuge" in d.find_element(By.ID, "tm-brain-route-panel").text)
+    assert driver.execute_script("return window.TrekBrainMapWorkspace.isActive()")
+    assert not driver.find_element(By.ID,"tm-ai-overlay").is_displayed(), (
+        "Changing only personal notes must not regenerate the route"
     )
+    # True route modification remains explicit, and opens the real form.
+    driver.find_element(By.CSS_SELECTOR,'#tm-brain-route-panel [data-workspace-action="modify"]').click()
+    wait.until(lambda d: d.find_element(By.ID, "tm-ai-overlay").is_displayed())
     driver.find_element(By.ID, "tm-ai-close").click()
     wait.until(lambda d: not d.find_element(By.ID, "tm-ai-overlay").is_displayed())
     driver.execute_script("window.TrekBrainMapWorkspace.exit();")

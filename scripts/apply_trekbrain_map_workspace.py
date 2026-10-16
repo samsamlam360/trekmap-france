@@ -455,6 +455,7 @@ body.tm-brain-route-mode.tm-brain-show-resources .tm-v91-legend {display:block!i
       '<button type="button" data-workspace-action="modify">✏️ Modifier</button>'+
       '<button type="button" class="tm-brain-primary" data-workspace-action="save">✓ Enregistrer</button></div>');
     panel.innerHTML=parts.join('');
+    window.TrekMapStageEdit?.renderNotes(p,panel);
     window.TrekMapTripReadiness?.bind(panel,p);
     syncExpanded();
   }
@@ -600,6 +601,7 @@ body.tm-brain-route-mode.tm-brain-show-resources .tm-v91-legend {display:block!i
   window.TrekBrainMapWorkspace={
     open:enter,exit:exit,recenter:recenter,
     exportGPX:exportGPX,
+    getPlan:function(){return active?plan:null;},
     isActive:function(){return active;}
   };
 })();

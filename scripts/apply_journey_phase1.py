@@ -29,8 +29,8 @@ block=r'''<!-- TM_JOURNEY_PHASE1_START -->
 (function(){
  "use strict";
  if(window.TrekMapJourneyFilters)return;
- var ids=['region-filter','difficulty-filter','duration-filter','tm-route-filter','tm-season-filter','tm-rating-filter','tm-photo-filter','tm-place-filter','distance-range','elevation-range'];
- var names={'region-filter':'Région','difficulty-filter':'Difficulté','duration-filter':'Durée','tm-route-filter':'Parcours','tm-season-filter':'Saison','tm-rating-filter':'Avis','tm-photo-filter':'Photos','tm-place-filter':'Lieu','distance-range':'Distance','elevation-range':'Dénivelé'};
+ var ids=['region-filter','difficulty-filter','duration-filter','tm-route-filter','tm-season-filter','tm-rating-filter','tm-photo-filter','tm-place-filter','distance-range','elevation-range','tm-daily-pace-filter'];
+ var names={'region-filter':'Région','difficulty-filter':'Difficulté','duration-filter':'Durée','tm-route-filter':'Parcours','tm-season-filter':'Saison','tm-rating-filter':'Avis','tm-photo-filter':'Photos','tm-place-filter':'Lieu','distance-range':'Distance','elevation-range':'Dénivelé','tm-daily-pace-filter':'Km / jour'};
  var group=document.createElement('div');
  group.id='tm-journey-active-filters';
  group.setAttribute('aria-label','Filtres appliqués, retirer un filtre');
