@@ -47,6 +47,9 @@ jobs:
       - name: Add native GPS permissions and branding
         working-directory: mobile
         run: node scripts/configure-android.mjs
+      - name: Bundle MapLibre scripts and styles inside the offline Android app
+        working-directory: mobile
+        run: npm run android:bundle-map
       - name: Synchronize Capacitor Android
         working-directory: mobile
         run: npx cap sync android

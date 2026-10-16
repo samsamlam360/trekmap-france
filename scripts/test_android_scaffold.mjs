@@ -7,6 +7,7 @@ const w=fs.readFileSync('.github/workflows/android-apk.yml','utf8');
 const patch=fs.readFileSync('mobile/scripts/configure-android.mjs','utf8');
 const check=fs.readFileSync('mobile/scripts/verify-android.mjs','utf8');
 assert.equal(c.appId,'fr.trekmap.france');
+assert.equal(p.dependencies['maplibre-gl'],'4.7.1');
 assert.equal(c.server.url,'https://trekmap-france.onrender.com');
 assert.equal(c.server.cleartext,false);
 assert.equal(c.android.allowMixedContent,false);
@@ -42,6 +43,15 @@ for(const f of ['OfflineRouteStore.java','OfflineTreksActivity.java','OfflineRou
 assert.ok(fs.readFileSync('mobile/native-src/fr/trekmap/france/OfflineTreksActivity.java','utf8').includes('OfflineRouteStore.list'));
 assert.ok(fs.readFileSync('mobile/native-src/fr/trekmap/france/OfflineRouteActivity.java','utf8').includes('RouteDiagram'));
 assert.ok(fs.readFileSync('frontend/hike.html','utf8').includes('nativePlugin.saveOfflineRoute'));
+assert.ok(fs.readFileSync('frontend/hike.html','utf8').includes('nativePlugin.openOfflineDownload'));
+assert.ok(fs.readFileSync('frontend/index.html','utf8').includes('Treks téléchargés'));
+assert.ok(fs.readFileSync('mobile/www/offline-map.html','utf8').includes('maplibregl.Map'));
+for(const f of ['OfflineTileStore.java','OfflineDownloadActivity.java','OfflineVectorMapActivity.java'])
+ assert.ok(fs.readFileSync('mobile/native-src/fr/trekmap/france/'+f,'utf8').includes('package fr.trekmap.france;'));
+const tiles=fs.readFileSync('mobile/native-src/fr/trekmap/france/OfflineTileStore.java','utf8');
+assert.ok(tiles.includes('MAX_TILES_PER_ACTION=320')&&tiles.includes('MAX_BYTES_PER_ACTION=24L*1024*1024'));
+assert.ok(w.includes('npm run android:bundle-map'));
+assert.ok(fs.readFileSync('mobile/scripts/bundle-offline-map.mjs','utf8').includes('maplibre-gl.js'));
 assert.ok(fs.readFileSync('frontend/hike.html','utf8').includes('nativePlugin.openTracker'));
 
 assert.ok(fs.readFileSync('frontend/hike.html','utf8').includes('navigator.geolocation.watchPosition'));

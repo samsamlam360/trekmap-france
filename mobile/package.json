@@ -7,11 +7,13 @@
     "android:add": "npx cap add android",
     "android:sync": "npx cap sync android",
     "android:configure": "node scripts/configure-android.mjs",
-    "android:verify": "node scripts/verify-android.mjs"
+    "android:verify": "node scripts/verify-android.mjs",
+    "android:bundle-map": "node scripts/bundle-offline-map.mjs"
   },
   "dependencies": {
     "@capacitor/core": "8.5.3",
-    "@capacitor/android": "8.5.3"
+    "@capacitor/android": "8.5.3",
+    "maplibre-gl": "4.7.1"
   },
   "devDependencies": {
     "@capacitor/cli": "8.5.3"

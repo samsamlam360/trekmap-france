@@ -39,7 +39,7 @@ public class OfflineTreksActivity extends Activity {
         TextView title=text("TrekMap · Hors connexion",25,Color.rgb(8,76,50));
         title.setTypeface(null,1);root.addView(title);
         root.addView(text("L'application reste accessible en mode avion. Voici les itinéraires que tu as préparés dans TrekMap avant de couper le réseau.",15,Color.DKGRAY));
-        TextView note=text("⚠ Carte de secours : le tracé local est schématique et ne comprend pas encore le fond de carte topographique. Le GPS fonctionne sans Internet, mais emporte aussi une carte fiable.",13,Color.rgb(126,67,17));
+        TextView note=text("⚠ Les cartes vectorielles des sections téléchargées fonctionnent sans Internet. Les zones non téléchargées restent vides. Conserve une carte de secours.",13,Color.rgb(126,67,17));
         root.addView(note);
         JSONArray routes=OfflineRouteStore.list(this);
         TextView section=text("Mes treks enregistrés ("+routes.length()+")",18,Color.rgb(9,88,59));
@@ -59,6 +59,13 @@ public class OfflineTreksActivity extends Activity {
             root.addView(button,new LinearLayout.LayoutParams(-1,dp(90)));
             button.setOnClickListener(v->{
                 Intent nav=new Intent(this,OfflineRouteActivity.class);
+                nav.putExtra("route_id",id);startActivity(nav);
+            });
+            Button download=new Button(this);download.setAllCaps(false);
+            download.setText("↓ Préparer la carte de ce trek");
+            root.addView(download,new LinearLayout.LayoutParams(-1,dp(52)));
+            download.setOnClickListener(v->{
+                Intent nav=new Intent(this,OfflineDownloadActivity.class);
                 nav.putExtra("route_id",id);startActivity(nav);
             });
         }

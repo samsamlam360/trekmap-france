@@ -255,7 +255,45 @@ async function openPlan(id){
     // and can override a first user tap inside a checklist text input.
   }catch(e){toast('Serveur inaccessible : '+(e.message||e))}
 }
-function openProfile(){if(!currentUser){authModal('login');return}fetch(API+'/auth/profile',{headers:headers()}).then(r=>r.json()).then(d=>{openModal(`<div class="modal-head"><div><h2>Mon profil</h2><div style="color:#718078">${esc(d.user.username)}${d.user.is_admin?' · Administrateur':''}</div></div><button class="close" id="modal-close">✕</button></div><div class="detail-grid"><div class="stat"><small>Mes treks</small><b>${d.stats.total}</b></div><div class="stat"><small>Publics</small><b>${d.stats.public}</b></div><div class="stat"><small>Privés</small><b>${d.stats.private}</b></div><div class="stat"><small>Favoris</small><b>${d.stats.favorites}</b></div></div><div class="modal-actions" style="justify-content:flex-start;flex-wrap:wrap;margin-top:18px"><button class="ghost-btn" id="profile-mine">Mes treks</button><button class="ghost-btn" id="profile-fav">Mes favoris</button><button class="ghost-btn" id="profile-password">Changer le mot de passe</button>${d.user.is_admin?'<button class="ghost-btn" id="admin-recalc">Recalculer les durées</button>':''}<button class="danger-btn" id="profile-logout">Se déconnecter</button></div>`);$('modal-close').onclick=closeModal;$('profile-mine').onclick=()=>{closeModal();switchTab('mine')};$('profile-fav').onclick=()=>{closeModal();switchTab('favorites')};$('profile-password').onclick=openPassword;$('profile-logout').onclick=()=>{closeModal();logout()};if($('admin-recalc'))$('admin-recalc').onclick=adminRecalc}).catch(()=>toast('Profil inaccessible.'))}
+function openProfile(){if(!currentUser){authModal('login');return}fetch(API+'/auth/profile',{headers:headers()}).then(r=>r.json()).then(d=>{openModal(`<div class="modal-head"><div><h2>Mon profil</h2><div style="color:#718078">${esc(d.user.username)}${d.user.is_admin?' · Administrateur':''}</div></div><button class="close" id="modal-close">✕</button></div><div class="detail-grid"><div class="stat"><small>Mes treks</small><b>${d.stats.total}</b></div><div class="stat"><small>Publics</small><b>${d.stats.public}</b></div><div class="stat"><small>Privés</small><b>${d.stats.private}</b></div><div class="stat"><small>Favoris</small><b>${d.stats.favorites}</b></div></div><div class="modal-actions" style="justify-content:flex-start;flex-wrap:wrap;margin-top:18px"><button class="ghost-btn" id="profile-mine">Mes treks</button><button class="ghost-btn" id="profile-fav">Mes favoris</button><button class="primary-btn" id="profile-downloaded">⬇ Treks téléchargés</button><button class="ghost-btn" id="profile-password">Changer le mot de passe</button>${d.user.is_admin?'<button class="ghost-btn" id="admin-recalc">Recalculer les durées</button>':''}<button class="danger-btn" id="profile-logout">Se déconnecter</button></div>`);$('modal-close').onclick=closeModal;$('profile-mine').onclick=()=>{closeModal();switchTab('mine')};$('profile-fav').onclick=()=>{closeModal();switchTab('favorites')};$('profile-downloaded').onclick=showProfileDownloads;$('profile-password').onclick=openPassword;$('profile-logout').onclick=()=>{closeModal();logout()};if($('admin-recalc'))$('admin-recalc').onclick=adminRecalc}).catch(()=>toast('Profil inaccessible.'))}
+
+async function showProfileDownloads(){
+ const existing=$('profile-downloaded-content');if(existing)existing.remove();
+ const panel=document.createElement('section');panel.id='profile-downloaded-content';
+ panel.style.cssText='background:#f2f8f4;border:1px solid #d9e9de;border-radius:15px;margin-top:14px;padding:14px';
+ const mount=$('modal');if(!mount)return;
+ mount.appendChild(panel);
+ const h=document.createElement('h3');h.textContent='⬇ Treks téléchargés';h.style.margin='0 0 8px';panel.appendChild(h);
+ const hint=document.createElement('p');hint.style.cssText='font-size:13px;line-height:1.5;color:#536e5a';
+ hint.textContent="Treks et cartes sauvegardés dans l'application Android sur ce téléphone, indépendamment de ton compte. Les cartes se préparent par sections de 25 km.";
+ panel.appendChild(hint);
+ const native=window.Capacitor?.Plugins?.TrekMapNativeGPS;
+ if(!native?.listOfflineRoutes){
+   const p=document.createElement('p');p.textContent='Ouvre ton profil dans l’application TrekMap France pour consulter les téléchargements Android. Sur le site web, ce stockage local n’est pas accessible.';
+   panel.appendChild(p);return;
+ }
+ const msg=document.createElement('p');msg.textContent='Lecture des treks enregistrés…';panel.appendChild(msg);
+ try{
+   const data=await native.listOfflineRoutes();
+   msg.textContent='';
+   const routes=Array.isArray(data.routes)?data.routes:[];
+   if(!routes.length){msg.textContent='Aucun trek téléchargé sur cet appareil. Ouvre un trek, entre dans Mode randonnée, puis enregistre-le pour Android.';return}
+   for(const r of routes){
+     const row=document.createElement('div');row.style.cssText='display:flex;flex-wrap:wrap;align-items:center;gap:9px;border-top:1px solid #d7e6dc;padding:12px 0';
+     const text=document.createElement('div');text.style.cssText='flex:1;min-width:150px';
+     const title=document.createElement('b');title.textContent=String(r.name||'Randonnée');text.appendChild(title);
+     const sub=document.createElement('small');sub.style.cssText='display:block;color:#628070;margin-top:3px';
+     sub.textContent=String(r.region||'')+' · '+Number(r.sections||1)+' section(s) de carte';text.appendChild(sub);
+     const btn=document.createElement('button');btn.type='button';btn.className='primary-btn';btn.textContent='Ouvrir hors ligne';
+     btn.onclick=()=>native.openOfflineRoute({id:String(r.id)}).catch(e=>toast(String(e?.message||e)));
+     row.append(text,btn);panel.appendChild(row);
+   }
+   const all=document.createElement('button');all.type='button';all.className='ghost-btn';
+   all.textContent='Voir tous mes téléchargements Android';all.style.marginTop='10px';
+   all.onclick=()=>native.openOfflineRoutes().catch(e=>toast(String(e?.message||e)));panel.appendChild(all);
+ }catch(e){msg.textContent='Impossible de lire les téléchargements : '+String(e?.message||e)}
+}
+
 function openPassword(){openModal(`<div class="modal-head"><h2>Changer le mot de passe</h2><button class="close" id="modal-close">✕</button></div><div class="form-grid"><div class="form-field full"><label>Ancien mot de passe</label><input id="old-pass" type="password"></div><div class="form-field full"><label>Nouveau mot de passe</label><input id="new-pass" type="password"></div></div><div id="pass-msg" style="color:#b52b35"></div><div class="modal-actions"><button class="ghost-btn" id="modal-close-2">Annuler</button><button class="primary-btn" id="save-pass">Modifier</button></div>`);$('modal-close').onclick=closeModal;$('modal-close-2').onclick=closeModal;$('save-pass').onclick=async()=>{const r=await fetch(API+'/auth/password',{method:'PUT',headers:headers({'Content-Type':'application/json'},'PUT'),body:JSON.stringify({old_password:$('old-pass').value,new_password:$('new-pass').value})});const d=await r.json();if(!r.ok){$('pass-msg').textContent=d.detail||'Erreur';return}closeModal();toast('Mot de passe modifié.')}}
 async function adminRecalc(){const r=await fetch(API+'/admin/recalculate-durations',{method:'PUT',headers:headers({},'PUT')});const d=await r.json();if(!r.ok){toast(d.detail||'Erreur');return}closeModal();await loadTraces();toast(`${d.treks_modifies} trek(s) recalculé(s).`)}
 function switchTab(tab){currentTab=tab;document.querySelectorAll('.tab').forEach(x=>x.classList.toggle('active',x.dataset.tab===tab));applyFilters();if(window.innerWidth<900)$('sidebar').classList.remove('collapsed')}
