@@ -11,7 +11,7 @@ for(const name of ['@capacitor/core','@capacitor/android']) assert.equal(pkg.dep
 assert.equal(pkg.devDependencies['@capacitor/cli'],'8.5.3');
 assert.ok(fs.existsSync('www/index.html')&&fs.existsSync('www/offline.html'));
 const xml=fs.readFileSync('android/app/src/main/AndroidManifest.xml','utf8');
-for(const permission of ['INTERNET','ACCESS_COARSE_LOCATION','ACCESS_FINE_LOCATION'])
+for(const permission of ['INTERNET','ACCESS_NETWORK_STATE','ACCESS_COARSE_LOCATION','ACCESS_FINE_LOCATION'])
  assert.ok(xml.includes('android.permission.'+permission),permission+' not declared');
 assert.ok(xml.includes('android:usesCleartextTraffic="false"'),'HTTP must remain disabled');
 assert.ok(!xml.includes('android.permission.ACCESS_BACKGROUND_LOCATION'),'do not promise background GPS');

@@ -8,7 +8,7 @@ const manifest=path.join(root,'AndroidManifest.xml');
 if(!fs.existsSync(manifest)) throw Error('Projet natif absent : lance npm run android:add');
 let xml=fs.readFileSync(manifest,'utf8');
 if(!xml.includes('<manifest') || !xml.includes('<application')) throw Error('AndroidManifest.xml inattendu');
-for(const permission of ['android.permission.INTERNET','android.permission.ACCESS_COARSE_LOCATION','android.permission.ACCESS_FINE_LOCATION','android.permission.FOREGROUND_SERVICE','android.permission.FOREGROUND_SERVICE_LOCATION','android.permission.POST_NOTIFICATIONS','android.permission.REQUEST_INSTALL_PACKAGES']){
+for(const permission of ['android.permission.INTERNET','android.permission.ACCESS_NETWORK_STATE','android.permission.ACCESS_COARSE_LOCATION','android.permission.ACCESS_FINE_LOCATION','android.permission.FOREGROUND_SERVICE','android.permission.FOREGROUND_SERVICE_LOCATION','android.permission.POST_NOTIFICATIONS','android.permission.REQUEST_INSTALL_PACKAGES']){
   if(!xml.includes('android:name="'+permission+'"')){
     xml=xml.replace(/(<application\b)/, '    <uses-permission android:name="'+permission+'" />\n\n    $1');
   }
