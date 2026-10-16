@@ -23,6 +23,19 @@ try:
     driver.execute_script("document.getElementById('tm-home')?.classList.add('tm-hidden')")
     # Real shortcut: only the km/day selector opens, not the entire advanced pane.
     button=wait.until(lambda d:d.find_element(By.ID,"tm-inline-pace"))
+    driver.execute_script("arguments[0].scrollIntoView({block:'nearest',inline:'center'})",button)
+    visible=driver.execute_script("""
+      let b=arguments[0],r=b.getBoundingClientRect(),nav=b.closest('#tm-inline-filters');
+      let s=getComputedStyle(b),n=getComputedStyle(nav);
+      let el=document.elementFromPoint(r.left+r.width/2,r.top+r.height/2);
+      return {viewport:innerWidth,display:s.display,visibility:s.visibility,
+        rect:{left:r.left,top:r.top,width:r.width,height:r.height},navDisplay:n.display,
+        navWidth:nav.clientWidth,navScrollWidth:nav.scrollWidth,
+        atPoint:el?.id||el?.className||el?.tagName};
+    """,button)
+    assert button.is_displayed() and visible["rect"]["width"]>=40, (
+        f"Km/jour shortcut hidden from user: {visible}"
+    )
     button.click()
     assert driver.find_element(By.ID,"tm-quick-pace-popover").is_displayed()
     assert not driver.execute_script(
