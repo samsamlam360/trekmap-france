@@ -7,6 +7,7 @@ import os
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
+from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.support.ui import WebDriverWait
 
 BASE=os.environ.get("TREKMAP_BROWSER_BASE","http://127.0.0.1:10000")
@@ -45,7 +46,7 @@ try:
     wait.until(lambda d:d.find_element(By.ID,"tm-journey-days"))
     first=driver.find_element(By.CSS_SELECTOR,"#checklist .check-row input[type=text]")
     first.click()
-    first.send_keys(" et potabilité")
+    first.send_keys(Keys.END," et potabilité")
     assert first.get_attribute("value")=="Eau avant le départ et potabilité",first.get_attribute("value")
     driver.find_element(By.ID,"add-check").click()
     new=driver.find_elements(By.CSS_SELECTOR,"#checklist .check-row input[type=text]")[-1]
@@ -59,7 +60,7 @@ try:
     driver.execute_script("arguments[0].open=true",day2)
     water=day2.find_element(By.CSS_SELECTOR,'[data-day-field="water"]')
     assert water.get_attribute("value")=="Source à vérifier"
-    water.send_keys(" et débit")
+    water.send_keys(Keys.END," et débit")
     sleep=day2.find_element(By.CSS_SELECTOR,'[data-day-field="sleep"]')
     assert sleep.get_attribute("value")=="Refuge prévu"
     driver.find_element(By.ID,"save-plan").click()
@@ -74,7 +75,7 @@ try:
     driver.set_window_size(390,844)
     first=driver.find_element(By.CSS_SELECTOR,"#checklist .check-row input[type=text]")
     driver.execute_script("arguments[0].scrollIntoView()",first)
-    first.send_keys(" ok")
+    first.send_keys(Keys.END," ok")
     assert first.get_attribute("value").endswith(" ok")
     assert driver.execute_script("return document.querySelector('#tm-journey-days').scrollWidth <= document.querySelector('#tm-journey-days').clientWidth+2")
     print("JOURNEY CHROME PASS: editable checklist, rehydration, templates, persisted day fields, responsive typing")
