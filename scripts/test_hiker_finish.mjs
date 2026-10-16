@@ -18,8 +18,9 @@ const workspace=fs.readFileSync(path('apply_trekbrain_map_workspace.py'),'utf8')
 const site=fs.readFileSync(path('apply_sitewide_ux.py'),'utf8');
 assert.ok(all[1].includes('flex:0 0 20px!important') && all[1].includes('flex:1 1 0%!important'),
   'global full-width input rule must not squeeze text fields into the right edge');
-assert.ok(all[0].includes('window.innerWidth>820?desktop:mobile'),
-  'active filter pills belong in the compact desktop bar');
+assert.ok(all[0].includes('window.innerWidth>820?document.body:mobile') &&
+  all[0].includes('body.tm-filterstrip-closed > #tm-journey-active-filters'),
+  'active pills stay visible and rise when the toolbar is folded');
 assert.ok(all[0].includes("id==='tm-rating-filter'"),
   'default Avis Toutes must not appear as a selected filter');
 assert.ok(js[3].includes("pop.id='tm-quick-pace-popover'") && !js[3].includes("quick.click()"),
