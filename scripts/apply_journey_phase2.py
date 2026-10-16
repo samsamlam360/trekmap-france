@@ -148,13 +148,15 @@ padding:9px 12px;min-height:42px;font-weight:700;font-size:12px}
  if(modal){
    // Only a top-level modal replacement reinitializes the form. Never observe
    // the checklist subtree: editing/counting would otherwise recurse forever.
-   new MutationObserver(function(){enhance();progress()}).observe(modal,{childList:true,subtree:false});
+   // The real trek fiche invokes refresh() after constructing the checklist.
+   // A MutationObserver on the modal used to append controls *during* opening
+   // and could steal focus or scroll position on mobile. Never observe editing.
    modal.addEventListener('change',progress);
    modal.addEventListener('input',progress);
    modal.addEventListener('click',function(){setTimeout(progress,0)});
    enhance();
  }
- window.TrekMapJourneyPlanner={refresh:enhance,openFor:openFor,getDays:getDays,templates:templates.map(function(t){return t.label})};
+ window.TrekMapJourneyPlanner={refresh:function(){enhance();progress()},openFor:openFor,getDays:getDays,templates:templates.map(function(t){return t.label})};
 })();
 </script>
 <!-- TM_JOURNEY_PHASE2_END -->'''
