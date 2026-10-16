@@ -19,7 +19,7 @@ assert.ok(html.includes('navigator.wakeLock'),'keep display on if allowed');
 assert.ok(html.includes('localStorage.setItem(key'),'track saved locally');
 assert.ok(html.includes('download-progress')&&html.includes('tiles.put(path'),'tile cache download');
 assert.ok(html.includes('save')||html.includes('saved.points.push('));
-assert.ok(html.includes("maxAge:3000")&&html.includes("accuracy>60"),'accuracy gate and fresh high accuracy');
+assert.ok(html.includes("maximumAge:3000")&&html.includes("accuracy>60"),'accuracy gate and fresh high accuracy');
 assert.ok(html.includes('Math.max(45,accuracy*1.8)'),'off-route GPS precision guard');
 assert.ok(html.includes('download-progress')&&html.includes('GPX'));
 assert.ok(html.includes('MAX_TILES')||html.includes('TILE_CAP=480'),'bounded downloads');
