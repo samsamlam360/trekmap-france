@@ -111,6 +111,8 @@ final class GpsTrackStore {
                 point.put(loc.getLatitude()); point.put(loc.getLongitude());
                 point.put(System.currentTimeMillis());
                 points.put(point);
+                session.put("lastLat",loc.getLatitude());
+                session.put("lastLon",loc.getLongitude());
             }
             JSONObject route=session.optJSONObject("route");
             if(route!=null) {

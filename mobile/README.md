@@ -65,3 +65,13 @@ La partie web de TrekMap France est mise à jour automatiquement via Render : au
 Les mises à jour système ne peuvent pas être installées silencieusement sans un store ou des droits système spéciaux. L'installation garde les données personnelles de l'application seulement lorsque la signature et l'identifiant de paquet correspondent. Si la clé est perdue, cette continuité de mise à jour est impossible. Tant que les secrets ne sont pas configurés, seule la compilation *debug* est produite et aucune publication signée n'est annoncée.
 
 **Attention** : le code de l'installateur doit être compilé et testé en APK ; la vérification GPS et du téléchargement hors ligne nécessite toujours un essai réel sur le téléphone.
+
+## Android : ouvrir les randonnées enregistrées en mode avion
+
+La WebView distante ne peut pas démarrer si Render est inaccessible. Cette version intègre une **interface Android autonome** qui s'ouvre automatiquement lorsque la connexion réseau n'est pas validée.
+
+Pour préparer : en ligne, ouvre un trek, sélectionne « Mode randonnée » puis « Enregistrer pour Android hors réseau ». Le tracé GPS est enregistré **dans le stockage privé Android**, sans envoyer les coordonnées à Neon. Jusqu'à douze itinéraires peuvent être mémorisés. La réduction à 6 000 points des itinéraires longs peut réduire la précision aux lacets ; c'est un plan de secours, pas un guidage certifié.
+
+En mode avion, rouvre l'application et choisis le trek enregistré : tracé schématique natif, bouton de suivi GPS, calcul des distances, pause et export GPX. La localisation doit rester activée sur le téléphone.
+
+**Limite fondamentale** : ce mode n'inclut **pas encore de fond de carte topographique**, de chemins avoisinants ou de points d'eau. Le téléchargement des tuiles du système web est séparé du stockage natif Android. Prévoir une vraie carte/GPX de secours et ne pas se fier uniquement au tracé simplifié.

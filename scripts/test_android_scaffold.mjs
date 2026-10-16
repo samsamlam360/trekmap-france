@@ -37,7 +37,12 @@ const workflow=fs.readFileSync('.github/workflows/android-apk.yml','utf8');
 assert.ok(workflow.includes('TREKMAP_ANDROID_KEYSTORE_BASE64') &&
           workflow.includes('assembleRelease') && workflow.includes('gh release create'));
 
-assert.ok(fs.readFileSync('frontend/hike.html','utf8').includes("nativePlugin.openTracker"));
+for(const f of ['OfflineRouteStore.java','OfflineTreksActivity.java','OfflineRouteActivity.java'])
+ assert.ok(fs.readFileSync('mobile/native-src/fr/trekmap/france/'+f,'utf8').includes('package fr.trekmap.france;'));
+assert.ok(fs.readFileSync('mobile/native-src/fr/trekmap/france/OfflineTreksActivity.java','utf8').includes('OfflineRouteStore.list'));
+assert.ok(fs.readFileSync('mobile/native-src/fr/trekmap/france/OfflineRouteActivity.java','utf8').includes('RouteDiagram'));
+assert.ok(fs.readFileSync('frontend/hike.html','utf8').includes('nativePlugin.saveOfflineRoute'));
+assert.ok(fs.readFileSync('frontend/hike.html','utf8').includes('nativePlugin.openTracker'));
 
 assert.ok(fs.readFileSync('frontend/hike.html','utf8').includes('navigator.geolocation.watchPosition'));
 assert.ok(fs.readFileSync('mobile/www/offline.html','utf8').includes('Connexion indisponible'));
