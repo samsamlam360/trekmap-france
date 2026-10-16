@@ -5,11 +5,10 @@
 *{box-sizing:border-box}html,body{margin:0;min-height:100%;font-family:system-ui,-apple-system,Segoe UI,sans-serif;background:#f2f8f4;color:#153a28}
 button,select{font:inherit}button{cursor:pointer;min-height:44px}button:disabled{opacity:.55;cursor:not-allowed}
 header{display:flex;align-items:center;gap:10px;background:#0a5338;color:white;min-height:58px;
-padding: max(54px, calc(env(safe-area-inset-top, 0px) + 14px)) 14px 12px;
-position:relative;z-index:5}
+padding:9px 14px;position:relative;z-index:5}
 header a{color:white;text-decoration:none;font-weight:750}header strong{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 header button{background:#ffffff22;color:white;border:1px solid #ffffff70;border-radius:10px;padding:9px}
-main{display:grid;grid-template-columns:minmax(0,1fr) 340px;height:calc(100dvh - 120px);min-height:400px}
+main{display:grid;grid-template-columns:minmax(0,1fr) 340px;height:calc(100dvh - 58px);min-height:400px}
 #mapwrap{position:relative;min-height:280px;background:#e1ebe4}#nav-map{height:100%;width:100%}
 #map-fallback{display:none;position:absolute;inset:0;z-index:2;background:#e5f0e7;align-items:center;justify-content:center;padding:20px;flex-direction:column;gap:10px;text-align:center}
 #map-fallback svg{width:100%;height:70%;max-height:500px}
@@ -42,7 +41,9 @@ header #center{flex-shrink:0;min-height:48px}header a{min-height:48px;display:fl
 
 #empty{padding:16px;color:#a62c22;font-weight:750;display:none}
 a.link{color:#115d40}
-@media(max-width:850px){header{min-height:54px}main{display:flex;flex-direction:column;height:auto;min-height:0}
+@media(max-width:850px){header{min-height:54px;
+padding-top:max(54px, calc(env(safe-area-inset-top, 0px) + 14px))}
+main{display:flex;flex-direction:column;height:auto;min-height:0}
 #mapwrap{height:min(55dvh,580px);min-height:300px;flex:none}
 aside{height:auto;overflow:visible;padding-bottom:calc(32px + env(safe-area-inset-bottom))}
 .stats .stat b{font-size:20px}}
