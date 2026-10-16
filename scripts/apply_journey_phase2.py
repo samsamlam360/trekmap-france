@@ -89,3 +89,6 @@ padding:9px 12px;min-height:42px;font-weight:700;font-size:12px}
 if html.count("</body>")!=1:raise SystemExit("Unexpected body marker")
 p.write_text(html.replace("</body>",block+"\n</body>",1),encoding="utf-8")
 print("Phase 2 : assistant de checklist additive, sans migration")
+
+from runpy import run_path
+run_path(str(Path(__file__).with_name('apply_journey_phase3.py')))
