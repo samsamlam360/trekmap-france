@@ -49,7 +49,7 @@ aside{height:auto;overflow:visible;padding-bottom:calc(32px + env(safe-area-inse
 <h2>Préparer le hors-ligne</h2>
 <p class="muted">À effectuer avec du réseau et avant le départ. Les cartes téléchargées restent dans le stockage de ce navigateur sur cet appareil.</p>
 <label class="muted" for="offline-zoom">Niveau de détail</label>
-<select id="offline-zoom"><option value="13">Standard (zoom 10 à 13, plus léger)</option><option value="14" selected>Détaillé (zoom 10 à 14)</option></select>
+<select id="offline-zoom"><option value="13">Standard (zoom 9 à 13, plus léger)</option><option value="14" selected>Détaillé (zoom 9 à 14)</option></select>
 <div class="actions"><button class="primary" id="download">↓ Télécharger la carte</button><button id="checkoffline">Vérifier le hors-ligne</button></div>
 <progress id="download-progress" max="100" value="0" hidden></progress>
 <div id="offline-status" role="status" aria-live="polite">Pas encore préparé.</div>
@@ -101,7 +101,7 @@ function tileXY(lat,lon,z){
  return [Math.floor((lon+180)/360*n),Math.floor(y)];
 }
 function tilesForLine(coords,zmax){
- const tiles=new Set(),degrees=[10,11,12,13,14].filter(z=>z<=zmax);
+ const tiles=new Set(),degrees=[9,10,11,12,13,14].filter(z=>z<=zmax);
  for(const z of degrees){
   const n=2**z;
   for(let k=1;k<coords.length;k++){
