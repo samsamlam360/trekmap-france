@@ -29,6 +29,8 @@ public class GpsTrackService extends Service implements LocationListener {
     static final String PAUSE="fr.trekmap.france.PAUSE";
     static final String RESUME="fr.trekmap.france.RESUME";
     static final String FINISH="fr.trekmap.france.FINISH";
+    static final String NEXT_DAY="fr.trekmap.france.NEXT_DAY";
+    static volatile boolean running=false;
     private static final String CHANNEL="trekmap_gps_recording";
     private static final int NOTIFICATION_ID=4205;
     private LocationManager manager;
@@ -38,6 +40,7 @@ public class GpsTrackService extends Service implements LocationListener {
 
     @Override public void onCreate(){
         super.onCreate();
+        running=true;
         manager=(LocationManager)getSystemService(LOCATION_SERVICE);
         session=GpsTrackStore.read(this);
         if(Build.VERSION.SDK_INT>=26){
@@ -54,7 +57,13 @@ public class GpsTrackService extends Service implements LocationListener {
         PendingIntent pi=PendingIntent.getActivity(this,0,to,flags);
         Notification.Builder b=Build.VERSION.SDK_INT>=26
                 ?new Notification.Builder(this,CHANNEL):new Notification.Builder(this);
-        return b.setSmallIcon(android.R.drawable.ic_menu_mylocation)
+        Intent pauseIntent=new Intent(this,GpsTrackService.class);
+        pauseIntent.setAction("active".equals(session==null?"":session.optString("status"))?PAUSE:RESUME);
+        PendingIntent toggle=PendingIntent.getService(this,1,pauseIntent,flags);
+        return b.addAction(android.R.drawable.ic_media_pause,
+                "active".equals(session==null?"":session.optString("status"))?"Pause":"Reprendre",
+                toggle)
+                .setSmallIcon(android.R.drawable.ic_menu_mylocation)
                 .setContentTitle("TrekMap · GPS natif")
                 .setContentText(line)
                 .setContentIntent(pi).setOngoing(true).setOnlyAlertOnce(true)
@@ -77,10 +86,24 @@ public class GpsTrackService extends Service implements LocationListener {
             stopGps();
             clockStop();
             set("status","finished");
-            set("note","Randonnée terminée. Exporte ton GPX.");
+            set("liveSinceEpoch",0);
+            set("note","Randonnée terminée. Trace conservée dans le carnet local.");
             GpsTrackStore.save(this,session);
+            TrackArchive.add(this,session);
             stopForeground(STOP_FOREGROUND_REMOVE);stopSelf();
             return START_NOT_STICKY;
+        }
+        if(NEXT_DAY.equals(cmd)){
+            session=GpsTrackStore.read(this);
+            String status=session.optString("status");
+            if("active".equals(status)||"paused".equals(status)){
+                try{GpsTrackStore.nextDay(session);}
+                catch(JSONException e){Log.e("TrekMapGPS","Cannot advance day",e);}
+                set("note","Nouvelle journée démarrée, suivi précédent conservé.");
+                GpsTrackStore.save(this,session);
+                foreground("Journée "+session.optInt("dayIndex",1)+" · "+status);
+            }
+            return START_STICKY;
         }
         if(!permissionOk()) {stopSelf();return START_NOT_STICKY;}
         if(START.equals(cmd)) {
@@ -109,6 +132,7 @@ public class GpsTrackService extends Service implements LocationListener {
             foreground("Suivi en cours · Appuie pour ouvrir");
             set("status","active");
             set("note","Recherche du signal GPS…");
+            set("liveSinceEpoch",System.currentTimeMillis());
             GpsTrackStore.save(this,session);
             activeSince=SystemClock.elapsedRealtime();
             previous=null;lastSampleTime=0;startGps();
@@ -137,6 +161,7 @@ public class GpsTrackService extends Service implements LocationListener {
     private void clockStop() {
         if(activeSince>0) {
             set("elapsed",session.optLong("elapsed")+Math.max(0,SystemClock.elapsedRealtime()-activeSince));
+            set("liveSinceEpoch",0);
             activeSince=0;
         }
     }
@@ -160,7 +185,22 @@ public class GpsTrackService extends Service implements LocationListener {
             set("note","Saut GPS ignoré.");
             GpsTrackStore.save(this,session);return;
         }
+        int before=session.optInt("offtrackFixes",0);
         GpsTrackStore.appendLocation(session,location,previous,lastSampleTime);
+        // Haptic departure alert only after 3 consecutive accurate fixes,
+        // never more than once every 3 minutes.
+        if(before<3 && session.optInt("offtrackFixes",0)>=3 &&
+            System.currentTimeMillis()-session.optLong("lastWarningEpoch",0)>180000) {
+            set("lastWarningEpoch",System.currentTimeMillis());
+            android.os.Vibrator vib=(android.os.Vibrator)getSystemService(VIBRATOR_SERVICE);
+            if(vib!=null && vib.hasVibrator()){
+                try{
+                    if(Build.VERSION.SDK_INT>=26)
+                        vib.vibrate(android.os.VibrationEffect.createWaveform(new long[]{0,170,150,170},-1));
+                    else vib.vibrate(350);
+                }catch(SecurityException e){Log.w("TrekMapGPS","Vibration unavailable",e);}
+            }
+        }
         boolean accepted=previous==null || step>=Math.max(6,Math.max(
                 location.hasAccuracy()?location.getAccuracy():45,
                 previous.getAccuracy())*0.65);
@@ -174,6 +214,7 @@ public class GpsTrackService extends Service implements LocationListener {
             set("note","Suivi interrompu par Android. Reprends manuellement.");
             GpsTrackStore.save(this,session);
         }
+        running=false;
         super.onDestroy();
     }
     @Override public IBinder onBind(Intent intent){return null;}

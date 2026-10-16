@@ -31,7 +31,7 @@ public class GpsTrackActivity extends Activity {
     private static final int REQUEST_GPS=41, REQUEST_EXPORT=42;
     private JSONObject requestedRoute;
     private TextView title, details, state, stats;
-    private Button start, pause, finish, export;
+    private Button start, pause, finish, export, nextDay, openMap, journal;
     private final Handler handler=new Handler(Looper.getMainLooper());
     private final Runnable redraw=new Runnable(){
         @Override public void run(){refresh();handler.postDelayed(this,1500);}
@@ -64,13 +64,25 @@ public class GpsTrackActivity extends Activity {
         start=button("▶ Démarrer l'enregistrement GPS",root);
         pause=button("⏸ Mettre en pause",root);
         finish=button("■ Terminer la randonnée",root);
-        export=button("↓ Exporter le GPX sur ce téléphone",root);
+        nextDay=button("☀ Passer au jour suivant",root);
+        openMap=button("🗺️ Ouvrir la carte TrekMap hors ligne",root);
+        journal=button("▤ Mon carnet GPS (sorties terminées)",root);
+        export=button("↓ Exporter mon GPX",root);
         TextView notice=label("La position est enregistrée uniquement sur cet appareil. Une notification indique quand le GPS fonctionne écran verrouillé. Le suivi peut néanmoins être interrompu par Android ou l'économie d'énergie. Une carte de secours reste indispensable.",13,Color.DKGRAY);
         root.addView(notice);
         start.setOnClickListener(v->startPressed());
         pause.setOnClickListener(v->pausePressed());
         finish.setOnClickListener(v->finishPressed());
         export.setOnClickListener(v->exportPressed());
+        nextDay.setOnClickListener(v->newDayPressed());
+        openMap.setOnClickListener(v->{
+            JSONObject r=shownRoute(GpsTrackStore.read(this));
+            if(r!=null&&OfflineRouteStore.find(this,r.optString("id"))!=null){
+                Intent intent=new Intent(this,OfflineVectorMapActivity.class);
+                intent.putExtra("route_id",r.optString("id"));startActivity(intent);
+            }else Toast.makeText(this,"Enregistre d'abord ce trek pour Android hors réseau.",Toast.LENGTH_LONG).show();
+        });
+        journal.setOnClickListener(v->startActivity(new Intent(this,TrackArchiveActivity.class)));
         setContentView(scroll);
         refresh();
     }
@@ -97,25 +109,41 @@ public class GpsTrackActivity extends Activity {
     private void refresh(){
         if(title==null)return;
         JSONObject session=GpsTrackStore.read(this);
+        if("active".equals(session.optString("status")) && !GpsTrackService.running &&
+           System.currentTimeMillis()-session.optLong("liveSinceEpoch",0)>8000){
+            try{
+                long last=session.optLong("lastFixEpoch",0);
+                long since=session.optLong("liveSinceEpoch",0);
+                long until=last>since?last:System.currentTimeMillis();
+                session.put("elapsed",session.optLong("elapsed")+Math.max(0,until-since));
+                session.put("liveSinceEpoch",0);
+                session.put("status","interrupted");
+                session.put("note","Le suivi a été interrompu par Android. Appuie sur Reprendre.");
+                GpsTrackStore.save(this,session);
+            }catch(org.json.JSONException ignored){}
+        }
         JSONObject route=shownRoute(session);
         String st=session.optString("status","ready");
         String name=route==null?"Aucun trek sélectionné":route.optString("name","Randonnée");
         title.setText(name);
         details.setText("Mode natif Android · suivi écran verrouillé");
         state.setText("État : "+translate(st)+"\n"+session.optString("note","Choisis d'abord une randonnée sur la carte."));
-        long elapsed=session.optLong("elapsed",0);
-        if("active".equals(st) && session.optLong("liveSinceEpoch")>0)
-            elapsed+=Math.max(0,System.currentTimeMillis()-session.optLong("liveSinceEpoch"));
+        long elapsed=GpsTrackStore.elapsedWithLive(session);
         String deviation=session.optDouble("offtrack",-1)<0?"indisponible":
                 String.format(Locale.FRANCE,"%.0f m",session.optDouble("offtrack"));
         String remaining=session.optDouble("remaining",-1)<0?"indisponible":
                 String.format(Locale.FRANCE,"%.2f km",session.optDouble("remaining")/1000);
         double accuracy=session.optDouble("accuracy",-1);
         String gps=accuracy<0?"en attente":String.format(Locale.FRANCE,"%.0f m",accuracy);
+        double walked=session.optDouble("distance")/1000;
+        long moving=session.optLong("movingMs",0);
+        double perDay=(session.optDouble("distance")-session.optDouble("dayStartDistance"))/1000;
+        double speed=moving>0?session.optDouble("distance")/(moving/3600000d)/1000:0;
         stats.setText(String.format(Locale.FRANCE,
-                "Parcourus : %.2f km\nRestants sur le tracé : %s\nÉcart au tracé : %s\nPrécision GPS : %s\nDurée : %02d:%02d\nPoints enregistrés : %d",
-                session.optDouble("distance")/1000,remaining,deviation,gps,
+                "JOUR %d · %.2f km aujourd'hui\nParcourus : %.2f km · Restants : %s\nÉcart au tracé : %s · GPS : %s\nDurée totale : %02d:%02d · Marche : %02d:%02d\nVitesse moyenne en marche : %.1f km/h\nDénivelé estimé : +%.0f m\nPoints GPS : %d",
+                session.optInt("dayIndex",1),perDay,walked,remaining,deviation,gps,
                 elapsed/3600000,(elapsed/60000)%60,
+                moving/3600000,(moving/60000)%60,speed,session.optDouble("ascent",0),
                 session.optJSONArray("points")==null?0:session.optJSONArray("points").length()));
         boolean same=route!=null && session.optJSONObject("route")!=null &&
                 route.optString("id").equals(session.optJSONObject("route").optString("id"));
@@ -124,6 +152,8 @@ public class GpsTrackActivity extends Activity {
         pause.setEnabled(active || paused);
         pause.setText(active?"⏸ Pause":"▶ Reprendre");
         finish.setEnabled(active||paused);
+        nextDay.setEnabled(active||paused);
+        openMap.setEnabled(route!=null);
         export.setEnabled(session.optJSONArray("points")!=null &&
                 session.optJSONArray("points").length()>=2);
         if((active||paused) && !same) {
@@ -209,9 +239,21 @@ public class GpsTrackActivity extends Activity {
         }
         handler.postDelayed(this::refresh,300);
     }
+    private void newDayPressed(){
+        JSONObject s=GpsTrackStore.read(this);
+        if(!"active".equals(s.optString("status"))&&!"paused".equals(s.optString("status")))return;
+        new AlertDialog.Builder(this).setTitle("Commencer la journée suivante ?")
+            .setMessage("Le kilométrage du jour sera remis à zéro. La trace complète et les statistiques précédentes seront conservées.")
+            .setNegativeButton("Annuler",null)
+            .setPositiveButton("Nouvelle journée",(d,w)->{
+                Intent i=new Intent(this,GpsTrackService.class);
+                i.setAction(GpsTrackService.NEXT_DAY);
+                startService(i);handler.postDelayed(this::refresh,400);
+            }).show();
+    }
     private void finishPressed(){
         new AlertDialog.Builder(this).setTitle("Terminer le suivi ?")
-            .setMessage("La trace restera sur ce téléphone jusqu'à la prochaine randonnée. Tu peux l'exporter en GPX.")
+            .setMessage("La trace sera conservée dans ton carnet GPS local. Tu pourras exporter son fichier GPX plus tard.")
             .setNegativeButton("Annuler",null)
             .setPositiveButton("Terminer",(d,w)->{
                 Intent i=new Intent(this,GpsTrackService.class);

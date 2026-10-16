@@ -8,7 +8,7 @@ import org.json.JSONObject;
 final class OfflineRouteStore {
     private static final String PREF="trekmap_offline_routes_v1";
     private static final String FIELD="routes";
-    private static final int MAX_ROUTES=12;
+    private static final int MAX_ROUTES=40;
     private OfflineRouteStore(){}
     static JSONArray list(Context context){
         try {

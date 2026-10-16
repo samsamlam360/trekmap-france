@@ -1,78 +1,166 @@
 <!doctype html>
-<html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Carte TrekMap hors ligne</title>
+<html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>TrekMap · Navigation hors ligne</title>
 <link rel="stylesheet" href="/assets/public/vendor/maplibre-gl.css">
 <style>
-*{box-sizing:border-box}html,body{height:100%;margin:0;font-family:system-ui,sans-serif;color:#133c29;background:#e4eee7}
-#map{position:absolute;inset:0}
-#head{position:absolute;top:env(safe-area-inset-top);left:10px;right:10px;z-index:3;background:#f9fff8f2;border-radius:13px;padding:10px 13px;box-shadow:0 3px 16px #132a1c23}
-#name{font-size:16px;font-weight:800;margin:0}
-#status{font-size:12px;margin-top:3px;color:#5a6c62}
-#actions{position:absolute;right:10px;bottom:25px;z-index:3;display:flex;flex-direction:column;gap:8px}
-button{font:inherit;border:0;border-radius:12px;background:#116a47;color:white;min-height:45px;padding:10px 13px;box-shadow:0 3px 12px #112f2026}
-#legend{position:absolute;bottom:25px;left:10px;z-index:2;background:#f9fff8e6;border-radius:10px;padding:7px 10px;font-size:11px;max-width:60%}
-#fallback{position:absolute;inset:0;display:none;align-items:center;justify-content:center;text-align:center;padding:25px;background:#edf7ee}
-#fallback p{max-width:300px;line-height:1.6}
+:root{font-family:system-ui,-apple-system,Segoe UI,sans-serif;color:#153d2d;--forest:#0b513c;--mint:#eef8f0;--safe-top:max(48px,env(safe-area-inset-top,0px));--safe-bottom:max(13px,env(safe-area-inset-bottom,0px))}
+*{box-sizing:border-box}html,body,#map{height:100%;margin:0;width:100%}body{background:#e4eee7;overflow:hidden}
+#map{position:absolute;inset:0}button{font:inherit;touch-action:manipulation;cursor:pointer}
+#top{position:absolute;z-index:3;top:0;left:0;right:0;padding:calc(var(--safe-top) + 9px) 13px 13px;background:linear-gradient(125deg,#09503b,#17785b);color:white;border-radius:0 0 20px 20px;box-shadow:0 4px 18px #092b1a24}
+.headline{display:flex;align-items:center;gap:9px;min-width:0}.mark{font-size:27px;border-radius:11px;background:#ffffff25;padding:6px 10px;line-height:1}.name{font-size:19px;font-weight:850;letter-spacing:-.4px}.sub{font-size:12px;color:#caeadd;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:66vw}
+.pill{border:1px solid #ffffff6b;background:#ffffff24;border-radius:100px;padding:6px 9px;font-size:11px;white-space:nowrap;margin-left:auto}
+#notice{margin:9px 0 0;font-size:12px;background:#fff7da;color:#76481d;border-radius:8px;padding:7px 9px;display:none}
+#top .tiny{font-size:11px;color:#d3efdd;margin:8px 0 0}
+#trek-panel{position:absolute;z-index:4;top:calc(var(--safe-top) + 106px);left:12px;width:min(332px,calc(100vw - 24px));max-height:45vh;overflow:auto;border:1px solid #d5e8d9;background:#f9fffbf7;border-radius:15px;box-shadow:0 6px 28px #17472b30;display:none}
+#trek-panel.show{display:block}.panel-title{font-weight:850;padding:12px 13px 4px}.trek{width:calc(100% - 16px);text-align:left;display:block;margin:7px 8px;padding:12px;background:white;border:1px solid #dae9df;border-radius:10px;color:#16412d}
+.trek.active{background:#e5f5eb;border-color:#118258;box-shadow:inset 3px 0 #128357}
+.trek b,.trek small{display:block}.trek small{color:#678071;font-size:11px;margin-top:4px}
+#map-tools{position:absolute;z-index:2;right:11px;top:calc(var(--safe-top) + 140px);display:grid;gap:8px}
+.round{background:#f8fff9;border:1px solid #d5e8d9;color:#0e543b;border-radius:14px;width:52px;height:52px;box-shadow:0 4px 18px #19442a30;font-size:21px;font-weight:750}
+.round.selected{background:#0c6749;color:white}
+#dock{position:absolute;z-index:3;left:10px;right:10px;bottom:var(--safe-bottom);border-radius:20px;background:#fbfffcf7;box-shadow:0 0 28px #17382640;border:1px solid #d6e8dc;max-height:65vh;overflow-y:auto}
+.dock-head{display:flex;align-items:center;gap:8px;padding:11px 15px 3px}.dock-head strong{flex:1;min-width:0;font-size:15px;text-overflow:ellipsis;white-space:nowrap;overflow:hidden}.dock-head button{border:0;background:#e7f5ec;border-radius:9px;color:#0a563b;padding:7px 10px;font-size:12px}
+.stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px;padding:10px 13px 12px}
+.stat{text-align:center;padding:10px 3px;background:#eff7f1;border-radius:11px}.stat strong{display:block;font-size:clamp(14px,4.2vw,20px);color:#0b6243}.stat span{display:block;font-size:10px;color:#627a69;margin-top:4px}
+.buttons{display:flex;gap:9px;padding:0 13px 13px}.buttons button{flex:1;border:0;min-height:47px;border-radius:12px;font-weight:750;font-size:13px;background:#dff1e6;color:#0c6044}
+.buttons .primary{background:#106c4b;color:#fff}
+#extra{border-top:1px solid #e2eee5;padding:9px 13px 13px;font-size:12px;color:#53695a;display:grid;gap:6px}
+#dock.collapsed .stats,#dock.collapsed .buttons,#dock.collapsed #extra{display:none}
+#alert{display:none;background:#fff1de;color:#8d4c19;padding:9px 12px;border-radius:9px;margin:0 13px 11px;font-size:12px}
+#alert.show{display:block}
+#fallback{display:none;position:absolute;inset:0;z-index:1;background:#e6f0e9;align-items:center;justify-content:center;padding:25px;text-align:center;color:#174a33}
+#empty{background:white;border-radius:17px;padding:21px;max-width:360px;font-size:15px;line-height:1.5}
+@media(min-width:760px){#top{right:auto;width:390px;border-radius:0 0 18px 0}.sub{max-width:290px}
+#trek-panel{top:155px;left:10px}#dock{left:auto;right:14px;width:380px;bottom:14px}#map-tools{top:18px}}
+@media(prefers-reduced-motion:reduce){*{scroll-behavior:auto!important}}
 </style></head><body>
-<div id="map"></div><div id="fallback"><p>Le moteur cartographique local n'a pas pu démarrer. Le tracé du trek reste disponible dans l'écran précédent.</p></div>
-<div id="head"><div id="name">Carte hors réseau</div><div id="status">Chargement des tuiles enregistrées…</div></div>
-<div id="actions"><button id="center">◎ Me centrer</button><button id="full">⌖ Voir le trek</button></div>
-<div id="legend">🟢 Tracé prévu · 🔵 GPS · 🟤 Chemins · 💧 Eau<br>Les zones non téléchargées restent vides.</div>
-<script src="/assets/public/vendor/maplibre-gl.js"></script><script>
+<div id="map" aria-label="Carte interactive des treks téléchargés"></div>
+<div id="fallback"><div id="empty">Carte locale indisponible. Les tracés restent consultables dans la liste des treks Android. Ne pars pas sans carte de secours.</div></div>
+<header id="top"><div class="headline"><div class="mark" aria-hidden="true">⌖</div><div style="flex:1;min-width:0"><div class="name">TrekMap France</div><div class="sub" id="subtitle">Mes randonnées téléchargées</div></div><span class="pill">HORS LIGNE</span></div>
+<p class="tiny" id="coverage">La carte utilise uniquement les fichiers enregistrés sur ce téléphone.</p><p id="notice" role="status"></p></header>
+<div id="map-tools"><button id="routes-toggle" class="round" aria-label="Voir les treks téléchargés" title="Mes treks téléchargés">☰</button><button id="center" class="round" aria-label="Centrer sur ma position" title="Me centrer">◎</button><button id="heading" class="round" aria-label="Orienter la carte dans le sens de la marche" title="Sens de la marche">↗</button><button id="full" class="round" aria-label="Voir tout le trek" title="Voir le parcours">⌗</button></div>
+<section id="trek-panel" aria-label="Choisir un trek téléchargé"><div class="panel-title">Treks téléchargés <span id="route-total"></span></div><div id="routes"></div></section>
+<section id="dock" aria-label="Navigation GPS"><div class="dock-head"><strong id="title">Choisis un trek téléchargé</strong><button id="collapse" aria-expanded="true" aria-controls="metrics">Réduire ⌄</button></div>
+<div id="metrics"><div class="stats"><div class="stat"><strong id="remaining">—</strong><span>KM RESTANTS</span></div><div class="stat"><strong id="walked">0,00</strong><span>KM PARCOURUS</span></div><div class="stat"><strong id="day">—</strong><span>SECTION DE 25 KM</span></div></div>
+<div id="alert"></div>
+<div class="buttons"><button id="start" class="primary">▶ Suivi GPS</button><button id="download">↓ Télécharger carte</button></div>
+<div id="extra"><span id="track-status">GPS prêt à être démarré depuis l'écran natif.</span><span id="details">Le suivi en cours reste enregistré sur cet appareil, même si la carte est fermée.</span><span>© OpenStreetMap / OpenFreeMap · Carte non topographique. Vérifie les chemins avant de partir.</span></div></div></section>
+<script src="/assets/public/vendor/maplibre-gl.js"></script>
+<script>
 'use strict';
-const el=id=>document.getElementById(id);
-let map,route,tracked=null;
-function featureLine(points){return {type:'Feature',properties:{},geometry:{type:'LineString',coordinates:points.map(p=>[p[1],p[0]])}}}
-function bounds(points){const b=new maplibregl.LngLatBounds();points.forEach(p=>b.extend([p[1],p[0]]));return b}
-const empty={type:'FeatureCollection',features:[]};
-async function start(){
- try{
-  const res=await fetch('/data/route.json',{cache:'no-store'});if(!res.ok)throw Error('Tracé manquant');
-  route=await res.json();const points=route.coords;
-  if(!Array.isArray(points)||points.length<2)throw Error('Tracé invalide');
-  el('name').textContent=route.name||'Randonnée';
-  if(typeof maplibregl==='undefined')throw Error('Moteur cartographique manquant');
-  const style={version:8,name:'Carte TrekMap hors ligne',sources:{
-   base:{type:'vector',tiles:['https://appassets.androidplatform.net/tiles/{z}/{x}/{y}.pbf'],minzoom:9,maxzoom:14,attribution:'© OpenStreetMap contributors · OpenFreeMap'},
-   trek:{type:'geojson',data:{type:'FeatureCollection',features:[featureLine(points)]}},
-   path:{type:'geojson',data:empty},
-   gps:{type:'geojson',data:empty}
-  },layers:[
-   {id:'bg',type:'background',paint:{'background-color':'#e6eee7'}},
-   {id:'forest',type:'fill',source:'base','source-layer':'landcover',filter:['==','class','wood'],paint:{'fill-color':'#bcd8b3'}},
-   {id:'park',type:'fill',source:'base','source-layer':'landuse',filter:['in','class','park','grass','cemetery'],paint:{'fill-color':'#cde8b9'}},
-   {id:'water',type:'fill',source:'base','source-layer':'water',paint:{'fill-color':'#93ceef'}},
-   {id:'waterlines',type:'line',source:'base','source-layer':'waterway',paint:{'line-color':'#68b4d9','line-width':2}},
-   {id:'roads',type:'line',source:'base','source-layer':'transportation',filter:['!in','class','path','track'],paint:{'line-color':'#c6af91','line-width':['interpolate',['linear'],['zoom'],9,.6,14,3]}},
-   {id:'paths',type:'line',source:'base','source-layer':'transportation',filter:['in','class','path','track'],paint:{'line-color':'#9a7c49','line-width':['interpolate',['linear'],['zoom'],9,1,14,2.5],'line-dasharray':[3,1]}},
-   {id:'shadow',type:'line',source:'trek',paint:{'line-color':'#fff','line-width':9}},
-   {id:'route',type:'line',source:'trek',paint:{'line-color':'#0c7e53','line-width':5}},
-   {id:'walk',type:'line',source:'path',paint:{'line-color':'#ed7423','line-width':4}},
-   {id:'gpsring',type:'circle',source:'gps',paint:{'circle-radius':11,'circle-color':'#fff'}},
-   {id:'gpsdot',type:'circle',source:'gps',paint:{'circle-radius':7,'circle-color':'#246bc4'}}
-  ]};
-  map=new maplibregl.Map({container:'map',style,center:[points[0][1],points[0][0]],zoom:12,maxZoom:16});
-  map.addControl(new maplibregl.NavigationControl({showCompass:false}),'bottom-left');
-  map.on('load',()=>map.fitBounds(bounds(points),{padding:55,maxZoom:14,duration:0}));
-  map.on('error',()=>{el('status').textContent='Certaines tuiles sont manquantes. Prépare cette section en Wi-Fi.'});
-  el('full').onclick=()=>map.fitBounds(bounds(points),{padding:55,maxZoom:14});
-  el('center').onclick=()=>{if(tracked)map.easeTo({center:[tracked[1],tracked[0]],zoom:15});};
-  el('status').textContent='Carte vectorielle locale · fonctionnelle en mode avion si téléchargée';
-  await updateGps();
-  setInterval(updateGps,2500);
- }catch(e){el('fallback').style.display='flex';el('status').textContent=String(e.message||e)}
+const $=id=>document.getElementById(id);
+const EMPTY={type:'FeatureCollection',features:[]};
+let map=null,routes=[],selected=null,current=null,headingMode=false,follow=true,lastGPS=null,panelOpen=false,mapReady=false;
+const locale=n=>Number(n).toLocaleString('fr-FR',{maximumFractionDigits:2,minimumFractionDigits:2});
+const line=coords=>({type:'Feature',properties:{},geometry:{type:'LineString',coordinates:coords.map(p=>[p[1],p[0]])}});
+function bbox(coords){const b=new maplibregl.LngLatBounds();coords.forEach(p=>b.extend([p[1],p[0]]));return b}
+function choose(id,zoom=true){
+ const r=routes.find(x=>String(x.id)===String(id));if(!r)return;
+ selected=r;$('title').textContent=r.name||'Randonnée';
+ $('subtitle').textContent=(r.name||'Randonnée')+' · '+(r.region||'France');
+ $('route-total').textContent='('+routes.length+')';
+ $('remaining').textContent='—';$('walked').textContent='0,00';
+ $('day').textContent='1/'+Math.max(1,Math.ceil(routeMeters(r.coords)/25000));
+ if(mapReady){
+  map.getSource('selected').setData({type:'FeatureCollection',features:[line(r.coords)]});
+  if(zoom)fit(r.coords);
+ }
+ panelOpen=false;$('trek-panel').classList.remove('show');
+ renderList();refreshSession();
 }
-async function updateGps(){
+function routeMeters(a){let sum=0;for(let i=1;i<a.length;i++){
+ const lat=(a[i-1][0]+a[i][0])*Math.PI/360;
+ const dlat=(a[i][0]-a[i-1][0])*111195,dlon=(a[i][1]-a[i-1][1])*111195*Math.cos(lat);
+ sum+=Math.hypot(dlat,dlon)}return sum}
+function fit(coords){if(!map||!coords?.length)return;
+ map.fitBounds(bbox(coords),{padding:{top:180,bottom:255,left:50,right:70},maxZoom:14,duration:300});
+}
+function renderList(){
+ const target=$('routes');target.replaceChildren();
+ if(!routes.length){target.textContent='Aucun trek sauvegardé. Connecte-toi et enregistre un itinéraire depuis Mode randonnée.';return}
+ routes.forEach(r=>{
+  const btn=document.createElement('button');btn.type='button';btn.className='trek'+(selected?.id===r.id?' active':'');
+  const title=document.createElement('b');title.textContent=r.name||'Randonnée';btn.appendChild(title);
+  const detail=document.createElement('small');detail.textContent=(r.region||'France')+' · '+locale(routeMeters(r.coords)/1000)+' km';btn.appendChild(detail);
+  btn.addEventListener('click',()=>choose(r.id));target.appendChild(btn);
+ });
+}
+function note(message){$('notice').textContent=message;$('notice').style.display=message?'block':'none'}
+function updateLayer(id,geo){const src=map?.getSource(id);if(src)src.setData(geo)}
+function start(){
+ Promise.all([fetch('/data/routes.json',{cache:'no-store'}).then(r=>{if(!r.ok)throw Error('Tracés absents');return r.json()}),
+              fetch('/data/route.json',{cache:'no-store'}).then(r=>r.ok?r.json():null).catch(()=>null)])
+ .then(async ([r,initial])=>{
+  routes=(Array.isArray(r)?r:[]).filter(x=>x&&Array.isArray(x.coords)&&x.coords.length>=2);
+  $('route-total').textContent='('+routes.length+')';
+  renderList();
+  if(!maplibregl||!routes.length){$('fallback').style.display='flex';if(!routes.length)note('Prépare un trek avec Internet avant ton départ.');return}
+  let features=routes.map((r,i)=>({...line(r.coords),properties:{id:String(r.id),index:i,name:r.name||'Randonnée'}}));
+  const style={version:8,name:'TrekMap France · local',sources:{
+   base:{type:'vector',tiles:['https://appassets.androidplatform.net/tiles/{z}/{x}/{y}.pbf'],minzoom:9,maxzoom:14,attribution:'© OpenStreetMap contributors / OpenFreeMap'},
+   downloaded:{type:'geojson',data:{type:'FeatureCollection',features}},
+   selected:{type:'geojson',data:EMPTY},walk:{type:'geojson',data:EMPTY},gps:{type:'geojson',data:EMPTY},
+   starts:{type:'geojson',data:{type:'FeatureCollection',features:routes.map(r=>({type:'Feature',properties:{id:r.id,name:r.name},geometry:{type:'Point',coordinates:[r.coords[0][1],r.coords[0][0]]}}))}}
+  },layers:[
+   {id:'bg',type:'background',paint:{'background-color':'#e4eee6'}},
+   {id:'forest',type:'fill',source:'base','source-layer':'landcover',filter:['==','class','wood'],paint:{'fill-color':'#b7d6b2'}},
+   {id:'park',type:'fill',source:'base','source-layer':'landuse',filter:['in','class','park','grass','cemetery'],paint:{'fill-color':'#d2e8be'}},
+   {id:'water',type:'fill',source:'base','source-layer':'water',paint:{'fill-color':'#a1d2e9'}},
+   {id:'waterlines',type:'line',source:'base','source-layer':'waterway',paint:{'line-color':'#65a8d5','line-width':2}},
+   {id:'roads',type:'line',source:'base','source-layer':'transportation',filter:['!in','class','path','track'],paint:{'line-color':'#c7b493','line-width':['interpolate',['linear'],['zoom'],9,.7,14,3]}},
+   {id:'paths',type:'line',source:'base','source-layer':'transportation',filter:['in','class','path','track'],paint:{'line-color':'#97805e','line-dasharray':[2,2],'line-width':['interpolate',['linear'],['zoom'],9,.7,14,2.4]}},
+   {id:'others',type:'line',source:'downloaded',paint:{'line-color':'#75ab8d','line-width':2,'line-opacity':.75}},
+   {id:'halo',type:'line',source:'selected',paint:{'line-color':'#fff','line-width':9}},
+   {id:'selection',type:'line',source:'selected',paint:{'line-color':'#0d7951','line-width':5}},
+   {id:'walked',type:'line',source:'walk',paint:{'line-color':'#ea8b33','line-width':4}},
+   {id:'start-halo',type:'circle',source:'starts',paint:{'circle-radius':9,'circle-color':'#fff'}},
+   {id:'start-dot',type:'circle',source:'starts',paint:{'circle-radius':6,'circle-color':'#0d7651','circle-stroke-width':1,'circle-stroke-color':'#fff'}},
+   {id:'gps-halo',type:'circle',source:'gps',paint:{'circle-radius':12,'circle-color':'#fff'}},
+   {id:'gps-dot',type:'circle',source:'gps',paint:{'circle-radius':8,'circle-color':'#2766d2'}}
+  ]};
+  map=new maplibregl.Map({container:'map',style,center:[routes[0].coords[0][1],routes[0].coords[0][0]],zoom:10,maxZoom:16,pitchWithRotate:false});
+  map.dragRotate.disable();map.touchZoomRotate.disableRotation();
+  map.on('load',()=>{mapReady=true;choose(initial?.id||routes[0].id)});
+  map.on('error',()=>note('Certaines zones ne sont pas téléchargées. Complète les sections en Wi-Fi avant le départ.'));
+  map.on('dragstart',()=>follow=false);map.on('zoomstart',()=>{if(mapReady)follow=false});
+  map.on('click','start-dot',ev=>{const id=ev.features?.[0]?.properties?.id;if(id)choose(id)});
+  refreshSession();setInterval(refreshSession,2000);
+ }).catch(e=>{note('Impossible de lire la carte locale : '+String(e.message||e));$('fallback').style.display='flex'});
+}
+async function refreshSession(){
  try{
-  const res=await fetch('/data/session.json',{cache:'no-store'});if(!res.ok)return;
-  const s=await res.json();if(s.route?.id!==route.id)return;
+  const r=await fetch('/data/session.json',{cache:'no-store'});if(!r.ok)return;
+  const s=await r.json();current=s;
+  if(!selected||!s.route||String(s.route.id)!==String(selected.id))return;
+  const distance=Number(s.distance)||0,remaining=Number(s.remaining);
+  $('walked').textContent=locale(distance/1000);
+  $('remaining').textContent=Number.isFinite(remaining)&&remaining>=0?locale(remaining/1000):'—';
+  const section=Number.isFinite(remaining)&&remaining>=0?Math.floor(Math.max(0,routeMeters(selected.coords)-remaining)/25000)+1:1;
+  $('day').textContent=Math.min(Math.max(1,Math.ceil(routeMeters(selected.coords)/25000)),section)+'/'+Math.max(1,Math.ceil(routeMeters(selected.coords)/25000));
+  $('track-status').textContent='GPS '+(s.status||'prêt')+' · Précision '+(s.accuracy>=0?Math.round(s.accuracy)+' m':'inconnue');
+  $('details').textContent=s.note||'La position et le suivi restent sur cet appareil.';
+  const off=Number(s.offtrack);
+  const alert=Number.isFinite(off)&&off>Math.max(45,Number(s.accuracy||45)*1.8) && s.status==='active';
+  $('alert').classList.toggle('show',!!alert);$('alert').textContent=alert?'⚠ Écart au parcours estimé : '+Math.round(off)+' m. Vérifie ta position et les chemins.':'';
   if(Number.isFinite(s.lastLat)&&Number.isFinite(s.lastLon)){
-    tracked=[s.lastLat,s.lastLon];
-    map.getSource('gps')?.setData({type:'FeatureCollection',features:[{type:'Feature',properties:{},geometry:{type:'Point',coordinates:[tracked[1],tracked[0]]}}]});
+   lastGPS=[s.lastLat,s.lastLon];
+   updateLayer('gps',{type:'FeatureCollection',features:[{type:'Feature',properties:{},geometry:{type:'Point',coordinates:[s.lastLon,s.lastLat]}}]});
+   if(follow&&mapReady)map.easeTo({center:[s.lastLon,s.lastLat],zoom:Math.max(map.getZoom(),14),bearing:headingMode&&Number.isFinite(s.bearing)?s.bearing:0,duration:650});
   }
-  if(Array.isArray(s.points)&&s.points.length>=2)
-    map.getSource('path')?.setData({type:'FeatureCollection',features:[featureLine(s.points)]});
+  if(Array.isArray(s.points)&&s.points.length>=2)updateLayer('walk',{type:'FeatureCollection',features:[line(s.points)]});
  }catch(_){}
 }
+function native(action){
+ if(!selected)return note('Sélectionne un trek téléchargé.');
+ const url='/native/'+action+'?route='+encodeURIComponent(String(selected.id));
+ // WebViewAssetLoader client intercepts this native-only navigation.
+ window.location.assign(url);
+}
+$('routes-toggle').onclick=()=>{panelOpen=!panelOpen;$('trek-panel').classList.toggle('show',panelOpen)};
+$('center').onclick=()=>{follow=true;$('center').classList.add('selected');if(lastGPS&&map)map.easeTo({center:[lastGPS[1],lastGPS[0]],zoom:15})};
+$('heading').onclick=()=>{headingMode=!headingMode;$('heading').classList.toggle('selected',headingMode);follow=true;if(!headingMode&&map)map.easeTo({bearing:0})};
+$('full').onclick=()=>{follow=false;if(selected)fit(selected.coords)};
+$('collapse').onclick=()=>{const dock=$('dock');const closed=dock.classList.toggle('collapsed');$('collapse').textContent=closed?'Déplier ⌃':'Réduire ⌄';$('collapse').setAttribute('aria-expanded',String(!closed))};
+$('start').onclick=()=>native('gps');$('download').onclick=()=>native('download');
 start();
 </script></body></html>

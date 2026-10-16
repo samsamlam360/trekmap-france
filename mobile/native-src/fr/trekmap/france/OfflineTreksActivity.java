@@ -38,9 +38,13 @@ public class OfflineTreksActivity extends Activity {
         root.setBackgroundColor(Color.rgb(243,249,245));scroll.addView(root);
         TextView title=text("TrekMap · Hors connexion",25,Color.rgb(8,76,50));
         title.setTypeface(null,1);root.addView(title);
-        root.addView(text("L'application reste accessible en mode avion. Voici les itinéraires que tu as préparés dans TrekMap avant de couper le réseau.",15,Color.DKGRAY));
+        root.addView(text("Retrouve tes itinéraires directement sur la carte TrekMap, sans connexion. GPS, progression et cartes téléchargées restent disponibles sur ce téléphone.",15,Color.DKGRAY));
         TextView note=text("⚠ Les cartes vectorielles des sections téléchargées fonctionnent sans Internet. Les zones non téléchargées restent vides. Conserve une carte de secours.",13,Color.rgb(126,67,17));
         root.addView(note);
+        Button map=new Button(this);
+        map.setAllCaps(false);map.setText("🗺️ Ouvrir la carte TrekMap hors ligne");
+        root.addView(map,new LinearLayout.LayoutParams(-1,dp(60)));
+        map.setOnClickListener(v->startActivity(new Intent(this,OfflineVectorMapActivity.class)));
         JSONArray routes=OfflineRouteStore.list(this);
         TextView section=text("Mes treks enregistrés ("+routes.length()+")",18,Color.rgb(9,88,59));
         section.setTypeface(null,1);root.addView(section);
