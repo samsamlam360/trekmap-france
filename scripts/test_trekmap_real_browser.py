@@ -818,15 +818,18 @@ try:
     assert saved["checklist"][1]["text"]=="Vérifier la météo", saved
     assert saved["days"][0]["water"]=="Point d’eau à vérifier", "Profile save erased per-day planning"
     wait.until(lambda d:d.execute_script(
-        "const x=document.querySelector('[data-p-checktext=\\\"1\\\"]');"
-        "return !!x&&x.value==='Vérifier la météo';"
+        "const fields=document.querySelectorAll('#tm-p-plan-editor input[data-p-checktext]');"
+        "return fields.length>=2&&fields[1].value==='Vérifier la météo';"
     ))
     # Reopen via the *real* user navigation, rather than calling the planner internally.
     driver.find_element(By.CSS_SELECTOR,'[data-p-tab="home"]').click()
     driver.find_element(By.CSS_SELECTOR,'[data-p-tab="projects"]').click()
     driver.find_element(By.CSS_SELECTOR,'[data-p-select="910001"]').click()
     driver.find_element(By.CSS_SELECTOR,'[data-p-plan="910001"]').click()
-    wait.until(lambda d:d.find_element(By.CSS_SELECTOR,'[data-p-checktext="1"]').get_attribute("value")=="Vérifier la météo")
+    wait.until(lambda d:d.execute_script(
+        "const fields=document.querySelectorAll('#tm-p-plan-editor input[data-p-checktext]');"
+        "return fields.length>=2&&fields[1].value==='Vérifier la météo';"
+    ))
     driver.set_window_size(390,844)
     mobile_input=driver.find_element(By.CSS_SELECTOR,'[data-p-checktext="0"]')
     driver.execute_script("arguments[0].scrollIntoView({block:'center'})",mobile_input)
