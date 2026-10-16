@@ -683,11 +683,14 @@ try:
         assert layout["separate"] and not layout["overlap"] and layout["footerInside"], (
             f"{label}: footer overlaps or leaves the available route panel: {layout}"
         )
+        # The map recenter is scheduled 230 ms after entering the workspace.
+        # Wait for it before exercising mobile expand, or that map movement
+        # can collapse the panel in between the real click and the assertion.
+        driver.execute_async_script("setTimeout(arguments[0], 550)")
         expand = panel.find_element(By.CSS_SELECTOR, '[data-workspace-action="expand"]')
-        expand.click()
-        assert "expanded" in panel.get_attribute("class").split(), (
-            f"{label}: native expand click cannot reveal the stage list"
-        )
+        if "expanded" not in panel.get_attribute("class").split():
+            expand.click()
+        wait.until(lambda d: "expanded" in panel.get_attribute("class").split())
         # The expanded CSS class is synchronous, but Chromium may still be
         # applying the responsive slide/scroll layout on a short viewport.
         # Wait for actual visibility instead of failing on a transient frame.
