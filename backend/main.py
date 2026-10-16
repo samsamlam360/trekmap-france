@@ -125,6 +125,8 @@ class DrawPreview(BaseModel):
 class PlanPayload(BaseModel):
     notes: str = Field(default="", max_length=10000)
     checklist: list[dict] = Field(default_factory=list)
+    # None means legacy client: preserve existing per-day planning records.
+    days: list[dict] | None = None
 
 class CommentPayload(BaseModel):
     content: str = Field(min_length=1, max_length=2000)
@@ -1108,7 +1110,15 @@ def get_plan(trek_id:int,user=Depends(current_user)):
         if not r or (not r.is_public and not can_manage(r.owner_id,user)):
             raise HTTPException(status_code=404,detail="Trek introuvable ou privé.")
         p=db.execute(text("SELECT notes,checklist FROM trek_plans WHERE trek_id=:t AND user_id=:u"),{"t":trek_id,"u":user["id"]}).first()
-        return {"notes":p.notes if p else "","checklist":p.checklist if p and p.checklist else []}
+        rows=p.checklist if p and isinstance(p.checklist,list) else []
+        return {
+            "notes":p.notes if p else "",
+            "checklist":[x for x in rows if isinstance(x,dict) and x.get("kind")!="day"],
+            "days":[dict(x.get("data") or {},day=x["day"]) for x in rows
+                    if isinstance(x,dict) and x.get("kind")=="day"
+                    and type(x.get("day")) is int and 1<=x["day"]<=60
+                    and isinstance(x.get("data"),dict)]
+        }
     finally: db.close()
 
 @app.put("/treks/{trek_id}/plan")
@@ -1118,8 +1128,27 @@ def save_plan(trek_id:int,data:PlanPayload,user=Depends(current_user)):
         r=db.execute(text("SELECT owner_id,is_public FROM treks WHERE id=:id"),{"id":trek_id}).first()
         if not r or (not r.is_public and not can_manage(r.owner_id,user)):
             raise HTTPException(status_code=404,detail="Trek introuvable ou privé.")
-        checklist=[{"text":str(x.get("text", ""))[:200],"done":bool(x.get("done",False))} for x in data.checklist[:100] if isinstance(x,dict) and str(x.get("text","")).strip()]
-        payload=json.dumps(checklist,ensure_ascii=False)
+        checklist=[{"text":str(x.get("text", ""))[:200],"done":bool(x.get("done",False))}
+                   for x in data.checklist[:100] if isinstance(x,dict) and str(x.get("text","")).strip()]
+        if data.days is None:
+            # Never destroy a newer per-day plan when a legacy client saves notes.
+            old=db.execute(text("SELECT checklist FROM trek_plans WHERE trek_id=:t AND user_id=:u"),
+                           {"t":trek_id,"u":user["id"]}).scalar()
+            day_rows=[x for x in (old if isinstance(old,list) else [])
+                      if isinstance(x,dict) and x.get("kind")=="day"]
+        else:
+            day_rows=[]
+            seen=set()
+            permitted=("start","end","distance_km","water","food","sleep","transport","notes")
+            for raw in data.days[:60]:
+                if not isinstance(raw,dict):continue
+                day=raw.get("day")
+                if type(day) is not int or not 1<=day<=60 or day in seen:continue
+                seen.add(day)
+                fields={k:str(raw.get(k) or "").strip()[:500] for k in permitted}
+                if any(fields.values()):
+                    day_rows.append({"kind":"day","day":day,"data":fields})
+        payload=json.dumps(checklist+day_rows,ensure_ascii=False)
         db.execute(text("""
             INSERT INTO trek_plans(trek_id,owner_id,user_id,notes,checklist) VALUES(:t,:u,:u,:n,CAST(:c AS jsonb))
             ON CONFLICT (trek_id,user_id) DO UPDATE
