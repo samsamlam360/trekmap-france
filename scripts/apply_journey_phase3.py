@@ -189,3 +189,6 @@ block=r'''<!-- TM_JOURNEY_PHASE3_START -->
 if html.count("</body>")!=1:raise SystemExit("Unexpected body marker")
 p.write_text(html.replace("</body>",block+"\n</body>",1),encoding="utf-8")
 print("Phase 3 : GPS volontaire et carnet graphique hors connexion")
+
+from runpy import run_path
+run_path(str(Path(__file__).with_name('apply_hiker_discovery.py')))
