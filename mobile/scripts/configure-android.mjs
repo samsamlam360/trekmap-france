@@ -8,7 +8,7 @@ const manifest=path.join(root,'AndroidManifest.xml');
 if(!fs.existsSync(manifest)) throw Error('Projet natif absent : lance npm run android:add');
 let xml=fs.readFileSync(manifest,'utf8');
 if(!xml.includes('<manifest') || !xml.includes('<application')) throw Error('AndroidManifest.xml inattendu');
-for(const permission of ['android.permission.INTERNET','android.permission.ACCESS_COARSE_LOCATION','android.permission.ACCESS_FINE_LOCATION','android.permission.FOREGROUND_SERVICE','android.permission.FOREGROUND_SERVICE_LOCATION','android.permission.POST_NOTIFICATIONS','android.permission.REQUEST_INSTALL_PACKAGES']){
+for(const permission of ['android.permission.INTERNET','android.permission.ACCESS_NETWORK_STATE','android.permission.ACCESS_COARSE_LOCATION','android.permission.ACCESS_FINE_LOCATION','android.permission.FOREGROUND_SERVICE','android.permission.FOREGROUND_SERVICE_LOCATION','android.permission.POST_NOTIFICATIONS','android.permission.REQUEST_INSTALL_PACKAGES']){
   if(!xml.includes('android:name="'+permission+'"')){
     xml=xml.replace(/(<application\b)/, '    <uses-permission android:name="'+permission+'" />\n\n    $1');
   }
@@ -22,6 +22,8 @@ if(!xml.includes('android:usesCleartextTraffic="false"')){
 if(!xml.includes('fr.trekmap.france.GpsTrackService')){
   xml=xml.replace('</application>', `
         <activity android:name="fr.trekmap.france.GpsTrackActivity" android:exported="false" />
+        <activity android:name="fr.trekmap.france.OfflineTreksActivity" android:exported="false" />
+        <activity android:name="fr.trekmap.france.OfflineRouteActivity" android:exported="false" />
         <activity android:name="fr.trekmap.france.TrekMapUpdateActivity" android:exported="false" />
         <provider android:name="androidx.core.content.FileProvider"
             android:authorities="fr.trekmap.france.apkprovider"
@@ -37,7 +39,7 @@ fs.writeFileSync(manifest,xml);
 const javaDest=path.join(root,'java/fr/trekmap/france');
 const nativeSrc=path.resolve('native-src/fr/trekmap/france');
 fs.mkdirSync(javaDest,{recursive:true});
-for(const file of ['TrekMapNativeGpsPlugin.java','GpsTrackStore.java','GpsTrackService.java','GpsTrackActivity.java','TrekMapUpdateManager.java','TrekMapUpdateActivity.java']){
+for(const file of ['TrekMapNativeGpsPlugin.java','GpsTrackStore.java','GpsTrackService.java','GpsTrackActivity.java','TrekMapUpdateManager.java','TrekMapUpdateActivity.java','OfflineRouteStore.java','OfflineTreksActivity.java','OfflineRouteActivity.java']){
   fs.copyFileSync(path.join(nativeSrc,file),path.join(javaDest,file));
 }
 // Register only an explicit native tracker launcher. No direct GPS data sent to the WebView.
@@ -45,15 +47,44 @@ fs.writeFileSync(path.join(javaDest,'MainActivity.java'), `package fr.trekmap.fr
 import android.app.AlertDialog;
 import android.content.Intent;
 import android.os.Bundle;
+import android.net.ConnectivityManager;
+import android.net.NetworkCapabilities;
 import com.getcapacitor.BridgeActivity;
 public class MainActivity extends BridgeActivity {
     private boolean updateCheckStarted = false;
+    private boolean offlineScreenVisible = false;
+    private boolean hasNetwork(){
+        ConnectivityManager cm=(ConnectivityManager)getSystemService(CONNECTIVITY_SERVICE);
+        NetworkCapabilities caps=cm==null?null:cm.getNetworkCapabilities(cm.getActiveNetwork());
+        return caps!=null &&
+            caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) &&
+            caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED);
+    }
+    private void showNativeOffline(){
+        if(offlineScreenVisible)return;
+        offlineScreenVisible=true;
+        startActivity(new Intent(this,OfflineTreksActivity.class));
+    }
     @Override public void onCreate(Bundle savedInstanceState) {
         registerPlugin(TrekMapNativeGpsPlugin.class);
         super.onCreate(savedInstanceState);
     }
+    @Override public void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        setIntent(intent);
+        if("fr.trekmap.france.RELOAD_ONLINE".equals(intent.getAction()) && hasNetwork()){
+            offlineScreenVisible=false;
+            if(getBridge()!=null && getBridge().getWebView()!=null)
+                getBridge().getWebView().loadUrl("https://trekmap-france.onrender.com/");
+        }
+    }
     @Override public void onResume() {
         super.onResume();
+        if(!hasNetwork()){
+            showNativeOffline();
+            return;
+        }
+        offlineScreenVisible=false;
         if(updateCheckStarted) return;
         updateCheckStarted = true;
         long previous = getSharedPreferences("tm_android_updates",MODE_PRIVATE).getLong("checked_at",0);

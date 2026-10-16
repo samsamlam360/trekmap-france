@@ -11,7 +11,7 @@ for(const name of ['@capacitor/core','@capacitor/android']) assert.equal(pkg.dep
 assert.equal(pkg.devDependencies['@capacitor/cli'],'8.5.3');
 assert.ok(fs.existsSync('www/index.html')&&fs.existsSync('www/offline.html'));
 const xml=fs.readFileSync('android/app/src/main/AndroidManifest.xml','utf8');
-for(const permission of ['INTERNET','ACCESS_COARSE_LOCATION','ACCESS_FINE_LOCATION'])
+for(const permission of ['INTERNET','ACCESS_NETWORK_STATE','ACCESS_COARSE_LOCATION','ACCESS_FINE_LOCATION'])
  assert.ok(xml.includes('android.permission.'+permission),permission+' not declared');
 assert.ok(xml.includes('android:usesCleartextTraffic="false"'),'HTTP must remain disabled');
 assert.ok(!xml.includes('android.permission.ACCESS_BACKGROUND_LOCATION'),'do not promise background GPS');
@@ -22,12 +22,16 @@ assert.ok(xml.includes('android.permission.POST_NOTIFICATIONS'),'Visible trackin
 assert.ok(xml.includes('android.permission.REQUEST_INSTALL_PACKAGES'),'Update installer permission');
 assert.ok(xml.includes('androidx.core.content.FileProvider'),'Private APK FileProvider');
 assert.ok(xml.includes('TrekMapUpdateActivity'),'Native update flow');
+assert.ok(xml.includes('OfflineTreksActivity')&&xml.includes('OfflineRouteActivity'),'Offline Android activities');
 assert.ok(fs.existsSync('android/app/src/main/res/xml/trekmap_update_paths.xml'));
-for(const f of ['TrekMapNativeGpsPlugin.java','GpsTrackStore.java','GpsTrackService.java','GpsTrackActivity.java','TrekMapUpdateManager.java','TrekMapUpdateActivity.java','MainActivity.java'])
+for(const f of ['TrekMapNativeGpsPlugin.java','GpsTrackStore.java','GpsTrackService.java','GpsTrackActivity.java','TrekMapUpdateManager.java','TrekMapUpdateActivity.java','OfflineRouteStore.java','OfflineTreksActivity.java','OfflineRouteActivity.java','MainActivity.java'])
  assert.ok(fs.existsSync('android/app/src/main/java/fr/trekmap/france/'+f), f);
 assert.ok(fs.existsSync('android/app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml'));
 const appgradle=fs.readFileSync('android/app/build.gradle','utf8');
 assert.ok(appgradle.includes('fr.trekmap.france'),'applicationId mismatch');
 assert.ok(appgradle.includes('// TrekMap stable version and signing configuration'));
 assert.ok(appgradle.includes('trekmapRelease'));
+const main=fs.readFileSync('android/app/src/main/java/fr/trekmap/france/MainActivity.java','utf8');
+assert.ok(main.includes('NET_CAPABILITY_VALIDATED')&&main.includes('showNativeOffline'));
+assert.ok(main.includes('RELOAD_ONLINE'));
 console.log('ANDROID CONFIG PASS: GPS service, update prompt, restricted FileProvider, fixed Android version and optional stable signing.');

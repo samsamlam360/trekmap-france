@@ -44,7 +44,7 @@ aside{height:auto;overflow:visible;padding-bottom:calc(32px + env(safe-area-inse
 <main><div id="mapwrap"><div id="nav-map" aria-label="Carte interactive de la randonnée"></div><div id="map-fallback"><strong>Tracé conservé hors connexion</strong><svg id="fallback-svg" viewBox="0 0 500 450" role="img" aria-label="Tracé de secours sans fond de carte"></svg><small>Le fond cartographique est indisponible. Suis seulement des chemins reconnus et vérifie ta position.</small></div><div id="map-legend"><i class="route"></i>Parcours prévu <i></i>Marche enregistrée</div></div>
 <aside><h1 id="title">Préparer ma randonnée</h1><p class="muted" id="route-info"></p><div id="state" data-kind="warning" role="status">En attente du tracé.</div>
 <div class="stats"><div class="stat"><b id="walked">0,00 km</b><small>Distance réellement parcourue</small></div><div class="stat"><b id="remaining">–</b><small>Restant sur le parcours (estimé)</small></div><div class="stat"><b id="deviation">–</b><small>Écart au tracé</small></div><div class="stat"><b id="elapsed">00:00</b><small>Temps depuis le départ (hors pause)</small></div></div>
-<h2>Navigation GPS</h2><div class="actions"><button class="primary" id="start">▶ Démarrer</button><button id="pause" disabled>⏸ Pause</button><button id="finish" disabled class="alert">■ Terminer</button><button id="export">↓ Exporter mon GPX</button><button id="native-gps" class="primary" hidden>📍 GPS Android · écran verrouillé</button></div>
+<h2>Navigation GPS</h2><div class="actions"><button class="primary" id="start">▶ Démarrer</button><button id="pause" disabled>⏸ Pause</button><button id="finish" disabled class="alert">■ Terminer</button><button id="export">↓ Exporter mon GPX</button><button id="native-gps" class="primary" hidden>📍 GPS Android · écran verrouillé</button><button id="native-save" class="primary" hidden>↓ Enregistrer pour Android hors réseau</button><button id="native-routes" hidden>🥾 Mes treks Android hors réseau</button></div>
 <p class="muted" id="gps-accuracy">Précision : aucune position pour le moment.</p>
 <h2>Préparer le hors-ligne</h2>
 <p class="muted">À effectuer avec du réseau et avant le départ. Les cartes téléchargées restent dans le stockage de ce navigateur sur cet appareil.</p>
@@ -359,14 +359,36 @@ el('download').addEventListener('click',prepare);el('checkoffline').addEventList
 // The WebView only opens a native screen. Location recording starts exclusively
 // after a second deliberate tap in that screen. No GPS positions cross this bridge.
 const nativePlugin=window.Capacitor?.Plugins?.TrekMapNativeGPS;
+function nativeCoords(){
+ if(coords.length<=6000)return coords;
+ const reduced=[];
+ for(let i=0;i<6000;i++)reduced.push(coords[Math.round(i*(coords.length-1)/5999)]);
+ return reduced;
+}
+function nativeRoute(){return {id:route.id,name:route.name,region:route.region,coords:nativeCoords()}}
 if(window.Capacitor?.getPlatform?.()==='android' && nativePlugin?.openTracker){
  const control=el('native-gps');
  control.hidden=false;
  control.addEventListener('click',async()=>{
    try{
-     await nativePlugin.openTracker({route:{id:route.id,name:route.name,coords}});
+     await nativePlugin.saveOfflineRoute?.({route:nativeRoute()});
+     await nativePlugin.openTracker({route:nativeRoute()});
    }catch(e){state('GPS Android indisponible : '+String(e?.message||e),'danger')}
  });
+ if(nativePlugin.saveOfflineRoute){
+   const save=el('native-save');save.hidden=false;
+   save.addEventListener('click',async()=>{
+     try{
+       await nativePlugin.saveOfflineRoute({route:nativeRoute()});
+       state('✓ Tracé enregistré dans Android. Accessible en mode avion, sans fond de carte topographique.','ok');
+     }catch(e){state('Enregistrement Android échoué : '+String(e?.message||e),'danger')}
+   });
+ }
+ if(nativePlugin.openOfflineRoutes){
+   const list=el('native-routes');list.hidden=false;
+   list.addEventListener('click',()=>nativePlugin.openOfflineRoutes().catch(e=>
+       state('Impossible d’ouvrir les treks hors réseau : '+String(e?.message||e),'danger')));
+ }
 }
 el('center').addEventListener('click',()=>{
  if(map){mapFollowing=true;if(lastGPS)map.easeTo({center:[lastGPS[1],lastGPS[0]],zoom:15});
