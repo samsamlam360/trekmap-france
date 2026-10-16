@@ -10,6 +10,15 @@ block=r'''<!-- TM_JOURNEY_PHASE1_START -->
 <style id="tm-journey-filters-style">
 #tm-journey-active-filters{display:flex;flex-wrap:wrap;gap:6px;align-items:center;min-width:0}
 #tm-journey-active-filters:empty{display:none}
+#tm-inline-filters #tm-journey-active-filters{
+  display:flex;align-items:center;gap:6px;flex:0 0 auto;max-width:none;pointer-events:auto;padding-right:4px
+}
+#tm-inline-filters #tm-journey-active-filters button{
+  min-height:36px;height:36px;border-radius:999px;
+  padding:7px 11px;background:#eaf7ef;border:1px solid #b5d8c4;
+  color:#155338;font-weight:750;box-shadow:none;max-width:none
+}
+
 #tm-journey-active-filters button{min-height:36px;padding:7px 11px;border:1px solid #b5d8c4;
   background:#eaf7ef;color:#155338;border-radius:999px;font-weight:750;font-size:12px;cursor:pointer}
 #tm-journey-active-filters button:hover{background:#d5efdf}
@@ -37,7 +46,7 @@ block=r'''<!-- TM_JOURNEY_PHASE1_START -->
  function holder(){
    var desktop=document.getElementById('tm-inline-filters');
    var mobile=document.querySelector('#sidebar .filters');
-   var target=window.innerWidth>820?document.body:mobile;
+   var target=window.innerWidth>820?desktop:mobile;
    if(target&&group.parentNode!==target)target.appendChild(group);
  }
  function active(el,id){
