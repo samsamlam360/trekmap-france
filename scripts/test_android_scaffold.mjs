@@ -1,0 +1,20 @@
+/* Smoke test independent from npm, Android SDK and production. */
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+const c=JSON.parse(fs.readFileSync('mobile/capacitor.config.json','utf8'));
+const p=JSON.parse(fs.readFileSync('mobile/package.json','utf8'));
+const w=fs.readFileSync('.github/workflows/android-apk.yml','utf8');
+const patch=fs.readFileSync('mobile/scripts/configure-android.mjs','utf8');
+const check=fs.readFileSync('mobile/scripts/verify-android.mjs','utf8');
+assert.equal(c.appId,'fr.trekmap.france');
+assert.equal(c.server.url,'https://trekmap-france.onrender.com');
+assert.equal(c.server.cleartext,false);
+assert.equal(c.android.allowMixedContent,false);
+assert.equal(c.loggingBehavior,'none');
+assert.deepEqual([p.dependencies['@capacitor/core'],p.dependencies['@capacitor/android'],p.devDependencies['@capacitor/cli']],['8.5.3','8.5.3','8.5.3']);
+for(const part of ['workflow_dispatch','pull_request','assembleDebug','upload-artifact@v4','node scripts/verify-android.mjs']) assert.ok(w.includes(part),part);
+for(const part of ['android.permission.ACCESS_FINE_LOCATION','android.permission.ACCESS_COARSE_LOCATION','android:usesCleartextTraffic','trekmap_icon_bg']) assert.ok(patch.includes(part),part);
+assert.ok(check.includes('ACCESS_BACKGROUND_LOCATION'),'background tracking should be intentionally absent');
+assert.ok(fs.readFileSync('frontend/hike.html','utf8').includes('navigator.geolocation.watchPosition'));
+assert.ok(fs.readFileSync('mobile/www/offline.html','utf8').includes('Connexion indisponible'));
+console.log('ANDROID SCAFFOLD PASS: isolated Android workflow, transport, live backend, foreground GPS only, offline warning.');

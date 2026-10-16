@@ -1,0 +1,16 @@
+{
+  "appId": "fr.trekmap.france",
+  "appName": "TrekMap France",
+  "webDir": "www",
+  "loggingBehavior": "none",
+  "server": {
+    "url": "https://trekmap-france.onrender.com",
+    "cleartext": false,
+    "errorPath": "offline.html"
+  },
+  "android": {
+    "allowMixedContent": false,
+    "webContentsDebuggingEnabled": false,
+    "backgroundColor": "#0b5138"
+  }
+}

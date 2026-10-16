@@ -1,0 +1,22 @@
+{
+  "name": "trekmap-france-android",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Application Android de TrekMap France : conteneur natif Capacitor, sans duplication du backend.",
+  "scripts": {
+    "android:add": "npx cap add android",
+    "android:sync": "npx cap sync android",
+    "android:configure": "node scripts/configure-android.mjs",
+    "android:verify": "node scripts/verify-android.mjs"
+  },
+  "dependencies": {
+    "@capacitor/core": "8.5.3",
+    "@capacitor/android": "8.5.3"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "8.5.3"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}
