@@ -44,7 +44,7 @@ jobs:
           for path in ['/ai/status','/ai/plan','/ai/clarify','/ai/feedback','/ai/brain']:
               if sum(1 for r in app_v5.app.routes if r.path==path)!=1:
                   raise SystemExit('Route dupliquée: '+path)
-          print('Routes TrekBrain v8: OK')
+          print('Routes TrekBrain v9: OK')
           PY
       - name: Vérifier la compréhension du français simple
         shell: bash
@@ -113,7 +113,7 @@ jobs:
           from pathlib import Path
           import re
           html=Path('frontend/index.html').read_text(encoding='utf-8')
-          required=['<!DOCTYPE html>','</html>','TREKMAP_UNIFIED_EXPERIENCE_START','trekmap-unified-css','trekmap-unified-js','tm-unified-topbar','tm-unified-drawer','TREKMAP_MOBILE_EXPERIENCE_START','trekmap-mobile-css','trekmap-mobile-js','tm-mobile-nav','tm-mobile-create-sheet','TREKMAP_MAP_POLISH_START','TREKMAP_AI_EXPERIENCE_START','trekmap-ai-js','TREKMAP_LANGUAGE_UI_START','trekmap-language-js','TREKMAP_REASONING_AGENT_UI_START','trekmap-reasoning-agent-js','TREKMAP_TREKBRAIN_UI_START','trekmap-trekbrain-js','tm-agent-clarify','/ai/clarify','/ai/feedback','tm-language-learn','Apprendre mon vocabulaire','Conseiller TrekMap','Ce que j’ai compris','Pourquoi je te conseille ce trek','function openDetail(','function startDrawing(','function exportGPX(']
+          required=['<!DOCTYPE html>','</html>','TREKMAP_UNIFIED_EXPERIENCE_START','trekmap-unified-css','trekmap-unified-js','tm-unified-topbar','tm-unified-drawer','TREKMAP_MOBILE_EXPERIENCE_START','trekmap-mobile-css','trekmap-mobile-js','tm-mobile-nav','tm-mobile-create-sheet','TREKMAP_MAP_POLISH_START','TREKMAP_AI_EXPERIENCE_START','trekmap-ai-js','TREKMAP_LANGUAGE_UI_START','trekmap-language-js','TREKMAP_REASONING_AGENT_UI_START','trekmap-reasoning-agent-js','TREKMAP_TREKBRAIN_V9_UI_START','trekmap-trekbrain-v9-js','tm-agent-clarify','/ai/clarify','/ai/feedback','tm-language-learn','Apprendre mon vocabulaire','Conseiller TrekMap','Ce que j’ai compris','Pourquoi je te conseille ce trek','function openDetail(','function startDrawing(','function exportGPX(']
           missing=[x for x in required if x not in html]
           if missing: raise SystemExit('Éléments frontend manquants: '+', '.join(missing))
           forbidden=['TREKMAP_STABLE_EXPLORER_START','TREKMAP_STABLE_REPAIRS_START','TREKMAP_BOTTOM_BAR_REPAIR_START','TREKMAP_PRODUCT_UPGRADE_START','TREKMAP_DISPLAY_STABILIZER_START','TREKMAP_FUNCTIONAL_REPAIRS_START','TREKMAP_NAVIGATION_POLISH_START','id="trekmap-explorer-ui"']
@@ -121,16 +121,16 @@ jobs:
           if present: raise SystemExit('Anciennes couches présentes: '+', '.join(present))
           if html.count('<html')!=1 or html.count('</html>')!=1: raise SystemExit('Structure HTML invalide')
           if html.count('TREKMAP_REASONING_AGENT_UI_START')!=1: raise SystemExit('Couche agent dupliquée')
-          if html.count('TREKMAP_TREKBRAIN_UI_START')!=1: raise SystemExit('Couche TrekBrain dupliquée')
+          if html.count('TREKMAP_TREKBRAIN_V9_UI_START')!=1: raise SystemExit('Couche TrekBrain dupliquée')
           scripts={
             'unified':'trekmap-unified-js','mobile':'trekmap-mobile-js','advisor':'trekmap-ai-js',
-            'language':'trekmap-language-js','reasoning':'trekmap-reasoning-agent-js','trekbrain':'trekmap-trekbrain-js'
+            'language':'trekmap-language-js','reasoning':'trekmap-reasoning-agent-js','trekbrain':'trekmap-trekbrain-v9-js'
           }
           for name,sid in scripts.items():
               match=re.search(r'<script id="'+re.escape(sid)+r'">(.*?)</script>',html,re.S)
               if not match: raise SystemExit('Script introuvable: '+sid)
               Path('/tmp/trekmap-'+name+'.js').write_text(match.group(1),encoding='utf-8')
-          print('Frontend TrekMap complet + TrekBrain v8: OK')
+          print('Frontend TrekMap complet + TrekBrain v9: OK')
       - name: Vérifier le JavaScript
         run: |
           node --check /tmp/trekmap-unified.js
