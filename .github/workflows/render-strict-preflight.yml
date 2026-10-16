@@ -123,6 +123,7 @@ jobs:
       - name: Verify accessible TrekBrain UI redesign
         run: |
           node scripts/test_hiker_finish.mjs
+          node scripts/test_hike_navigation.mjs
           node scripts/test_trekbrain_ux_refresh.mjs
           node scripts/test_trekbrain_desktop_experience.mjs
           node scripts/test_trekbrain_map_workspace.mjs
