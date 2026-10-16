@@ -1,0 +1,25 @@
+name: Export official verified Android v1028
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/transfer-android-v1028.yml'
+permissions:
+  contents: read
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Download and verify existing signed release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release download android-v1028 --repo samsamlam360/trekmap-france --pattern 'trekmap-france.apk' --dir . --clobber
+          echo 'ee6f9663be2b450bb0f6a7c348dc7e2d519baadc24a9baf32f8965677178d1d0  trekmap-france.apk' | sha256sum -c -
+      - name: Attach verified APK for phone installation
+        uses: actions/upload-artifact@v4
+        with:
+          name: TrekMap-France-v1028-officiel
+          path: trekmap-france.apk
+          if-no-files-found: error
+          retention-days: 7
