@@ -42,7 +42,8 @@ padding:9px 12px;min-height:42px;font-weight:700;font-size:12px}
    if(!list||!out)return;
    var lines=[...list.querySelectorAll('.check-row')].filter(function(r){return r.querySelector('input[type="text"]')?.value.trim()});
    var done=lines.filter(function(r){return r.querySelector('input[type="checkbox"]')?.checked}).length;
-   out.firstChild.textContent=done+' / '+lines.length+' éléments cochés';
+   var label=done+' / '+lines.length+' éléments cochés';
+   if(out.firstChild.textContent!==label)out.firstChild.textContent=label;
  }
  function enhance(){
    var list=document.getElementById('checklist');
@@ -76,7 +77,9 @@ padding:9px 12px;min-height:42px;font-weight:700;font-size:12px}
  }
  var modal=document.getElementById('modal');
  if(modal){
-   new MutationObserver(function(){enhance();progress()}).observe(modal,{childList:true,subtree:true});
+   // Only a top-level modal replacement reinitializes the form. Never observe
+   // the checklist subtree: editing/counting would otherwise recurse forever.
+   new MutationObserver(function(){enhance();progress()}).observe(modal,{childList:true,subtree:false});
    modal.addEventListener('change',progress);
    modal.addEventListener('input',progress);
    modal.addEventListener('click',function(){setTimeout(progress,0)});
