@@ -1,0 +1,25 @@
+name: Export verified Android v1022
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/export-android-v1022.yml'
+permissions:
+  contents: read
+jobs:
+  export-apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Download and validate official signed release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release download android-v1022 --repo samsamlam360/trekmap-france --pattern 'trekmap-france.apk' --dir . --clobber
+          echo 'e5d0945a6a89b41c544de85f0ec6b5683bc18bc62a3f6265956e6349535d6b5e  trekmap-france.apk' | sha256sum -c -
+      - name: Attach signed release APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: trekmap-france-v1022-officiel
+          path: trekmap-france.apk
+          if-no-files-found: error
+          retention-days: 7
