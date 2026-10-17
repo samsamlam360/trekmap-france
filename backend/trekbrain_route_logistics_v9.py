@@ -1489,19 +1489,18 @@ def _attach_preloaded_terrain(
         kind = str(row.get("category") or "")
         source = str(row.get("source_url") or "")
         if kind == "water" and (key in seen_water or (source and source in seen_water_sources)):
-            # A fresh OSM drinking_water=no must override stale, preloaded
-            # evidence of potable water for the same mapped source.
-            if str(row.get("water_status") or "") == "not_potable":
-                for existing in water:
-                    old_source = str(existing.get("source_url") or "")
-                    same_source = bool(source and source == old_source)
-                    if not same_source and coord_key(existing) != key:
-                        continue
-                    if source and old_source and source != old_source:
-                        continue
-                    existing["status"] = "not_potable"
-                    existing["water_status"] = "not_potable"
-                    existing["notes"] = "Eau signalée non potable : ne pas boire."
+            # Merge the original OSM restriction tags too. Prior to this fix,
+            # a later 'access=private' or 'seasonal=yes' point was silently
+            # discarded during deduplication and counted as drinking water.
+            from .trekbrain_water_evidence_v9 import merge_water_evidence
+            for existing in water:
+                old_source = str(existing.get("source_url") or "")
+                same_source = bool(source and source == old_source)
+                if not same_source and coord_key(existing) != key:
+                    continue
+                if source and old_source and source != old_source:
+                    continue
+                merge_water_evidence(existing, row)
             continue
         if kind == "water" and key not in seen_water:
             seen_water.add(key)
@@ -1522,6 +1521,8 @@ def _attach_preloaded_terrain(
                     else "Point d'eau cartographié près du tracé ; disponibilité et potabilité à vérifier."
                 ),
                 "source_url": row.get("source_url") or "",
+                "osm_tags": dict(row.get("osm_tags") or {})
+                if isinstance(row.get("osm_tags"), dict) else {},
                 "display_only": True,
             })
         elif kind == "food" and key not in seen_food:

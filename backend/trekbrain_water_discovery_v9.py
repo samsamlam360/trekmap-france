@@ -262,14 +262,10 @@ def install_water_discovery(v3, resources) -> None:
                 same_source = bool(old_source and old_source == new_source)
                 if not (same_source or not old_source or not new_source):
                     continue
-                if str(item.get("status") or item.get("water_status") or "") == "not_potable":
-                    previous.update({
-                        "status": "not_potable",
-                        "water_status": "not_potable",
-                        "notes": "Eau signalée non potable : ne pas boire.",
-                    })
-                    if new_source and not old_source:
-                        previous["source_url"] = new_source
+                from .trekbrain_water_evidence_v9 import merge_water_evidence
+                merge_water_evidence(previous, item)
+                if new_source and not old_source:
+                    previous["source_url"] = new_source
                 continue
             seen[key] = item
             merged.append(item)

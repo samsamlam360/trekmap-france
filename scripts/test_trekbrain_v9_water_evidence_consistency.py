@@ -142,4 +142,65 @@ finally:
     free._request_json = real_request
 
 print("11 contradictory OSM water tags: three provider layers produce exactly the same statuses PASS")
+
+# End-to-end OSM tag-preservation: route-first parsing -> preload -> daily
+# evidence check. A map marker must never become verified resupply merely
+# because the payload was normalized into a different public field schema.
+for index, restriction in enumerate([
+    {"access":"private"},{"seasonal":"summer"},{"locked":"yes"},
+    {"intermittent":"yes"},{"access":"customers"},
+]):
+    element={
+        "type":"node","id":8000000+index,
+        "lat":45.009, "lon":5.001,
+        "tags":{"amenity":"drinking_water",**restriction},
+    }
+    sourced=logistics._terrain_resource(element)
+    plan={
+        "route_preview":{"coords":[[45.0,5.0],[45.02,5.0]],"fallback":False},
+        "duration_days":1,
+        "stages":[{"day":1,"distance_km":2.3}],
+        "water":[],
+    }
+    logistics._attach_preloaded_terrain(plan,[sourced],True)
+    actual=plan["water"][0]
+    assert actual["osm_tags"].get(next(iter(restriction)))==next(iter(restriction.values()))
+    assert not confirmed_water_reference(actual), (restriction, actual)
+    missing=resources._missing_terrain_intent(plan,{"water":True})
+    assert missing["missing_water_days"]==[1],(restriction, missing)
+
+# Re-discovered SAME OSM source must not lose its private/seasonal tags.
+point={
+    "category":"water","name":"Robinet","lat":45.009,"lon":5.001,
+    "source_url":"https://www.openstreetmap.org/node/999991",
+    "osm_tags":{"amenity":"drinking_water","access":"private"},
+    "status":"potable_referenced",
+}
+for merger in ("route_first","supplement"):
+    existing={**point,"osm_tags":{"amenity":"drinking_water"}}
+    result={"water":[existing]}
+    incoming={**point,"osm_tags":{"amenity":"drinking_water","access":"private"}}
+    if merger=="route_first":
+        logistics._attach_preloaded_terrain(result,[incoming],False)
+    else:
+        resources._merge_supplemented_resources(result,[incoming])
+    assert result["water"][0]["osm_tags"].get("access")=="private",result
+    assert not confirmed_water_reference(result["water"][0]),result
+
+# Contradictory provider snapshots cannot erase an earlier explicit warning.
+from backend.trekbrain_water_evidence_v9 import merge_water_evidence
+for old_tags,new_tags in [
+    ({"amenity":"drinking_water","access":"private"},
+     {"amenity":"drinking_water","access":"yes"}),
+    ({"amenity":"drinking_water","drinking_water":"no"},
+     {"amenity":"drinking_water","drinking_water":"yes"}),
+    ({"amenity":"drinking_water","seasonal":"winter"},
+     {"amenity":"drinking_water","seasonal":"no"}),
+]:
+    old={**point,"osm_tags":old_tags}
+    new={**point,"osm_tags":new_tags}
+    merge_water_evidence(old,new)
+    assert not confirmed_water_reference(old),(old_tags,new_tags,old)
+print("OSM WATER PRELOAD/MERGES: 5 restricted tags and 3 provider-merging routes PASS")
+
 print("No new request wave, explicit non-potable warnings and field-check caveats PASS")

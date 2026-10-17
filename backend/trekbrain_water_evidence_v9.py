@@ -89,5 +89,50 @@ def confirmed_water_reference(item: Mapping[str, Any] | None) -> bool:
         return False
     return True
 
+def merge_water_evidence(existing: dict[str, Any], incoming: Mapping[str, Any]) -> None:
+    """Merge the SAME OSM water source without erasing safety/access warnings.
 
-__all__ = ["potability_status", "has_osm_identity", "water_evidence_status", "confirmed_water_reference"]
+    A route-first POI and a later mirror can return different subsets of
+    OSM tags. Neither an incomplete response nor a recent generic potable
+    amenity can erase an older explicit restriction or 'not potable' tag.
+    This changes evidence only, never the route or provider budgets.
+    """
+    if not isinstance(existing, dict) or not isinstance(incoming, Mapping):
+        return
+    current = existing.get("osm_tags")
+    old = current if isinstance(current, Mapping) else {}
+    recent = incoming.get("osm_tags")
+    fresh = recent if isinstance(recent, Mapping) else {}
+    merged = dict(old)
+    for key, value in fresh.items():
+        name = str(key)
+        previous = str(old.get(key) or "").strip().casefold()
+        newest = str(value or "").strip().casefold()
+        if name in {"drinking_water", "water:potable", "potable"}:
+            # Explicitly unsafe or conditional statuses win over 'yes'.
+            rank = {"no": 4, "conditional": 3, "seasonal": 3,
+                    "intermittent": 3, "unknown": 2}
+            if rank.get(previous, 0) > rank.get(newest, 0):
+                continue
+        if name == "access" and previous in {"no", "private", "customers", "permit"}:
+            if newest not in {"no", "private", "customers", "permit"}:
+                continue
+        if name in {"locked", "disused", "abandoned", "intermittent"}:
+            if previous in {"yes", "true", "1"} and newest not in {"yes", "true", "1"}:
+                continue
+        if name == "seasonal" and previous not in {"", "no", "false", "0"}:
+            if newest in {"", "no", "false", "0"}:
+                continue
+        merged[key] = value
+    if merged:
+        existing["osm_tags"] = merged
+    original_status = water_evidence_status(existing)
+    new_status = water_evidence_status(incoming)
+    if "not_potable" in (original_status, new_status):
+        existing.update(status="not_potable", water_status="not_potable",
+                        notes="Eau signalée non potable : ne pas boire.")
+    elif original_status == "unverified" and new_status == "potable_referenced":
+        existing.update(status="potable_referenced", water_status="potable_referenced")
+
+
+__all__ = ["potability_status", "has_osm_identity", "water_evidence_status", "confirmed_water_reference", "merge_water_evidence"]
