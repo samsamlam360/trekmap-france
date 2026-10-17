@@ -47,9 +47,11 @@ block = r'''<!-- TREKMAP_FOUR_SPACES_START -->
 #tm-design-filter-flyout button{min-height:38px;border:0;background:#e6f3ea;color:#16583a;
  border-radius:10px;padding:7px 12px;font-weight:750}
 #tm-inline-filters{gap:7px!important}
+#tm-design-toolbar{position:absolute;z-index:3650;top:calc(var(--tm-top) + 69px);right:clamp(276px,21vw,340px);display:flex;align-items:center;gap:6px}
+
 #tm-inline-filters select{min-width:126px!important}
 #tm-inline-filters [data-filter-target="duration-filter"]{max-width:152px!important}
-.map-tools #tm-design-filter-button,.map-tools #tm-design-add-button{
+#tm-design-toolbar #tm-design-filter-button,#tm-design-toolbar #tm-design-add-button{
  display:inline-flex!important;align-items:center;justify-content:center;gap:5px;
  min-height:44px!important;border-radius:12px!important;background:#fff!important;
  color:#154b32!important;border:1px solid #d3e3d9!important;font-size:12px!important;font-weight:800!important}
@@ -80,17 +82,15 @@ body.tm-design-library-mode #tm-design-library-hint{display:block;color:#d8ebe0;
  #tm-mobile-nav .tm-mobile-nav-btn[data-tm-space]{min-height:50px!important;border-radius:12px!important}
  #tm-mobile-nav .tm-mobile-nav-btn[data-tm-space] .tm-space-label{white-space:nowrap;font-size:10px}
  #tm-inline-filters{display:none!important}
- .map-tools{display:flex!important;align-items:flex-start!important;flex-wrap:wrap!important;
-  gap:6px!important;max-width:calc(100vw - 18px)!important}
- .map-tools #tm-design-filter-button,.map-tools #tm-design-add-button{padding:8px 11px!important}
+ #tm-design-toolbar{top:calc(var(--tm-top) + 10px);right:12px}
+ #tm-design-toolbar #tm-design-filter-button,#tm-design-toolbar #tm-design-add-button{padding:8px 11px!important}
  #tm-desktop-info{display:none!important}
- body.tm-brain-route-mode .map-tools #tm-design-filter-button,
- body.tm-brain-route-mode .map-tools #tm-design-add-button{display:none!important}
+ body.tm-brain-route-mode #tm-design-toolbar{display:none!important}
  #tm-unified-drawer .tm-trek-tile{min-width:235px}
 }
 @media(max-width:380px){
  #tm-mobile-nav .tm-mobile-nav-btn[data-tm-space] .tm-space-label{font-size:9px}
- .map-tools #tm-design-filter-button,.map-tools #tm-design-add-button{font-size:11px!important}
+ #tm-design-toolbar #tm-design-filter-button,#tm-design-toolbar #tm-design-add-button{font-size:11px!important}
 }
 @media(prefers-reduced-motion:reduce){
  .tm-trek-tile,.tm-p-item{transition:none!important}
@@ -219,6 +219,11 @@ body.tm-design-library-mode #tm-design-library-hint{display:block;color:#d8ebe0;
  // Les vrais boutons créer/importer restent en DOM, pour préserver leurs handlers.
  var tools=document.querySelector('.map-tools');
  if(tools){
+  var toolbar=document.createElement('div');
+  toolbar.id='tm-design-toolbar';
+  toolbar.setAttribute('role','group');
+  toolbar.setAttribute('aria-label','Actions Explorer');
+  app.appendChild(toolbar);
   var panel=$('tm-map-options-panel');
   if(panel&&!panel.querySelector('.tm-design-map-actions')){
    var actionGroup=document.createElement('div');
@@ -237,7 +242,7 @@ body.tm-design-library-mode #tm-design-library-hint{display:block;color:#d8ebe0;
   function actionButton(id,label){
    var b=document.createElement('button');
    b.type='button';b.id=id;b.textContent=label;b.className='tm-design-action';
-   tools.insertBefore(b,tools.firstChild);
+   toolbar.appendChild(b);
    return b;
   }
   var addButton=actionButton('tm-design-add-button','＋ Ajouter');
