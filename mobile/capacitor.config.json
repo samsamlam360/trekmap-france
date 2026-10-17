@@ -4,9 +4,12 @@
   "webDir": "www",
   "loggingBehavior": "none",
   "server": {
-    "url": "https://trekmap-france.onrender.com",
+    "hostname": "localhost",
+    "androidScheme": "https",
     "cleartext": false,
-    "errorPath": "offline.html"
+    "allowNavigation": [
+      "trekmap-france.onrender.com"
+    ]
   },
   "android": {
     "allowMixedContent": false,
