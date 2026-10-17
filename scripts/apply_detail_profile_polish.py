@@ -229,7 +229,8 @@ body.tm-design-library-mode #tm-profile-v2 .tm-p-hero p{font-size:12px}
     var empty=document.createElement('p');empty.id='tm-p-status-empty';empty.hidden=true;
     empty.textContent='Aucun trek ne correspond à ces critères.';
     parent.after(empty);
-    input.addEventListener('input',function(){state.query=input.value;applyList()});
+    function syncSearch(){if(state.query!==input.value){state.query=input.value;applyList()}}
+    ['input','change','search'].forEach(function(type){input.addEventListener(type,syncSearch)});
     chips.addEventListener('click',function(e){
      var b=e.target.closest('[data-tm-status]');if(!b)return;
      state.status=b.dataset.tmStatus;applyList();
