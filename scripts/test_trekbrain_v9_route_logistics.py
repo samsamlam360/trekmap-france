@@ -1161,9 +1161,9 @@ near_water={"name":"Public drinking fountain","lat":0.001,"lon":0.225,
 near_food={"name":"Village grocery","lat":0.001,"lon":0.224,
            "category":"food","source_url":"https://www.openstreetmap.org/node/880102",
            "osm_tags":{"shop":"convenience"}}
-similar_stay={**stay_22,"name":"Camping à 21,5 km",
+similar_stay={**stay_22,"name":"Camping à 19,8 km",
               "source_url":"https://www.openstreetmap.org/node/880023",
-              "_route_progress_km":21.5,"lon":0.215}
+              "_route_progress_km":19.8,"lon":0.198}
 with_resources,_=logistics._source_aware_stage_plan(
     FakeRoundtrip,coords,template_stages,fixed_anchors,
     [similar_stay,stay_22],5,25.0,
