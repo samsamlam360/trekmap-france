@@ -72,6 +72,12 @@ public class MainActivity extends BridgeActivity {
     @Override public void onCreate(Bundle savedInstanceState) {
         registerPlugin(TrekMapNativeGpsPlugin.class);
         super.onCreate(savedInstanceState);
+        // Always show the native, bundled vector map on a fresh application
+        // launch. Neither HTML nor GPS depends on Render waking up.
+        if(savedInstanceState==null && (getIntent()==null ||
+                !"fr.trekmap.france.RELOAD_ONLINE".equals(getIntent().getAction()))){
+            showNativeOffline();
+        }
     }
     @Override public void onNewIntent(Intent intent) {
         super.onNewIntent(intent);
@@ -80,16 +86,18 @@ public class MainActivity extends BridgeActivity {
             offlineScreenVisible=false;
             if(getBridge()!=null && getBridge().getWebView()!=null)
                 getBridge().getWebView().loadUrl("https://trekmap-france.onrender.com/");
+        } else if("fr.trekmap.france.OPEN_LOCAL".equals(intent.getAction())){
+            offlineScreenVisible=false;
+            if(getBridge()!=null && getBridge().getWebView()!=null)
+                getBridge().getWebView().loadUrl("https://localhost/");
         }
     }
     @Override public void onResume() {
         super.onResume();
-        if(!hasNetwork()){
-            showNativeOffline();
-            return;
-        }
+        // Offline/online transitions must not repeatedly cover the bundled
+        // dashboard with new activities. Users explicitly control switching.
         offlineScreenVisible=false;
-        if(updateCheckStarted) return;
+        if(!hasNetwork()||updateCheckStarted) return;
         updateCheckStarted = true;
         long previous = getSharedPreferences("tm_android_updates",MODE_PRIVATE).getLong("checked_at",0);
         long now = System.currentTimeMillis();
