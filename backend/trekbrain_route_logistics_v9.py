@@ -1419,7 +1419,7 @@ def _assign_verified_nights(options, connectors, stage_lengths, daily_max, stric
 
 def _source_aware_stage_plan(
     roundtrip, coords, old_stages, anchors, candidates, days, daily_max,
-    resource_rows=None,
+    resource_rows=None, daily_min=None,
 ):
     """Rebalance *walking-stage boundaries* near sourced, route-close nights.
 
@@ -1458,14 +1458,23 @@ def _source_aware_stage_plan(
     # close to the *walked* route. Route-projection alone proves no access.
     from .trekbrain_water_evidence_v9 import confirmed_water_reference, has_osm_identity
     from .trekbrain_resources_v9 import _confirmed_food_reference
-    terrain = [
-        item for item in (resource_rows or [])
-        if isinstance(item, dict) and has_osm_identity(item)
-        and ((str(item.get("category") or "") == "water"
-              and confirmed_water_reference(item))
-             or (str(item.get("category") or "") == "food"
-                 and _confirmed_food_reference(item)))
-    ][:100]
+    terrain = []
+    for item in (resource_rows or [])[:100]:
+        if not isinstance(item, dict) or not has_osm_identity(item):
+            continue
+        if not ((item.get("category") == "water" and confirmed_water_reference(item))
+                or (item.get("category") == "food" and _confirmed_food_reference(item))):
+            continue
+        try:
+            projection = roundtrip._project_stay_to_route(coords, cumulative, item)
+            progress, offroute = float(projection[1]), float(projection[2])
+        except (TypeError, ValueError, IndexError, KeyError):
+            continue
+        # A water point near a crossing section of the route can belong to a
+        # completely different hiking day. Do not borrow it as night evidence.
+        if not math.isfinite(progress) or not math.isfinite(offroute) or offroute > 1.5:
+            continue
+        terrain.append((item, progress))
     options = []
     for night, centre in enumerate(baseline, 1):
         left = 0.0 if night == 1 else baseline[night - 2]
@@ -1482,7 +1491,7 @@ def _source_aware_stage_plan(
                 except (KeyError, TypeError, ValueError):
                     continue
                 if (not math.isfinite(progress) or not math.isfinite(offroute)
-                        or offroute > 0.55 or offroute < 0
+                        or offroute > 1.25 or offroute < 0
                         or abs(progress - centre) > window
                         or progress <= left + 2.0 or progress >= right - 2.0
                         or not str(stay.get("source_url") or "").strip()):
@@ -1507,18 +1516,21 @@ def _source_aware_stage_plan(
                 length = (progress - previous) * scale
                 if length < 2.0 or length > daily_max + 0.01:
                     continue
+                if daily_min is not None and length < float(daily_min) - 0.01:
+                    continue
                 if length < min(original[index] * 0.73, 5.0):
                     continue
                 motion = abs(progress - baseline[index])
-                benefit = (3.0 - min(1.0, float(stay["_offroute_km"]) / 0.55)
+                benefit = (3.0 - min(1.0, float(stay["_offroute_km"]) / 1.25)
                            if stay else 0.0)
                 if stay and terrain:
                     # These are source-backed *planning preferences*, not
                     # walking-access validation nor a promise of fresh water.
                     # Prefer ends of stages with actual mapped drinkable water
                     # and groceries, all else being reasonably equal.
-                    near = [row for row in terrain
-                            if _geo_km(stay, row) <= 1.5]
+                    near = [row for row, water_progress in terrain
+                            if abs(water_progress - progress) <= 3.0
+                            and _geo_km(stay, row) <= 1.5]
                     benefit += (0.3 if any(row.get("category") == "water"
                                           and confirmed_water_reference(row)
                                           for row in near) else 0.0)
@@ -1537,6 +1549,8 @@ def _source_aware_stage_plan(
     for reward, moved, boundaries, selected, previous in beam:
         last_length = (total - previous) * scale
         if last_length < min(original[-1] * 0.73, 5.0) or last_length > daily_max + 0.01:
+            continue
+        if daily_min is not None and last_length < float(daily_min) - 0.01:
             continue
         if not any(stay is not None for stay in selected):
             continue
@@ -1794,6 +1808,7 @@ def _attach_logistics(result: dict[str, Any], data, legacy_main, v3, roundtrip, 
     # hard daily limits. ORS will still verify actual walking access below.
     stage_plan, stage_plan_diagnostics = _source_aware_stage_plan(
         roundtrip, coords, old_stages, anchors, pool, days, daily_max,
+        daily_min=declared_min,
         resource_rows=(
             [{**row, "category": "water"}
              for row in (result.get("water") or []) if isinstance(row, dict)]
