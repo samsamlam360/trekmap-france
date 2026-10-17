@@ -71,7 +71,6 @@ def forget_device(request,response,db):
 
 def link_login(request,response,uid,db):
     """Called inside the successful password-authentication transaction."""
-    ensure_device_schema()
     now=datetime.now()
     raw=request.cookies.get(DEVICE_COOKIE,"")
     exists=False
