@@ -1268,10 +1268,15 @@ def _postroute_corridor_resources(boundaries, intent, existing_items):
     # last intermediate stages in the existing six-request wave.
     food_anchors.extend(interiors)
 
-    # Include the trailhead and every overnight area, even on a one-day walk.
-    # The shared six-call cap still bounds the wave; never query a closed loop's
-    # identical start/finish twice.
-    for boundary in boundaries:
+    # TrekBrain can supply measured mid-stage anchors on its immutable
+    # pedestrian polyline. Keep legacy start/night boundaries when none are
+    # available (standalone planner and geometry-poor cases).
+    water_anchors = intent.get("_water_corridor_anchors")
+    if not isinstance(water_anchors, list) or not water_anchors:
+        water_anchors = boundaries
+    for boundary in water_anchors:
+        if not isinstance(boundary, dict) or "lat" not in boundary or "lon" not in boundary:
+            continue
         if intent.get("water") and _closest(waters, boundary, 4.5) is None:
             if not any(_dist(boundary, job[0]) < 0.25 for job in water_jobs):
                 water_jobs.append((boundary, "water", (

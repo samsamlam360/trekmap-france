@@ -945,6 +945,48 @@ def _missing_terrain_intent(result: dict[str, Any], intent: dict[str, Any]) -> d
     return adjusted
 
 
+def _cold_water_stage_probes(result: dict[str, Any], days: int,
+                             missing_days: list[int]) -> list[dict[str, Any]]:
+    """Sample actual walked kilometres halfway through unserved stages.
+
+    A two-day loop previously checked only its trailhead and first overnight,
+    leaving both 15-20 km stage interiors beyond the 5.5 km Photon radius.
+    This only changes which existing Photon lookups are aimed where; the
+    stored walking route and six-call total budget stay untouched.
+    """
+    coords = ((result.get("route_preview") or {}).get("coords") or [])
+    if not isinstance(coords, list) or len(coords) < 2:
+        return []
+    profile, total = _route_distance_profile(coords)
+    if total <= 0 or len(profile) != len(coords):
+        return []
+    breaks = _stage_progress_breaks(result, days)
+    # Prioritize first and final unverified days before assigning any extra
+    # public-provider slots to adjacent stages.
+    ordered = sorted({int(day) for day in missing_days if isinstance(day, int)
+                      and 1 <= day <= days})
+    chosen = []
+    while ordered:
+        chosen.append(ordered.pop(0))
+        if ordered:
+            chosen.append(ordered.pop(-1))
+    probes = []
+    for day in chosen:
+        distance = total * (breaks[day - 1] + breaks[day]) / 2
+        index = 1
+        while index < len(profile) - 1 and profile[index] < distance:
+            index += 1
+        lo, hi = profile[index - 1], profile[index]
+        fraction = max(0.0, min(1.0, (distance-lo)/(hi-lo))) if hi > lo else 0.0
+        a, b = coords[index - 1], coords[index]
+        lat = _number(a[0] + (b[0] - a[0]) * fraction) if isinstance(a, (list,tuple)) and isinstance(b, (list,tuple)) else None
+        lon = _number(a[1] + (b[1] - a[1]) * fraction) if isinstance(a, (list,tuple)) and isinstance(b, (list,tuple)) else None
+        if lat is not None and lon is not None and -90 <= lat <= 90 and -180 <= lon <= 180:
+            probes.append({"lat": lat, "lon": lon, "category": "route_anchor",
+                           "name": f"Milieu du jour {day}", "route_day": day})
+    return probes
+
+
 def _supplement_route_resources(result: dict[str, Any], data) -> dict[str, Any]:
     """Bounded Photon safety net on final day anchors, never used for routing."""
     try:
@@ -983,6 +1025,10 @@ def _supplement_route_resources(result: dict[str, Any], data) -> dict[str, Any]:
         terrain_intent = _missing_terrain_intent(result, intent)
         post_intent["water"] = bool(terrain_intent.get("water"))
         post_intent["food"] = bool(terrain_intent.get("food"))
+        if post_intent["water"]:
+            post_intent["_water_corridor_anchors"] = _cold_water_stage_probes(
+                result, days, terrain_intent.get("missing_water_days") or []
+            )
 
         transit_items = [
             item for item in (result.get("points_of_interest") or [])
