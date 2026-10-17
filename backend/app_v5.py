@@ -213,6 +213,10 @@ def NumberSafe(value):
 from . import profile_v2
 app.router.routes.extend(profile_v2.router.routes)
 
+# Password recovery without exposing plaintext tokens or adding user-enumeration endpoints.
+from .password_reset import install_password_reset
+install_password_reset(app)
+
 
 # Offline navigation: public, bounded vector map tiles from OpenFreeMap.
 # The proxy identifies the application via User-Agent (unlike browser fetch).
