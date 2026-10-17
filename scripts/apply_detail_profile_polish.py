@@ -327,3 +327,7 @@ body.tm-design-library-mode #tm-profile-v2 .tm-p-hero p{font-size:12px}
 if html.count('</body>')!=1:raise SystemExit('Polish UI: body ambigu')
 p.write_text(html.replace('</body>',block+'\n</body>',1),encoding='utf-8')
 print('TrekMap détail et profil : hiérarchie claire, filtres de statut et options regroupées')
+
+# Couche finale : connexion, accueil, TrekBrain et récupération du compte.
+from runpy import run_path
+run_path(str(Path(__file__).with_name('apply_finish_recovery_ui.py')))
