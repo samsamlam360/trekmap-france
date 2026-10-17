@@ -101,6 +101,7 @@ def link_login(request,response,uid,db):
 
 
 def install_account_switch(app):
+    core.RATE_LIMITS["/auth/accounts/enroll"]=8
     core.RATE_LIMITS["/auth/accounts/switch"]=12
     core.RATE_LIMITS["/auth/accounts/remove"]=12
 
@@ -111,6 +112,22 @@ def install_account_switch(app):
         except Exception:
             # The rest of the service remains accessible.
             pass
+
+    @app.post("/auth/accounts/enroll")
+    def enroll_current_device(request:Request,response:Response,
+                              user=Depends(core.current_user)):
+        """Remember the already-authenticated user, with explicit user action."""
+        ensure_device_schema()
+        db=core.db_or_503()
+        try:
+            link_login(request,response,int(user["id"]),db)
+            db.commit()
+            return {"message":"Compte ajouté à cet appareil."}
+        except SQLAlchemyError as exc:
+            db.rollback()
+            raise HTTPException(503,"Enregistrement du compte indisponible.") from exc
+        finally:
+            db.close()
 
     @app.get("/auth/accounts")
     def accounts(request:Request,user=Depends(core.current_user)):
