@@ -251,6 +251,8 @@ function home(){
 }
 function projects(){
   const treks=accountTreks();
+  const ownedIds=new Set((model.treks||[]).map(function(t){return Number(t.id)}));
+  const favoriteIds=new Set((model.favorites||[]).map(function(t){return Number(t.id)}));
   const current=selected!=null?treks.find(function(t){return Number(t.id)===Number(selected)}):null;
   const j=current?journey(current.id):null;
   const photos=j&&j.photo_urls||[];
@@ -283,9 +285,10 @@ function projects(){
     '<h2 class="tm-p-heading" style="margin:0">Mes aventures</h2>'+
     '<button type="button" class="tm-p-btn primary" data-p-go="downloads">⬇ Treks téléchargés</button></div>'+
     '<div class="tm-p-cols"><div class="tm-p-card">'+
-    '<h3>Tous mes treks et favoris</h3><div class="tm-p-list">'+(treks.length?treks.map(function(t){
+    '<h3>Mes treks</h3><div class="tm-p-list">'+(treks.length?treks.map(function(t){
        const j=journey(t.id),tag=statusNames[j&&j.status||'planned'];
-       return '<div class="tm-p-project-row'+(Number(selected)===Number(t.id)?' is-selected':'')+'">'+
+       const origin=(ownedIds.has(Number(t.id))?'created ':'')+(favoriteIds.has(Number(t.id))?'favorite ':'')+(!ownedIds.has(Number(t.id))&&!favoriteIds.has(Number(t.id))?'other':'');
+       return '<div data-p-origin="'+origin.trim()+'" class="tm-p-project-row'+(Number(selected)===Number(t.id)?' is-selected':'')+'">'+
          card(t,'<button type="button" class="tm-p-btn" data-p-select="'+Number(t.id)+'" aria-pressed="'+
          (Number(selected)===Number(t.id)?'true':'false')+'" aria-label="Ouvrir '+e(t.name)+' dans Mes aventures">'+e(tag)+' →</button>')+'</div>';
     }).join(''):'<p class="tm-p-muted">Crée un trek ou ajoute un itinéraire aux favoris pour le retrouver ici.</p>')+

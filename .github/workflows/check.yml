@@ -150,6 +150,9 @@ jobs:
       - name: Vérifier la nouvelle fiche et les filtres du profil
         run: python scripts/test_detail_profile_polish.py
 
+      - name: Vérifier le login et la séparation des favoris
+        run: python scripts/test_finish_recovery_ui.py
+
   production-smoke:
     runs-on: ubuntu-latest
     needs: quality-check

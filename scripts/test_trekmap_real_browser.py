@@ -299,6 +299,14 @@ try:
         wait.until(lambda d: d.find_element(By.ID, "modal-backdrop").is_displayed())
         driver.execute_script("closeModal();")
         wait.until(lambda d: not d.find_element(By.ID, "modal-backdrop").is_displayed())
+    driver.execute_script("document.getElementById('tm-account-btn').click()")
+    wait.until(lambda d: d.find_element(By.ID, 'tm-forgot-link').is_displayed())
+    driver.find_element(By.ID, 'tm-forgot-link').click()
+    wait.until(lambda d: d.find_element(By.ID,'tm-forgot-email').is_displayed())
+    assert "Mot de passe oublié" in driver.find_element(By.ID,'modal').text
+    driver.find_element(By.ID,'tm-recovery-back').click()
+    wait.until(lambda d: d.find_element(By.ID, 'tm-forgot-link').is_displayed())
+    driver.execute_script("closeModal()")
     # New menu exposes the same create/import actions without duplication.
     assert driver.find_element(By.ID, "tm-design-add-button").is_displayed()
     assert driver.find_element(By.ID, "tm-design-filter-button").is_displayed()
@@ -736,7 +744,8 @@ try:
         achievements:['Premier trek terminé'],
         treks:[{id:910001,name:'Sentier test',region:'Alpes',distance:18,elevation:300,is_public:true},
            {id:910002,name:'Sentier à découvrir',region:'Massif central',distance:9,elevation:120,is_public:true}],
-        favorites:[{id:910001,name:'Sentier test',region:'Alpes',distance:18,elevation:300,is_public:true}],
+        favorites:[{id:910001,name:'Sentier test',region:'Alpes',distance:18,elevation:300,is_public:true},
+          {id:910003,name:'Favori découvert',region:'Bretagne',distance:32,elevation:500,is_public:true}],
         journeys:[{trek_id:910001,status:'completed',name:'Sentier test',region:'Alpes',
              distance:18,elevation:300,completed_on:'2026-08-09',actual_distance_km:12.5,
              actual_ascent_m:450,rating:5,notes:'Belle sortie',photo_urls:[]}],
@@ -779,6 +788,16 @@ try:
     )
     driver.find_element(By.CSS_SELECTOR, '[data-p-tab="projects"]').click()
     # Reproduce reported bug: "À découvrir" must expose and focus the actual editor.
+    wait.until(lambda d: d.find_element(By.CSS_SELECTOR,'.tm-library-categories').is_displayed())
+    assert driver.find_element(By.CSS_SELECTOR,'[data-p-select="910002"]').is_displayed()
+    assert not driver.find_element(By.CSS_SELECTOR,'[data-p-select="910003"]').is_displayed()
+    driver.find_element(By.CSS_SELECTOR,'[data-tm-origin="favorite"]').click()
+    assert driver.find_element(By.CSS_SELECTOR,'[data-p-select="910003"]').is_displayed()
+    assert driver.find_element(By.CSS_SELECTOR,'[data-p-select="910001"]').is_displayed()
+    assert not driver.find_element(By.CSS_SELECTOR,'[data-p-select="910002"]').is_displayed()
+    driver.find_element(By.CSS_SELECTOR,'[data-tm-origin="created"]').click()
+    assert driver.find_element(By.CSS_SELECTOR,'[data-p-select="910002"]').is_displayed()
+    assert not driver.find_element(By.CSS_SELECTOR,'[data-p-select="910003"]').is_displayed()
     wait.until(lambda d: d.find_element(By.ID,'tm-p-status-filter').is_displayed())
     driver.find_element(By.CSS_SELECTOR,'[data-tm-status="completed"]').click()
     assert driver.find_element(By.CSS_SELECTOR,'[data-p-select="910001"]').is_displayed()

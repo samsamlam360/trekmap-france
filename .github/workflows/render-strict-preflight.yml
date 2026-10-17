@@ -256,6 +256,10 @@ jobs:
         if: matrix.python-version == '3.11'
         run: python scripts/test_profile_v2_integration.py
 
+      - name: Verify password reset privacy and security on isolated CI PostGIS
+        if: matrix.python-version == '3.11'
+        run: python scripts/test_password_reset_integration.py
+
       - name: Install Chromium for real responsive smoke
         if: matrix.python-version == '3.11'
         uses: browser-actions/setup-chrome@v1
