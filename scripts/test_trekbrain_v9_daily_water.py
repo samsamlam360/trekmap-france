@@ -332,3 +332,50 @@ assert [(kind,round(lat,2)) for kind,lat in checked if kind=="water"]==[
     ("water",45.08),("water",45.24)],checked
 assert {"food","stay","transit"} <= {kind for kind,_ in checked},checked
 print("Midstage source-water probes: real route fractions, day coverage, 6-call cap, no geometry changes: PASS")
+
+
+# Cold-cache fallback: a real OSM supermarket can be presented as a POSSIBLE
+# place to buy water in bottles, NEVER as a drinking fountain or complete
+# water-day verification. An unknown bakery, private shop or guessed store
+# must never qualify even for this secondary purchasing hint.
+shopping_plan={
+    "duration_days":2,
+    "stages":[{"day":1},{"day":2}],
+    "route_preview":{"coords":[[45.0,5.0],[45.05,5.0],[45.1,5.0]]},
+    "water":[],
+    "food":[
+        {"name":"Épicerie du bourg","lat":45.025,"lon":5.0,
+         "category":"food","source_url":"https://www.openstreetmap.org/node/880101",
+         "osm_tags":{"shop":"convenience"}},
+        {"name":"Boulangerie","lat":45.027,"lon":5.0,
+         "category":"food","source_url":"https://www.openstreetmap.org/node/880102",
+         "osm_tags":{"shop":"bakery"}},
+        {"name":"Épicerie privée","lat":45.028,"lon":5.0,
+         "category":"food","source_url":"https://www.openstreetmap.org/node/880103",
+         "osm_tags":{"shop":"supermarket","access":"private"}},
+        {"name":"Épicerie inventée","lat":45.029,"lon":5.0,
+         "category":"food","source_url":"","osm_tags":{"shop":"supermarket"}},
+    ],
+}
+resources.enrich_resources(shopping_plan)
+coverage=resources._resource_coverage(shopping_plan,{"water":True,"food":True})
+assert coverage["water"]=="not_verified",coverage
+assert coverage["days_with_water"]==[],coverage
+assert coverage["days_with_possible_bottled_water_purchase"]==[1],coverage
+assert coverage["possible_bottled_water_shop_points"]==1,coverage
+assert coverage["daily"][0]["water"]["possible_bottled_water_shops"]==1,coverage
+assert coverage["daily"][1]["water"]["possible_bottled_water_shops"]==0,coverage
+shopping_plan["map_resources"]["coverage"]=coverage
+resources._annotate_stage_resources(shopping_plan)
+stage=shopping_plan["stages"][0]
+assert stage["water_verification"]["status"]=="not_verified",stage
+assert "Épicerie du bourg" in stage["water_notes"],stage
+assert "ne remplace pas" in stage["water_notes"],stage
+assert stage["water_purchase_alternatives"]==[{
+    "name":"Épicerie du bourg",
+    "source_url":"https://www.openstreetmap.org/node/880101",
+    "distance_to_route_km":0.0,"availability":"to_check"
+}],stage
+assert shopping_plan["stages"][1]["water_purchase_alternatives"]==[]
+assert resources._potential_bottled_water_shop(shopping_plan["food"][1]) is False
+print("Uncached stores: possible bottled-water purchase shown only as unverified fallback; drinking-water readiness unchanged: PASS")

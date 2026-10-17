@@ -87,6 +87,25 @@ def _confirmed_food_reference(item: dict[str, Any]) -> bool:
     )
 
 
+
+def _potential_bottled_water_shop(item: dict[str, Any]) -> bool:
+    """OSM grocery/supermarket: possible purchase, NEVER potable-water proof.
+
+    Without a current shop inventory and opening hours we cannot guarantee
+    that bottled water will be sold at the time of the hike. Bakeries,
+    restaurants and generic POIs are deliberately excluded.
+    """
+    tags = item.get("osm_tags") or {}
+    return bool(
+        isinstance(tags, dict)
+        and str(tags.get("shop") or "").casefold()
+            in {"supermarket", "convenience", "general", "grocery"}
+        and _confirmed_food_reference(item)
+        and str(tags.get("abandoned") or "").casefold() != "yes"
+    )
+
+
+
 class AIRedrawPayload(BaseModel):
     model_config = ConfigDict(allow_inf_nan=False)
     name: str = Field(min_length=1, max_length=160)
@@ -1096,6 +1115,8 @@ def _resource_coverage(
     potable = [point for point in valid_water if confirmed_water_reference(point)]
     food = [point for point in points if isinstance(point, dict)
             and point.get("kind") == "food" and _confirmed_food_reference(point)]
+    purchase_water = [point for point in food
+                      if _potential_bottled_water_shop(point)]
 
     def point_days(rows):
         return sorted({point["route_day"] for point in rows
@@ -1127,6 +1148,10 @@ def _resource_coverage(
         coverage[f"days_with_{kind}"] = covered[kind]
         coverage[f"days_without_{kind}"] = missing if requested else []
     coverage.update({
+        # Completely separate from verified drinking fountains. Shops may
+        # sell bottled water, but inventory, access and hours are unverified.
+        "possible_bottled_water_shop_points": len(purchase_water),
+        "days_with_possible_bottled_water_purchase": point_days(purchase_water),
         "mapped_water_points": len(valid_water),
         "days_with_unverified_water": point_days([
             point for point in valid_water if water_evidence_status(point) == "unverified"
@@ -1149,6 +1174,9 @@ def _resource_coverage(
                     "mapped_points": sum(point.get("route_day") == day for point in (
                         valid_water if kind == "water" else food
                     )),
+                    **({"possible_bottled_water_shops": sum(
+                        point.get("route_day") == day for point in purchase_water
+                    )} if kind == "water" else {}),
                 } for kind in ("water", "food")
             }} for day in range(1, days + 1)
         ],
@@ -1225,6 +1253,27 @@ def _annotate_stage_resources(result: dict[str, Any]) -> dict[str, Any]:
             stage["water_notes"] = (
                 "Aucun point d'eau OSM confirmé pour cette étape ; "
                 "prévoir une réserve et vérifier les sources avant le départ."
+            )
+        # A mapped grocery is a *potential* bottled-water purchase, never
+        # substituted for potable drinking-water evidence in readiness.
+        purchase_candidates = [item for item in food
+                               if _potential_bottled_water_shop(item)]
+        stage["water_purchase_alternatives"] = [
+            {"name": item.get("name") or "Commerce alimentaire",
+             "source_url": item["source_url"],
+             "distance_to_route_km": item.get("distance_to_route_km"),
+             "availability": "to_check"}
+            for item in purchase_candidates[:2]
+        ]
+        if (purchase_candidates
+                and not any(confirmed_water_reference(item) for item in water)):
+            shop_names = ", ".join(
+                str(item.get("name") or "commerce") for item in purchase_candidates[:2]
+            )
+            stage["water_notes"] += (
+                " · Achat d'eau en bouteille éventuellement possible : "
+                + shop_names + ". Vérifier ouverture, stock et accès ; "
+                "ceci ne remplace pas une source potable confirmée."
             )
         if food:
             stage["food_notes"] = " · ".join(
