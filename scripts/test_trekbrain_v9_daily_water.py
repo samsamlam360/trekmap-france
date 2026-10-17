@@ -421,3 +421,23 @@ assert abs(resources._cold_water_stage_probes(
     {**two_days,"points_of_interest":[next_day_town]},2,[1]
 )[0]["lat"]-45.08)<0.00001
 print("Water village probes: OSM identity, same walked day, max route deviation and no geometry mutation: PASS")
+
+
+# In truly cold regions, real OSM grocery POIs are more common than mapped
+# place=village objects. Use a public, source-linked shop as the same bounded
+# water-search bias, but never mark it as a potable drinking-water source.
+public_shop={"name":"Epicerie chemin","lat":45.107,"lon":5.0,
+ "category":"food","osm_tags":{"shop":"convenience"},
+ "source_url":"https://www.openstreetmap.org/node/770200"}
+private_shop={**public_shop,"lat":45.081,
+ "osm_tags":{"shop":"convenience","access":"private"},
+ "source_url":"https://www.openstreetmap.org/node/770201"}
+shop_probes=resources._cold_water_stage_probes(
+    {**two_days,"food":[private_shop,public_shop]},2,[1,2])
+assert abs(shop_probes[0]["lat"]-45.107)<0.00001,shop_probes
+assert abs(shop_probes[1]["lat"]-45.24)<0.00001,shop_probes
+assert resources._cold_water_stage_probes(
+    {**two_days,"food":[private_shop]},2,[1])[0]["name"]=="Milieu du jour 1"
+assert resources._sourced_water_coverage([
+    {"kind":"water","route_day":1,**public_shop}])==([],0)
+print("Sourced groceries may bias fountain search; private shops cannot, and neither validates drinking water: PASS")
