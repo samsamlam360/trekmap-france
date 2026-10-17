@@ -249,7 +249,7 @@ function formatKm(m){return (Math.max(0,m)/1000).toFixed(2).replace('.',',')+' k
 function formatTime(ms){
  const m=Math.floor(Math.max(0,ms)/60000);return String(Math.floor(m/60)).padStart(2,'0')+':'+String(m%60).padStart(2,'0');
 }
-let route=null,coords=[],map=null,active=false,paused=false,watch=null,wake=null,mapFollowing=true,lastGPS=null,distanceAnchor=null,headingMode=false;
+let route=null,coords=[],map=null,active=false,paused=false,watch=null,wake=null,mapFollowing=true,lastGPS=null,lastProjection=null,distanceAnchor=null,headingMode=false;
 let saved={points:[],walked:0,elapsed:0,startedAt:null,pausedAt:null,finished:false,summaryAt:null};
 let key='';
 try{
@@ -352,10 +352,11 @@ function persist(){
  catch(_){state('Stockage saturé : exporte ta trace GPX dès que possible.','danger')}
 }
 function elapsed(){return saved.elapsed+(active&&!paused&&saved.startedAt?Date.now()-saved.startedAt:0)}
+// Cached projection: never rescan a 60,000-vertex GPX on each timer tick.
 function update(){
  const walked=formatKm(saved.walked),time=formatTime(elapsed());
  el('walked').textContent=walked;el('elapsed').textContent=time;
- const nearest=lastGPS?projected(lastGPS,coords):null;
+ const nearest=lastGPS?lastProjection:null;
  const remaining=nearest?formatKm(nearest.remaining):formatKm(routeLength);
  el('remaining').textContent=remaining;
  el('deviation').textContent=nearest?Math.round(nearest.meters)+' m':'–';
@@ -380,6 +381,7 @@ function gpsPosition(pos){
  const {latitude,longitude,accuracy}=pos.coords,now=Date.now();
  if(!Number.isFinite(latitude)||!Number.isFinite(longitude))return;
  lastGPS=[latitude,longitude];
+ lastProjection=null;
  el('gps-accuracy').textContent='Précision GPS : environ '+Math.round(accuracy)+' m';
  if(map&&map.isStyleLoaded()){
    map.getSource('position')?.setData(pointGeo(lastGPS));
@@ -408,6 +410,7 @@ function gpsPosition(pos){
  }
  if(badJump){state('Déplacement GPS trop rapide ou incohérent : point ignoré.','warning');update();return}
  const nearest=projected(lastGPS,coords);
+ lastProjection=nearest;
  if(nearest.meters>Math.max(45,accuracy*1.8)){
    state('⚠ Tu es à environ '+Math.round(nearest.meters)+' m du tracé. Vérifie le terrain et ta position avant de continuer.','danger');
  }else state('✓ Tu sembles suivre le parcours ('+Math.round(nearest.meters)+' m du tracé).','ok');
@@ -424,7 +427,7 @@ async function start(){
   if(!confirm('Créer une nouvelle randonnée ? L’ancienne trace sera remplacée. Exporte-la avant si tu souhaites la garder.'))return;
   saved={points:[],walked:0,elapsed:0,startedAt:null,pausedAt:null,finished:false,summaryAt:null};
  }
- active=true;paused=false;distanceAnchor=null;saved.startedAt=Date.now();persist();
+ active=true;paused=false;distanceAnchor=null;lastProjection=null;saved.startedAt=Date.now();persist();
  try{watch=navigator.geolocation.watchPosition(gpsPosition,gpsError,{enableHighAccuracy:true,maximumAge:3000,timeout:16000})}
  catch(e){active=false;state('Impossible de démarrer le GPS : '+e.message,'danger');update();return}
  try{if(navigator.wakeLock)wake=await navigator.wakeLock.request('screen')}catch(_){}

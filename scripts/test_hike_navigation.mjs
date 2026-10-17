@@ -15,6 +15,13 @@ assert.ok(html.includes('restant sur le parcours')||html.includes('Restant sur l
 assert.ok(html.includes('off-line')||html.includes('hors connexion'));
 assert.ok(html.includes('OpenFreeMap')&&html.includes('OpenStreetMap'),'attributions visible');
 assert.ok(html.includes('navigator.geolocation.watchPosition'),'real GPS watch');
+assert.ok(html.includes('lastProjection=nearest;') && html.includes('lastProjection=null;'),
+ 'GPS projections must be refreshed for each accurate fix and cleared for stale fixes');
+const updateBody=html.split('function update(){')[1]?.split('function gpsPosition(pos){')[0];
+assert.ok(updateBody?.includes('const nearest=lastGPS?lastProjection:null;') &&
+ !updateBody.includes('projected(lastGPS,coords)'),
+ 'periodic on-screen update must not rescan the entire GPX');
+
 assert.ok(html.includes('id="gps-hud"') && html.includes('id="gps-map-controls"') &&
   html.includes('id="hud-remaining"') && html.includes('id="hud-walked"') &&
   html.includes('id="hud-time"'),'mobile map must expose real GPS stats');
@@ -80,6 +87,26 @@ assert.ok(on.meters<2,'on route projects close to zero');
 assert.ok(on.remaining>370&&on.remaining<420,'distance remaining is along the route');
 assert.ok(off.meters>210,'out of route is measurable');
 assert.ok(math.projected([45,2.01],route).remaining<2);
+const syntheticRegions=[
+ [49.70,0.20],[48.82,-3.45],[48.11,7.13],[46.72,5.91],[44.67,3.11],
+ [44.88,1.12],[44.32,3.53],[45.31,5.81],[42.91,-0.12],[48.19,7.30],
+ [46.12,5.52],[43.46,4.40],[43.86,5.28],[45.13,2.65],[49.88,4.72],
+ [46.33,-0.58],[45.68,2.06],[45.37,4.54],[44.31,3.41],[47.36,-2.25]
+];
+assert.equal(syntheticRegions.length,20);
+for(const [idx,[lat,lon]] of syntheticRegions.entries()){
+ const path=[[lat,lon],[lat,lon+0.025],[lat+0.015,lon+0.025]];
+ const first=math.projected([lat,lon],path);
+ const middle=math.projected([lat,lon+0.0125],path);
+ const end=math.projected(path[2],path);
+ const away=math.projected([lat+0.005,lon+0.0125],path);
+ assert.ok(first.meters<1 && first.remaining>middle.remaining &&
+  middle.remaining>end.remaining && end.remaining<2,
+  'GPS synthetic region '+idx+': monotonic along-track remaining distance');
+ assert.ok(away.meters>200,'GPS synthetic region '+idx+': deviation detected');
+}
+console.log('GPS SIMULATION: 20 geometry cases passed (not a hardware test)');
+
 // Regression: a large route must split instead of refusing >480 map tiles.
 assert.ok(html.includes('id="plan-sections"') && html.includes('id="download-all"') &&
           html.includes('id="section-picker"'),'chunked controls visible on mobile');
