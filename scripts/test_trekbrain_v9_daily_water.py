@@ -180,3 +180,100 @@ print("Contradictory OSM water tags: explicit not-potable precedence: PASS")
 print("Non-potable source isolation and stale-cache safety: PASS")
 
 print('Daily water: partial/complete/unsourced, unnamed reverse search, outage, one-day and bounded wave: PASS')
+
+
+# Phase 1 cold regions: Photon's single filtered reverse answer may contain
+# an unknown spring closer than an explicitly documented drinking fountain.
+# It must prefer documented public drinking water without claiming an unknown
+# source has become potable, even if Overpass is unavailable.
+def photon_feature(identifier, lat, tag_key, tag_value, extra=None):
+    props={"osm_type":"N","osm_id":identifier,"countrycode":"FR",
+           "osm_key":tag_key,"osm_value":tag_value}
+    if extra is not None:
+        props["extra"]=extra
+    return {"properties":props,"geometry":{"coordinates":[5.0,lat]}}
+anchor={"lat":45.0,"lon":5.0}
+def fake_water_reply(url,**kwargs):
+    assert url.endswith("/reverse") and kwargs["params"]["limit"]==20
+    return {"features":[
+        photon_feature(92001,45.001,"natural","spring"),
+        photon_feature(92002,45.002,"amenity","drinking_water",
+                       {"access":"private"}),
+        photon_feature(92003,45.005,"amenity","drinking_water"),
+    ]}
+old_request=planner._request_json
+planner._request_json=fake_water_reply
+try:
+    chosen=planner._photon_anchor_resource(
+        anchor,"water",("natural:spring","amenity:drinking_water"),5.5)
+finally:
+    planner._request_json=old_request
+from backend.trekbrain_water_evidence_v9 import confirmed_water_reference
+assert chosen and chosen["source_url"].endswith("/92003"),chosen
+assert confirmed_water_reference(chosen),chosen
+
+# A private drinking fountain on its own is still mapped context but must
+# NOT satisfy the days-with-drinking-water readiness requirement.
+planner._request_json=lambda url,**kwargs: {"features":[
+    photon_feature(92002,45.002,"amenity","drinking_water",
+                   {"access":"private"}),
+]}
+try:
+    restricted=planner._photon_anchor_resource(
+        anchor,"water",("amenity:drinking_water",),5.5)
+finally:
+    planner._request_json=old_request
+assert restricted["osm_tags"]["access"]=="private"
+assert not confirmed_water_reference(restricted),restricted
+
+# Original six-call provider cap retained: share remaining free requests
+# across at least two DISTINCT days of unsolved potable water rather than
+# spending the penultimate slot on a redundant second transit station.
+route_anchors=[
+    {"lat":45.0+i*.06,"lon":5.0,"category":"route_anchor",
+     "name":f"J{i}"} for i in range(4)
+]
+checked=[]
+old_probe=planner._photon_anchor_resource
+planner._photon_anchor_resource=lambda point,category,tags,radius: (
+    checked.append((round(point["lat"],4),category)) or None
+)
+try:
+    planner._postroute_corridor_resources(route_anchors,{
+        "food":True,"water":True,"sleep":True,"transit":True,
+        "accommodation":"camping"
+    },[{"category":"water","lat":45.0,"lon":5.0,
+        "source_url":"https://www.openstreetmap.org/node/92004",
+        "osm_tags":{"natural":"spring"},"water_status":"unverified"}])
+finally:
+    planner._photon_anchor_resource=old_probe
+assert len(checked)==6,checked
+assert [category for _,category in checked].count("food")==2,checked
+water_locations={lat for lat,category in checked if category=="water"}
+assert water_locations=={45.0,45.06},checked
+assert {"stay","transit"} <= {kind for _,kind in checked},checked
+# Daily labels must not suggest private drinking water is public water.
+private_stage={
+    "duration_days":1,"stages":[{"day":1}],
+    "route_preview":{"coords":[[45.0,5.0],[45.06,5.0]]},
+    "water":[restricted],
+}
+resources.enrich_resources(private_stage)
+resources._annotate_stage_resources(private_stage)
+assert "accès ou disponibilité restreints" in private_stage["stages"][0]["water_notes"],private_stage
+assert "Aucune eau potable identifiée" in private_stage["stages"][0]["water_notes"],private_stage
+
+# Explicit nonpotability encoded in Photon's optional extra metadata wins
+# over the generic amenity=drinking_water principal tag.
+planner._request_json=lambda url,**kwargs: {"features":[
+    photon_feature(92009,45.003,"amenity","drinking_water",
+                   {"drinking_water":"no"}),
+]}
+try:
+    unsafe_photon=planner._photon_anchor_resource(
+        anchor,"water",("amenity:drinking_water",),5.5)
+finally:
+    planner._request_json=old_request
+assert unsafe_photon["water_status"]=="not_potable",unsafe_photon
+assert not confirmed_water_reference(unsafe_photon)
+print("Cold-cache Photon fallback: unknown/private springs do not hide public water; two days probed in six-call cap: PASS")
