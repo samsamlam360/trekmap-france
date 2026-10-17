@@ -719,13 +719,23 @@ def _photon_split_stays(v3, roundtrip, coords, category: str, days: int, night_a
                 item = None
             if not isinstance(item, dict):
                 continue
-            item = dict(item)
-            actual = str(item.get("category") or "")
-            if category in {"camping", "refuge"} and actual != category:
-                continue
-            if category == "lodging" and actual not in {"camping", "refuge", "lodging"}:
-                item["category"] = "lodging"
-            found.append(item)
+            # Photon returns up to 20 features per HTTP response. Reuse
+            # several real OSM stays rather than discarding other camps/gites
+            # located on different walking days. Each row has already passed
+            # source, tag and radius checks in the shared Photon parser.
+            queue = [item] + [
+                row for row in (item.get("_photon_alternatives") or [])[:6]
+                if isinstance(row, dict)
+            ]
+            for raw in queue:
+                candidate = {k: v for k, v in raw.items()
+                             if k != "_photon_alternatives"}
+                actual = str(candidate.get("category") or "")
+                if category in {"camping", "refuge"} and actual != category:
+                    continue
+                if category == "lodging" and actual not in {"camping", "refuge", "lodging"}:
+                    continue
+                found.append(candidate)
 
     deduped, seen = [], set()
     for item in found:
