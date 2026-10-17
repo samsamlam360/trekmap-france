@@ -1257,10 +1257,16 @@ def _night_options(anchors, rows, daily_target, *, allow_distant_transfer=False)
         options = []
         for stay in rows:
             gap = abs(float(stay.get("_route_progress_km") or 0) - anchor["route_progress_km"])
-            if gap > window and not allow_distant_transfer:
-                continue
             distance = _geo_km(anchor, stay)
             if not math.isfinite(distance):
+                continue
+            # On intersecting/looped paths a real lodging can sit right at
+            # this stage end but its nearest-route projection belongs to a
+            # different lap. Don't discard its ACTUAL proximity to this night
+            # anchor merely because the progress indices differ. Only ORS
+            # pedestrian outward+return links, checked below, can certify it.
+            if (gap > window and distance > _WALK_CONNECTOR_LIMIT_KM
+                    and not allow_distant_transfer):
                 continue
             options.append({**stay, "_night": anchor["night"], "_anchor": dict(anchor),
                             "_anchor_distance_km": distance, "_progress_gap_km": gap})
