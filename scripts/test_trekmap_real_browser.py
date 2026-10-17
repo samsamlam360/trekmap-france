@@ -790,6 +790,8 @@ try:
     assert driver.find_element(By.CSS_SELECTOR,'[data-p-select="910002"]').is_displayed()
     driver.find_element(By.ID,'tm-p-status-search').clear()
     driver.find_element(By.CSS_SELECTOR,'[data-tm-status="all"]').click()
+    wait.until(lambda d: d.find_element(By.CSS_SELECTOR,'[data-p-select="910001"]').is_displayed())
+    wait.until(lambda d: d.find_element(By.CSS_SELECTOR,'[data-p-select="910002"]').is_displayed())
     discover=driver.find_element(By.CSS_SELECTOR, '[data-p-select="910002"]')
     assert "À découvrir" in discover.text
     driver.execute_script(
