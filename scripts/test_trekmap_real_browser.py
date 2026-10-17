@@ -275,30 +275,34 @@ try:
     assert driver.find_element(By.ID, "tm-unified-drawer").is_displayed()
     assert driver.execute_script("return map.getZoom()") == zoom_before
 
+    # Quatre onglets visibles remplacent les anciennes actions dispersées.
+    nav_buttons = driver.find_elements(By.CSS_SELECTOR,
+        '#tm-primary-navigation [data-tm-space]')
+    assert [b.get_attribute("aria-label") for b in nav_buttons] == [
+        "Explorer", "TrekBrain", "Mes treks", "Profil"
+    ], "Desktop navigation must expose four well-labelled spaces"
     topbar_layout = driver.execute_script(
         "const s=document.getElementById('tm-main-search-wrap').getBoundingClientRect();"
-        "const b=document.getElementById('tm-ai-launch').getBoundingClientRect();"
-        "return {searchRight:s.right,brainLeft:b.left,brainRight:b.right,"
-        "viewport:innerWidth};"
+        "const b=document.querySelector('#tm-primary-navigation [data-tm-space=brain]').getBoundingClientRect();"
+        "return {searchRight:s.right,brainLeft:b.left,brainRight:b.right,viewport:innerWidth};"
     )
     assert topbar_layout["brainLeft"] >= topbar_layout["searchRight"] - 1, (
-        f"Desktop search overlaps TrekBrain button: {topbar_layout}"
+        f"Desktop search overlaps TrekBrain navigation: {topbar_layout}"
     )
     assert topbar_layout["brainRight"] <= topbar_layout["viewport"], (
-        f"TrekBrain button out of desktop viewport: {topbar_layout}"
+        f"TrekBrain navigation outside desktop viewport: {topbar_layout}"
     )
-    # Import, create, favorites and profile remain functional for a visitor:
-    # clicking should open the existing login dialog, never a dead button.
+    # Hidden adapters remain functional while the visible UI uses contextual actions.
     for action_id in ("tm-import-btn", "tm-create-btn",
                       "tm-favorites-btn", "tm-account-btn"):
-        control = driver.find_element(By.ID, action_id)
-        control.click()
+        driver.execute_script("document.getElementById(arguments[0]).click()", action_id)
         wait.until(lambda d: d.find_element(By.ID, "modal-backdrop").is_displayed())
         driver.execute_script("closeModal();")
         wait.until(lambda d: not d.find_element(By.ID, "modal-backdrop").is_displayed())
-
-    ai_launcher = driver.find_element(By.ID, "tm-ai-launch")
-    ai_launcher.click()
+    # New menu exposes the same create/import actions without duplication.
+    assert driver.find_element(By.ID, "tm-design-add-button").is_displayed()
+    assert driver.find_element(By.ID, "tm-design-filter-button").is_displayed()
+    nav_buttons[1].click()
     wait.until(lambda d: d.find_element(By.ID, "tm-ai-overlay").is_displayed())
     assert driver.find_element(By.ID, "tm-ai-prompt").is_displayed()
     driver.find_element(By.ID, "tm-ai-close").click()
@@ -564,7 +568,7 @@ try:
     wait.until(lambda d: not d.execute_script("return window.TrekMapImmersive.isActive()"))
     assert mobile_navigation.is_displayed()
     assert driver.find_element(By.ID, "tm-map-control-dock").is_displayed()
-    mobile_filters = mobile_navigation.find_element(By.CSS_SELECTOR, '[data-mobile-action="filters"]')
+    mobile_filters = driver.find_element(By.ID, "tm-design-filter-button")
     mobile_filters.click()
     wait.until(lambda d: "tm-mobile-filters-open" in
                d.find_element(By.TAG_NAME, "body").get_attribute("class").split())
@@ -599,7 +603,7 @@ try:
     mobile_close.click()
     wait.until(lambda d: "tm-mobile-filters-open" not in
                d.find_element(By.TAG_NAME, "body").get_attribute("class").split())
-    mobile_ai = mobile_navigation.find_element(By.CSS_SELECTOR, '[data-mobile-action="ai"]')
+    mobile_ai = mobile_navigation.find_element(By.CSS_SELECTOR, '[data-tm-space="brain"]')
     mobile_ai.click()
     wait.until(lambda d: d.find_element(By.ID, "tm-ai-overlay").is_displayed())
     driver.find_element(By.ID, "tm-ai-close").click()
@@ -914,7 +918,8 @@ try:
     driver.save_screenshot(str(OUT / "profile-v2-mobile.png"))
     driver.find_element(By.ID,"tm-p-exit").click()
     driver.set_window_size(1440,900)
-    driver.find_element(By.ID,"tm-ai-launch").click()
+    driver.find_element(By.CSS_SELECTOR,
+        '#tm-primary-navigation [data-tm-space="brain"]').click()
     wait.until(lambda d: d.find_element(By.ID,"tm-ai-overlay").is_displayed())
     pref_button=driver.find_element(By.ID,"tm-ai-profile-defaults")
     pref_button.click()
