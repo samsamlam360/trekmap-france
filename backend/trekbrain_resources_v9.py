@@ -1085,6 +1085,14 @@ def _supplement_route_resources(result: dict[str, Any], data) -> dict[str, Any]:
         terrain_intent = _missing_terrain_intent(result, intent)
         post_intent["water"] = bool(terrain_intent.get("water"))
         post_intent["food"] = bool(terrain_intent.get("food"))
+        if post_intent["food"]:
+            # Searching only at the start and stage ends systematically
+            # missed bakeries in the INTERIOR of an otherwise unserved day.
+            # Reuse measured route-relative stage probes and the existing
+            # Photon six-call envelope, without changing providers or trails.
+            post_intent["_food_corridor_anchors"] = _cold_water_stage_probes(
+                result, days, terrain_intent.get("missing_food_days") or []
+            )
         if post_intent["water"]:
             post_intent["_water_corridor_anchors"] = _cold_water_stage_probes(
                 result, days, terrain_intent.get("missing_water_days") or []
