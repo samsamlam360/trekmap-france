@@ -81,31 +81,40 @@ try:
     assert saved['walked']>10 and len(saved['points'])>=2
     browser.set_window_size(390,844)
     assert browser.find_element(By.ID,'nav-map').is_displayed()
-    assert browser.find_element(By.ID,'download').is_displayed()
+    assert not browser.find_element(By.ID,'hike-options').is_displayed()
+    assert not browser.find_element(By.ID,'download').is_displayed()
+    assert browser.find_element(By.ID,'quick-start').is_displayed()
+    assert browser.find_element(By.ID,'quick-tools').is_displayed()
+    assert browser.find_element(By.ID,'map-recenter').is_displayed()
+    assert not browser.find_element(By.ID,'map-heading').is_displayed()
     # GPS cockpit should be useful before opening any secondary options.
     hud=browser.find_element(By.ID,'gps-hud')
     assert hud.is_displayed(),'mobile GPS dashboard missing'
     assert browser.find_element(By.ID,'gps-map-controls').is_displayed()
-    assert browser.find_element(By.ID,'hud-walked').text==browser.find_element(By.ID,'walked').text
-    assert browser.find_element(By.ID,'hud-remaining').text==browser.find_element(By.ID,'remaining').text
-    assert browser.find_element(By.ID,'hud-time').text==browser.find_element(By.ID,'elapsed').text
+    assert browser.execute_script("""
+      return ['walked','remaining','elapsed'].every((id,i)=>
+        document.getElementById(['hud-walked','hud-remaining','hud-time'][i]).textContent===
+        document.getElementById(id).textContent)
+    """),'GPS HUD values must match detailed statistics even when Options is closed'
     assert browser.execute_script("return document.getElementById('mapwrap').getBoundingClientRect().height")>=410
-    assert browser.find_element(By.ID,'quick-pause').is_enabled(),'quick pause must work while recording'
-    browser.find_element(By.ID,'quick-pause').click()
-    assert 'pause' in browser.find_element(By.ID,'state').text.lower()
-    assert browser.find_element(By.ID,'quick-pause').text.startswith('▶'),'resume action must be visible'
-    browser.find_element(By.ID,'quick-pause').click()
-    assert not browser.find_element(By.ID,'quick-start').is_enabled(),'original and quick GPS controls must stay in sync'
-    browser.find_element(By.ID,'map-heading').click()
-    assert browser.find_element(By.ID,'map-heading').get_attribute('aria-pressed')=='true'
-    browser.find_element(By.ID,'map-heading').click()
-    assert browser.find_element(By.ID,'map-heading').get_attribute('aria-pressed')=='false'
+    browser.find_element(By.ID,'quick-start').click()
+    assert 'pause' in browser.execute_script("return document.getElementById('state').textContent").lower()
+    assert browser.find_element(By.ID,'quick-start').text.startswith('▶'),'resume action must be visible'
+    browser.find_element(By.ID,'quick-start').click()
+    assert browser.find_element(By.ID,'quick-start').text.startswith('⏸'),'pause action must be visible'
+    browser.find_element(By.ID,'quick-tools').click()
+    assert browser.find_element(By.ID,'hike-options').is_displayed()
+    assert browser.find_element(By.ID,'one-tap-download').is_displayed()
+    assert browser.find_element(By.ID,'close-hike-options').is_displayed()
+    browser.find_element(By.ID,'close-hike-options').click()
+    assert not browser.find_element(By.ID,'hike-options').is_displayed()
+    assert browser.find_element(By.ID,'quick-start').is_displayed()
 
     assert browser.execute_script("return document.documentElement.scrollWidth<=window.innerWidth+2"),'nav viewport horizontally overflowing'
-    before_reload=browser.find_element(By.ID,'walked').text
+    before_reload=browser.execute_script("return document.getElementById('walked').textContent")
     browser.get(BASE+'/randonnee')
     wait.until(lambda d:d.execute_script("return !!window.TrekMapHikeCore"))
-    assert browser.find_element(By.ID,'walked').text==before_reload,'walked distance lost on reload'
+    assert browser.execute_script("return document.getElementById('walked').textContent")==before_reload,'walked distance lost on reload'
     # Prepare a deterministic short offline package. Vector tile requests are
     # mocked, but the app shell and real MapLibre library must be cached.
     browser.execute_script("""
@@ -115,7 +124,10 @@ try:
           status:200,headers:{'content-type':'application/x-protobuf'}}))
         :window.__realFetch(input,options);
     """)
-    browser.find_element(By.ID,'download').click()
+    browser.find_element(By.ID,'quick-tools').click()
+    assert browser.find_element(By.ID,'hike-options').is_displayed()
+    # One main download action, preserving the original web downloading pipeline.
+    browser.find_element(By.ID,'one-tap-download').click()
     wait_long=WebDriverWait(browser,95)
     wait_long.until(lambda d: 'Lot terminé' in d.find_element(By.ID,'offline-status').text
         or 'Échec' in d.find_element(By.ID,'offline-status').text
@@ -139,8 +151,8 @@ try:
     try:
       browser.get(BASE+'/randonnee')
       wait.until(lambda d:d.execute_script("return !!window.TrekMapHikeCore"))
-      assert browser.find_element(By.ID,'title').text=='Sentier de vérification GPS'
-      assert browser.find_element(By.ID,'walked').text==before_reload
+      assert browser.execute_script("return document.getElementById('title').textContent")=='Sentier de vérification GPS'
+      assert browser.execute_script("return document.getElementById('walked').textContent")==before_reload
     finally:
       browser.execute_cdp_cmd('Network.emulateNetworkConditions',{
         'offline':False,'latency':0,'downloadThroughput':-1,'uploadThroughput':-1})
@@ -167,7 +179,7 @@ try:
     """)
     browser.get(BASE+'/randonnee?large-route-e2e=1')
     wait.until(lambda d:d.execute_script("return !!window.TrekMapHikeCore"))
-    assert browser.find_element(By.ID,'title').text=='Grand trek de validation'
+    assert browser.execute_script("return document.getElementById('title').textContent")=='Grand trek de validation'
     assert browser.execute_script("return window.__nativeWrites") == 0,'unexpected automatic Android storage call on page entry'
     assert browser.execute_script("return document.getElementById('section-picker').options.length") == 0, 'tile planning started before user requested it'
     assert browser.execute_script("return document.documentElement.scrollWidth<=window.innerWidth+2"), 'large trek broke mobile viewport'

@@ -93,6 +93,53 @@ aside{height:auto;overflow:visible;padding-bottom:calc(32px + env(safe-area-inse
 }
 @media(prefers-reduced-motion:reduce){#gps-progress-fill{transition:none}}
 
+
+/* Mobile simplification: only main GPS, centering and Options stay visible. */
+@media(max-width:850px){
+ header #center{display:none}
+ #gps-map-controls #map-full,#gps-map-controls #map-heading{display:none}
+ #gps-hud-toggle,#quick-pause{display:none}
+ #gps-hud-actions{grid-template-columns:1.2fr 1fr}
+ #gps-hud-actions #quick-start{font-size:15px;min-height:49px}
+ #gps-hud-actions #quick-tools{font-size:15px;min-height:49px}
+ #gps-hud-status{white-space:normal;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+ #gps-hud-top{padding-bottom:9px}
+ #mapwrap{height:calc(100dvh - 118px);min-height:410px}
+ #map-legend{bottom:168px;max-width:66%;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+ #nav-map .maplibregl-ctrl-bottom-right{bottom:170px}
+ main>aside#hike-options{display:none;position:fixed;bottom:0;left:0;right:0;top:auto;
+   height:auto;max-height:86dvh;overflow-y:auto;overscroll-behavior:contain;
+   margin:0;background:#f7fbf8;z-index:60;border-radius:23px 23px 0 0;
+   box-shadow:0 -8px 38px #081f1744;padding:17px 17px calc(22px + env(safe-area-inset-bottom))}
+ main>aside#hike-options.is-open{display:block}
+ #options-backdrop.is-open{display:block}
+ main>aside#hike-options .stats{display:grid}
+ main>aside#hike-options #start,main>aside#hike-options #pause{display:none!important}
+ main>aside#hike-options .actions{margin:8px 0}
+ main>aside#hike-options .actions button{font-size:13px;min-height:49px}
+ body.hike-options-open{overflow:hidden}
+}
+#options-backdrop{display:none;position:fixed;inset:0;background:#051e15a8;z-index:59}
+#options-backdrop[hidden]{display:none!important}
+#hike-options .options-modal-head{display:none}
+@media(max-width:850px){
+ #hike-options .options-modal-head{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:12px}
+ #hike-options .options-modal-head strong{font-size:20px;color:#135737}
+ #hike-options .options-modal-head button{font-size:24px;min-height:46px;min-width:46px;
+    border:1px solid #c6decf;border-radius:13px;color:#105a3b;background:#eaf4ed}
+ #hike-options .option-group{background:#fff;border:1px solid #dae9e0;border-radius:16px;margin:11px 0;padding:11px}
+ #hike-options .option-group summary{padding:9px 5px;min-height:42px;cursor:pointer;font-weight:800;color:#175b40}
+ #hike-options .option-group[open] summary{border-bottom:1px solid #e4ece6;margin-bottom:9px}
+ #hike-options .option-group h2{display:none}
+ #hike-options .option-group p.muted{font-size:12px}
+ #hike-options .option-extra{width:100%;min-height:49px;padding:10px;border:1px solid #b9d6c2;
+    border-radius:12px;color:#fff;background:#126d4a;font-weight:750}
+ #hike-options .option-group details{border-top:1px solid #edf1ed;margin-top:8px;padding-top:7px}
+ #hike-options .option-group details summary{color:#1a6046}
+ #hike-options .options-muted{font-size:12px;color:#597b69}
+ #hike-options #state{font-size:13px}
+ #hike-options #route-info{margin:4px 0}
+}
 </style></head><body>
 <header><a href="/" id="back">← TrekMap</a><strong id="header-title">Mode randonnée</strong><button id="center">◎ Me centrer</button></header>
 <main><div id="mapwrap"><div id="nav-map" aria-label="Carte interactive de la randonnée"></div><div id="map-fallback"><strong>Tracé conservé hors connexion</strong><svg id="fallback-svg" viewBox="0 0 500 450" role="img" aria-label="Tracé de secours sans fond de carte"></svg><small>Le fond cartographique est indisponible. Suis seulement des chemins reconnus et vérifie ta position.</small></div><div id="map-legend"><i class="route"></i>Parcours prévu <i></i>Marche enregistrée</div>
@@ -114,7 +161,7 @@ aside{height:auto;overflow:visible;padding-bottom:calc(32px + env(safe-area-inse
 <button id="quick-pause" type="button" disabled>⏸ Pause</button>
 <button id="quick-tools" type="button" aria-label="Afficher les commandes et les téléchargements">☷ Options</button>
 </div></div></div>
-<aside><h1 id="title">Préparer ma randonnée</h1><p class="muted" id="route-info"></p><div id="state" data-kind="warning" role="status">En attente du tracé.</div>
+<aside id="hike-options" aria-label="Options de randonnée"><h1 id="title">Préparer ma randonnée</h1><p class="muted" id="route-info"></p><div id="state" data-kind="warning" role="status">En attente du tracé.</div>
 <div class="stats"><div class="stat"><b id="walked">0,00 km</b><small>Distance réellement parcourue</small></div><div class="stat"><b id="remaining">–</b><small>Restant sur le parcours (estimé)</small></div><div class="stat"><b id="deviation">–</b><small>Écart au tracé</small></div><div class="stat"><b id="elapsed">00:00</b><small>Temps depuis le départ (hors pause)</small></div></div>
 <h2>Navigation GPS</h2><div class="actions"><button class="primary" id="start">▶ Démarrer</button><button id="pause" disabled>⏸ Pause</button><button id="finish" disabled class="alert">■ Terminer</button><button id="export">↓ Exporter mon GPX</button><button id="native-gps" class="primary" hidden>📍 GPS Android · écran verrouillé</button><button id="native-save" class="primary" hidden>↓ Enregistrer pour Android hors réseau</button><button id="native-routes" hidden>🥾 Mes treks Android hors réseau</button><button id="native-tiles" class="primary" hidden>🗺️ Télécharger la vraie carte Android</button></div>
 <p class="muted" id="gps-accuracy">Précision : aucune position pour le moment.</p>
@@ -323,8 +370,8 @@ function update(){
   100*(routeLength-nearest.remaining)/routeLength)):0;
  el('gps-progress-fill').style.width=progress.toFixed(1)+'%';
  el('gps-progress').setAttribute('aria-valuenow',String(Math.round(progress)));
- el('quick-start').disabled=active;
- el('quick-start').textContent=active?'✓ GPS actif':'▶ Démarrer';
+ el('quick-start').disabled=false;
+ el('quick-start').textContent=!active?'▶ Démarrer':paused?'▶ Reprendre':'⏸ Pause';
  el('quick-pause').disabled=!active;
  el('quick-pause').textContent=paused?'▶ Reprendre':'⏸ Pause';
 }
@@ -660,11 +707,105 @@ el('map-heading').addEventListener('click',()=>{
  if(!headingMode&&map)map.easeTo({bearing:0,duration:200});
  if(headingMode&&!active)state('Démarre le GPS pour obtenir le cap de déplacement.','warning');
 });
-el('quick-start').addEventListener('click',()=>el('start').click());
-el('quick-pause').addEventListener('click',()=>el('pause').click());
-el('quick-tools').addEventListener('click',()=>{
- el('title').scrollIntoView({behavior:'smooth',block:'start'});
+el('quick-start').addEventListener('click',()=>{
+ if(active)el('pause').click();
+ else el('start').click();
 });
+el('quick-pause').addEventListener('click',()=>el('pause').click());
+// Reuse the old, tested action handlers; reorganize only their presentation.
+(function setupHikingOptions(){
+ const aside=el('hike-options');
+ const backdrop=document.createElement('div');backdrop.id='options-backdrop';backdrop.hidden=true;
+ document.querySelector('main').insertBefore(backdrop,aside);
+ const heading=document.createElement('div');heading.className='options-modal-head';
+ heading.innerHTML='<strong>Options de randonnée</strong><button type="button" id="close-hike-options" aria-label="Fermer les options">×</button>';
+ aside.insertBefore(heading,aside.firstChild);
+ function group(label,nodes,opened){
+  const block=document.createElement('details');block.className='option-group';
+  block.open=opened;const title=document.createElement('summary');title.textContent=label;
+  block.appendChild(title);
+  nodes.forEach(node=>{if(node)block.appendChild(node)});
+  aside.appendChild(block);return block;
+ }
+ const navigationHeader=[...aside.querySelectorAll('h2')].find(h=>h.textContent==='Navigation GPS');
+ const offlineHeader=[...aside.querySelectorAll('h2')].find(h=>h.textContent==='Préparer le hors-ligne');
+ const safetyHeader=[...aside.querySelectorAll('h2')].find(h=>h.textContent==='Sécurité');
+ const navigationActions=navigationHeader?.nextElementSibling;
+ const accuracy=el('gps-accuracy');
+ const metrics=el('walked')?.closest('.stats');
+ const info=offlineHeader?.nextElementSibling;
+ const offlineLabel=el('offline-zoom')?.previousElementSibling;
+ const offlineControls=el('download')?.closest('.actions');
+ const technicalNotes=safetyHeader?.nextElementSibling;
+ const notice=aside.querySelector('.notice');
+ const offline=group('Cartes hors ligne',[],true);
+ const oneTap=document.createElement('button');oneTap.type='button';oneTap.className='option-extra';
+ oneTap.id='one-tap-download';oneTap.textContent='↓ Télécharger le trek hors ligne';
+ offline.appendChild(oneTap);
+ const status=el('offline-status');const progress=el('download-progress');
+ offline.append(progress,status);
+ const advanced=document.createElement('details');advanced.id='advanced-offline';
+ advanced.innerHTML='<summary>Gérer les sections et la qualité</summary>';
+ [offlineHeader,info,offlineLabel,el('offline-zoom'),el('plan-sections'),
+  el('segment-overview'),el('section-picker')?.previousElementSibling,
+  el('section-picker'),offlineControls].forEach(x=>{if(x)advanced.appendChild(x)});
+ offline.appendChild(advanced);
+ const follow=group('Suivi et GPX',[navigationHeader,navigationActions,accuracy],true);
+ const more= document.createElement('details');more.id='advanced-gps';
+ more.innerHTML='<summary>Mesures détaillées</summary>';
+ if(metrics)more.appendChild(metrics);
+ follow.appendChild(more);
+ const android=group('Android et carte',[],false);
+ const androidButtons=document.createElement('div');androidButtons.className='actions';
+ for(const id of ['native-gps','native-save','native-tiles','native-routes']){
+  const btn=el(id);if(btn)androidButtons.appendChild(btn);
+ }
+ android.appendChild(androidButtons);
+ const viewButtons=document.createElement('div');viewButtons.className='actions';
+ for(const id of ['map-full','map-heading']){const btn=el(id);if(btn)viewButtons.appendChild(btn)}
+ android.appendChild(viewButtons);
+ const diagnostics=group('Diagnostic et sécurité',[el('android-diagnostic'),notice,safetyHeader,technicalNotes],false);
+ if(el('state'))aside.insertBefore(el('state'),offline);
+ // This handler deliberately dispatches the existing Android download when
+ // available, so browser-only tiles never masquerade as native saved maps.
+ oneTap.addEventListener('click',()=>{
+  const native=window.Capacitor?.getPlatform?.()==='android' &&
+   !!nativePlugin?.openOfflineDownload && !!nativePlugin?.saveOfflineRoute;
+  (native?el('native-tiles'):el('download-all')).click();
+ });
+ let open=false,previousFocus=null;
+ function setOpen(value){
+  open=!!value;aside.classList.toggle('is-open',open);
+  aside.setAttribute('aria-hidden',String(!open));
+  aside.inert=!open;
+  backdrop.classList.toggle('is-open',open);backdrop.hidden=!open;
+  document.body.classList.toggle('hike-options-open',open);
+  el('quick-tools').setAttribute('aria-expanded',String(open));
+  if(open){previousFocus=document.activeElement;el('close-hike-options').focus()}
+  else{(previousFocus||el('quick-tools')).focus();previousFocus=null}
+ }
+ function isMobile(){return window.matchMedia('(max-width:850px)').matches}
+ function sync(){if(!isMobile()){aside.inert=false;aside.removeAttribute('aria-hidden');aside.classList.remove('is-open');backdrop.hidden=true;backdrop.classList.remove('is-open');document.body.classList.remove('hike-options-open')}
+  else if(!open){aside.inert=true;aside.setAttribute('aria-hidden','true')}}
+ aside.inert=isMobile();if(isMobile())aside.setAttribute('aria-hidden','true');
+ el('quick-tools').setAttribute('aria-haspopup','dialog');
+ el('quick-tools').setAttribute('aria-expanded','false');
+ el('quick-tools').addEventListener('click',()=>{if(isMobile())setOpen(true);else aside.scrollIntoView({behavior:'smooth',block:'start'})});
+ el('close-hike-options').addEventListener('click',()=>setOpen(false));
+ backdrop.addEventListener('click',()=>setOpen(false));
+ window.addEventListener('resize',sync);
+ document.addEventListener('keydown',e=>{
+  if(!open||!isMobile())return;
+  if(e.key==='Escape'){e.preventDefault();setOpen(false);return}
+  if(e.key==='Tab'){
+   const nodes=[...aside.querySelectorAll('button:not([disabled]):not([hidden]),select:not([disabled]),summary')]
+    .filter(node=>node.getClientRects().length&&getComputedStyle(node).visibility!=='hidden');
+   if(!nodes.length)return;
+   if(e.shiftKey&&document.activeElement===nodes[0]){e.preventDefault();nodes[nodes.length-1].focus()}
+   else if(!e.shiftKey&&document.activeElement===nodes[nodes.length-1]){e.preventDefault();nodes[0].focus()}
+  }
+ });
+})();
 window.addEventListener('pagehide',()=>{if(active){saved.elapsed=elapsed();saved.startedAt=null;active=false;persist()}releaseWatch()});
 setInterval(update,10000);
 update();

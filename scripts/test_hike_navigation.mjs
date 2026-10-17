@@ -18,15 +18,22 @@ assert.ok(html.includes('navigator.geolocation.watchPosition'),'real GPS watch')
 assert.ok(html.includes('id="gps-hud"') && html.includes('id="gps-map-controls"') &&
   html.includes('id="hud-remaining"') && html.includes('id="hud-walked"') &&
   html.includes('id="hud-time"'),'mobile map must expose real GPS stats');
-assert.ok(html.includes('id="gps-hud-toggle"') &&
-  html.includes("hud.classList.toggle('is-compact')"),'GPS panel can be collapsed without disabling commands');
+assert.ok(html.includes('id="hike-options"')&&html.includes('id="gps-hud"') &&
+  html.includes('id="quick-tools"'),'Options panel replaces duplicate visible GPS controls');
 for(const id of ['quick-start','quick-pause','quick-tools','map-recenter','map-full','map-heading'])
  assert.ok(html.includes('id="'+id+'"') &&
    html.includes("el('"+id+"').addEventListener('click'"),
    'mobile control '+id+' needs a working click handler');
-assert.ok(html.includes("el('quick-start').addEventListener('click',()=>el('start').click())") &&
-          html.includes("el('quick-pause').addEventListener('click',()=>el('pause').click())"),
-  'HUD must invoke the original GPS controls rather than a second tracking engine');
+assert.ok(html.includes("if(active)el('pause').click()") &&
+          html.includes("else el('start').click()"),
+  'main GPS button must use existing tested start/pause actions');
+assert.ok(html.includes('className=\'option-group\'') &&
+  html.includes("group('Cartes hors ligne'") &&
+  html.includes("group('Suivi et GPX'") &&
+  html.includes("group('Android et carte'"),'Options must classify advanced features');
+assert.ok(html.includes('id=\'one-tap-download\'') &&
+  html.includes("(native?el('native-tiles'):el('download-all')).click()"),
+  'single offline download must dispatch to proper Android or web storage');
 assert.ok(html.includes("headingMode&&Number.isFinite(pos.coords.heading)") &&
           html.includes("pos.coords.speed>=0.5"),'map heading only when moving and bearing is valid');
 assert.ok(html.includes('aria-valuenow')&&html.includes("remaining=nearest?"),
