@@ -46,6 +46,15 @@ class NationalCuratedTest(unittest.TestCase):
                 self.assertIn(x["source_key"],x["description"])
                 self.assertIn(x["region"],REGIONS)
                 self.assertGreaterEqual(x["duration_days"],1)
+                # This is a tentative planning duration, not a verified official
+                # stage split. The card and its description MUST agree.
+                import re
+                match=re.search(r"Durée indicative : environ (\\d+) jours",x["description"])
+                if match is not None:
+                    self.assertEqual(
+                        x["duration_days"],int(match.group(1)),
+                        "Contradiction durée/description : "+x["name"])
+
                 self.assertGreaterEqual(x["distance"],20)
                 self.assertGreaterEqual(len(x["name"]),4)  # GR34 is a legitimate four-character GR name
                 self.assertEqual(x["geometry"]["type"],"LineString")
