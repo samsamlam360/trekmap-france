@@ -84,7 +84,7 @@ block=r'''<!-- TM_FINISH_RECOVERY_START -->
   button.disabled=true;
   try{
    var response=await fetch('/auth/password/'+path,{method:'POST',credentials:'same-origin',
-    headers:{'Content-Type':'application/json'},body:JSON.stringify(payload),cache:'no-store'});
+    headers:(typeof headers==='function'?headers({'Content-Type':'application/json'},'POST'):{'Content-Type':'application/json'}),body:JSON.stringify(payload),cache:'no-store'});
    var data=await response.json().catch(function(){return {}});
    if(!response.ok)throw Error(data.detail||'Service momentanément indisponible.');
    return data;
