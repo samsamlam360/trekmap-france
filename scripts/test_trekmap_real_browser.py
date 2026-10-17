@@ -801,6 +801,9 @@ try:
     )
     discover.click()
     wait.until(lambda d: d.find_element(By.ID, "tm-p-journey-card").is_displayed())
+    assert driver.execute_script(
+        "return document.activeElement?.id==='tm-p-journey-card'"
+    ), "Adventure click did not bring its detail editor into focus"
     assert not driver.execute_script("return window.__profileErrors"), (
         "The first-time adventure editor raised a JavaScript exception"
     )
@@ -817,9 +820,6 @@ try:
         "Sparse collection membership must not overwrite the trek distance"
     )
     assert "Sentier à découvrir" in driver.find_element(By.ID, "tm-p-journey-card").text
-    assert driver.execute_script(
-        "return document.activeElement?.id==='tm-p-journey-card'"
-    ), "Adventure click did not bring its detail editor into focus"
     assert driver.find_element(By.CSS_SELECTOR, '[data-p-select="910002"]').get_attribute("aria-pressed")=="true"
     driver.find_element(By.CSS_SELECTOR, '[data-p-select="910001"]').click()
     assert driver.find_element(By.ID, "tm-p-journey-form").is_displayed()
