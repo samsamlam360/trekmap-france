@@ -16,7 +16,7 @@ jobs:
           import urllib.parse, urllib.request, urllib.error, json, time, concurrent.futures
           HEADERS={"User-Agent":"TrekMap-France/5.0 (+https://trekmap-france.onrender.com)","Accept":"application/json"}
           def probe(label,url,params=None,post=False):
-              body=urllib.parse.urlencode(params or {}).encode()
+              body=urllib.parse.urlencode(params or {},doseq=True).encode()
               target=url if post else url+"?"+body.decode()
               start=time.monotonic()
               try:
