@@ -1188,7 +1188,7 @@ unverified=logistics._assign_verified_nights(
         [sourced_stay_095],20.0)[1]},
     {}, wider["lengths"],25.0,True,
 )
-assert unverified==[None],unverified
+assert unverified==[None,None,None,None],unverified
 hard_min_block,_=logistics._source_aware_stage_plan(
     FakeRoundtrip,coords,template_stages,fixed_anchors,
     [stay_22],5,25.0,daily_min=19.0)
