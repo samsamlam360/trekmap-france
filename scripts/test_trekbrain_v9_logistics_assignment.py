@@ -159,6 +159,59 @@ class AssignmentTests(unittest.TestCase):
         self.assertEqual([row["name"] for row in assigned], ["short-return", "second"])
         self.assertTrue(all(row["_access_mode"] == "walk" for row in assigned))
 
+    def test_same_sourced_campsite_can_cover_two_nights_with_independent_walk_routes(self):
+        # Camping at the same hub on consecutive evenings is not a duplicate
+        # night. Both end-of-day anchors must have different, valid connectors.
+        def option(day):
+            return {"name": "Camping partagé",
+                    "source_url": "https://www.openstreetmap.org/node/55001",
+                    "_night": day, "_anchor_distance_km": 0.2}
+        options = {1: [option(1)], 2: [option(2)]}
+        assert lodging._connector_key(options[1][0]) != lodging._connector_key(options[2][0])
+        connections = {
+            lodging._connector_key(options[1][0]): {
+                "validated": True, "return_validated": True,
+                "distance_km": 0.3, "return_distance_km": 0.35},
+            lodging._connector_key(options[2][0]): {
+                "validated": True, "return_validated": True,
+                "distance_km": 0.4, "return_distance_km": 0.45},
+        }
+        assigned = lodging._assign_verified_nights(options, connections, [9, 9, 9], 12, True)
+        self.assertEqual([x["name"] if x else None for x in assigned],
+                         ["Camping partagé", "Camping partagé"])
+        self.assertEqual([x["_access_mode"] for x in assigned], ["walk", "walk"])
+        self.assertNotEqual(assigned[0]["_connector"]["distance_km"],
+                            assigned[1]["_connector"]["distance_km"])
+
+    def test_repeated_campsite_without_second_verified_return_remains_unresolved(self):
+        def option(day):
+            return {"name": "Refuge unique",
+                    "source_url": "https://www.openstreetmap.org/node/55002",
+                    "_night": day, "_anchor_distance_km": 0.2}
+        options = {1: [option(1)], 2: [option(2)]}
+        connections = {
+            lodging._connector_key(options[1][0]): {
+                "validated": True, "return_validated": True,
+                "distance_km": 0.2, "return_distance_km": 0.2},
+            lodging._connector_key(options[2][0]): {
+                "validated": True, "return_validated": False,
+                "distance_km": 0.2, "return_distance_km": 0.2},
+        }
+        strict = lodging._assign_verified_nights(options, connections, [9, 9, 9], 12, True)
+        self.assertIsNotNone(strict[0])
+        self.assertIsNone(strict[1])
+        flexible = lodging._assign_verified_nights(options, connections, [9, 9, 9], 12, False)
+        self.assertIsNotNone(flexible[0])
+        self.assertIsNone(flexible[1], "Unverified duplicate must not turn into a transfer")
+        # Even with both legs validated, an excessive next-day walking effort
+        # cannot be approved solely because the campsite is familiar.
+        connections[lodging._connector_key(options[2][0])] = {
+            "validated": True, "return_validated": True,
+            "distance_km": 3.0, "return_distance_km": 3.0,
+        }
+        too_far = lodging._assign_verified_nights(options, connections, [11, 11, 11], 12, True)
+        self.assertIsNone(too_far[1])
+
     def test_duplicate_private_unsourced_and_nonfinite_stays_are_not_extra_nights(self):
         anchor = lodging._night_anchors(route, self.coords, 2)[0]
         real = self.stay(anchor, "Same hut", source="https://www.openstreetmap.org/node/10")
