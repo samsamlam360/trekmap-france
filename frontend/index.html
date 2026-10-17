@@ -56,6 +56,7 @@ window.fetch = (input, init={}) => nativeFetch(input, {...init, credentials:'inc
 const $ = id => document.getElementById(id);
 let map, currentUser=null, allTreks=[], filteredTreks=[], currentTab='all', currentDetail=null, detailLayer=null, trekLayerGroup=null, drawMode=false, drawCoords=[], drawMarkers=[], drawLine=null, drawRouteLine=null, drawPreviewTimer=null, drawPreviewBusy=false, drawPreviewVersion=0, drawPreviewController=null, searchTimer=null;
 let layers={}, traceFeatures=[], apiHealthy=false;
+let cachedTraceLayers=new Map();
 const difficultyLabel={easy:'Facile',medium:'Moyen',hard:'Difficile',extreme:'Extrême'};
 function token(){return localStorage.getItem('trekmap_token')||''}
 function cookieValue(name){const prefix=name+'=';return document.cookie.split('; ').find(x=>x.startsWith(prefix))?.slice(prefix.length)||''}
@@ -104,16 +105,92 @@ $('gpx-file').addEventListener('change',async()=>{
 function resetFilters(){ $('region-filter').value='';$('difficulty-filter').value='';$('distance-range').value=0;$('distance-tolerance').value=10;$('elevation-range').value=0;$('elevation-tolerance').value=200;$('duration-filter').value='';$('sort-filter').value='relevance';$('search').value='';updateFilterLabels();applyFilters()}
 window.resetFilters=resetFilters;
 function updateFilterLabels(){$('distance-value').textContent=Number($('distance-range').value)?$('distance-range').value+' km':'toutes';$('distance-tolerance-value').textContent='± '+$('distance-tolerance').value+' km';$('elevation-value').textContent=Number($('elevation-range').value)?$('elevation-range').value+' m':'tous';$('elevation-tolerance-value').textContent='± '+$('elevation-tolerance').value+' m'}
-function clearTraceLayer(){if(trekLayerGroup)trekLayerGroup.clearLayers()}
+function clearTraceLayer(){if(trekLayerGroup)trekLayerGroup.clearLayers();cachedTraceLayers.clear()}
 function geometryToLeaflet(geometry){if(!geometry||!Array.isArray(geometry.coordinates))return [];if(geometry.type==='LineString')return geometry.coordinates.filter(p=>Array.isArray(p)&&p.length>=2).map(p=>[Number(p[1]),Number(p[0])]).filter(p=>p.every(Number.isFinite));if(geometry.type==='MultiLineString')return geometry.coordinates.flat().filter(p=>Array.isArray(p)&&p.length>=2).map(p=>[Number(p[1]),Number(p[0])]).filter(p=>p.every(Number.isFinite));return []}
-function drawTrace(t,highlight){const coords=Array.isArray(t.coords)&&t.coords.length>1?t.coords:geometryToLeaflet(t.geometry);if(coords.length<2)return;const line=L.polyline(coords,{color:highlight?'#176b45':'#98a69f',weight:highlight?5:3,opacity:highlight?.95:.48,lineCap:'round',lineJoin:'round'});line.on('click',()=>openDetail(t.id));line.bindTooltip(esc(t.name||'Trek'));line.addTo(trekLayerGroup)}
-function refreshTraceStyles(){if(!trekLayerGroup)return;clearTraceLayer();const ids=new Set(filteredTreks.map(t=>Number(t.id)));allTreks.forEach(t=>drawTrace(t,ids.has(Number(t.id))))}
+function drawTrace(t,highlight){
+ const id=Number(t.id);
+ const existing=cachedTraceLayers.get(id);
+ if(existing){
+  if(existing.highlight!==highlight){existing.line.setStyle({color:highlight?'#176b45':'#98a69f',weight:highlight?5:3,opacity:highlight?.95:.48});existing.highlight=highlight}
+  return;
+ }
+ const coords=Array.isArray(t.coords)&&t.coords.length>1?t.coords:geometryToLeaflet(t.geometry);
+ if(coords.length<2)return;
+ const line=L.polyline(coords,{color:highlight?'#176b45':'#98a69f',weight:highlight?5:3,opacity:highlight?.95:.48,lineCap:'round',lineJoin:'round'});
+ line.on('click',()=>openDetail(id));line.bindTooltip(esc(t.name||'Trek'));line.addTo(trekLayerGroup);
+ cachedTraceLayers.set(id,{line,highlight});
+}
+function refreshTraceStyles(){
+ if(!trekLayerGroup)return;
+ const ids=new Set(filteredTreks.map(t=>Number(t.id)));
+ const active=new Set(allTreks.map(t=>Number(t.id)));
+ for(const [id,entry] of cachedTraceLayers){if(!active.has(id)){trekLayerGroup.removeLayer(entry.line);cachedTraceLayers.delete(id)}}
+ allTreks.forEach(t=>drawTrace(t,ids.has(Number(t.id))));
+}
 function fitAll(){if(!trekLayerGroup)return;const bounds=trekLayerGroup.getBounds();if(bounds.isValid())map.fitBounds(bounds.pad(.08),{maxZoom:13})}
-async function loadMapTraces(){try{const r=await fetch(API+'/treks/geojson',{headers:headers(),cache:'no-store'});const d=await r.json();if(!r.ok)throw new Error(d.detail||`HTTP ${r.status}`);traceFeatures=d.features||[];const byId=new Map(allTreks.map(t=>[Number(t.id),t]));for(const f of traceFeatures){const t=byId.get(Number(f.properties?.id));if(t)t.geometry=f.geometry;else allTreks.push({...f.properties,coords:geometryToLeaflet(f.geometry)});}refreshTraceStyles();return true}catch(e){console.error('GeoJSON:',e);toast('Les données des traces n’ont pas pu être chargées : '+(e.message||e));return false}}
+async function loadMapTraces(preloaded){
+ try{
+  const d=preloaded || await (async()=>{
+    const r=await fetch(API+'/treks/geojson',{headers:headers(),cache:'no-store'});
+    const json=await r.json();if(!r.ok)throw Error(json.detail||'Chargement des tracés impossible');return json;
+  })();
+  traceFeatures=d.features||[];
+  const byId=new Map(allTreks.map(t=>[Number(t.id),t]));
+  for(const f of traceFeatures){
+   const id=Number(f.properties?.id);
+   const t=byId.get(id);
+   if(t){t.geometry=f.geometry;t.coords=geometryToLeaflet(f.geometry)}
+   else if(Number.isSafeInteger(id)){const added={...f.properties,geometry:f.geometry,coords:geometryToLeaflet(f.geometry)};allTreks.push(added);byId.set(id,added)}
+  }
+  refreshTraceStyles();return true;
+ }catch(e){console.error('GeoJSON:',e);toast('Les tracés ne sont pas disponibles : '+(e.message||e));return false}
+}
 function updateApiStatus(ok,message=''){const b=$('api-status');if(!b)return;b.textContent=ok?'● API OK':'● API';b.title=ok?'Serveur et données accessibles':(message||'Serveur inaccessible');b.style.color=ok?'#176b45':'#b52b35'}
 function initMap(){if(typeof L==='undefined'){console.error('Leaflet non chargé');$('loading').textContent='Impossible de charger la carte. Vérifie ta connexion Internet.';$('loading').style.display='block';return false}map=L.map('map',{zoomControl:true,preferCanvas:true}).setView([46.6,2.2],6);layers.standard=L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OpenStreetMap contributors'});layers.topo=L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png',{maxZoom:17,attribution:'© OpenTopoMap'});layers.satellite=L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',{maxZoom:19,attribution:'© Esri'});layers.standard.addTo(map);trekLayerGroup=L.layerGroup().addTo(map);setTimeout(()=>map.invalidateSize(),150);return true}
 async function loadRegions(){try{const r=await fetch(API+'/regions');if(!r.ok)throw 0;const data=await r.json();$('region-filter').innerHTML='<option value="">Toutes les régions</option>'+data.map(x=>`<option value="${esc(x.name)}">${esc(x.name)}${x.count?` (${x.count})`:''}</option>`).join('')}catch(e){console.error(e)}}
-async function loadTraces(){showLoading(true);let lastError='';for(let attempt=0;attempt<3;attempt++){try{const r=await fetch(API+'/treks',{headers:headers(),cache:'no-store'});const raw=await r.text();let d=null;try{d=raw?JSON.parse(raw):null}catch(e){}if(!r.ok)throw new Error((d&&d.detail)||raw||`HTTP ${r.status}`);if(!Array.isArray(d))throw new Error('Réponse API invalide.');allTreks=d.map(t=>({...t,coords:Array.isArray(t.coords)?t.coords:[]}));apiHealthy=true;updateApiStatus(true);applyFilters();await loadMapTraces();applyFilters();const drawable=allTreks.filter(t=>Array.isArray(t.coords)&&t.coords.length>1);if(drawable.length)fitAll();else if(allTreks.length){toast('Les treks sont chargés mais aucune géométrie exploitable n’est disponible. Ouvre « API » pour diagnostiquer.')}showLoading(false);return true}catch(e){lastError=e.message||String(e);apiHealthy=false;updateApiStatus(false,lastError);console.error('Chargement treks, tentative',attempt+1,lastError);if(attempt<2)await new Promise(res=>setTimeout(res,700*(attempt+1)))}}showLoading(false);renderList();toast('Impossible de charger les treks. '+lastError);return false}
+async function loadTraces(){
+ showLoading(true);let lastError='';
+ clearTraceLayer();traceFeatures=[];
+ // Les tracés et la liste légère partent ensemble, sans télécharger deux fois les géométries.
+ const geometryPromise=fetch(API+'/treks/geojson',{headers:headers(),cache:'no-store'})
+  .then(async r=>{const d=await r.json();if(!r.ok)throw Error(d.detail||'Tracés indisponibles');return d})
+  .catch(err=>{console.warn('Chargement de la géométrie:',err);return null});
+ for(let attempt=0;attempt<3;attempt++){
+  try{
+   let payload;
+   try{
+    const r=await fetch(API+'/catalog/bootstrap',{headers:headers(),cache:'no-store'});
+    payload=await r.json();
+    if(!r.ok||!Array.isArray(payload.treks))throw Error('Catalogue léger indisponible');
+   }catch(e){
+    const r=await fetch(API+'/treks',{headers:headers(),cache:'no-store'});
+    const data=await r.json();if(!r.ok||!Array.isArray(data))throw Error(data?.detail||'API des treks indisponible');
+    payload={treks:data,regions:[]};
+   }
+   allTreks=payload.treks.map(t=>({...t,coords:Array.isArray(t.coords)?t.coords:[]}));
+   apiHealthy=true;updateApiStatus(true);
+   if(payload.regions?.length){
+    const region=$('region-filter'),old=region.value;
+    region.innerHTML='<option value="">Toutes les régions</option>'+payload.regions.map(x=>'<option value="'+esc(x.name)+'">'+esc(x.name)+' ('+Number(x.count||0)+')</option>').join('');
+    region.value=old;
+   }else loadRegions();
+   applyFilters();showLoading(false);
+   document.dispatchEvent(new Event('trekmap:catalog-ready'));
+   const geo=await geometryPromise;
+   if(geo)await loadMapTraces(geo);
+   else await loadMapTraces();
+   applyFilters();
+   if(cachedTraceLayers.size)fitAll();
+   return true;
+  }catch(e){
+   lastError=e.message||String(e);console.error('Catalogue, essai',attempt+1,lastError);
+   if(attempt<2)await new Promise(done=>setTimeout(done,450*(attempt+1)));
+  }
+ }
+ apiHealthy=false;updateApiStatus(false,lastError);showLoading(false);renderList();
+ document.dispatchEvent(new Event('trekmap:catalog-ready'));
+ toast('Impossible de charger les treks. '+lastError);return false;
+}
 async function restoreSession(){try{const r=await fetch(API+'/auth/me',{headers:headers()});if(!r.ok)throw 0;currentUser=(await r.json()).user}catch(e){localStorage.removeItem('trekmap_token');localStorage.removeItem('trekmap_user');currentUser=null}updateAccountUI()}
 function updateAccountUI(){if(currentUser){$('account-name').textContent=currentUser.username+ (currentUser.is_admin?' · ADMIN':'');$('account-sub').textContent=currentUser.email;$('avatar').textContent=currentUser.username.charAt(0).toUpperCase();$('account-button').textContent='Déconnexion'}else{$('account-name').textContent='Mode visiteur';$('account-sub').textContent='Treks publics';$('avatar').textContent='👤';$('account-button').textContent='Connexion'}}
 function authModal(mode='login'){$('modal').innerHTML=`<div class="modal-head"><h2>${mode==='login'?'Connexion':'Créer un compte'}</h2><button class="close" id="modal-close">✕</button></div><div class="form-grid">${mode==='register'?'<div class="form-field full"><label>Nom d’utilisateur</label><input id="auth-user" autocomplete="username"></div><div class="form-field full"><label>E-mail</label><input id="auth-email" type="email" autocomplete="email"></div>':''}<div class="form-field full"><label>${mode==='login'?'Nom d’utilisateur ou e-mail':'Mot de passe'}</label><input id="auth-login" autocomplete="username"></div>${mode==='register'?'<div class="form-field full"><label>Mot de passe (8 caractères minimum)</label><input id="auth-pass" type="password" autocomplete="new-password"></div>':'<div class="form-field full"><label>Mot de passe</label><input id="auth-pass" type="password" autocomplete="current-password"></div>'}</div><p id="auth-msg" style="color:#b52b35"></p><div class="modal-actions"><button class="ghost-btn" id="switch-auth">${mode==='login'?'Créer un compte':'J’ai déjà un compte'}</button><button class="primary-btn" id="submit-auth">${mode==='login'?'Se connecter':'Créer mon compte'}</button></div>`;$('modal-backdrop').style.display='flex';$('modal-close').onclick=closeModal;$('switch-auth').onclick=()=>authModal(mode==='login'?'register':'login');$('submit-auth').onclick=()=>submitAuth(mode)}
@@ -301,7 +378,7 @@ function setLayer(value){Object.values(layers).forEach(l=>map.removeLayer(l));(l
 initMap();updateFilterLabels();
 $('search').addEventListener('input',debounceSearch);$('clear-search').onclick=()=>{$('search').value='';applyFilters()};$('region-filter').onchange=applyFilters;$('difficulty-filter').onchange=applyFilters;$('duration-filter').onchange=applyFilters;$('sort-filter').onchange=applyFilters;['distance-range','distance-tolerance','elevation-range','elevation-tolerance'].forEach(id=>$(id).oninput=()=>{updateFilterLabels();applyFilters()});$('reset-filters').onclick=resetFilters;$('upload-button').onclick=importGPX;$('create-button').onclick=openCreate;$('account-button').onclick=()=>currentUser?logout():authModal('login');$('map-toggle').onclick=()=>{$('sidebar').classList.toggle('collapsed');setTimeout(()=>map.invalidateSize(),260)};$('close-sidebar').onclick=()=>$('sidebar').classList.add('collapsed');$('map-fit').onclick=fitAll;$('api-status').onclick=async()=>{try{const r=await fetch(API+'/health',{cache:'no-store'});const d=await r.json();updateApiStatus(r.ok&&d.status==='ok', d.error||'');if(r.ok){const geom=d.treks_with_geometry??'—';toast(`API ${d.status==='ok'?'OK':'dégradée'} · ${d.treks??0} trek(s) · ${geom} trace(s) · PostGIS ${d.postgis?'OK':'?'} · ORS ${d.ors_configured?'OK':'non configuré'}`)}else toast('API en erreur')}catch(e){updateApiStatus(false,e.message);toast('API inaccessible : '+e.message)}};$('map-layers').onchange=e=>setLayer(e.target.value);$('map-fullscreen').onclick=()=>{const el=$('map');if(!document.fullscreenElement)el.requestFullscreen?.();else document.exitFullscreen?.()};$('locate-map').onclick=()=>map.locate({setView:true,maxZoom:14});if(map){L.DomEvent.disableClickPropagation($('draw-panel'));L.DomEvent.disableScrollPropagation($('draw-panel'));L.DomEvent.disableClickPropagation(document.querySelector('.map-tools'));map.on('click',addDrawPoint);}if(map)map.on('locationfound',e=>L.circleMarker(e.latlng,{radius:8}).addTo(map).bindPopup('Ta position').openPopup());if(map)map.on('locationerror',()=>toast('Position indisponible.'));$('draw-undo').onclick=undoDrawPoint;$('draw-clear').onclick=clearDrawPoints;$('draw-cancel').onclick=cancelDrawing;$('draw-finish').onclick=finishDrawing;$('modal-backdrop').onclick=e=>{if(e.target.id==='modal-backdrop'){closeModal();if(drawMode)cancelDrawing()}};$('modal').onclick=e=>e.stopPropagation();document.querySelectorAll('.tab').forEach(x=>x.onclick=()=>switchTab(x.dataset.tab));document.querySelectorAll('.bottom-nav button').forEach(x=>x.onclick=()=>{const a=x.dataset.action;if(a==='explore'){switchTab('all');$('sidebar').classList.remove('collapsed')}if(a==='create')openCreate();if(a==='favorites')switchTab('favorites');if(a==='profile')openProfile()});updateDrawPanel();
 document.addEventListener('keydown',e=>{if(e.key==='Escape'&&drawMode){e.preventDefault();cancelDrawing()}if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='z'&&drawMode){e.preventDefault();undoDrawPoint()}});
-(async function(){await restoreSession();await loadRegions();await loadTraces();})();
+(async function(){await restoreSession();await loadTraces();})();
 </script>
 </body>
 </html>

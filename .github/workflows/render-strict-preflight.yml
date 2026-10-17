@@ -260,6 +260,10 @@ jobs:
         if: matrix.python-version == '3.11'
         run: python scripts/test_password_reset_integration.py
 
+      - name: Test fast catalog and device accounts on local PostGIS
+        if: matrix.python-version == '3.11'
+        run: python scripts/test_fast_catalog_accounts_integration.py
+
       - name: Install Chromium for real responsive smoke
         if: matrix.python-version == '3.11'
         uses: browser-actions/setup-chrome@v1

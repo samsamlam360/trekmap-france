@@ -217,6 +217,12 @@ app.router.routes.extend(profile_v2.router.routes)
 from .password_reset import install_password_reset
 install_password_reset(app)
 
+# Progressive map bootstrap and browser-device account switching.
+from .fast_catalog import install_fast_catalog
+from .account_switch import install_account_switch
+install_fast_catalog(app, robust_db_or_503)
+install_account_switch(app)
+
 
 # Offline navigation: public, bounded vector map tiles from OpenFreeMap.
 # The proxy identifies the application via User-Agent (unlike browser fetch).

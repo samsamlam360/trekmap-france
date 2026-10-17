@@ -167,3 +167,8 @@ block=r'''<!-- TM_FINISH_RECOVERY_START -->
 if html.count('</body>')!=1:raise SystemExit('Frontend: body closing marker invalid')
 path.write_text(html.replace('</body>',block+'\n</body>',1),encoding='utf-8')
 print('Accueil/TrekBrain finish and secure password recovery UI installed')
+
+# Progressive map landing and secure account switcher.
+from runpy import run_path
+run_path(str(Path(__file__).with_name('apply_fast_accounts_ui.py')))
+
