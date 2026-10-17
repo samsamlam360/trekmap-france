@@ -1215,14 +1215,14 @@ def _photon_anchor_resource(anchor, category: str, osm_tags, radius_km: float, q
             rank = (0 if confirmed_water_reference(row) else 1, distance)
         else:
             rank = (distance,)
-        if category in {"water", "food"}:
+        if category in {"water", "food", "stay"}:
             verified_candidates.append((rank, row))
         if best is None or rank < best[0]:
             best = (rank, row)
     if best is None:
         return None
     primary = best[1]
-    if category in {"water", "food"}:
+    if category in {"water", "food", "stay"}:
         # Source URL is canonical, and a separate OSM element at identical
         # coordinates can carry a vital non-potability warning. Keep source
         # identity, not only rounded coordinates, as the deduplication key.
