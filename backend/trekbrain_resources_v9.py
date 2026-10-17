@@ -774,7 +774,10 @@ def _bbox_route_water_food(
                 clauses = "".join(
                     f'nwr(around:2800,{line}){flt};'
                     for flt in ('["amenity"="drinking_water"]',
-                                '["man_made"="water_tap"]', '["natural"="spring"]')
+                                '["man_made"="water_tap"]', '["natural"="spring"]',
+                                '["amenity"="water_point"]',
+                                '["man_made"="water_well"]["drinking_water"="yes"]',
+                                '["man_made"="water_pump"]["drinking_water"="yes"]')
                 )
                 statements.append(f"({clauses});out center tags {water_quota};")
             else:
@@ -849,14 +852,11 @@ def _bbox_route_water_food(
             if lat is None or lon is None:
                 continue
             category, water_status = None, "unverified"
-            if (
-                tags.get("amenity") == "drinking_water"
-                or tags.get("man_made") == "water_tap"
-                or tags.get("natural") == "spring"
-            ):
+            from .trekbrain_water_evidence_v9 import mapped_water_source, potability_status
+            if mapped_water_source(tags):
                 category = "water"
-                # An explicit OSM non-potable tag wins over the amenity.
-                from .trekbrain_water_evidence_v9 import potability_status
+                # A well or pump without explicit potable evidence stays
+                # unknown; negatives and access restrictions remain binding.
                 water_status = potability_status(tags)
             elif (
                 tags.get("shop") in {
