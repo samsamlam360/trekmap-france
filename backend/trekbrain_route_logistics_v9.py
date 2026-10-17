@@ -1362,7 +1362,7 @@ def _night_access_diagnostics(anchors, projected, options, connectors, assigned)
 
 
 def _assign_verified_nights(options, connectors, stage_lengths, daily_max, strict_walk):
-    """Globally prefer unique walkable stays over attractive unverified ones.
+    """Prefer independently verified walkable stays, allowing a safe base camp.
 
     Missing nights are explicit slots. Forward and next-morning access effort
     both count against the walking limit; lodging never changes the backbone.
@@ -1375,8 +1375,6 @@ def _assign_verified_nights(options, connectors, stage_lengths, daily_max, stric
             expanded.append((missing + 1, transfers, cost, chosen + [None], used, 0.0))
             for row in options.get(night, []):
                 key = _stay_key(row)
-                if key in used:
-                    continue
                 connector = connectors.get(_connector_key(row)) or {}
                 outward = float(connector.get("distance_km") or 0)
                 back = float(connector.get("return_distance_km") or 0)
@@ -1388,10 +1386,22 @@ def _assign_verified_nights(options, connectors, stage_lengths, daily_max, stric
                           else "walking_access_unverified")
                 if strict_walk and not walks:
                     continue
+                # Reusing the same accommodation on separate nights is valid
+                # for a hub-and-spoke trek only if *each* stage-end anchor has
+                # its OWN independently validated outward and return route.
+                # A prior night's route must not validate a different night.
+                # Never reuse a transfer candidate without confirmed access.
+                reused = key in used
+                if reused and not walks:
+                    continue
                 mode = "walk" if walks else "transfer"
                 chosen_row = {**row, "_access_mode": mode, "_access_reason": reason, "_connector": connector}
                 effort = outward + back if walks else row["_anchor_distance_km"]
-                expanded.append((missing, transfers + (not walks), cost + effort,
+                # Prefer an equally walkable distinct stay, but do not mark
+                # a correctly validated second night as missing just because
+                # the same real campsite is usable again.
+                reuse_cost = 1.0 if reused else 0.0
+                expanded.append((missing, transfers + (not walks), cost + effort + reuse_cost,
                                  chosen + [chosen_row], used | {key}, back if walks else 0.0))
         expanded.sort(key=lambda state: state[:3])
         beam = expanded[:64]
