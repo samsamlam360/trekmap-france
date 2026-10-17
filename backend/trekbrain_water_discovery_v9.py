@@ -123,6 +123,37 @@ def _missing_day_samples(result: dict[str, Any], coords: list[list[float]], days
     return samples[:16]
 
 
+_OSM_WATER_FILTERS = (
+    '["amenity"="drinking_water"]',
+    '["man_made"="water_tap"]',
+    '["natural"="spring"]',
+    '["amenity"="water_point"]',
+    '["man_made"="water_well"]["drinking_water"="yes"]',
+    '["man_made"="water_pump"]["drinking_water"="yes"]',
+)
+
+
+def _water_corridor_query(samples: list[list[float]]) -> str:
+    """One bounded OSM corridor rather than one query per sample and tag.
+
+    Overpass QL >=0.7.55 accepts a line of lat/lon pairs in around:. Six
+    tagged lookups along that line replace up to 96 separate scans without
+    changing the number of provider HTTP calls or the water-safety rules.
+    The result is *always* snapped against the actual walked route by the
+    subsequent resource overlay; a polyline shortcut never validates a POI.
+    """
+    clean = _valid_coords(samples)[:16]
+    if not clean:
+        return ""
+    points = ",".join(f"{lat:.6f},{lon:.6f}" for lat, lon in clean)
+    radius = 3200
+    clauses = "".join(
+        f'nwr(around:{radius},{points}){tag};'
+        for tag in _OSM_WATER_FILTERS
+    )
+    return "[out:json][timeout:4];(" + clauses + ");out center tags 120;"
+
+
 def discover_water_points(v3, result: dict[str, Any]) -> list[dict[str, Any]]:
     route = result.get("route_preview") or {}
     coords = _valid_coords(route.get("coords") or [])
@@ -133,18 +164,7 @@ def discover_water_points(v3, result: dict[str, Any]) -> list[dict[str, Any]]:
     if not samples:
         return []
 
-    radius_m = 3200
-    clauses = []
-    for lat, lon in samples:
-        clauses.extend([
-            f'nwr(around:{radius_m},{lat:.6f},{lon:.6f})["amenity"="drinking_water"];',
-            f'nwr(around:{radius_m},{lat:.6f},{lon:.6f})["man_made"="water_tap"];',
-            f'nwr(around:{radius_m},{lat:.6f},{lon:.6f})["natural"="spring"];',
-            f'nwr(around:{radius_m},{lat:.6f},{lon:.6f})["amenity"="water_point"];',
-            f'nwr(around:{radius_m},{lat:.6f},{lon:.6f})["man_made"="water_well"]["drinking_water"="yes"];',
-            f'nwr(around:{radius_m},{lat:.6f},{lon:.6f})["man_made"="water_pump"]["drinking_water"="yes"];',
-        ])
-    query = "[out:json][timeout:4];(" + "".join(clauses) + ");out center tags 120;"
+    query = _water_corridor_query(samples)
     try:
         # This is display-only context after a validated route already exists.
         # One short mirror attempt is enough; failing fast is preferable to
@@ -285,4 +305,4 @@ def install_water_discovery(v3, resources) -> None:
     resources.enrich_resources = enrich_resources
 
 
-__all__ = ["install_water_discovery", "discover_water_points", "_sample_route"]
+__all__ = ["install_water_discovery", "discover_water_points", "_sample_route", "_water_corridor_query"]
