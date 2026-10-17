@@ -1062,3 +1062,35 @@ rejected = logistics._assign_verified_nights(
 )
 assert rejected == [None], rejected
 print("Borderline 3.2km candidates get one bounded round-trip check, never a fake 4km walking connection: OK")
+
+
+# A loop can cross itself or return next to an earlier portion. The POI's
+# closest projected route-progress can be on day 1 even though the actual
+# stage-end anchor on day 3 is just metres away. This is a real candidate, not
+# a confirmed hiking connector: the ORS walking matrix remains mandatory.
+crossing_anchor = [{"night": 2, "lat": 0.0, "lon": 0.200,
+                    "route_progress_km": 46.0}]
+crossing_stay = {
+    "name": "Gîte près du deuxième passage",
+    "lat": 0.001, "lon": 0.200,
+    "_route_progress_km": 3.0,
+    "source_url": "https://www.openstreetmap.org/node/771003",
+}
+crossing_candidates = logistics._night_options(
+    crossing_anchor, [crossing_stay], 15.0
+)
+assert len(crossing_candidates[2]) == 1, crossing_candidates
+assert crossing_candidates[2][0]["_progress_gap_km"] == 43.0
+assert crossing_candidates[2][0]["_anchor_distance_km"] < 0.3
+# A remotely located candidate still cannot bypass the stage-progress window.
+far_crossing_stay = {**crossing_stay, "lat": 0.25,
+                     "source_url": "https://www.openstreetmap.org/node/771004"}
+assert logistics._night_options(
+    crossing_anchor, [far_crossing_stay], 15.0
+)[2] == []
+# No unvalidated or one-way walk may certify the geographically close place.
+no_pedestrian_proof = logistics._assign_verified_nights(
+    {1: crossing_candidates[2]}, {}, [15.0, 15.0], 20.0, True
+)
+assert no_pedestrian_proof == [None], no_pedestrian_proof
+print("Loop intersection stay candidate no longer lost, walking checks still mandatory: OK")
