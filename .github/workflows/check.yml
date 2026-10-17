@@ -145,6 +145,8 @@ jobs:
           node --check /tmp/trekmap-language.js
           node --check /tmp/trekmap-reasoning.js
           node --check /tmp/trekmap-trekbrain.js
+      - name: Vérifier les quatre espaces et le GPS préservé
+        run: python scripts/test_four_spaces_design.py
 
   production-smoke:
     runs-on: ubuntu-latest
