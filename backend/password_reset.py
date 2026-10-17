@@ -153,6 +153,8 @@ def install_password_reset(app):
         if not re.fullmatch(r"[A-Za-z0-9_-]{40,160}", data.token):
             raise HTTPException(400, "Lien de réinitialisation invalide.")
         digest = hash_token(data.token)
+        from .account_switch import ensure_device_schema
+        ensure_device_schema()
         db = core.db_or_503()
         try:
             row = db.execute(text("""
@@ -168,6 +170,9 @@ def install_password_reset(app):
                             "WHERE user_id=:uid AND consumed_at IS NULL"),
                        {"now": datetime.utcnow(), "uid": row.user_id})
             db.execute(text("DELETE FROM user_sessions WHERE user_id=:uid"),
+                       {"uid": row.user_id})
+            # A reset also removes remembered quick-switch grants on every device.
+            db.execute(text("DELETE FROM user_account_devices WHERE user_id=:uid"),
                        {"uid": row.user_id})
             db.commit()
             core.clear_session_cookies(response)
