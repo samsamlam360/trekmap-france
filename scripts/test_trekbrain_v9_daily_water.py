@@ -277,3 +277,58 @@ finally:
 assert unsafe_photon["water_status"]=="not_potable",unsafe_photon
 assert not confirmed_water_reference(unsafe_photon)
 print("Cold-cache Photon fallback: unknown/private springs do not hide public water; two days probed in six-call cap: PASS")
+
+
+# Route-relative cold water probes must cover the WHOLE walked day, not just
+# the start/night boundary of a 15-20 km route. All tests are offline and do
+# not claim any fountain exists until a provider supplies an OSM object.
+walk={
+    "duration_days": 3,
+    "stages": [
+        {"distance_km":10.0},{"distance_km":20.0},{"distance_km":10.0},
+    ],
+    "route_preview":{"coords":[[45.0,5.0],[45.1,5.0],
+                             [45.3,5.0],[45.4,5.0]]},
+}
+original_geometry=[point[:] for point in walk["route_preview"]["coords"]]
+probes=resources._cold_water_stage_probes(walk,3,[1,2,3])
+assert [p["route_day"] for p in probes]==[1,3,2],probes
+assert all(p["category"]=="route_anchor" for p in probes)
+assert abs(probes[0]["lat"]-45.05)<0.001,probes
+assert abs(probes[1]["lat"]-45.35)<0.001,probes
+assert abs(probes[2]["lat"]-45.20)<0.001,probes
+assert walk["route_preview"]["coords"]==original_geometry
+assert [p["route_day"] for p in resources._cold_water_stage_probes(walk,3,[2])]==[2]
+assert resources._cold_water_stage_probes({"route_preview":{"coords":[]}},3,[1])==[]
+
+# Keep the cap of six; two-day requests now check both walking-day middles.
+two_days={
+    "duration_days":2,
+    "stages":[{"distance_km":16},{"distance_km":16}],
+    "route_preview":{"coords":[[45.0,5.0],[45.08,5.0],
+                               [45.16,5.0],[45.24,5.0],
+                               [45.32,5.0]]},
+}
+water_anchors=resources._cold_water_stage_probes(two_days,2,[1,2])
+assert len(water_anchors)==2
+assert abs(water_anchors[0]["lat"]-45.08)<0.0001,water_anchors
+assert abs(water_anchors[1]["lat"]-45.24)<0.0001,water_anchors
+checked=[]
+orig=planner._photon_anchor_resource
+planner._photon_anchor_resource=lambda point,kind,tags,radius: (
+    checked.append((kind,point["lat"])) or None
+)
+try:
+    planner._postroute_corridor_resources(
+        [{"lat":45.0,"lon":5.0},{"lat":45.16,"lon":5.0},
+         {"lat":45.32,"lon":5.0}],
+        {"water":True,"food":True,"sleep":True,"transit":True,
+         "accommodation":"camping","_water_corridor_anchors":water_anchors},[],
+    )
+finally:
+    planner._photon_anchor_resource=orig
+assert len(checked)<=6,checked
+assert [(kind,round(lat,2)) for kind,lat in checked if kind=="water"]==[
+    ("water",45.08),("water",45.24)],checked
+assert {"food","stay","transit"} <= {kind for kind,_ in checked},checked
+print("Midstage source-water probes: real route fractions, day coverage, 6-call cap, no geometry changes: PASS")
