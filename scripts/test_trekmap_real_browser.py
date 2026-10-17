@@ -918,7 +918,8 @@ try:
     driver.save_screenshot(str(OUT / "profile-v2-mobile.png"))
     driver.find_element(By.ID,"tm-p-exit").click()
     driver.set_window_size(1440,900)
-    driver.find_element(By.ID,"tm-ai-launch").click()
+    driver.find_element(By.CSS_SELECTOR,
+        '#tm-primary-navigation [data-tm-space="brain"]').click()
     wait.until(lambda d: d.find_element(By.ID,"tm-ai-overlay").is_displayed())
     pref_button=driver.find_element(By.ID,"tm-ai-profile-defaults")
     pref_button.click()
