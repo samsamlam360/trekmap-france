@@ -1415,7 +1415,7 @@ def _install_plan_overlay(app, legacy_main):
                 )
                 result["_terrain_osm_preloaded"] = not water_rescue_needed
                 if water_rescue_needed:
-                    result["_water_rescue_mirror_index"] = 2
+                    result["_water_rescue_mirror"] = "independent"
             else:
                 # Water/food are already present in the validated route result.
                 # Keep transit or a genuinely missing lodging supplement eligible
@@ -1433,7 +1433,7 @@ def _install_plan_overlay(app, legacy_main):
             result = enrich_resources(result)
             enrich_ms = round((time.monotonic() - enrich_started) * 1000)
             result.pop("_terrain_osm_preloaded", None)
-            result.pop("_water_rescue_mirror_index", None)
+            result.pop("_water_rescue_mirror", None)
 
             # Store positively identified OSM objects from fresh providers,
             # never empty results or records that were merely read from cache.

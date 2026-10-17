@@ -101,12 +101,17 @@ try:
     # on the already configured third, independent free Overpass endpoint.
     calls.clear()
     recovered = water.discover_water_points(None, {
-        **plan, "_water_rescue_mirror_index": 2,
+        **plan, "_water_rescue_mirror": "independent",
     })
-    assert len(calls) == 1 and calls[0][0] == free.OVERPASS_URLS[2], calls
+    assert len(calls) == 1 and calls[0][0] == free.OVERPASS_URLS[-1], calls
     assert calls[0][1]["timeout"] <= 1.6 and calls[0][1]["retries"] == 1
     assert len(recovered) == len(tag_cases)
     assert recovered[0]["status"] == "not_potable", recovered[0]
+    # The order is [primary FOSSGIS, VK, sibling FOSSGIS, private.coffee].
+    # A first-visit outage must not retry a correlated sibling first.
+    assert len(free.OVERPASS_URLS) >= 4
+    assert free.OVERPASS_URLS[-1] != free.OVERPASS_URLS[2]
+    assert calls[0][0] not in {free.OVERPASS_URLS[0], free.OVERPASS_URLS[2]}
 finally:
     free._request_json = real_request
 

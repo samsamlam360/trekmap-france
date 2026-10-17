@@ -151,8 +151,12 @@ def discover_water_points(v3, result: dict[str, Any]) -> list[dict[str, Any]]:
         # independent existing mirror rather than immediately retrying one
         # which just timed out. Normally keep the historical first mirror.
         mirrors = list(free.OVERPASS_URLS)
-        requested = result.get("_water_rescue_mirror_index")
-        mirror_index = 2 if requested == 2 and len(mirrors) >= 3 else 0
+        # Route-first and targeted terrain waves already tried the primary
+        # FOSSGIS instance. If they failed, the independent last mirror is
+        # preferable to another FOSSGIS backend with correlated outages.
+        # No additional provider request: replace only the fallback target.
+        requested = result.get("_water_rescue_mirror")
+        mirror_index = len(mirrors) - 1 if requested == "independent" and len(mirrors) > 1 else 0
         url = mirrors[mirror_index]
         payload = free._request_json(
             url,
