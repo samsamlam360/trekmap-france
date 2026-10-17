@@ -441,3 +441,89 @@ assert resources._cold_water_stage_probes(
 assert resources._sourced_water_coverage([
     {"kind":"water","route_day":1,**public_shop}])==([],0)
 print("Sourced groceries may bias fountain search; private shops cannot, and neither validates drinking water: PASS")
+
+
+# A SINGLE Photon lookup may return several usable OSM POIs on different
+# walking stages. Never throw away the extra already-downloaded evidence.
+# Nothing in this test uses the public provider or additional network calls.
+extra_http=[]
+def multi_photon(url,**kw):
+    extra_http.append((url,kw))
+    if url.endswith("/reverse"):
+        return {"features":[
+            {"properties":{"osm_type":"N","osm_id":982001,"countrycode":"FR",
+                "osm_key":"amenity","osm_value":"drinking_water"},
+             "geometry":{"coordinates":[5.0,45.020]}},
+            {"properties":{"osm_type":"N","osm_id":982002,"countrycode":"FR",
+                "osm_key":"amenity","osm_value":"drinking_water"},
+             "geometry":{"coordinates":[5.0,45.080]}},
+            {"properties":{"osm_type":"N","osm_id":982003,"countrycode":"FR",
+                "osm_key":"amenity","osm_value":"drinking_water",
+                "extra":{"drinking_water":"no"}},
+             "geometry":{"coordinates":[5.0,45.060]}},
+            {"properties":{"osm_type":"N","osm_id":982004,"countrycode":"FR",
+                "osm_key":"natural","osm_value":"spring"},
+             "geometry":{"coordinates":[5.0,45.055]}},
+            {"properties":{"osm_type":"N","osm_id":982005,"countrycode":"FR",
+                "osm_key":"amenity","osm_value":"drinking_water"},
+             "geometry":{"coordinates":[5.0,45.250]}}, # Too far; reject
+        ]}
+    return {"features":[
+        {"properties":{"osm_type":"N","osm_id":982101,"countrycode":"FR",
+            "osm_key":"shop","osm_value":"bakery"},
+         "geometry":{"coordinates":[5.0,45.030]}},
+        {"properties":{"osm_type":"N","osm_id":982102,"countrycode":"FR",
+            "osm_key":"shop","osm_value":"convenience"},
+         "geometry":{"coordinates":[5.0,45.070]}},
+        {"properties":{"osm_type":"N","osm_id":982103,"countrycode":"FR",
+            "osm_key":"shop","osm_value":"bakery"},
+         "geometry":{"coordinates":[5.0,46.000]}}, # Too far; reject
+    ]}
+orig_http=planner._request_json
+planner._request_json=multi_photon
+try:
+    water_batch=planner._photon_anchor_resource(
+        {"lat":45.05,"lon":5.0},"water",
+        ("amenity:drinking_water","natural:spring"),5.5)
+    assert water_batch
+    extra=water_batch.get("_photon_alternatives") or []
+    assert len(extra)==3,extra
+    assert len({r["source_url"] for r in [water_batch]+extra})==4
+    assert {r["source_url"].split("/")[-1] for r in [water_batch]+extra}=={
+        "982001","982002","982003","982004"}
+    from backend.trekbrain_water_evidence_v9 import confirmed_water_reference
+    non_potable=next(r for r in [water_batch]+extra if r["source_url"].endswith("/982003"))
+    assert non_potable["water_status"]=="not_potable"
+    assert not confirmed_water_reference(non_potable)
+    assert confirmed_water_reference(water_batch)
+    assert len(extra_http)==1
+
+    extra_http.clear()
+    batch=planner._postroute_corridor_resources(
+        [{"lat":45.0,"lon":5.0},{"lat":45.05,"lon":5.0},
+         {"lat":45.10,"lon":5.0}],
+        {"water":True,"food":True,"_water_corridor_anchors":[
+            {"lat":45.05,"lon":5.0,"route_day":1}]},[])
+finally:
+    planner._request_json=orig_http
+assert len(extra_http)<=6,extra_http
+assert len(extra_http)==3,extra_http # One water and two food queries
+assert all("_photon_alternatives" not in x for x in batch)
+water_ids={x["source_url"].split("/")[-1] for x in batch if x["category"]=="water"}
+food_ids={x["source_url"].split("/")[-1] for x in batch if x["category"]=="food"}
+assert water_ids=={"982001","982002","982003","982004"},water_ids
+assert food_ids=={"982101","982102"},food_ids
+before_route=[[45.0,5.0],[45.05,5.0],[45.1,5.0]]
+multi_plan={"duration_days":2,
+    "stages":[{"day":1,"distance_km":5.5},{"day":2,"distance_km":5.5}],
+    "route_preview":{"coords":[r[:] for r in before_route]},
+    "water":[],"resources":[]}
+resources._merge_supplemented_resources(multi_plan,batch)
+resources.enrich_resources(multi_plan)
+coverage=resources._resource_coverage(multi_plan,{"water":True,"food":True})
+assert coverage["days_with_water"]==[1,2],coverage
+assert coverage["days_with_food"]==[1,2],coverage
+assert multi_plan["route_preview"]["coords"]==before_route
+assert any(x["status"]=="not_potable" for x in multi_plan["map_resources"]["evidence_points"]
+           if x["kind"]=="water")
+print("Photon multi evidence: two water days/two food days, explicit unsafe tap preserved, one-call harvest, immutable geometry: PASS")
