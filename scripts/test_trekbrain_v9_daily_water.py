@@ -527,3 +527,44 @@ assert multi_plan["route_preview"]["coords"]==before_route
 assert any(x["status"]=="not_potable" for x in multi_plan["map_resources"]["evidence_points"]
            if x["kind"]=="water")
 print("Photon multi evidence: two water days/two food days, explicit unsafe tap preserved, one-call harvest, immutable geometry: PASS")
+
+
+# Phase 1 second pass: a mapped grocery on J1/J3 does NOT cover J2.
+# Prioritize one independent Photon lookup in the true middle of J2
+# instead of repeatedly probing the J1 town. All within six HTTP jobs.
+food_by_day={
+    "duration_days":3,
+    "route_preview":{"coords":[[45.0,5.0],[45.09,5.0],
+                               [45.18,5.0],[45.27,5.0]]},
+    "stages":[{"day":day,"distance_km":10.0} for day in (1,2,3)],
+    "food":[
+        {"name":"Commerce J1","lat":45.025,"lon":5.0,"category":"food",
+         "source_url":"https://www.openstreetmap.org/node/998001",
+         "osm_tags":{"shop":"convenience"}},
+        {"name":"Commerce J3","lat":45.245,"lon":5.0,"category":"food",
+         "source_url":"https://www.openstreetmap.org/node/998003",
+         "osm_tags":{"shop":"supermarket"}},
+    ],
+}
+food_missing=resources._missing_terrain_intent(food_by_day,{"food":True})
+assert food_missing["missing_food_days"]==[2],food_missing
+focused=resources._cold_water_stage_probes(food_by_day,3,[2])
+assert len(focused)==1 and focused[0]["route_day"]==2,focused
+assert abs(focused[0]["lat"]-45.135)<0.002,focused
+food_calls=[]
+previous_food_lookup=planner._photon_anchor_resource
+planner._photon_anchor_resource=lambda anchor,kind,tags,radius: (
+    food_calls.append((kind,round(anchor["lat"],4))) or None)
+try:
+    planner._postroute_corridor_resources(
+        [{"lat":45.0,"lon":5.0},{"lat":45.09,"lon":5.0},
+         {"lat":45.18,"lon":5.0},{"lat":45.27,"lon":5.0}],
+        {"food":True,"_food_corridor_anchors":focused},[])
+finally:
+    planner._photon_anchor_resource=previous_food_lookup
+assert food_calls[0]==("food",round(focused[0]["lat"],4)),food_calls
+assert len(food_calls)<=6,food_calls
+assert ("food",45.0) in food_calls,food_calls # Old trailhead backup kept
+assert food_by_day["route_preview"]["coords"]==[
+    [45.0,5.0],[45.09,5.0],[45.18,5.0],[45.27,5.0]]
+print("Cold food: search unsupplied hiking day before trailhead fallback in same six-call budget: PASS")
