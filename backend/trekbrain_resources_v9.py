@@ -1154,8 +1154,10 @@ def _annotate_stage_resources(result: dict[str, Any]) -> dict[str, Any]:
             stage["water_notes"] = " · ".join(
                 f"{item.get('name') or 'Point d’eau'}"
                 + (
-                    " (potable référencée)"
-                    if str(item.get("status") or "") == "potable_referenced"
+                    " (potable référencée, disponibilité à vérifier)"
+                    if confirmed_water_reference(item)
+                    else " (potabilité référencée mais accès ou disponibilité restreints)"
+                    if water_evidence_status(item) == "potable_referenced"
                     else " (non potable : ne pas boire)"
                     if str(item.get("status") or "") == "not_potable"
                     else " (potabilité à vérifier)"
