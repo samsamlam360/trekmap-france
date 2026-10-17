@@ -46,8 +46,6 @@ block = r'''<!-- TREKMAP_FOUR_SPACES_START -->
 #tm-design-filter-flyout .tm-flyout-foot{display:flex;justify-content:flex-end;margin-top:9px}
 #tm-design-filter-flyout button{min-height:38px;border:0;background:#e6f3ea;color:#16583a;
  border-radius:10px;padding:7px 12px;font-weight:750}
-#tm-inline-filters [data-filter-target="distance-range"],
-#tm-inline-filters [data-filter-target="elevation-range"]{display:none!important}
 #tm-inline-filters{gap:7px!important}
 #tm-inline-filters select{min-width:126px!important}
 #tm-inline-filters [data-filter-target="duration-filter"]{max-width:152px!important}
@@ -111,7 +109,7 @@ body.tm-design-library-mode #tm-design-library-hint{display:block;color:#d8ebe0;
   ['library','▣','Mes treks'],
   ['profile','♙','Profil']
  ];
- var current='explore',profile=$('tm-profile-v2'),filterFlyout=null;
+ var current='explore',profile=$('tm-profile-v2');
  function mobile(){return window.innerWidth<=820}
  function profileOpen(){return !!(profile&&!profile.hidden)}
  function activate(space){
@@ -143,7 +141,6 @@ body.tm-design-library-mode #tm-design-library-hint{display:block;color:#d8ebe0;
  function closeFilters(){
   document.body.classList.remove('tm-inline-filters-open','tm-mobile-filters-open');
   $('tm-inline-advanced')?.setAttribute('aria-expanded','false');
-  filterFlyout?.classList.remove('open');
  }
  function closeAdd(){
   var sheet=$('tm-mobile-create-sheet');
@@ -266,59 +263,8 @@ body.tm-design-library-mode #tm-design-library-hint{display:block;color:#d8ebe0;
    }else $('tm-inline-advanced')?.click();
   });
  }
- // Une pastille "Durée" n'a aucune raison d'ouvrir quinze filtres d'un coup.
- var durationButton=document.querySelector('#tm-inline-filters [data-filter-target="duration-filter"]');
- var durationSource=$('duration-filter');
- if(durationButton&&durationSource){
-  filterFlyout=document.createElement('div');
-  filterFlyout.id='tm-design-filter-flyout';
-  filterFlyout.setAttribute('role','group');
-  filterFlyout.setAttribute('aria-label','Filtre de durée');
-  var label=document.createElement('label');
-  label.htmlFor='tm-design-duration';
-  label.textContent='Durée du trek';
-  var selector=document.createElement('select');
-  selector.id='tm-design-duration';
-  var foot=document.createElement('div');foot.className='tm-flyout-foot';
-  var done=document.createElement('button');done.type='button';done.textContent='Terminer';
-  foot.appendChild(done);filterFlyout.append(label,selector,foot);
-  document.body.appendChild(filterFlyout);
-  function placeFlyout(){
-   var r=durationButton.getBoundingClientRect();
-   filterFlyout.style.left=Math.max(10,Math.min(r.left,window.innerWidth-296))+'px';
-   filterFlyout.style.top=Math.min(r.bottom+8,window.innerHeight-170)+'px';
-  }
-  function closeFlyout(){
-   filterFlyout.classList.remove('open');
-   durationButton.setAttribute('aria-expanded','false');
-  }
-  durationButton.setAttribute('aria-haspopup','true');
-  durationButton.setAttribute('aria-expanded','false');
-  durationButton.addEventListener('click',function(e){
-   e.preventDefault();e.stopImmediatePropagation();
-   closeFilters();
-   if(durationButton.getAttribute('aria-expanded')==='true'){closeFlyout();return}
-   selector.replaceChildren.apply(selector,[...durationSource.options].map(function(o){return o.cloneNode(true)}));
-   selector.value=durationSource.value;
-   placeFlyout();filterFlyout.classList.add('open');
-   durationButton.setAttribute('aria-expanded','true');
-   selector.focus();
-  },true);
-  selector.addEventListener('change',function(){
-   durationSource.value=selector.value;
-   durationSource.dispatchEvent(new Event('input',{bubbles:true}));
-   durationSource.dispatchEvent(new Event('change',{bubbles:true}));
-  });
-  done.addEventListener('click',function(){closeFlyout();durationButton.focus()});
-  document.addEventListener('pointerdown',function(e){
-   if(!filterFlyout.classList.contains('open'))return;
-   if(!filterFlyout.contains(e.target)&&e.target!==durationButton)closeFlyout();
-  },true);
-  document.addEventListener('keydown',function(e){
-   if(e.key==='Escape'&&filterFlyout.classList.contains('open')){closeFlyout();durationButton.focus()}
-  });
-  window.addEventListener('resize',function(){if(filterFlyout.classList.contains('open'))placeFlyout()});
- }
+ // Les filtres Distance, Dénivelé et Durée réutilisent les trois popovers natifs,
+ // déjà testés avec de vrais navigateurs et liés aux valeurs des filtres source.
  // Synchronisation visuelle minimale des espaces, sans polling ni requêtes.
  document.addEventListener('click',function(e){
   if(e.target.closest('#tm-ai-launch'))activate('brain');
@@ -334,7 +280,7 @@ body.tm-design-library-mode #tm-design-library-hint{display:block;color:#d8ebe0;
  }).observe(document.body,{attributes:true,attributeFilter:['class']});
  window.TrekMapFourSpaces={
   open:openSpace,getActive:function(){return current},
-  openDuration:function(){durationButton?.click()},
+  openDuration:function(){document.querySelector('[data-filter-target="duration-filter"]')?.click()},
   showLibrary:function(tab){return openPrivateTab(['projects','collections','downloads','journal'].includes(tab)?tab:'projects')}
  };
 })();
