@@ -56,6 +56,15 @@ import com.getcapacitor.BridgeActivity;
 public class MainActivity extends BridgeActivity {
     private boolean updateCheckStarted = false;
     private boolean offlineScreenVisible = false;
+    private boolean installedFromPlayStore(){
+        try{
+            String installer;
+            if(android.os.Build.VERSION.SDK_INT>=30)
+                installer=getPackageManager().getInstallSourceInfo(getPackageName()).getInstallingPackageName();
+            else installer=getPackageManager().getInstallerPackageName(getPackageName());
+            return "com.android.vending".equals(installer);
+        }catch(Exception e){return false;}
+    }
     private boolean hasNetwork(){
         ConnectivityManager cm=(ConnectivityManager)getSystemService(CONNECTIVITY_SERVICE);
         NetworkCapabilities caps=cm==null?null:cm.getNetworkCapabilities(cm.getActiveNetwork());
@@ -98,7 +107,8 @@ public class MainActivity extends BridgeActivity {
         // Offline/online transitions must not repeatedly cover the bundled
         // dashboard with new activities. Users explicitly control switching.
         offlineScreenVisible=false;
-        if(!hasNetwork()||updateCheckStarted) return;
+        // Play Store versions update exclusively through Google Play.
+        if(!hasNetwork()||updateCheckStarted||installedFromPlayStore()) return;
         updateCheckStarted = true;
         long previous = getSharedPreferences("tm_android_updates",MODE_PRIVATE).getLong("checked_at",0);
         long now = System.currentTimeMillis();
