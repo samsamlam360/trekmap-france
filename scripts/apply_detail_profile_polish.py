@@ -81,6 +81,10 @@ body.tm-design-library-mode #tm-profile-v2 .tm-p-hero p{font-size:12px}
 #tm-profile-v2 .tm-p-cols>.tm-p-card{min-width:0}
 #tm-profile-v2 .tm-p-project-row[hidden]{display:none!important}
 #tm-profile-v2 #tm-p-status-filter{margin:0 0 13px;display:grid;gap:9px}
+#tm-profile-v2 .tm-library-categories{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;margin-bottom:8px}
+#tm-profile-v2 .tm-library-categories button{min-height:48px;padding:9px 7px;border:1px solid #c9ded0;background:#f4f9f5;color:#285c41;border-radius:12px;font-size:12px;font-weight:830}
+#tm-profile-v2 .tm-library-categories button[aria-pressed="true"]{background:#115f42;color:#fff;border-color:#115f42}
+#tm-profile-v2 .tm-library-categories button:focus-visible{outline:3px solid #e6ab45!important;outline-offset:2px}
 #tm-profile-v2 #tm-p-status-search{height:45px;padding:10px 13px;border-radius:11px;
  border:1px solid #bbd4c3;background:#fff;color:#18492f;font:inherit;font-size:14px}
 #tm-profile-v2 .tm-p-status-chips{display:flex;gap:6px;flex-wrap:wrap}
@@ -176,7 +180,9 @@ body.tm-design-library-mode #tm-profile-v2 .tm-p-hero p{font-size:12px}
  observer.observe(modal,{childList:true,subtree:true});
  refineDetail();
 
- var state={status:'all',query:''};
+ var state={status:'all',query:'',origin:'created'};
+ var categories=[['created','Créés'],['favorite','Favoris'],['other','À préparer']];
+ function inOrigin(row,origin){return origin==='all'||String(row.dataset.pOrigin||'other').split(/\s+/).includes(origin)}
  var statuses=[['all','Tous'],['planned','À découvrir'],['preparing','En préparation'],
   ['ready','Prêt'],['completed','Terminé']];
  function normalized(s){return String(s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase()}
@@ -195,14 +201,22 @@ body.tm-design-library-mode #tm-profile-v2 .tm-p-hero p{font-size:12px}
   if(!panel)return;
   var q=normalized(state.query.trim()),shown=0;
   rows.forEach(function(row){
-   var ok=(state.status==='all'||statusOf(row)===state.status)
+   var ok=inOrigin(row,state.origin)&&(state.status==='all'||statusOf(row)===state.status)
      &&(!q||normalized(row.textContent).includes(q));
-   row.hidden=!ok;if(ok)shown++;
+   if(row.hidden!==!ok)row.hidden=!ok;if(ok)shown++;
+  });
+  panel.querySelectorAll('[data-tm-origin]').forEach(function(button){
+   var origin=button.dataset.tmOrigin;
+   button.setAttribute('aria-pressed',String(state.origin===origin));
+   var count=rows.filter(function(row){return inOrigin(row,origin)}).length;
+   var label=categories.find(function(cat){return cat[0]===origin})[1]+' · '+count;
+   if(button.textContent!==label)button.textContent=label;
   });
   panel.querySelectorAll('[data-tm-status]').forEach(function(b){
    var filter=b.dataset.tmStatus;
    b.setAttribute('aria-pressed',String(state.status===filter));
-   var count=filter==='all'?rows.length:rows.filter(function(r){return statusOf(r)===filter}).length;
+   var visibleRows=rows.filter(function(r){return inOrigin(r,state.origin)});
+   var count=filter==='all'?visibleRows.length:visibleRows.filter(function(r){return statusOf(r)===filter}).length;
    var next=statuses.find(function(s){return s[0]===filter})[1]+' · '+count;
    if(b.textContent!==next)b.textContent=next;
   });
@@ -214,7 +228,27 @@ body.tm-design-library-mode #tm-profile-v2 .tm-p-hero p{font-size:12px}
   if(list&&!content.querySelector('#tm-p-status-filter')){
    var parent=list.parentElement;
    if(parent){
+    var owned=Array.from(content.querySelectorAll('.tm-p-project-row')).some(function(row){return inOrigin(row,'created')});
+    if(!owned&&state.origin==='created'){
+     var fave=Array.from(content.querySelectorAll('.tm-p-project-row')).some(function(row){return inOrigin(row,'favorite')});
+     state.origin=fave?'favorite':'other';
+    }
     var filters=document.createElement('div');filters.id='tm-p-status-filter';
+    var categoryRow=document.createElement('div');categoryRow.className='tm-library-categories';
+    categoryRow.setAttribute('role','group');categoryRow.setAttribute('aria-label','Mes treks créés et mes favoris');
+    categories.forEach(function(cat){
+     var button=document.createElement('button');button.type='button';
+     button.dataset.tmOrigin=cat[0];button.textContent=cat[1];
+     button.setAttribute('aria-pressed',String(state.origin===cat[0]));
+     categoryRow.appendChild(button);
+    });
+    categoryRow.addEventListener('click',function(event){
+     var button=event.target.closest('[data-tm-origin]');if(!button)return;
+     state.origin=button.dataset.tmOrigin;state.status='all';state.query='';
+     var input=filters.querySelector('#tm-p-status-search');if(input)input.value='';
+     applyList();
+    });
+    filters.appendChild(categoryRow);
     var input=document.createElement('input');input.id='tm-p-status-search';input.type='search';
     input.autocomplete='off';input.placeholder='Rechercher dans mes treks…';
     input.setAttribute('aria-label','Rechercher dans mes treks');input.value=state.query;
@@ -237,7 +271,14 @@ body.tm-design-library-mode #tm-profile-v2 .tm-p-hero p{font-size:12px}
     });
    }
   }
-  if(content.querySelector('#tm-p-status-filter'))applyList();
+  if(content.querySelector('#tm-p-status-filter')){
+   var chosen=content.querySelector('.tm-p-project-row.is-selected');
+   if(chosen&&!inOrigin(chosen,state.origin)){
+    state.origin=inOrigin(chosen,'created')?'created':
+       inOrigin(chosen,'favorite')?'favorite':'other';
+   }
+   applyList();
+  }
   // L'éditeur conserve le même formulaire, champs et sauvegarde.
   var form=content.querySelector('#tm-p-journey-form');
   if(form&&!form.querySelector('.tm-p-more')){
@@ -277,7 +318,9 @@ body.tm-design-library-mode #tm-profile-v2 .tm-p-hero p{font-size:12px}
  refineProfile();
  window.TrekMapDetailProfilePolish={refineDetail:refineDetail,refineProfile:refineProfile,
   setStatus:function(s){if(statuses.some(function(x){return x[0]===s})){state.status=s;applyList()}},
-  getStatus:function(){return state.status}};
+  getStatus:function(){return state.status},
+  setOrigin:function(s){if(categories.some(function(x){return x[0]===s})){state.origin=s;applyList()}},
+  getOrigin:function(){return state.origin}};
 })();
 </script>
 <!-- TM_DETAIL_PROFILE_POLISH_END -->'''
