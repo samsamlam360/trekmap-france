@@ -51,6 +51,17 @@ assert.ok(html.includes('id="android-diagnostic"')&&html.includes('nativePlugin.
 
 assert.ok(html.includes('navigator.wakeLock'),'keep display on if allowed');
 assert.ok(html.includes('localStorage.setItem(key'),'track saved locally');
+assert.ok(html.includes('id="offline-coverage"') &&
+ html.includes('function updateOfflineCoverage()') &&
+ html.includes("data.complete===true") && html.includes('Couverture web partielle') &&
+ html.includes('Couverture totale NON vérifiée'),
+ 'Offline status must distinguish proven coverage from an incomplete download');
+assert.ok(html.includes('complete:false,partial:true') &&
+ html.includes('lastDownloadErrors:fail') &&
+ html.includes('lastDownloadBytes:bytes'),
+ 'New download must invalidate stale complete state and preserve batch results');
+assert.ok(html.includes('Carte Android : couverture non vérifiée ici.'),
+ 'Do not misrepresent browser tiles as native Android offline coverage');
 assert.ok(html.includes('download-progress') && html.includes('cache.put(path') &&
   html.includes('caches.open(CACHE_TILES)') && html.includes('new Set(chosen.flatMap(s=>s.files))'),
   'all route sections must save tiles into one deduplicated offline cache');

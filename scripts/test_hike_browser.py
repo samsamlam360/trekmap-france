@@ -134,6 +134,21 @@ try:
         or 'partiel' in d.find_element(By.ID,'offline-status').text)
     outcome=browser.find_element(By.ID,'offline-status').text
     assert 'Lot terminé' in outcome,'offline package not complete: '+outcome
+    coverage=browser.execute_script("return document.getElementById('offline-coverage').textContent")
+    assert 'NON vérifiée' in coverage,'download alone must not promise complete offline coverage'
+    browser.execute_script("""
+      localStorage.setItem('tm-hike-offline-v1-987654321',JSON.stringify({
+        complete:true,tiles:40,present:40,stamp:Date.now(),sections:1,zoom:14
+      }));
+      document.getElementById('quick-tools').click();
+    """)
+    verified=browser.execute_script("return document.getElementById('offline-coverage').textContent")
+    assert '40/40' in verified and 'Couverture web vérifiée' in verified,verified
+    browser.execute_script("""
+      localStorage.removeItem('tm-hike-offline-v1-987654321');
+      document.getElementById('close-hike-options').click();
+    """)
+
     saved=browser.execute_async_script("""
       const done=arguments[0];
       Promise.all([caches.open('tm-hike-app-v1'),caches.open('tm-hike-tiles-v1')])
