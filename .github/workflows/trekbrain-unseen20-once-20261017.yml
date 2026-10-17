@@ -1,0 +1,52 @@
+name: TrekBrain 20-regions one-off measured audit
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/trekbrain-unseen20-once-20261017.yml'
+permissions:
+  contents: read
+concurrency:
+  group: trekbrain-once-20-regions
+  cancel-in-progress: false
+jobs:
+  verify-20:
+    runs-on: ubuntu-latest
+    timeout-minutes: 38
+    env:
+      EXPECTED_SHA: 26cae8b40495d7dcd3f19335fca01ba78e5e6d06
+      TREKBRAIN_BENCHMARK_OUT: benchmark-results-20
+      TREKBRAIN_BENCHMARK_URL: https://trekmap-france.onrender.com
+      TREKBRAIN_BENCHMARK_MIN_INTERVAL_SECONDS: '20'
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check the deployed production revision
+        shell: python
+        run: |
+          import json,os,time,urllib.request
+          for attempt in range(12):
+              try:
+                  with urllib.request.urlopen('https://trekmap-france.onrender.com/ai/status',timeout=20) as r:d=json.load(r)
+                  if str(d.get('build_commit','')).lower()==os.environ['EXPECTED_SHA']:
+                      print('Production baseline confirmed',d['build_commit']);break
+              except Exception as e:print(type(e).__name__,str(e)[:160])
+              time.sleep(10)
+          else:raise SystemExit('Production changed: refusing to mix baseline results')
+      - name: Audit twenty real regional prompts, serial and rate bounded
+        run: python scripts/benchmark_trekbrain_v9_unseen20.py
+      - name: Keep all measurements including failures
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: trekbrain-20-real-baseline
+          path: benchmark-results-20/
+          if-no-files-found: warn
+          retention-days: 14
+      - name: Publish exact report
+        if: always()
+        shell: python
+        run: |
+          from pathlib import Path
+          p=Path('benchmark-results-20/trekbrain-production-benchmark.md')
+          result=p.read_text(encoding='utf-8') if p.exists() else 'Rapport absent. Vérifier le journal.'
+          print(result)
+          with open(__import__('os').environ['GITHUB_STEP_SUMMARY'],'a',encoding='utf-8') as f:f.write(result)
