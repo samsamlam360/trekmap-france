@@ -9,7 +9,18 @@ const patch=fs.readFileSync('mobile/scripts/configure-android.mjs','utf8');
 const check=fs.readFileSync('mobile/scripts/verify-android.mjs','utf8');
 assert.equal(c.appId,'fr.trekmap.france');
 assert.equal(p.dependencies['maplibre-gl'],'4.7.1');
-assert.equal(c.server.url,'https://trekmap-france.onrender.com');
+assert.equal(c.server.url,undefined,'Android must never wait for Render before showing its local shell');
+assert.equal(c.server.hostname,'localhost');
+assert.equal(c.server.androidScheme,'https');
+assert.deepEqual(c.server.allowNavigation,['trekmap-france.onrender.com']);
+const home=fs.readFileSync('mobile/www/index.html','utf8');
+for(const id of ['id="offline-map"','id="saved-routes"','id="journal"','id="online"','id="routes"'])
+ assert.ok(home.includes(id),'Bundled app missing '+id);
+assert.ok(home.includes('listOfflineRoutes')&&home.includes('openOnline'),'Dashboard actions missing');
+assert.ok(!/<script[^>]+src=["']https?:/.test(home)&&!/<link[^>]+href=["']https?:/.test(home),
+ 'Bundled launcher must not load remote assets');
+new vm.Script(home.match(/<script>([\s\S]*?)<\/script>/)?.[1]||'throw Error("No dashboard script")');
+
 assert.equal(c.server.cleartext,false);
 assert.equal(c.android.allowMixedContent,false);
 assert.equal(c.loggingBehavior,'none');
@@ -27,6 +38,8 @@ assert.ok(svc.includes('startForeground(')&&svc.includes('removeUpdates('));
 assert.ok(!svc.includes('HttpURLConnection')&&!svc.includes('new URL('));
 const bridge=fs.readFileSync('mobile/native-src/fr/trekmap/france/TrekMapNativeGpsPlugin.java','utf8');
 assert.ok(bridge.includes('"/randonnee"')&&bridge.includes('"https"')&&bridge.includes('openTracker'));
+assert.ok(bridge.includes('"localhost"')&&bridge.includes('public void openOnline(')&&bridge.includes('public void openLocalHome('));
+assert.ok(bridge.includes('NET_CAPABILITY_VALIDATED'),'online navigation must check connectivity');
 assert.ok(bridge.includes('public void listOfflineRoutes(') && bridge.includes('public void openOfflineDownload('),'profile offline bridge exists');
 assert.ok(bridge.includes('public void openOfflineDownload(PluginCall call){\n        if(!trustedHikePage()')===false,
   'map downloading must work from the actual root profile');
@@ -92,11 +105,14 @@ assert.ok(mapHtml.includes('HORS LIGNE')&&mapHtml.includes('Treks téléchargés
 assert.ok(!/src=["']https?:\/\//.test(mapHtml),'offline map must not load remote scripts/styles');
 assert.ok(!/href=["']https?:\/\//.test(mapHtml),'offline map must not load remote CSS');
 const nativeMap=fs.readFileSync('mobile/native-src/fr/trekmap/france/OfflineVectorMapActivity.java','utf8');
+assert.ok(nativeMap.includes('fr.trekmap.france.OPEN_LOCAL'),'Native Back must return to bundled home');
 assert.ok(nativeMap.includes('"routes.json"')&&nativeMap.includes('"waypoints.json"')&&nativeMap.includes('"/native/gps"'));
 assert.ok(nativeMap.includes('"/native/online"')&&nativeMap.includes('NET_CAPABILITY_VALIDATED'),
   'native map must offer a validated return online');
 assert.ok(nativeMap.includes('route==null?"null":route.toString()'),
   'offline home must not close on an empty saved route list');
+assert.ok(patch.includes('https://localhost/'),'Home screen navigation must be local');
+assert.ok(patch.includes('"fr.trekmap.france.OPEN_OFFLINE"'),'Offline deep link supported');
 assert.ok(patch.includes('startActivity(new Intent(this,OfflineVectorMapActivity.class))'),
   'offline main entry must show the real map, not a placeholder list');
 assert.ok(mapHtml.includes('id="go-online"')&&mapHtml.includes('/native/online'),
