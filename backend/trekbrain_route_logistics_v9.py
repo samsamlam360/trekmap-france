@@ -16,6 +16,10 @@ This layer makes the hierarchy explicit for every trek, GR or not:
 5. never invalidate an otherwise safe pedestrian route merely because lodging
    logistics are incomplete.
 
+Stage boundary positions may now move a few route-kilometres toward sourced,
+route-close stays and nearby real water/grocery evidence. They never become
+a confirmed place to sleep until ORS verifies both walking directions.
+
 The actual walking backbone still comes from the existing GR/OSM/ORS planners.
 No straight-line geometry is promoted to a hiking route.
 """
@@ -1415,6 +1419,7 @@ def _assign_verified_nights(options, connectors, stage_lengths, daily_max, stric
 
 def _source_aware_stage_plan(
     roundtrip, coords, old_stages, anchors, candidates, days, daily_max,
+    resource_rows=None,
 ):
     """Rebalance *walking-stage boundaries* near sourced, route-close nights.
 
@@ -1451,6 +1456,14 @@ def _source_aware_stage_plan(
     baseline = [float(a["route_progress_km"]) for a in anchors]
     # Candidate nights must have a real external reference and project very
     # close to the *walked* route. Route-projection alone proves no access.
+    from .trekbrain_water_evidence_v9 import confirmed_water_reference, has_osm_identity
+    from .trekbrain_resources_v9 import _confirmed_food_reference
+    terrain = [
+        item for item in (resource_rows or [])
+        if isinstance(item, dict) and has_osm_identity(item)
+        and (confirmed_water_reference(item)
+             or _confirmed_food_reference(item))
+    ][:100]
     options = []
     for night, centre in enumerate(baseline, 1):
         left = 0.0 if night == 1 else baseline[night - 2]
@@ -1497,6 +1510,17 @@ def _source_aware_stage_plan(
                 motion = abs(progress - baseline[index])
                 benefit = (3.0 - min(1.0, float(stay["_offroute_km"]) / 0.55)
                            if stay else 0.0)
+                if stay and terrain:
+                    # These are source-backed *planning preferences*, not
+                    # walking-access validation nor a promise of fresh water.
+                    # Prefer ends of stages with actual mapped drinkable water
+                    # and groceries, all else being reasonably equal.
+                    near = [row for row in terrain
+                            if _geo_km(stay, row) <= 1.5]
+                    benefit += (0.3 if any(confirmed_water_reference(row)
+                                          for row in near) else 0.0)
+                    benefit += (0.2 if any(_confirmed_food_reference(row)
+                                          for row in near) else 0.0)
                 score = reward + benefit - motion * 0.12
                 expanded.append((score, moved + motion, boundaries + [progress],
                                  selected + [stay], progress))
@@ -1765,7 +1789,9 @@ def _attach_logistics(result: dict[str, Any], data, legacy_main, v3, roundtrip, 
     # the old split when candidates are absent, too far, or incompatible with
     # hard daily limits. ORS will still verify actual walking access below.
     stage_plan, stage_plan_diagnostics = _source_aware_stage_plan(
-        roundtrip, coords, old_stages, anchors, pool, days, daily_max
+        roundtrip, coords, old_stages, anchors, pool, days, daily_max,
+        resource_rows=(list(result.get("water") or [])
+                       + list(result.get("resources") or result.get("food") or [])),
     )
     if stage_plan:
         stage_lengths = stage_plan["lengths"]
