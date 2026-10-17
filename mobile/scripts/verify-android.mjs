@@ -3,7 +3,15 @@ import fs from 'node:fs';
 const conf=JSON.parse(fs.readFileSync('capacitor.config.json','utf8'));
 const pkg=JSON.parse(fs.readFileSync('package.json','utf8'));
 assert.equal(conf.appId,'fr.trekmap.france');
-assert.equal(conf.server.url,'https://trekmap-france.onrender.com');
+assert.equal(conf.server.url,undefined,'Remote URL must not replace the local Android app');
+assert.equal(conf.server.hostname,'localhost');
+assert.equal(conf.server.androidScheme,'https');
+assert.deepEqual(conf.server.allowNavigation,['trekmap-france.onrender.com']);
+const home=fs.readFileSync('www/index.html','utf8');
+for(const id of ['id="offline-map"','id="saved-routes"','id="journal"','id="online"','id="routes"'])
+ assert.ok(home.includes(id),'Bundled dashboard missing '+id);
+assert.ok(home.includes('openOnline')&&home.includes('listOfflineRoutes'));
+
 assert.equal(conf.server.cleartext,false);
 assert.equal(conf.android.allowMixedContent,false);
 assert.equal(conf.android.webContentsDebuggingEnabled,false);
@@ -42,4 +50,8 @@ for(const f of ['offline-map.html','vendor/maplibre-gl.js','vendor/maplibre-gl.c
 const main=fs.readFileSync('android/app/src/main/java/fr/trekmap/france/MainActivity.java','utf8');
 assert.ok(main.includes('NET_CAPABILITY_VALIDATED')&&main.includes('showNativeOffline'));
 assert.ok(main.includes('RELOAD_ONLINE'));
+assert.ok(main.includes('OPEN_LOCAL')&&main.includes('https://localhost/'));
+assert.ok(main.includes('OPEN_OFFLINE'));
+const bridge=fs.readFileSync('android/app/src/main/java/fr/trekmap/france/TrekMapNativeGpsPlugin.java','utf8');
+assert.ok(bridge.includes('"localhost"')&&bridge.includes('public void openOnline('));
 console.log('ANDROID CONFIG PASS: GPS service, update prompt, restricted FileProvider, fixed Android version and optional stable signing.');

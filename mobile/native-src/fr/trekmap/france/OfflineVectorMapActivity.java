@@ -153,16 +153,13 @@ public class OfflineVectorMapActivity extends Activity {
         web.loadUrl("https://"+DOMAIN+"/assets/public/offline-map.html");
     }
     @Override public void onBackPressed(){
-        // Do not reveal the blank online WebView when offline.
-        android.net.ConnectivityManager cm=(android.net.ConnectivityManager)getSystemService(CONNECTIVITY_SERVICE);
-        android.net.NetworkCapabilities caps=cm==null?null:cm.getNetworkCapabilities(cm.getActiveNetwork());
-        if(caps!=null&&caps.hasCapability(android.net.NetworkCapabilities.NET_CAPABILITY_VALIDATED)){
-            Intent intent=new Intent(this,MainActivity.class);
-            intent.setAction("fr.trekmap.france.RELOAD_ONLINE");
-            intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP|Intent.FLAG_ACTIVITY_SINGLE_TOP);
-            startActivity(intent);finish();
-        }else Toast.makeText(this,"Mode hors ligne. Reconnecte-toi puis appuie sur Actualiser.",
-            Toast.LENGTH_LONG).show();
+        // Back is always an instant local dashboard, including in airplane mode.
+        // Online travel remains a separate explicit button on the map.
+        Intent home=new Intent(this,MainActivity.class);
+        home.setAction("fr.trekmap.france.OPEN_LOCAL");
+        home.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP|Intent.FLAG_ACTIVITY_SINGLE_TOP);
+        startActivity(home);
+        finish();
     }
     @Override protected void onDestroy(){
         if(web!=null){web.loadUrl("about:blank");web.destroy();web=null;}

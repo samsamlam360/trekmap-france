@@ -56,6 +56,15 @@ import com.getcapacitor.BridgeActivity;
 public class MainActivity extends BridgeActivity {
     private boolean updateCheckStarted = false;
     private boolean offlineScreenVisible = false;
+    private boolean installedFromPlayStore(){
+        try{
+            String installer;
+            if(android.os.Build.VERSION.SDK_INT>=30)
+                installer=getPackageManager().getInstallSourceInfo(getPackageName()).getInstallingPackageName();
+            else installer=getPackageManager().getInstallerPackageName(getPackageName());
+            return "com.android.vending".equals(installer);
+        }catch(Exception e){return false;}
+    }
     private boolean hasNetwork(){
         ConnectivityManager cm=(ConnectivityManager)getSystemService(CONNECTIVITY_SERVICE);
         NetworkCapabilities caps=cm==null?null:cm.getNetworkCapabilities(cm.getActiveNetwork());
@@ -72,6 +81,11 @@ public class MainActivity extends BridgeActivity {
     @Override public void onCreate(Bundle savedInstanceState) {
         registerPlugin(TrekMapNativeGpsPlugin.class);
         super.onCreate(savedInstanceState);
+        // Capacitor starts its bundled local dashboard immediately. The
+        // native MapLibre view is one tap away and needs no remote boot.
+        if(savedInstanceState==null && getIntent()!=null &&
+                "fr.trekmap.france.OPEN_OFFLINE".equals(getIntent().getAction()))
+            showNativeOffline();
     }
     @Override public void onNewIntent(Intent intent) {
         super.onNewIntent(intent);
@@ -80,16 +94,21 @@ public class MainActivity extends BridgeActivity {
             offlineScreenVisible=false;
             if(getBridge()!=null && getBridge().getWebView()!=null)
                 getBridge().getWebView().loadUrl("https://trekmap-france.onrender.com/");
+        } else if("fr.trekmap.france.OPEN_LOCAL".equals(intent.getAction())){
+            offlineScreenVisible=false;
+            if(getBridge()!=null && getBridge().getWebView()!=null)
+                getBridge().getWebView().loadUrl("https://localhost/");
+        } else if("fr.trekmap.france.OPEN_OFFLINE".equals(intent.getAction())){
+            showNativeOffline();
         }
     }
     @Override public void onResume() {
         super.onResume();
-        if(!hasNetwork()){
-            showNativeOffline();
-            return;
-        }
+        // Offline/online transitions must not repeatedly cover the bundled
+        // dashboard with new activities. Users explicitly control switching.
         offlineScreenVisible=false;
-        if(updateCheckStarted) return;
+        // Play Store versions update exclusively through Google Play.
+        if(!hasNetwork()||updateCheckStarted||installedFromPlayStore()) return;
         updateCheckStarted = true;
         long previous = getSharedPreferences("tm_android_updates",MODE_PRIVATE).getLong("checked_at",0);
         long now = System.currentTimeMillis();

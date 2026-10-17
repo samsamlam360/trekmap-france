@@ -1,5 +1,91 @@
 <!doctype html>
-<html lang="fr"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"/>
-<meta name="theme-color" content="#0b5138"/><title>TrekMap France</title>
-<style>body{font:16px system-ui,sans-serif;display:grid;place-items:center;min-height:100vh;margin:0;background:#eff7f1;color:#123e2a;text-align:center}main{max-width:25rem;padding:2rem}a{display:inline-block;margin-top:1rem;padding:.8rem 1.4rem;background:#0b6b49;color:white;border-radius:1rem}</style>
-</head><body><main><h1>🥾 TrekMap France</h1><p>Application de randonnée reliée à TrekMap France.</p><p>La première ouverture nécessite une connexion au site.</p><a href="https://trekmap-france.onrender.com">Ouvrir TrekMap</a></main></body></html>
+<html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#0b5138"><title>TrekMap France · Application</title>
+<style>
+:root{font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;color:#173b2c;background:#f3f8f4}
+*{box-sizing:border-box}body{margin:0;min-height:100dvh}button{font:inherit;cursor:pointer}
+header{padding:calc(20px + env(safe-area-inset-top,0px)) 21px 26px;color:#fff;background:linear-gradient(140deg,#084b37,#147956);border-radius:0 0 28px 28px}
+header .brand{display:flex;align-items:center;gap:10px;font-size:14px;font-weight:850;color:#d5f1df}header .logo{font-size:25px}h1{font-size:30px;letter-spacing:-.04em;line-height:1.15;margin:22px 0 10px}header p{max-width:35rem;font-size:14px;line-height:1.6;color:#d2ebdb;margin:0}
+.status{display:inline-flex;align-items:center;gap:8px;border-radius:20px;padding:8px 11px;margin-top:17px;background:#ffffff24;font-size:12px;font-weight:750}
+.status i{width:9px;height:9px;border-radius:50%;background:#d3e2a5}
+main{max-width:850px;padding:21px 15px calc(95px + env(safe-area-inset-bottom,0px));margin:auto}
+.hero{width:100%;text-align:left;padding:20px;border:0;border-radius:20px;color:#fff;background:linear-gradient(115deg,#127a51,#0a523c);display:grid;gap:8px;box-shadow:0 8px 24px #145a3630}
+.hero b{font-size:20px}.hero span{font-size:13px;color:#d7eee0;line-height:1.5}
+h2{font-size:18px;letter-spacing:-.02em;margin:27px 3px 12px}section{display:grid;gap:11px}
+.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:11px}
+.tile{border:1px solid #d6e8dc;background:#fff;border-radius:17px;padding:16px;text-align:left;min-height:134px;display:flex;flex-direction:column;gap:8px;box-shadow:0 4px 12px #2449310a}
+.tile .icon{font-size:26px}.tile b{font-size:15px}.tile small{font-size:12px;color:#5b7668;line-height:1.5}
+.notice{padding:15px;border:1px solid #cfe1d4;background:#f5fbf6;border-radius:15px;font-size:13px;line-height:1.5;color:#335946}
+#routes{display:grid;gap:9px}
+.route{display:flex;justify-content:space-between;align-items:center;gap:10px;text-align:left;border:1px solid #d4e7db;background:#fff;border-radius:13px;padding:13px 14px;min-height:57px}
+.route b{display:block;font-size:14px;overflow:hidden;text-overflow:ellipsis}.route small{display:block;color:#698173;font-size:11px;margin-top:3px}
+.route .arrow{font-size:19px;color:#13704c}
+#feedback{min-height:21px;padding:5px 3px;font-size:13px;color:#93522e}
+footer{padding:14px;color:#608273;font-size:12px;text-align:center;line-height:1.55}
+button:focus-visible{outline:3px solid #d69c2e;outline-offset:3px}
+@media(min-width:680px){header{padding-left:max(20px,calc((100% - 800px)/2))}main{padding:26px 20px 60px}.grid{grid-template-columns:repeat(4,minmax(0,1fr))}.tile{min-height:154px}}
+@media(prefers-reduced-motion:no-preference){button:active{transform:scale(.985)}}
+</style></head><body>
+<header>
+ <div class="brand"><span class="logo" aria-hidden="true">🥾</span> TREKMAP FRANCE <span aria-hidden="true">·</span> ANDROID</div>
+ <h1>La randonnée commence ici.</h1>
+ <p>La carte, le GPS et tes treks téléchargés peuvent s'ouvrir sans attendre le serveur. Retrouve tous les itinéraires en ligne dès que tu le souhaites.</p>
+ <div class="status" id="network"><i aria-hidden="true"></i> <span>Application prête, même sans connexion</span></div>
+</header>
+<main>
+ <button class="hero" id="offline-map" type="button"><b>🗺️ Ouvrir ma carte</b><span>Carte Android locale · tracés sauvegardés · suivi GPS · points de repère</span><span aria-hidden="true">Explorer →</span></button>
+ <h2>Mes outils de randonnée</h2>
+ <div class="grid" role="group" aria-label="Outils TrekMap">
+  <button type="button" class="tile" id="saved-routes"><span class="icon" aria-hidden="true">🎒</span><b>Treks téléchargés</b><small>Retrouver mes itinéraires enregistrés</small></button>
+  <button type="button" class="tile" id="journal"><span class="icon" aria-hidden="true">📍</span><b>Mon carnet GPS</b><small>Traces et randonnées enregistrées</small></button>
+  <button type="button" class="tile" id="online"><span class="icon" aria-hidden="true">🌐</span><b>TrekMap en ligne</b><small>Recherche, profil, favoris et TrekBrain</small></button>
+  <button type="button" class="tile" id="refresh"><span class="icon" aria-hidden="true">🔄</span><b>Actualiser</b><small>Rafraîchir mes treks stockés sur ce téléphone</small></button>
+ </div>
+ <h2>Prêts pour la randonnée <span id="route-count" aria-live="polite"></span></h2>
+ <section id="routes" aria-label="Liste des treks enregistrés"><div class="notice">Chargement des itinéraires de cet appareil…</div></section>
+ <p role="status" aria-live="polite" id="feedback"></p>
+ <div class="notice">Pour utiliser une carte complète sans réseau, prépare le trek et télécharge ses sections cartographiques en Wi-Fi avant de partir. Le GPS fonctionne indépendamment de Render, mais doit être vérifié sur le terrain.</div>
+ <footer>Interface installée dans l'APK · Les nouveaux treks et TrekBrain nécessitent une connexion au serveur.</footer>
+</main>
+<script>
+(function(){
+'use strict';
+var $=function(id){return document.getElementById(id)};
+var native=function(){return window.Capacitor&&window.Capacitor.Plugins&&window.Capacitor.Plugins.TrekMapNativeGPS};
+function feedback(m){$('feedback').textContent=m||''}
+async function action(name,data){
+ var plugin=native();
+ if(!plugin||typeof plugin[name]!=='function'){feedback('Ouvre cette page depuis l’application Android TrekMap.');return null}
+ try{feedback('Ouverture…');var result=await plugin[name](data||{});feedback('');return result||{}}
+ catch(e){feedback(e.message||'Cet outil Android n’a pas pu s’ouvrir.');return null}
+}
+async function refresh(){
+ var plugin=native();
+ if(!plugin){$('routes').textContent='Cette liste est disponible depuis l’application Android.';return}
+ try{
+  var response=await plugin.listOfflineRoutes();
+  var items=Array.isArray(response.routes)?response.routes:[];
+  $('route-count').textContent='('+items.length+')';
+  var panel=$('routes');panel.replaceChildren();
+  if(!items.length){var empty=document.createElement('div');empty.className='notice';empty.textContent='Aucun trek sauvegardé sur cet appareil. Va dans TrekMap en ligne, choisis un trek et utilise « Mode randonnée » pour le conserver ici.';panel.appendChild(empty);return}
+  items.forEach(function(item){
+   var b=document.createElement('button');b.type='button';b.className='route';
+   var left=document.createElement('span'),title=document.createElement('b'),details=document.createElement('small'),arrow=document.createElement('span');
+   title.textContent=item.name||'Randonnée';details.textContent=(item.region||'France')+' · '+Number(item.sections||1)+' section(s)';
+   left.append(title,details);arrow.className='arrow';arrow.textContent='›';b.append(left,arrow);
+   b.addEventListener('click',function(){action('openOfflineMap',{id:String(item.id)})});
+   panel.appendChild(b);
+  });
+ }catch(e){feedback('Lecture des treks enregistrés indisponible : '+(e.message||e))}
+}
+$('offline-map').addEventListener('click',function(){action('openOfflineMap')});
+$('saved-routes').addEventListener('click',function(){action('openOfflineRoutes')});
+$('journal').addEventListener('click',function(){action('openOfflineJournal')});
+$('online').addEventListener('click',function(){action('openOnline')});
+$('refresh').addEventListener('click',refresh);
+function network(){ $('network').querySelector('span').textContent=navigator.onLine?'Application prête · mode local disponible':'Sans connexion · mode local disponible'}
+window.addEventListener('online',network);window.addEventListener('offline',network);network();
+refresh();
+})();
+</script>
+</body></html>
