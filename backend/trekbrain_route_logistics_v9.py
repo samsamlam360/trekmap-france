@@ -1461,8 +1461,10 @@ def _source_aware_stage_plan(
     terrain = [
         item for item in (resource_rows or [])
         if isinstance(item, dict) and has_osm_identity(item)
-        and (confirmed_water_reference(item)
-             or _confirmed_food_reference(item))
+        and ((str(item.get("category") or "") == "water"
+              and confirmed_water_reference(item))
+             or (str(item.get("category") or "") == "food"
+                 and _confirmed_food_reference(item)))
     ][:100]
     options = []
     for night, centre in enumerate(baseline, 1):
@@ -1517,9 +1519,11 @@ def _source_aware_stage_plan(
                     # and groceries, all else being reasonably equal.
                     near = [row for row in terrain
                             if _geo_km(stay, row) <= 1.5]
-                    benefit += (0.3 if any(confirmed_water_reference(row)
+                    benefit += (0.3 if any(row.get("category") == "water"
+                                          and confirmed_water_reference(row)
                                           for row in near) else 0.0)
-                    benefit += (0.2 if any(_confirmed_food_reference(row)
+                    benefit += (0.2 if any(row.get("category") == "food"
+                                          and _confirmed_food_reference(row)
                                           for row in near) else 0.0)
                 score = reward + benefit - motion * 0.12
                 expanded.append((score, moved + motion, boundaries + [progress],
@@ -1790,8 +1794,13 @@ def _attach_logistics(result: dict[str, Any], data, legacy_main, v3, roundtrip, 
     # hard daily limits. ORS will still verify actual walking access below.
     stage_plan, stage_plan_diagnostics = _source_aware_stage_plan(
         roundtrip, coords, old_stages, anchors, pool, days, daily_max,
-        resource_rows=(list(result.get("water") or [])
-                       + list(result.get("resources") or result.get("food") or [])),
+        resource_rows=(
+            [{**row, "category": "water"}
+             for row in (result.get("water") or []) if isinstance(row, dict)]
+            + [{**row, "category": "food"}
+               for row in (result.get("resources") or result.get("food") or [])
+               if isinstance(row, dict)]
+        ),
     )
     if stage_plan:
         stage_lengths = stage_plan["lengths"]
