@@ -1,0 +1,51 @@
+name: One-off OSM water provider diagnostic
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/water-provider-probe-20261017.yml'
+permissions:
+  contents: read
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Probe public providers with tiny bbox and safely report availability
+        run: |
+          python - <<'PY'
+          import urllib.parse, urllib.request, urllib.error, json, time, concurrent.futures
+          HEADERS={"User-Agent":"TrekMap-France/5.0 (+https://trekmap-france.onrender.com)","Accept":"application/json"}
+          def probe(label,url,params=None,post=False):
+              body=urllib.parse.urlencode(params or {}).encode()
+              target=url if post else url+"?"+body.decode()
+              start=time.monotonic()
+              try:
+                  r=urllib.request.Request(target,data=body if post else None,headers=HEADERS,method="POST" if post else "GET")
+                  with urllib.request.urlopen(r,timeout=6) as res:
+                      data=res.read(450000)
+                      status=res.status
+                  obj=json.loads(data)
+                  features=obj.get("features") if isinstance(obj,dict) else None
+                  elements=obj.get("elements") if isinstance(obj,dict) else None
+                  types=sorted({(f.get("properties") or {}).get("osm_value","") for f in (features or [])})[:10]
+                  if isinstance(features,list):
+                      return label,dict(status=status,time_s=round(time.monotonic()-start,2),count=len(features),osm_values=types,invalid=False)
+                  return label,dict(status=status,time_s=round(time.monotonic()-start,2),count=len(elements or []),remark=bool(obj.get("remark")),invalid=not isinstance(elements,list))
+              except Exception as e:
+                  return label,dict(error=type(e).__name__,message=str(e)[:110],time_s=round(time.monotonic()-start,2))
+          lat,lon=48.857,2.351
+          # Unnamed Paris fountains provide a positive-control area for mapping.
+          water='[out:json][timeout:4];nwr["amenity"="drinking_water"](around:1500,48.857,2.351);out center tags 15;'
+          jobs=[
+            ("Photon reverse exact", "https://photon.komoot.io/reverse", {"lat":lat,"lon":lon,"radius":2,"limit":20,"osm_tag":"amenity:drinking_water"},False),
+            ("Photon reverse multiple", "https://photon.komoot.io/reverse", {"lat":lat,"lon":lon,"radius":2,"limit":20,"osm_tag":["amenity:drinking_water","natural:spring"]},False),
+            ("Overpass FOSSGIS", "https://lz4.overpass-api.de/api/interpreter", {"data":water},True),
+            ("Overpass private.coffee", "https://overpass.private.coffee/api/interpreter", {"data":water},True),
+            ("Overpass mail.ru", "https://maps.mail.ru/osm/tools/overpass/api/interpreter", {"data":water},True),
+          ]
+          with concurrent.futures.ThreadPoolExecutor(max_workers=5) as pool:
+              futures=[pool.submit(probe,*job) for job in jobs]
+              for f in concurrent.futures.as_completed(futures):
+                  label,info=f.result()
+                  print(json.dumps({"provider":label,**info},ensure_ascii=False))
+          PY
