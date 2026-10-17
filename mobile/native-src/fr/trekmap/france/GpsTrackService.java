@@ -177,9 +177,26 @@ public class GpsTrackService extends Service implements LocationListener {
             set("note","Position simulée ignorée.");GpsTrackStore.save(this,session);return;
         }
         if(location.getTime()<System.currentTimeMillis()-30000)return;
-        if(location.hasAccuracy() && location.getAccuracy()>45){
-            set("accuracy",Math.round(location.getAccuracy()));
-            set("note","Signal GPS trop imprécis.");GpsTrackStore.save(this,session);return;
+        // A missing accuracy estimate is never permission to count metres.
+        if(!location.hasAccuracy() || !Float.isFinite(location.getAccuracy()) ||
+                location.getAccuracy()>45 || location.getAccuracy()<0){
+            set("accuracy",location.hasAccuracy() && Float.isFinite(location.getAccuracy())
+                    ?Math.round(location.getAccuracy()):-1);
+            set("note","Position GPS sans précision fiable. Distance non comptée.");
+            GpsTrackStore.save(this,session);return;
+        }
+        // Android may deliver cached fixes out of order after the screen wakes.
+        // Monotonic fix timestamps stop an older position counting as a walk.
+        if(previous!=null &&
+                location.getElapsedRealtimeNanos()<=previous.getElapsedRealtimeNanos()){
+            return;
+        }
+        // A long location outage must not become a fictitious straight-line
+        // walk. Reacquire an anchor and count only subsequent measured legs.
+        if(previous!=null &&
+                location.getElapsedRealtimeNanos()-previous.getElapsedRealtimeNanos()>90000000000L){
+            previous=null;lastSampleTime=0;
+            set("note","Signal GPS retrouvé après une coupure : distance de la période sans signal non estimée.");
         }
         // Reject teleport jumps without resetting the accepted anchor.
         double step=previous==null?0:location.distanceTo(previous);
