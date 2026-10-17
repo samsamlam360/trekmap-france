@@ -203,14 +203,10 @@ def _terrain_resource(element: dict[str, Any]) -> dict[str, Any] | None:
     lat, lon = point
     category = None
     status = "unverified"
-    if (
-        tags.get("amenity") == "drinking_water"
-        or tags.get("man_made") == "water_tap"
-        or tags.get("natural") == "spring"
-    ):
+    from .trekbrain_water_evidence_v9 import mapped_water_source, potability_status
+    if mapped_water_source(tags):
         category = "water"
-        # Consistent interpretation across all TrekBrain OSM providers.
-        from .trekbrain_water_evidence_v9 import potability_status
+        # Explicit no/conditional water tags remain stronger than the icon.
         status = potability_status(tags)
     elif tags.get("shop") in {
         "supermarket", "convenience", "bakery", "general",
@@ -299,6 +295,9 @@ def _bbox_route_query(
         '["amenity"="drinking_water"]',
         '["man_made"="water_tap"]',
         '["natural"="spring"]',
+        '["amenity"="water_point"]',
+        '["man_made"="water_well"]["drinking_water"="yes"]',
+        '["man_made"="water_pump"]["drinking_water"="yes"]',
         '["railway"="station"]',
         '["railway"="halt"]',
         '["amenity"="bus_station"]',
