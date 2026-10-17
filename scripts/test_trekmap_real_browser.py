@@ -278,9 +278,9 @@ try:
     # Quatre onglets visibles remplacent les anciennes actions dispersées.
     nav_buttons = driver.find_elements(By.CSS_SELECTOR,
         '#tm-primary-navigation [data-tm-space]')
-    assert [b.text.strip() for b in nav_buttons] == [
-        '⌖ Explorer', '✦ TrekBrain', '▣ Mes treks', '♙ Profil'
-    ], "Desktop navigation does not match four spaces"
+    assert [b.get_attribute("aria-label") for b in nav_buttons] == [
+        "Explorer", "TrekBrain", "Mes treks", "Profil"
+    ], "Desktop navigation must expose four well-labelled spaces"
     topbar_layout = driver.execute_script(
         "const s=document.getElementById('tm-main-search-wrap').getBoundingClientRect();"
         "const b=document.querySelector('#tm-primary-navigation [data-tm-space=brain]').getBoundingClientRect();"
