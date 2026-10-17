@@ -94,6 +94,8 @@ jobs:
           node --check /tmp/trekmap-language.js
           node --check /tmp/trekmap-reasoning.js
           node --check /tmp/trekmap-trekbrain.js
+      - name: Vérifier la nouvelle navigation et ses raccourcis
+        run: python scripts/test_four_spaces_design.py
 
       - name: Vérifier la syntaxe Python
         run: python -m compileall -q backend scripts
