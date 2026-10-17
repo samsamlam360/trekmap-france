@@ -156,7 +156,7 @@ body.tm-design-library-mode #tm-profile-v2 .tm-p-hero p{font-size:12px}
   if(group){
    Array.from(actions.children).forEach(function(node){
     if(node===group.parentElement ||node.id==='plan-detail'||node.id==='hike-navigate-detail'
-       ||node.id==='export-detail'&&actions.querySelector('#export-detail')===node) return;
+       ||(node.id==='export-detail'&&!actions.querySelector('#plan-detail')&&!actions.querySelector('#hike-navigate-detail'))) return;
     if(node.tagName==='BUTTON')group.appendChild(node);
    });
    // L'édition des informations arrive après une requête réseau : regrouper aussi ce bouton.
