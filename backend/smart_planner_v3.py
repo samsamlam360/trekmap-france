@@ -1283,18 +1283,14 @@ def _postroute_corridor_resources(boundaries, intent, existing_items):
     if len(interiors) > 2:
         interiors = [interiors[0], interiors[-1]]
 
-    # First search actual UNSERVED walking-day interiors. This avoids
-    # wasting the only grocery slot at the trailhead while an unserved day
-    # has a village midway along the line. Retain the original start/night
-    # anchors as a secondary chance within the SAME six-call provider cap.
+    # Food near the actual start is valuable for resupply and is often much
+    # easier to resolve than a shop near a mathematical mountain day split.
     food_anchors = []
-    stage_food = intent.get("_food_corridor_anchors")
-    if isinstance(stage_food, list):
-        food_anchors.extend(anchor for anchor in stage_food[:8]
-                            if isinstance(anchor, dict)
-                            and "lat" in anchor and "lon" in anchor)
     if boundaries:
         food_anchors.append(boundaries[0])
+    # If the first overnight boundary is at an isolated summit, a later
+    # overnight village can still have a real grocery. Include both first and
+    # last intermediate stages in the existing six-request wave.
     food_anchors.extend(interiors)
 
     # TrekBrain can supply measured mid-stage anchors on its immutable
@@ -1330,8 +1326,7 @@ def _postroute_corridor_resources(boundaries, intent, existing_items):
             stay_jobs.append((boundary, "stay", tags, 8.0))
 
     for boundary in food_anchors:
-        if (intent.get("food") and _closest(foods, boundary, 5.0) is None
-                and not any(_dist(boundary, row[0]) < 0.25 for row in food_jobs)):
+        if intent.get("food") and _closest(foods, boundary, 5.0) is None:
             food_jobs.append((boundary, "food", (
                 "shop:supermarket", "shop:convenience", "shop:bakery",
                 "shop:general", "shop:grocery", "shop:greengrocer",
