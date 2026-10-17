@@ -860,15 +860,18 @@ async def upload_gpx(file:UploadFile=File(...),user=Depends(current_user)):
 # Auth / favorites / plans
 # -----------------------------
 @app.post("/auth/register")
-def register(data:RegisterUser, response: Response):
+def register(data:RegisterUser, response: Response, request: Request):
     username=normalize_text(data.username); email=normalize_text(data.email).lower()
     if not re.fullmatch(r"[A-Za-z0-9_.-]{3,80}",username): raise HTTPException(status_code=400,detail="Nom d'utilisateur invalide.")
     if not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+",email): raise HTTPException(status_code=400,detail="Adresse e-mail invalide.")
+    from .account_switch import ensure_device_schema, link_login
+    ensure_device_schema()
     db=db_or_503()
     try:
         if db.execute(text("SELECT 1 FROM users WHERE LOWER(username)=LOWER(:u) OR LOWER(email)=LOWER(:e)"),{"u":username,"e":email}).first(): raise HTTPException(status_code=409,detail="Ce compte existe déjà.")
         uid=db.execute(text("INSERT INTO users(username,email,password_hash) VALUES(:u,:e,:p) RETURNING id"),{"u":username,"e":email,"p":hash_password(data.password)}).scalar_one()
         token=secrets.token_urlsafe(48); db.execute(text("INSERT INTO user_sessions(token,user_id,expires_at) VALUES(:t,:u,:x)"),{"t":token,"u":uid,"x":datetime.now()+timedelta(days=SESSION_DURATION_DAYS)})
+        link_login(request,response,int(uid),db)
         db.commit()
         set_session_cookies(response, token)
         payload={"user":{"id":int(uid),"username":username,"email":email,"is_admin":False}}
@@ -879,12 +882,15 @@ def register(data:RegisterUser, response: Response):
     finally: db.close()
 
 @app.post("/auth/login")
-def login(data:LoginUser, response: Response):
+def login(data:LoginUser, response: Response, request: Request):
+    from .account_switch import ensure_device_schema, link_login
+    ensure_device_schema()
     db=db_or_503()
     try:
         row=db.execute(text("SELECT id,username,email,password_hash,is_admin FROM users WHERE LOWER(username)=LOWER(:l) OR LOWER(email)=LOWER(:l)"),{"l":normalize_text(data.login)}).first()
         if not row or not verify_password(data.password,row.password_hash): raise HTTPException(status_code=401,detail="Identifiant ou mot de passe incorrect.")
         token=secrets.token_urlsafe(48); db.execute(text("INSERT INTO user_sessions(token,user_id,expires_at) VALUES(:t,:u,:x)"),{"t":token,"u":row.id,"x":datetime.now()+timedelta(days=SESSION_DURATION_DAYS)})
+        link_login(request,response,int(row.id),db)
         db.commit()
         set_session_cookies(response, token)
         payload={"user":{"id":row.id,"username":row.username,"email":row.email,"is_admin":bool(row.is_admin)}}
@@ -897,10 +903,12 @@ def login(data:LoginUser, response: Response):
 def me(user=Depends(current_user)): return {"user":{k:user[k] for k in ("id","username","email","is_admin")}}
 
 @app.post("/auth/logout")
-def logout(response: Response, user=Depends(current_user)):
+def logout(response: Response, request: Request, user=Depends(current_user)):
     db=db_or_503()
     try:
         db.execute(text("DELETE FROM user_sessions WHERE token=:t"),{"t":user["token"]})
+        from .account_switch import forget_device
+        forget_device(request,response,db)
         db.commit()
         clear_session_cookies(response)
         return {"message":"Déconnecté"}
