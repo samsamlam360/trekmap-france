@@ -1,0 +1,123 @@
+name: One-off TrekBrain phase1 multi Photon benchmark
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/trekbrain-phase1-multi-photon-20261017.yml'
+permissions:
+  contents: read
+concurrency:
+  group: one-off-trekbrain-multi-photon-20261017
+  cancel-in-progress: false
+jobs:
+  audited-real:
+    runs-on: ubuntu-latest
+    timeout-minutes: 28
+    env:
+      EXPECTED_SHA: 97315bae8a53aba5e2dda55bc1c9ddbce9b98548
+      TREKBRAIN_BENCHMARK_URL: https://trekmap-france.onrender.com
+      TREKBRAIN_BENCHMARK_MIN_INTERVAL_SECONDS: '18'
+    steps:
+      - uses: actions/checkout@v4
+      - name: Refuse wrong Render revision
+        shell: python
+        run: |
+          import os,time,urllib.request,json
+          for _ in range(45):
+              try:
+                  with urllib.request.urlopen('https://trekmap-france.onrender.com/ai/status', timeout=20) as resp:
+                      body=json.load(resp)
+                  live=str(body.get('build_commit','')).lower()
+                  if live==os.environ['EXPECTED_SHA'].lower():
+                      print('Benchmark LIVE commit',live,flush=True);break
+                  print('Different live commit',live,flush=True)
+              except Exception as error:
+                  print(type(error).__name__,str(error)[:200],flush=True)
+              time.sleep(10)
+          else:
+              raise SystemExit('Cannot benchmark a different production build')
+      - name: Five previously unbenchmarked regions, with genuine cache-miss telemetry
+        shell: python
+        continue-on-error: true
+        env:
+          TREKBRAIN_BENCHMARK_OUT: results-new-regions
+        run: |
+          import os,sys
+          sys.path.insert(0,'scripts')
+          import benchmark_trekbrain_v9_production as core
+          candidates=[
+            ('brive-correze','Brive-la-Gaillarde, Corrèze',2,15,
+             'Prépare une randonnée de deux jours en boucle depuis Brive-la-Gaillarde, environ 15 km par jour avec camping, eau potable et commerces.'),
+            ('senlis-oise','Senlis, Oise',2,16,
+             'Trouve un trek en boucle de deux jours à Senlis dans l’Oise, 16 km par jour avec gîte, fontaines potables et ravitaillement.'),
+            ('tournus-saone-loire','Tournus, Saône-et-Loire',3,14,
+             'Propose une boucle de trois jours au départ de Tournus, 14 km par jour, hébergements accessibles à pied, eau potable et commerces.'),
+            ('vence-alpes-maritimes','Vence, Alpes-Maritimes',2,15,
+             'Une randonnée pédestre de deux jours en boucle depuis Vence, environ 15 km par jour avec camping, points d’eau potable et nourriture.'),
+            ('blois-loir-cher','Blois, Loir-et-Cher',2,16,
+             'Prépare une randonnée de deux jours en boucle au départ de Blois, 16 km par jour avec gîte, eau potable et commerces.'),
+          ]
+          core.SCENARIOS=[{
+             'id':sid,'prompt':prompt,'region':region,'days':days,'daily_km':km,
+             'difficulty':'medium','route_type':'Boucle',
+             'require_transit':False,'require_water':True,
+             'require_accommodation':True,'require_food':True,
+             'expect_type':'boucle','expect_close':True,
+          } for sid,region,days,km,prompt in candidates]
+          core.OUT_DIR=core.Path(os.environ['TREKBRAIN_BENCHMARK_OUT'])
+          core.OUT_DIR.mkdir(parents=True,exist_ok=True)
+          core.main()
+      - name: Ten identical previous benchmark prompts for comparable before-after
+        shell: python
+        continue-on-error: true
+        env:
+          TREKBRAIN_BENCHMARK_OUT: results-repeat-ten
+        run: |
+          import os,sys
+          sys.path.insert(0,'scripts')
+          import benchmark_trekbrain_v9_unseen20 as unseen
+          import benchmark_trekbrain_v9_production as core
+          ids=['cote-granit-rose','sarlat-dordogne','florac-cevennes','luberon-bonnieux',
+               'etretat-pays-caux','lac-blanc-vosges','nasbinals-aubrac',
+               'chartreuse-saint-pierre','cauterets-pont-espagne','riquewihr-vosges']
+          rows={row['id']:row for row in unseen.SCENARIOS}
+          assert len(ids)==len(set(ids))==10 and all(key in rows for key in ids)
+          core.SCENARIOS=[rows[key] for key in ids]
+          core.OUT_DIR=core.Path(os.environ['TREKBRAIN_BENCHMARK_OUT'])
+          core.OUT_DIR.mkdir(parents=True,exist_ok=True)
+          core.main()
+      - name: Save complete results even when readiness checks fail
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: trekbrain-phase1-multi-photon-15
+          path: |
+            results-new-regions/
+            results-repeat-ten/
+          if-no-files-found: warn
+          retention-days: 14
+      - name: Print independent summaries and cold-cache evidence
+        if: always()
+        shell: python
+        run: |
+          from pathlib import Path
+          import os,json
+          summaries=[]
+          for name in ['results-new-regions','results-repeat-ten']:
+              base=Path(name)
+              report=base/'trekbrain-production-benchmark.md'
+              summary=report.read_text(encoding='utf-8') if report.exists() else f'MISSING REPORT {name}'
+              print(summary)
+              datafile=base/'trekbrain-production-benchmark.json'
+              if datafile.exists():
+                  data=json.loads(datafile.read_text(encoding='utf-8'))
+                  for row in data.get('scenarios',[]):
+                      print('CACHE VERIFICATION',row['id'],
+                            'status=',row.get('osm_cache_status'),
+                            'hits=',row.get('osm_cache_hits'),
+                            'cold=',row.get('cold_cache'),
+                            'nights_walk=',row.get('nights_walk_confirmed'),
+                            'water_referenced=',row.get('water_potable_referenced'),
+                            flush=True)
+              summaries.append('## '+name+'\n'+summary)
+          with open(os.environ['GITHUB_STEP_SUMMARY'],'a',encoding='utf-8') as f:
+              f.write('\n\n'.join(summaries))
