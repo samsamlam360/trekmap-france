@@ -824,6 +824,21 @@ def _choose_stays(roundtrip, coords, rows, days: int, daily_target: float, night
     return beam[0][2] if beam else []
 
 
+def _near_stage_end_coverage(anchors, projected) -> set[int]:
+    """Only geographically close, sourced stays merit a pedestrian ORS check.
+
+    A stay aligned by progress alone may still be many kilometres from the
+    real stage end. This never declares the walking connector valid.
+    """
+    return {
+        int(anchor["night"])
+        for anchor in (anchors or [])
+        if any(_geo_km(anchor, stay) <= _WALK_CONNECTOR_LIMIT_KM
+               for stay in (projected or [])
+               if str(stay.get("source_url") or "").strip())
+    }
+
+
 def _preloaded_result_stays(result: dict[str, Any], category: str) -> list[dict[str, Any]]:
     """Reuse overnight evidence already paid for during route construction."""
     rows = []
@@ -935,7 +950,14 @@ def _discover_stays(
         preloaded_chosen = _choose_stays(
             roundtrip, coords, preloaded_projected, days, daily_target, night_anchors
         )
-        if len(preloaded_chosen) >= needed:
+        # Generic lodging can be preloaded as far-away transfer candidates.
+        # Do not suppress the existing route-wide search in that case: find
+        # real near-stage options before spending ORS Matrix calls.
+        preloaded_walk_nights = _near_stage_end_coverage(night_anchors, preloaded_projected)
+        preloaded_sufficient = (len(preloaded_chosen) >= needed and
+            (category != "lodging" or not night_anchors or
+             len(preloaded_walk_nights) >= needed))
+        if preloaded_sufficient:
             if want_terrain:
                 try:
                     _extra_stays, terrain_rows, terrain_preloaded = provider_call(
@@ -1047,15 +1069,24 @@ def _discover_stays(
     # are both empty/incomplete, allow exactly one bounded Photon stage-anchor
     # wave as a rescue. The jobs inside that wave run concurrently and every
     # candidate is still projected back onto the validated route before use.
+    near_nights = _near_stage_end_coverage(night_anchors, projected)
+    needs_nearby_lodging = bool(
+        category == "lodging" and night_anchors
+        and len(near_nights) < needed
+    )
     if (
-        len(chosen) < needed
+        (len(chosen) < needed or needs_nearby_lodging)
         and not photon_hedge_started
         and deadline - time.monotonic() >= 0.9
     ):
         rescued_anchors = night_anchors
         if night_anchors is not None:
-            supplied_nights = {int(row.get("_night") or 0) for row in chosen}
-            rescued_anchors = [anchor for anchor in night_anchors if anchor["night"] not in supplied_nights]
+            # On generic nights, a remote transfer candidate is NOT enough to
+            # stop discovery of an actual walking-distance alternative.
+            supplied_nights = (near_nights if needs_nearby_lodging else
+                {int(row.get("_night") or 0) for row in chosen})
+            rescued_anchors = [anchor for anchor in night_anchors
+                               if anchor["night"] not in supplied_nights]
         rows.extend(provider_call(
             "logistics.photon_fallback",
             _photon_split_stays, v3, roundtrip, coords, category, days, rescued_anchors
