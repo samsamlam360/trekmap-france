@@ -21,6 +21,7 @@ from sqlalchemy import text
 from . import smart_planner_v7 as v7
 from .trekbrain_water_evidence_v9 import (
     confirmed_water_reference, has_osm_identity, water_evidence_status,
+    merge_water_evidence,
 )
 from .trekbrain_geo_safety_v9 import (
     _filter_active,
@@ -573,22 +574,11 @@ def _merge_supplemented_resources(result: dict[str, Any], rows: list[dict[str, A
     transit_rows = []
 
     def add_unique(target, item, *, category=None):
-        # A fresh 'drinking_water=no' overrides stale cached source metadata.
+        # Preserve restrictions even when an OSM object already exists in the
+        # primary result; don't treat a newly merged point as available water.
         def preserve_newer_unsafe_status(existing):
-            if (
-                target is water
-                and water_evidence_status(item) == "not_potable"
-            ):
-                existing["status"] = "not_potable"
-                existing["water_status"] = "not_potable"
-                existing["notes"] = "Eau signalée non potable : ne pas boire."
-                if isinstance(item.get("osm_tags"), dict):
-                    existing["osm_tags"] = dict(item["osm_tags"])
-            elif (target is water and water_evidence_status(existing) == "unverified"
-                  and water_evidence_status(item) == "potable_referenced"):
-                existing.update({name: item[name] for name in (
-                    "status", "water_status", "osm_tags", "notes", "source_url",
-                ) if name in item})
+            if target is water:
+                merge_water_evidence(existing, item)
 
         key = str(item.get("source_url") or "")
         try:
