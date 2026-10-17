@@ -1,0 +1,27 @@
+name: Export signed Android v1009 for download
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/export-signed-android-v1009.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  signed-apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Fetch signed public Android release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release download android-v1009 --repo samsamlam360/trekmap-france --pattern 'trekmap-france.apk' --dir . --clobber
+          echo '125d1555002cc9bb19ae2a3f02ab72b00fff71cf22f4fb99b654fc7f8f2e914a  trekmap-france.apk' | sha256sum -c -
+          unzip -t trekmap-france.apk | tail -n 1
+      - name: Make verified APK downloadable
+        uses: actions/upload-artifact@v4
+        with:
+          name: trekmap-france-v1009-signe
+          path: trekmap-france.apk
+          if-no-files-found: error
+          retention-days: 7
