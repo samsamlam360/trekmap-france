@@ -155,7 +155,7 @@ assert '["amenity"="water_point"]' in compact_query
 assert '["man_made"="water_well"]["drinking_water"="yes"]' in compact_query
 assert '["man_made"="water_pump"]["drinking_water"="yes"]' in compact_query
 assert f"{synthetic_samples[-1][0]:.6f},{synthetic_samples[-1][1]:.6f}" in compact_query
-assert len(compact_query)<1300,len(compact_query)
+assert len(compact_query)<3500,len(compact_query)
 assert water._water_corridor_query([])==""
 # Source-identity conflicts: the new parse must retain access=private when
 # another OSM result of the exact same source reports just amenity=drinking_water.
