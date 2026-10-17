@@ -1110,6 +1110,10 @@ def _photon_anchor_resource(anchor, category: str, osm_tags, radius_km: float, q
         return None
 
     best = None
+    # Photon already fetched up to 20 OSM features in this ONE HTTP response.
+    # Preserve a small, separately validated selection for multiple walking
+    # days. The existing caller still receives the same primary resource.
+    verified_candidates = []
     for feature in (payload.get("features") or []) if isinstance(payload, dict) else []:
         props = feature.get("properties") or {}
         country_code = str(props.get("countrycode") or props.get("country_code") or "").upper()
@@ -1211,9 +1215,30 @@ def _photon_anchor_resource(anchor, category: str, osm_tags, radius_km: float, q
             rank = (0 if confirmed_water_reference(row) else 1, distance)
         else:
             rank = (distance,)
+        if category in {"water", "food"}:
+            verified_candidates.append((rank, row))
         if best is None or rank < best[0]:
             best = (rank, row)
-    return best[1] if best else None
+    if best is None:
+        return None
+    primary = best[1]
+    if category in {"water", "food"}:
+        # Source URL is canonical, and a separate OSM element at identical
+        # coordinates can carry a vital non-potability warning. Keep source
+        # identity, not only rounded coordinates, as the deduplication key.
+        seen = {primary["source_url"]}
+        alternatives = []
+        for _score, row in sorted(verified_candidates, key=lambda item: item[0]):
+            key = row["source_url"]
+            if key in seen:
+                continue
+            seen.add(key)
+            alternatives.append(row)
+            if len(alternatives) >= 6:
+                break
+        if alternatives:
+            primary["_photon_alternatives"] = alternatives
+    return primary
 
 
 def _postroute_corridor_resources(boundaries, intent, existing_items):
@@ -1340,21 +1365,30 @@ def _postroute_corridor_resources(boundaries, intent, existing_items):
                 item = future.result()
             except Exception:
                 item = None
-            if item:
-                found.append(item)
+            if isinstance(item, dict):
+                # Extra OSM objects are drawn from the original Photon
+                # response, with the same hard tag/source/geographical
+                # checks. Do NOT open another HTTP call to retrieve them.
+                alternatives = item.get("_photon_alternatives")
+                found.append({key: value for key, value in item.items()
+                              if key != "_photon_alternatives"})
+                if isinstance(alternatives, list):
+                    found.extend(row for row in alternatives[:6]
+                                 if isinstance(row, dict))
 
     deduped, seen = [], set()
     for item in found:
         key = (
             item.get("category"),
-            round(float(item.get("lat")), 5),
-            round(float(item.get("lon")), 5),
+            str(item.get("source_url") or ""),
         )
         if key in seen:
             continue
         seen.add(key)
         deduped.append(item)
-    return deduped
+    # A deliberately small bound keeps the response inexpensive even if
+    # every public Photon endpoint returns its full 20-feature payload.
+    return deduped[:36]
 
 
 def _equal_progress_boundaries(route_coords, start, end, days: int):
