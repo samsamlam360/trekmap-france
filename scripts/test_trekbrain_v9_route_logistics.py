@@ -1218,3 +1218,43 @@ assert without_preference["progress"]==with_no_reference["progress"],(
     without_preference,with_no_reference
 )
 print("Deep stage planner: wider 1.25km source radius, explicit daily minimum, disjoint water sections ignored, ORS safety intact: PASS")
+
+
+# Each Photon stay request already downloads several OSM features; one
+# answer may cover several nights. Never launch another HTTP request merely
+# to harvest those features. A wrong category must remain rejected.
+class MultiStayPhoton:
+    calls = []
+    @staticmethod
+    def _photon_anchor_resource(anchor,category,tags,radius,**kw):
+        MultiStayPhoton.calls.append((anchor,category,radius))
+        return {
+            "name":"Premier camping","lat":0.001,"lon":0.2,
+            "category":"camping",
+            "source_url":"https://www.openstreetmap.org/node/980001",
+            "_photon_alternatives":[
+                {"name":"Deuxième camping","lat":0.001,"lon":0.4,
+                 "category":"camping",
+                 "source_url":"https://www.openstreetmap.org/node/980002"},
+                {"name":"Troisième camping","lat":0.001,"lon":0.6,
+                 "category":"camping",
+                 "source_url":"https://www.openstreetmap.org/node/980003"},
+                {"name":"Hôtel non demandé","lat":0.001,"lon":0.5,
+                 "category":"lodging",
+                 "source_url":"https://www.openstreetmap.org/node/980004"},
+                {"name":"Même OSM","lat":0.001,"lon":0.4,
+                 "category":"camping",
+                 "source_url":"https://www.openstreetmap.org/node/980002"},
+            ],
+        }
+
+stay_batch=logistics._photon_split_stays(
+    MultiStayPhoton,FakeRoundtrip,coords,"camping",5,
+    night_anchors=[{"lat":0.0,"lon":0.2,"night":1}])
+assert len(MultiStayPhoton.calls)==1,MultiStayPhoton.calls
+assert {s["source_url"].split("/")[-1] for s in stay_batch}=={
+    "980001","980002","980003"},stay_batch
+assert all("_photon_alternatives" not in s for s in stay_batch)
+assert all(s["category"]=="camping" for s in stay_batch)
+assert coords==base_result["route_preview"]["coords"]
+print("Stay Photon batch: three OSM camps from ONE request, no unsourced/wrong category validation: PASS")
