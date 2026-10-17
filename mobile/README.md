@@ -1,4 +1,4 @@
-# TrekMap France pour Android (premier APK de test)
+# TrekMap France pour Android : application locale avec outils de randonnée
 
 Ce dossier crée une **vraie application Android installable** avec Capacitor 8, en gardant le site Python/HTML et la base Neon inchangés. Il ne nécessite ni compte Google Play ni ordinateur Android Studio pour produire l'APK, car GitHub Actions le compile.
 
@@ -11,11 +11,11 @@ La compilation se lance à chaque PR touchant `mobile/` et après les modificati
 ## Fonctionnement technique
 
 - App ID stable : `fr.trekmap.france`. Nom : **TrekMap France**.
-- L'application Android charge exclusivement `https://trekmap-france.onrender.com` dans une WebView native. Ainsi comptes, données, TrekBrain et interface restent sur le site existant et continuent d'évoluer sans deux copies divergentes.
+- **Nouvelle architecture local-first** : Android ouvre directement l'accueil contenu dans `mobile/www/index.html`, inclus dans l'APK. Il affiche immédiatement les raccourcis carte locale, treks téléchargés, journal GPS et recherche en ligne, même si Render dort. Le bouton « TrekMap en ligne » ouvre ensuite le site HTTPS dans la WebView Capacitor uniquement sur demande.
 - La permission GPS est demandée au moment où l'utilisateur démarre l'enregistrement. Le service natif de type localisation reste actif avec notification pendant que l'écran se verrouille. Aucune permission ACCESS_BACKGROUND_LOCATION n'est demandée ; le service doit démarrer depuis l'application visible.
-- Le fond de carte hors ligne actuel de TrekMap reste une fonctionnalité **web** : son fonctionnement dans la WebView Android et la reprise hors connexion doivent encore être testés en conditions réelles. Le chargement initial du site nécessite le réseau et le démarrage hors réseau n'est **pas garanti** pour cet APK initial.
+- Le fond de carte MapLibre et ses bibliothèques sont empaquetés localement, avec une activité WebView Android séparée qui bloque toute ressource Internet. **Les tuiles géographiques ne sont disponibles hors ligne qu'après téléchargement par zones**, et les itinéraires doivent être enregistrés depuis le mode randonnée. Sans données enregistrées, le téléphone affiche un écran d'aide, pas une carte de France prétendument téléchargée. Le test sur vrai appareil reste indispensable.
 - **Suivi GPS natif expérimental** : depuis « Mode randonnée » l'APK propose « GPS Android · écran verrouillé » et ouvre une interface Android dédiée. L'enregistrement démarre seulement après un clic utilisateur dans cet écran. Pause / reprise / arrêt, distance réelle, écart au tracé, durée et export GPX en local. Le système Android peut malgré tout interrompre le service en cas de restrictions batterie ; validation sur téléphone requise.
-- Le `server.url` de Capacitor est habituellement destiné au développement. Pour l'APK de test, le seul plugin natif accepte une requête d'ouverture **uniquement** depuis `https://trekmap-france.onrender.com/randonnee`; il ne démarre pas le GPS, ne renvoie jamais de coordonnées et nécessite un clic d'enregistrement natif distinct. Pour une publication officielle, servir les ressources locales et auditer le pont WebView.
+- Le `server.url` distant a été retiré. Le shell Capacitor est servi depuis `https://localhost` en HTTPS local. `allowNavigation` est limité à `trekmap-france.onrender.com`. Le plugin Android vérifie l'URL actuelle sur le thread UI : le tableau de bord local ne peut accéder qu'aux fonctions de consultation/navigation native, alors que l'enregistrement des tracés et le suivi GPS par commande JS restent réservés à `/randonnee` sur le site officiel. Le suivi GPS exige toujours un clic distinct.
 - Le build GitHub Actions produit un APK signé par la clé **debug temporaire** du runner. Cette clé change : ne pas promettre des mises à jour sans réinstallation. Pour des mises à jour durables, configurer une clé de signature privée persistante dans les Secrets GitHub, jamais dans le dépôt.
 
 ## Développement local facultatif
@@ -98,3 +98,22 @@ Ne jamais utiliser le fond comme seule preuve de praticabilité d'un chemin. Bie
 - Un écart à l'itinéraire doit être confirmé par **3 positions fiables** ; vibration optionnelle (permission Android) avec une fréquence plafonnée. Les repères eau/refuge/ravitaillement sont créés **manuellement** depuis une position GPS, pas des confirmations d'ouverture, de potabilité ou d'accessibilité.
 
 **Limites non résolues** : uniquement une carte vectorielle locale avec ses tuiles effectivement téléchargées ; certaines zones restent vides si la préparation est incomplète. Le tracé réduit à 6 000 points peut perdre des détails. Les photos du carnet natif ne sont pas synchronisées avec le compte web. La détection du retour au tracé reste une estimation GPS, non un conseil de sécurité. Vérifier la carte/GPX de secours avant toute randonnée et tester en conditions réelles avant usage.
+
+## Vers Google Play (AAB)
+
+Sur la branche `main`, quand les quatre secrets de signature privée `TREKMAP_ANDROID_KEYSTORE_BASE64`, `TREKMAP_ANDROID_STORE_PASSWORD`, `TREKMAP_ANDROID_KEY_PASSWORD` et `TREKMAP_ANDROID_KEY_ALIAS` ont été configurés, le workflow GitHub Actions construit **en plus de l'APK de test** un Android App Bundle signé `app-release.aab` : `Actions > TrekMap Android APK > Artifacts > trekmap-france-play-aab-…`.
+
+Le bundle Google Play exclut la permission sensible `REQUEST_INSTALL_PACKAGES`, propre au système historique de mises à jour APK. Une installation distribuée par Google Play n'affiche pas le mécanisme de mise à jour latérale GitHub : les mises à jour passent par Google Play.
+
+**Pas encore prêt à publier sans validation complémentaire** : tester la nouvelle interface locale et toutes les commandes natives sur un vrai téléphone, vérifier les règles de confidentialité et les déclarations Play, préparer la fiche Play Store, et contrôler la signature et le SDK cible au moment de la publication. L'APK debug généré en PR n'est pas destiné à Google Play. Ne jamais exposer les clés de signature dans le dépôt.
+
+## Utilisation hors réseau
+
+1. Ouvrir l'application : l'accueil local est disponible sans attendre Render.
+2. Appuyer sur « Ouvrir ma carte » : l'activité Android hors ligne affiche les tracés sauvegardés.
+3. Pour préparer une randonnée, se connecter au site via « TrekMap en ligne », ouvrir le trek, puis « Mode randonnée » et enregistrer le tracé sur le téléphone.
+4. Télécharger **toutes les sections et tuiles** du trek pendant une connexion Wi-Fi ; vérifier que chaque section est complète.
+5. Activer le mode avion et tester carte, trajets, suivi GPS et retour vers l'accueil local **avant** toute randonnée réelle. Les nouveaux treks, comptes et TrekBrain ne sont pas fonctionnels hors réseau.
+6. Un appui sur « Retour » de la carte Android revient désormais à l'accueil local. Le passage en ligne est volontaire et exige une connexion validée.
+
+Ce mode ne prétend pas charger tous les treks de France ni toutes les cartes hors réseau. Les données enregistrées peuvent être perdues si l'application est désinstallée : exporter les GPX importants avant de désinstaller.
