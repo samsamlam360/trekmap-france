@@ -107,6 +107,15 @@ final class GpsTrackStore {
                 return;
             }
             if(last==null || step>=Math.max(6,Math.max(acc,last.getAccuracy())*0.65)) {
+                JSONArray points=session.optJSONArray("points");
+                if(points==null) {points=new JSONArray();session.put("points",points);}
+                // Stop accumulating distance when the GPX can no longer
+                // record the corresponding points. No silent distance/trace
+                // divergence on a very long trip.
+                if(points.length()>=MAX_TRACK_POINTS) {
+                    session.put("note","Capacité de trace atteinte. Termine puis exporte le GPX.");
+                    return;
+                }
                 if(last!=null) {
                     session.put("distance",session.optDouble("distance")+step);
                     if(step/seconds>.45)session.put("movingMs",session.optLong("movingMs")+Math.min(60000,Math.round(seconds*1000)));
@@ -117,12 +126,6 @@ final class GpsTrackStore {
                         if(climb>3 && climb<35)
                             session.put("ascent",session.optDouble("ascent")+climb);
                     }
-                }
-                JSONArray points=session.optJSONArray("points");
-                if(points==null) {points=new JSONArray();session.put("points",points);}
-                if(points.length()>=MAX_TRACK_POINTS) {
-                    session.put("note","Capacité de trace atteinte. Exporte le GPX.");
-                    return;
                 }
                 JSONArray point=new JSONArray();
                 point.put(loc.getLatitude()); point.put(loc.getLongitude());
