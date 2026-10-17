@@ -1173,6 +1173,23 @@ def _photon_anchor_resource(anchor, category: str, osm_tags, radius_km: float, q
                 "transit": "Transport public",
             }.get(category, "Point utile")
 
+        # Photon exposes the principal OSM tag and, when indexed, a limited
+        # set of extra attributes. Negative potability and private access
+        # must never be discarded just because Overpass is unavailable.
+        osm_tags = {osm_key: osm_value}
+        if category == "water":
+            extras = props.get("extra")
+            if isinstance(extras, dict):
+                for key in (
+                    "access", "drinking_water", "water:potable", "potable",
+                    "seasonal", "locked", "disused", "abandoned", "intermittent",
+                ):
+                    if key in extras:
+                        osm_tags[key] = extras[key]
+            from .trekbrain_water_evidence_v9 import potability_status
+            resolved_water_status = potability_status(osm_tags)
+        else:
+            resolved_water_status = "unverified"
         row = {
             "name": name[:300],
             "short_name": name.split(",")[0].strip()[:160],
@@ -1181,17 +1198,21 @@ def _photon_anchor_resource(anchor, category: str, osm_tags, radius_km: float, q
             "category": final_category,
             "source_url": source_url,
             "opening_hours": "",
-            "water_status": (
-                "potable_referenced"
-                if category == "water" and osm_key == "amenity" and osm_value == "drinking_water"
-                else "unverified"
-            ),
-            "osm_tags": {osm_key: osm_value},
+            "water_status": resolved_water_status,
+            "osm_tags": osm_tags,
             "_postroute_resource": True,
             "_distance_to_anchor_km": round(distance, 2),
         }
-        if best is None or distance < best[0]:
-            best = (distance, row)
+        if category == "water":
+            from .trekbrain_water_evidence_v9 import confirmed_water_reference
+            # A closer unknown spring must not hide a mapped drinking-water
+            # point when the independent provider returns both in one answer.
+            # Explicit access restrictions still defeat any 'potable' hint.
+            rank = (0 if confirmed_water_reference(row) else 1, distance)
+        else:
+            rank = (distance,)
+        if best is None or rank < best[0]:
+            best = (rank, row)
     return best[1] if best else None
 
 
@@ -1202,8 +1223,11 @@ def _postroute_corridor_resources(boundaries, intent, existing_items):
 
     existing_items = list(existing_items or [])
     stays = [x for x in existing_items if x.get("category") in {"camping", "refuge", "lodging"}]
+    from .trekbrain_water_evidence_v9 import confirmed_water_reference
+    # A mapped but unsafe/unknown spring is not daily drinking water.
+    # It must not suppress a separate Photon query for a traceable fountain.
     waters = [x for x in existing_items if x.get("category") == "water"
-              and re.fullmatch(r"https://www\.openstreetmap\.org/(node|way|relation)/[1-9][0-9]*", str(x.get("source_url") or ""))]
+              and confirmed_water_reference(x)]
     # Only source-linked OSM shops can suppress a first-visit discovery.
     # Guessed map coordinates from upstream planners are not evidence that a
     # village's actual grocery has already been checked.
@@ -1283,7 +1307,10 @@ def _postroute_corridor_resources(boundaries, intent, existing_items):
     # former order spent five slots on transit/stays/water and only one on
     # food. The round robin still reserves the first slot for every needed
     # logistics family, with no additional HTTP calls or serial retries.
-    groups = [food_jobs, transit_jobs, stay_jobs, water_jobs]
+    # After each category gets one slot, spend the final two slots on the
+    # still-missing essentials: food for the next day and drinking water for
+    # the next stage. Preserve the existing maximum of SIX provider calls.
+    groups = [food_jobs, water_jobs, stay_jobs, transit_jobs]
     jobs = []
     while groups and len(jobs) < 6:
         remaining = []
