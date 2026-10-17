@@ -252,4 +252,28 @@ assert [category for _,category in checked].count("food")==2,checked
 water_locations={lat for lat,category in checked if category=="water"}
 assert water_locations=={45.0,45.06},checked
 assert {"stay","transit"} <= {kind for _,kind in checked},checked
+# Daily labels must not suggest private drinking water is public water.
+private_stage={
+    "duration_days":1,"stages":[{"day":1}],
+    "route_preview":{"coords":[[45.0,5.0],[45.06,5.0]]},
+    "water":[restricted],
+}
+resources.enrich_resources(private_stage)
+resources._annotate_stage_resources(private_stage)
+assert "accès ou disponibilité restreints" in private_stage["stages"][0]["water_notes"],private_stage
+assert "Aucune eau potable identifiée" in private_stage["stages"][0]["water_notes"],private_stage
+
+# Explicit nonpotability encoded in Photon's optional extra metadata wins
+# over the generic amenity=drinking_water principal tag.
+planner._request_json=lambda url,**kwargs: {"features":[
+    photon_feature(92009,45.003,"amenity","drinking_water",
+                   {"drinking_water":"no"}),
+]}
+try:
+    unsafe_photon=planner._photon_anchor_resource(
+        anchor,"water",("amenity:drinking_water",),5.5)
+finally:
+    planner._request_json=old_request
+assert unsafe_photon["water_status"]=="not_potable",unsafe_photon
+assert not confirmed_water_reference(unsafe_photon)
 print("Cold-cache Photon fallback: unknown/private springs do not hide public water; two days probed in six-call cap: PASS")
