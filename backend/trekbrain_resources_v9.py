@@ -989,6 +989,24 @@ def _cold_water_stage_probes(result: dict[str, Any], days: int,
         chosen.append(ordered.pop(0))
         if ordered:
             chosen.append(ordered.pop(-1))
+    # A confirmed OSM village near the *walked* stage often offers better
+    # fountain coverage than a mathematical midpoint in an empty field. Only
+    # use source-linked settlements on or close to the existing hiking line.
+    # Their existence is NOT evidence that public drinking water is available.
+    settlements = []
+    for item in (result.get("points_of_interest") or [])[:80]:
+        if not isinstance(item, dict) or not has_osm_identity(item):
+            continue
+        tags = item.get("osm_tags") or {}
+        if not isinstance(tags, dict):
+            continue
+        place_type = str(tags.get("place") or "").casefold()
+        if place_type not in {"village", "town", "city", "hamlet"}:
+            continue
+        location = _point(item)
+        matched = _route_match(coords, item, (profile, total)) if location else None
+        if matched and matched[0] <= 1.5:
+            settlements.append((location, matched[1], place_type, matched[0]))
     probes = []
     for day in chosen:
         distance = total * (breaks[day - 1] + breaks[day]) / 2
@@ -1001,8 +1019,24 @@ def _cold_water_stage_probes(result: dict[str, Any], days: int,
         lat = _number(a[0] + (b[0] - a[0]) * fraction) if isinstance(a, (list,tuple)) and isinstance(b, (list,tuple)) else None
         lon = _number(a[1] + (b[1] - a[1]) * fraction) if isinstance(a, (list,tuple)) and isinstance(b, (list,tuple)) else None
         if lat is not None and lon is not None and -90 <= lat <= 90 and -180 <= lon <= 180:
+            low, high = breaks[day - 1], breaks[day]
+            stage_km = (high - low) * total
+            # Stay within the same walking stage, and do not divert the lookup
+            # across a long section just because a distant city is known.
+            max_shift_km = min(6.0, max(2.5, stage_km * 0.4))
+            nearby = [
+                ({"city": 0, "town": 0, "village": 1, "hamlet": 2}[kind],
+                 abs(progress * total - distance), route_gap, location)
+                for location, progress, kind, route_gap in settlements
+                if low + 0.04 * (high - low) <= progress <= high - 0.04 * (high - low)
+                and abs(progress * total - distance) <= max_shift_km
+            ]
+            if nearby:
+                _priority, _stage_gap, _off_route, location = min(nearby)
+                lat, lon = location
             probes.append({"lat": lat, "lon": lon, "category": "route_anchor",
-                           "name": f"Milieu du jour {day}", "route_day": day})
+                           "name": f"Repère eau jour {day}" if nearby else f"Milieu du jour {day}",
+                           "route_day": day})
     return probes
 
 
