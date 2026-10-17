@@ -13,7 +13,7 @@ for marker in ("TREKMAP_UNIFIED_EXPERIENCE_START", "TREKMAP_PROFILE_V2_START",
     assert HTML.count(marker) == 1, f"marqueur absent/dupliqué: {marker}"
 
 for identifier in ("tm-primary-navigation", "tm-four-spaces-js", "tm-four-spaces-css",
-                   "tm-design-filter-flyout", "tm-design-add-button",
+                   "tm-map-filter-popover", "tm-design-add-button",
                    "tm-design-filter-button", "tm-map-options-panel",
                    "tm-mobile-nav", "tm-profile-v2", "tm-brain-route-panel"):
     assert identifier in HTML, f"fonction absente: {identifier}"
@@ -26,7 +26,7 @@ assert "openPrivateTab('projects')" in HTML
 assert "openPrivateTab('home')" in HTML
 assert "window.TrekMapProfileV2.open()" in HTML
 assert "window.TrekMapOpenAI" in HTML
-assert "durationSource.dispatchEvent(new Event('change'" in HTML
+assert "data-filter-target" in HTML and "duration-filter" in HTML
 assert "tm-mobile-create-sheet" in HTML
 assert "tm-import-btn" in HTML and "tm-create-btn" in HTML
 assert "TrekMapHikingNavigation" in HTML
