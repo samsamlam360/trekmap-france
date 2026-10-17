@@ -1262,8 +1262,17 @@ def _connector(ors, legacy_main, roundtrip, coords, stay: dict[str, Any], deadli
     }
 
 
-def _night_options(anchors, rows, daily_target, *, allow_distant_transfer=False):
-    """Build at most four source-backed options per fixed end of stage."""
+def _night_options(
+    anchors, rows, daily_target, *, allow_distant_transfer=False,
+    stage_lengths=None, daily_max=None,
+):
+    """Preserve nearby stays, but prioritize those not already ruled out by daily limits.
+
+    A straight-line connector distance is ONLY a lower bound on walking.
+    If even that lower bound exceeds the available outward or morning-return
+    kilometres, this candidate can never qualify as a confirmed walking
+    overnight. Keep it available for honest transfer diagnostics.
+    """
     window = max(8.0, min(15.0, float(daily_target) * 0.62))
     out = {}
     for anchor in anchors:
@@ -1281,9 +1290,30 @@ def _night_options(anchors, rows, daily_target, *, allow_distant_transfer=False)
             if (gap > window and distance > _WALK_CONNECTOR_LIMIT_KM
                     and not allow_distant_transfer):
                 continue
+            # Only a negative result is decisive here. A candidate passing
+            # this lower-bound test still MUST receive real ORS bidirectional
+            # evidence before it is represented as reachable on foot.
+            budget_possible = True
+            index = int(anchor["night"]) - 1
+            if (stage_lengths is not None and daily_max is not None
+                    and 0 <= index < len(stage_lengths) - 1):
+                try:
+                    outward_room = float(daily_max) - float(stage_lengths[index])
+                    return_room = float(daily_max) - float(stage_lengths[index + 1])
+                    budget_possible = (
+                        math.isfinite(outward_room) and math.isfinite(return_room)
+                        and distance <= outward_room + 0.01
+                        and distance <= return_room + 0.01
+                    )
+                except (TypeError, ValueError, OverflowError):
+                    budget_possible = False
             options.append({**stay, "_night": anchor["night"], "_anchor": dict(anchor),
-                            "_anchor_distance_km": distance, "_progress_gap_km": gap})
-        options.sort(key=lambda item: (item["_anchor_distance_km"], item["_progress_gap_km"], _stay_key(item)))
+                            "_anchor_distance_km": distance, "_progress_gap_km": gap,
+                            "_walk_budget_feasible": budget_possible})
+        options.sort(key=lambda item: (
+            not item["_walk_budget_feasible"], item["_anchor_distance_km"],
+            item["_progress_gap_km"], _stay_key(item),
+        ))
         out[anchor["night"]] = options[:4]
     return out
 
@@ -1301,7 +1331,8 @@ def _validate_night_options(ors, legacy_main, roundtrip, coords, options):
         for night in sorted(options):
             if rank < len(options[night]):
                 row = options[night][rank]
-                if row["_anchor_distance_km"] <= _WALK_CONNECTOR_LIMIT_KM:
+                if (row["_anchor_distance_km"] <= _WALK_CONNECTOR_LIMIT_KM
+                        and row.get("_walk_budget_feasible") is not False):
                     eligible.append(row)
     eligible = eligible[:_MAX_CONNECTOR_OPTIONS]
     connectors = {}
@@ -1356,6 +1387,8 @@ def _night_access_diagnostics(anchors, projected, options, connectors, assigned)
             reason = "no_accommodation_near_stage"
         elif not walk_range:
             reason = "candidates_too_far_for_connector_check"
+        elif not any(row.get("_walk_budget_feasible") is not False for row in walk_range):
+            reason = "candidate_not_compatible_with_daily_limits"
         elif not verified:
             reason = "walking_connector_unverified"
         elif not chosen or chosen.get("_access_mode") != "walk":
@@ -1832,8 +1865,11 @@ def _attach_logistics(result: dict[str, Any], data, legacy_main, v3, roundtrip, 
         anchors = _night_anchors(roundtrip, coords, days, [
             {"distance_km": km} for km in stage_lengths
         ])
-    options = _night_options(anchors, pool, daily_target,
-                             allow_distant_transfer=days == 2 and category == "lodging" and not strict_walk)
+    options = _night_options(
+        anchors, pool, daily_target,
+        allow_distant_transfer=days == 2 and category == "lodging" and not strict_walk,
+        stage_lengths=stage_lengths, daily_max=daily_max,
+    )
     connector_map, connector_meta = _validate_night_options(ors, legacy_main, roundtrip, coords, options)
     assigned = _assign_verified_nights(options, connector_map, stage_lengths, daily_max, strict_walk)
     night_diagnostics = _night_access_diagnostics(anchors, pool, options, connector_map, assigned)
