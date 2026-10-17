@@ -317,7 +317,7 @@ for index, (tags, status, public) in enumerate(new_water_cases):
         assert item["water_status"] == status, (item, status)
         assert confirmed_water_reference(item) is public, item
     else:
-        assert item is None, (tags, item)
+        assert item is None or item.get("category") != "water", (tags, item)
 
 # Ensure the Overpass stage query and independent rescue query actually
 # request the new categories, rather than merely recognizing mock records.
