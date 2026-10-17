@@ -16,6 +16,10 @@ This layer makes the hierarchy explicit for every trek, GR or not:
 5. never invalidate an otherwise safe pedestrian route merely because lodging
    logistics are incomplete.
 
+Stage boundary positions may now move a few route-kilometres toward sourced,
+route-close stays and nearby real water/grocery evidence. They never become
+a confirmed place to sleep until ORS verifies both walking directions.
+
 The actual walking backbone still comes from the existing GR/OSM/ORS planners.
 No straight-line geometry is promoted to a hiking route.
 """
@@ -1413,6 +1417,156 @@ def _assign_verified_nights(options, connectors, stage_lengths, daily_max, stric
     return beam[0][3] if beam else []
 
 
+def _source_aware_stage_plan(
+    roundtrip, coords, old_stages, anchors, candidates, days, daily_max,
+    resource_rows=None,
+):
+    """Rebalance *walking-stage boundaries* near sourced, route-close nights.
+
+    This is a bounded local optimizer on an existing pedestrian backbone.
+    The night itself is NEVER inferred walkable from crow-flight proximity:
+    independent ORS outward/return connector verification follows unchanged.
+    No route geometry, user-day count, provider calls, or endpoints change.
+    """
+    no_change = {"changed": False, "reason": "no_safe_improvement"}
+    if days <= 1 or len(anchors) != days - 1 or len(old_stages) != days:
+        return None, no_change
+    # Some upstream planners attach stage-specific geometry; never desynchronise
+    # that geometry from route-stage boundaries we do not own.
+    if any(not isinstance(row, dict) or any(
+            key in row for key in ("coords", "geometry", "route_coords",
+                                   "route_geometry", "waypoints"))
+           for row in old_stages):
+        return None, {"changed": False, "reason": "stage_geometry_owned_elsewhere"}
+    try:
+        cumulative = roundtrip._cumulative(coords)
+        total = float(cumulative[-1])
+        original = [float(row["distance_km"]) for row in old_stages]
+        if not (math.isfinite(total) and total > 0
+                and all(math.isfinite(km) and km > 0 for km in original)):
+            return None, no_change
+    except (KeyError, TypeError, ValueError, IndexError):
+        return None, no_change
+    reported = sum(original)
+    # Only reconcile routes whose existing stage sum is actually consistent
+    # with the GPS/ORS backbone. Otherwise keep the original values.
+    if abs(reported - total) > max(3.0, total * 0.08):
+        return None, {"changed": False, "reason": "route_stage_distance_mismatch"}
+
+    baseline = [float(a["route_progress_km"]) for a in anchors]
+    # Candidate nights must have a real external reference and project very
+    # close to the *walked* route. Route-projection alone proves no access.
+    from .trekbrain_water_evidence_v9 import confirmed_water_reference, has_osm_identity
+    from .trekbrain_resources_v9 import _confirmed_food_reference
+    terrain = [
+        item for item in (resource_rows or [])
+        if isinstance(item, dict) and has_osm_identity(item)
+        and ((str(item.get("category") or "") == "water"
+              and confirmed_water_reference(item))
+             or (str(item.get("category") or "") == "food"
+                 and _confirmed_food_reference(item)))
+    ][:100]
+    options = []
+    for night, centre in enumerate(baseline, 1):
+        left = 0.0 if night == 1 else baseline[night - 2]
+        right = total if night == days - 1 else baseline[night]
+        window = min(5.0, original[night - 1] * 0.27,
+                     original[night] * 0.27)
+        possible = [(centre, None)]
+        if window >= 0.3:
+            eligible = []
+            for stay in candidates:
+                try:
+                    progress = float(stay["_route_progress_km"])
+                    offroute = float(stay["_offroute_km"])
+                except (KeyError, TypeError, ValueError):
+                    continue
+                if (not math.isfinite(progress) or not math.isfinite(offroute)
+                        or offroute > 0.55 or offroute < 0
+                        or abs(progress - centre) > window
+                        or progress <= left + 2.0 or progress >= right - 2.0
+                        or not str(stay.get("source_url") or "").strip()):
+                    continue
+                eligible.append((progress, stay))
+            eligible.sort(key=lambda x: (x[1]["_offroute_km"],
+                                          abs(x[0] - centre), _stay_key(x[1])))
+            # Max five options per boundary: ≤ 5^N work, pruned with beam.
+            possible.extend(eligible[:4])
+        options.append(possible)
+    if not any(len(group) > 1 for group in options):
+        return None, no_change
+
+    # Each state contains (reward, total movement, boundaries, matched stay,
+    # previous route progress). Maintain a bounded beam of alternatives.
+    beam = [(0.0, 0.0, [], [], 0.0)]
+    scale = reported / total
+    for index, choices in enumerate(options):
+        expanded = []
+        for reward, moved, boundaries, selected, previous in beam:
+            for progress, stay in choices:
+                length = (progress - previous) * scale
+                if length < 2.0 or length > daily_max + 0.01:
+                    continue
+                if length < min(original[index] * 0.73, 5.0):
+                    continue
+                motion = abs(progress - baseline[index])
+                benefit = (3.0 - min(1.0, float(stay["_offroute_km"]) / 0.55)
+                           if stay else 0.0)
+                if stay and terrain:
+                    # These are source-backed *planning preferences*, not
+                    # walking-access validation nor a promise of fresh water.
+                    # Prefer ends of stages with actual mapped drinkable water
+                    # and groceries, all else being reasonably equal.
+                    near = [row for row in terrain
+                            if _geo_km(stay, row) <= 1.5]
+                    benefit += (0.3 if any(row.get("category") == "water"
+                                          and confirmed_water_reference(row)
+                                          for row in near) else 0.0)
+                    benefit += (0.2 if any(row.get("category") == "food"
+                                          and _confirmed_food_reference(row)
+                                          for row in near) else 0.0)
+                score = reward + benefit - motion * 0.12
+                expanded.append((score, moved + motion, boundaries + [progress],
+                                 selected + [stay], progress))
+        expanded.sort(key=lambda row: (-row[0], row[1]))
+        beam = expanded[:40]
+        if not beam:
+            return None, no_change
+
+    candidates_final = []
+    for reward, moved, boundaries, selected, previous in beam:
+        last_length = (total - previous) * scale
+        if last_length < min(original[-1] * 0.73, 5.0) or last_length > daily_max + 0.01:
+            continue
+        if not any(stay is not None for stay in selected):
+            continue
+        # Candidate positioning is only a heuristic. A connector must be
+        # independently checked before declaring a walking overnight.
+        lengths = [(b - a) * scale for a, b in zip(
+            [0.0] + boundaries, boundaries + [total]
+        )]
+        if any(abs(new - old) > max(5.0, 0.31 * old)
+               for old, new in zip(original, lengths)):
+            continue
+        candidates_final.append((reward, moved, boundaries, lengths, selected))
+    if not candidates_final:
+        return None, no_change
+    candidates_final.sort(key=lambda row: (-row[0], row[1]))
+    reward, moved, boundaries, lengths, selected = candidates_final[0]
+    if reward <= 0.05 or moved <= 0.10:
+        return None, no_change
+    # Preserve the reported distance sum (and avoid artificial extra km).
+    lengths[-1] = reported - sum(lengths[:-1])
+    return {
+        "lengths": lengths, "progress": boundaries,
+        "matched_nights": [index for index, stay in enumerate(selected, 1)
+                            if stay is not None],
+        "movement_km": round(moved, 2),
+    }, {"changed": True, "matched_nights": sum(x is not None for x in selected),
+         "total_shift_km": round(moved, 2),
+         "reason": "sourced_stays_near_existing_walking_line"}
+
+
 def _strict_walk_request(data) -> bool:
     text = _fold(getattr(data, "prompt", ""))
     return any(phrase in text for phrase in (
@@ -1634,6 +1788,25 @@ def _attach_logistics(result: dict[str, Any], data, legacy_main, v3, roundtrip, 
     # Discovery may also supply a selected transfer from the two-day rescue.
     pool = _project_stays(roundtrip, coords, list(discovered) + list(chosen), category,
                           3.2 if strict_walk else 12.5 if category == "lodging" else _MAX_OFFROUTE_KM)
+    # Shape the DAILY STAGE SPLITS using already discovered, source-linked
+    # overnight options. The main pedestrian geometry is unchanged. Preserve
+    # the old split when candidates are absent, too far, or incompatible with
+    # hard daily limits. ORS will still verify actual walking access below.
+    stage_plan, stage_plan_diagnostics = _source_aware_stage_plan(
+        roundtrip, coords, old_stages, anchors, pool, days, daily_max,
+        resource_rows=(
+            [{**row, "category": "water"}
+             for row in (result.get("water") or []) if isinstance(row, dict)]
+            + [{**row, "category": "food"}
+               for row in (result.get("resources") or result.get("food") or [])
+               if isinstance(row, dict)]
+        ),
+    )
+    if stage_plan:
+        stage_lengths = stage_plan["lengths"]
+        anchors = _night_anchors(roundtrip, coords, days, [
+            {"distance_km": km} for km in stage_lengths
+        ])
     options = _night_options(anchors, pool, daily_target,
                              allow_distant_transfer=days == 2 and category == "lodging" and not strict_walk)
     connector_map, connector_meta = _validate_night_options(ors, legacy_main, roundtrip, coords, options)
@@ -1751,8 +1924,12 @@ def _attach_logistics(result: dict[str, Any], data, legacy_main, v3, roundtrip, 
             "day": day,
             "name": old.get("name") or f"Jour {day}",
             "title": old.get("title") or f"Jour {day} · itinéraire principal",
-            "distance_km": old.get("distance_km", round(base_distance, 1)),
-            "route_distance_km": old.get("route_distance_km", old.get("distance_km", round(base_distance, 1))),
+            "distance_km": round(base_distance, 2) if stage_plan else old.get("distance_km", round(base_distance, 1)),
+            "route_distance_km": round(base_distance, 2) if stage_plan else old.get("route_distance_km", old.get("distance_km", round(base_distance, 1))),
+            "stage_anchor": (
+                {"lat": anchors[day - 1]["lat"], "lon": anchors[day - 1]["lon"]}
+                if stage_plan and day < days else old.get("stage_anchor")
+            ),
             "estimated_walking_km_with_access": round(estimated_effort, 1),
             "overnight": overnight,
             "overnight_logistics": night,
@@ -1786,6 +1963,7 @@ def _attach_logistics(result: dict[str, Any], data, legacy_main, v3, roundtrip, 
     result["logistics"] = {
         "mode": "route-first",
         "category": category,
+        "stage_boundary_optimization": stage_plan_diagnostics,
         "status": "complete" if complete else "partial",
         "route_immutable": True,
         "discovered_candidates": len(discovered),
@@ -1817,7 +1995,7 @@ def _attach_logistics(result: dict[str, Any], data, legacy_main, v3, roundtrip, 
             **connector_meta,
             "total_ms": round((time.monotonic() - logistics_started) * 1000),
         },
-        "principle": "Le tracé pédestre est calculé d'abord. Les nuitées sont une logistique secondaire et ne rallongent pas artificiellement l'itinéraire principal.",
+        "principle": "Tracé pédestre inchangé ; découpage des étapes ajustable près des nuitées sourcées, mais accès à pied confirmé uniquement après vérification ORS aller-retour.",
     }
     advisor_notes = result.get("advisor_notes")
     if not isinstance(advisor_notes, list):

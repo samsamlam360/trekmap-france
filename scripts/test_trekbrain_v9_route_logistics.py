@@ -1094,3 +1094,79 @@ no_pedestrian_proof = logistics._assign_verified_nights(
 )
 assert no_pedestrian_proof == [None], no_pedestrian_proof
 print("Loop intersection stay candidate no longer lost, walking checks still mandatory: OK")
+
+
+# Stage boundaries can move a few kilometres toward REAL sourced lodging
+# BEFORE any connector calls. Geometry and route length must remain unchanged;
+# a source-linked stay nearby is still NOT proof of walking access.
+template_stages=[{"day":i+1,"distance_km":20.0} for i in range(5)]
+fixed_anchors=logistics._night_anchors(
+    FakeRoundtrip,coords,5,template_stages)
+stay_22={"name":"Camping à 22 km","lat":0.001,"lon":0.22,
+         "category":"camping","source_url":"https://www.openstreetmap.org/node/880022",
+         "_route_progress_km":22.0,"_offroute_km":0.1}
+candidate_plan,diag=logistics._source_aware_stage_plan(
+    FakeRoundtrip,coords,template_stages,fixed_anchors,
+    [stay_22],5,25.0)
+assert diag["changed"] is True,diag
+assert diag["matched_nights"]==1,diag
+assert abs(candidate_plan["lengths"][0]-22.0)<0.02,candidate_plan
+assert abs(candidate_plan["lengths"][1]-18.0)<0.02,candidate_plan
+assert abs(sum(candidate_plan["lengths"])-100.0)<0.0001
+assert candidate_plan["matched_nights"]==[1]
+assert all(stage["distance_km"]==20.0 for stage in template_stages)
+assert coords==base_result["route_preview"]["coords"]
+shifted_anchors=logistics._night_anchors(
+    FakeRoundtrip,coords,5,
+    [{"distance_km":km} for km in candidate_plan["lengths"]])
+assert abs(shifted_anchors[0]["route_progress_km"]-22.0)<0.01
+# The following original ORS checks remain mandatory: a close OSM camp is
+# still a transfer candidate if ORS does not validate the walking connector.
+shifted_options=logistics._night_options(shifted_anchors,[stay_22],20.0)
+assert len(shifted_options[1])==1,shifted_options
+assert logistics._assign_verified_nights(
+    {1:shifted_options[1]}, {}, [22.0,18.0],25.0,True
+)==[None]
+# Never split using an AI-guessed place, a distant campsite, or old stage
+# metadata whose own geometry cannot safely be regenerated here.
+for untrusted in (
+    {**stay_22,"source_url":""},
+    {**stay_22,"_offroute_km":0.9},
+    {**stay_22,"_route_progress_km":30.0},
+):
+    rejected,reason=logistics._source_aware_stage_plan(
+        FakeRoundtrip,coords,template_stages,fixed_anchors,
+        [untrusted],5,25.0)
+    assert rejected is None and not reason["changed"],reason
+no_shape,reason=logistics._source_aware_stage_plan(
+    FakeRoundtrip,coords,[{**x,"coords":[[0,0],[0,1]]} for x in template_stages],
+    fixed_anchors,[stay_22],5,25.0)
+assert no_shape is None and reason["reason"]=="stage_geometry_owned_elsewhere"
+# Hard 20 km/day limit blocks even a 2 km shift.
+strict_plan,_=logistics._source_aware_stage_plan(
+    FakeRoundtrip,coords,template_stages,fixed_anchors,
+    [stay_22],5,20.0)
+assert strict_plan is None
+# No invented route length if prior stage sums disagree with route geometry.
+invalid_plan,reason=logistics._source_aware_stage_plan(
+    FakeRoundtrip,coords,[{"distance_km":30.0} for _ in range(5)],
+    fixed_anchors,[stay_22],5,40.0)
+assert invalid_plan is None and reason["reason"]=="route_stage_distance_mismatch"
+# Drinking-water and groceries are tie-breakers, not falsely validated
+# overnight access and not independently trusted when missing an OSM link.
+near_water={"name":"Public drinking fountain","lat":0.001,"lon":0.225,
+            "category":"water","water_status":"potable_referenced",
+            "source_url":"https://www.openstreetmap.org/node/880101",
+            "osm_tags":{"amenity":"drinking_water"}}
+near_food={"name":"Village grocery","lat":0.001,"lon":0.224,
+           "category":"food","source_url":"https://www.openstreetmap.org/node/880102",
+           "osm_tags":{"shop":"convenience"}}
+similar_stay={**stay_22,"name":"Camping à 19,8 km",
+              "source_url":"https://www.openstreetmap.org/node/880023",
+              "_route_progress_km":19.8,"lon":0.198}
+with_resources,_=logistics._source_aware_stage_plan(
+    FakeRoundtrip,coords,template_stages,fixed_anchors,
+    [similar_stay,stay_22],5,25.0,
+    resource_rows=[near_water,near_food])
+assert abs(with_resources["progress"][0]-22.0)<0.02,with_resources
+print("Source-aware stage boundary planner: real campsite/water/shop, hard daily limits, immutable pedestrian geometry and ORS walk validation: PASS")
