@@ -15,7 +15,7 @@ jobs:
         env:
           TREKBRAIN_BENCHMARK_OUT: results-stage-decision
           TREKBRAIN_BENCHMARK_MIN_INTERVAL_SECONDS: '18'
-          TREKBRAIN_BENCHMARK_EXPECTED_SHA: '751990d0f59eec10ad6a065e05d207a8d09df580'
+          EXPECTED_SHA: '751990d0f59eec10ad6a065e05d207a8d09df580'
         shell: python
         continue-on-error: true
         run: |
