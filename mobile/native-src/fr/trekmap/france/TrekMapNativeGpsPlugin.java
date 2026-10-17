@@ -46,8 +46,13 @@ public class TrekMapNativeGpsPlugin extends Plugin {
                 final boolean secure="https".equals(uri.getScheme())
                         && "trekmap-france.onrender.com".equals(uri.getHost())
                         && uri.getPort()==-1;
-                final boolean accepted=secure && ("/randonnee".equals(path) ||
-                        (!hikeOnly && "/".equals(path)));
+                // Capacitor serves the bundled dashboard from HTTPS localhost.
+                // Remote TrekMap may still use the bridge only on its own trusted pages.
+                final boolean local="https".equals(uri.getScheme())
+                        && "localhost".equals(uri.getHost()) && uri.getPort()==-1
+                        && ("/".equals(path) || "/index.html".equals(path));
+                final boolean accepted=(secure && ("/randonnee".equals(path) ||
+                        (!hikeOnly && "/".equals(path)))) || (!hikeOnly && local);
                 if(!accepted){
                     call.reject(hikeOnly?"Action réservée au mode randonnée TrekMap.":
                             "Cette action doit être ouverte depuis TrekMap France.");return;
@@ -76,6 +81,31 @@ public class TrekMapNativeGpsPlugin extends Plugin {
             }catch(Exception e){
                 call.reject("Écran Android inaccessible : "+e.getMessage());
             }
+        });
+    }
+
+    /** Online features load only after a deliberate tap; no cold-start dependency. */
+    @PluginMethod
+    public void openOnline(PluginCall call){
+        permitted(call,false,()->navigate(call,"https://trekmap-france.onrender.com/"));
+    }
+
+    /** Return to the bundled, network-independent application dashboard. */
+    @PluginMethod
+    public void openLocalHome(PluginCall call){
+        permitted(call,false,()->navigate(call,"https://localhost/"));
+    }
+
+    private void navigate(PluginCall call,String url){
+        Activity activity=getActivity();
+        if(activity==null){call.reject("Application fermée.");return;}
+        activity.runOnUiThread(()->{
+            try{
+                WebView web=getBridge()==null?null:getBridge().getWebView();
+                if(web==null){call.reject("Écran Android indisponible.");return;}
+                web.loadUrl(url);
+                call.resolve();
+            }catch(Exception e){call.reject("Navigation impossible : "+e.getMessage());}
         });
     }
 
