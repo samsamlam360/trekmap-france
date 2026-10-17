@@ -204,3 +204,88 @@ for old_tags,new_tags in [
 print("OSM WATER PRELOAD/MERGES: 5 restricted tags and 3 provider-merging routes PASS")
 
 print("No new request wave, explicit non-potable warnings and field-check caveats PASS")
+
+
+# Regression: PostGIS OSM cache must NOT discard access and availability tags.
+# These rows are fabricated in memory. No production Neon read/write.
+from backend import trekbrain_osm_cache_v9 as osm_cache
+from backend import database as database_module
+
+cache_cases = [
+    ("public", {"amenity": "drinking_water"}, True),
+    ("customers", {"amenity": "drinking_water", "access": "customers"}, False),
+    ("locked", {"amenity": "drinking_water", "locked": "yes"}, False),
+    ("seasonal", {"amenity": "drinking_water", "seasonal": "summer"}, False),
+    ("intermittent", {"amenity": "drinking_water", "intermittent": "yes"}, False),
+    ("unsafe", {"amenity": "drinking_water", "drinking_water": "no"}, False),
+]
+fake_rows = [
+    {
+        "source_url": f"https://www.openstreetmap.org/node/{995000 + i}",
+        "category": "water", "name": label, "lat": 45.009, "lon": 5.001,
+        # Deliberately stale positive field. OSM tags take precedence.
+        "water_status": "potable_referenced", "osm_tags": tags,
+    } for i, (label, tags, _) in enumerate(cache_cases)
+]
+
+class FakeCacheConnection:
+    def __init__(self):
+        self.sql = []
+    def execute(self, statement, params=None):
+        self.sql.append(str(statement))
+        return self
+    def mappings(self):
+        return self
+    def all(self):
+        return fake_rows
+    def commit(self):
+        pass
+    def rollback(self):
+        pass
+    def close(self):
+        pass
+
+connections = []
+real_session_local = database_module.SessionLocal
+
+def fake_session_local():
+    obj = FakeCacheConnection()
+    connections.append(obj)
+    return obj
+
+database_module.SessionLocal = fake_session_local
+try:
+    cached = osm_cache.read_near_route({
+        "route_preview": {"coords": [[45.0, 5.0], [45.02, 5.02]]},
+    }, {"water": True})
+    assert len(cached) == len(cache_cases), cached
+    by_name = {row["name"]: row for row in cached}
+    for label, tags, expected in cache_cases:
+        row = by_name[label]
+        assert row["osm_tags"] == tags, (label, row)
+        assert confirmed_water_reference(row) is expected, (label, row)
+        assert row["_cached_osm"] is True
+
+    # A stale status cannot override OSM evidence of explicitly unsafe water.
+    flagged = osm_cache._candidate({
+        "category": "water", "source_url": fake_rows[-1]["source_url"],
+        "name": "unsafe", "lat": 45.009, "lon": 5.001,
+        "water_status": "potable_referenced",
+        "osm_tags": fake_rows[-1]["osm_tags"],
+    })
+    assert flagged["water_status"] == "not_potable", flagged
+
+    written = osm_cache.store_sourced([{
+        "category": "water", "source_url": fake_rows[0]["source_url"],
+        "name": "public", "lat": 45.009, "lon": 5.001,
+        "status": "unverified", "osm_tags": {},
+    }])
+    assert written == 1
+    sql = "\n".join(connections[-1].sql)
+    assert "trekbrain_osm_cache_v9.osm_tags || EXCLUDED.osm_tags" in sql
+    assert "trekbrain_osm_cache_v9.water_status = 'not_potable'" in sql
+    assert "EXCLUDED.osm_tags = '{}'::jsonb" in sql
+finally:
+    database_module.SessionLocal = real_session_local
+
+print("OSM CACHE: tagged public/restricted/unsafe water retained on read and protected on upsert PASS")

@@ -51,12 +51,19 @@ def _candidate(point: dict[str, Any]) -> dict[str, Any] | None:
         encoded_tags = "{}"
     if len(encoded_tags) > 10000:
         encoded_tags = "{}"  # Never persist truncated, invalid JSONB.
+    # Never preserve an optimistic label when the fresh OSM tags explicitly
+    # mark the water as unsafe. Every cache read rechecks these same tags.
+    if category == "water":
+        from .trekbrain_water_evidence_v9 import water_evidence_status
+        status = water_evidence_status(point)
+    else:
+        status = "unverified"
     return {
         "source_url": source,
         "category": category,
         "name": str(point.get("name") or "Ressource OSM")[:160],
         "lat": lat, "lon": lon,
-        "water_status": str(point.get("water_status") or point.get("status") or "unverified")[:40],
+        "water_status": status,
         "tags": encoded_tags,
     }
 
@@ -136,7 +143,11 @@ def read_near_route(
         point = dict(row)
         if not _candidate(point):
             continue
-        point.pop("osm_tags", None)
+        # The restrictions are essential evidence, not presentation metadata.
+        # Dropping tags here previously turned customers-only/seasonal/locked
+        # cached OSM water into apparently publicly accessible drinking water.
+        # Keep a distinct dictionary for the caller, without mutating DB rows.
+        point["osm_tags"] = dict(point.get("osm_tags") or {})
         point["notes"] = "Référence OpenStreetMap mise en cache ; ouverture et disponibilité à vérifier."
         point["_cached_osm"] = True
         out.append(point)
@@ -185,8 +196,24 @@ def store_sourced(
                     name = EXCLUDED.name,
                     lat = EXCLUDED.lat,
                     lon = EXCLUDED.lon,
-                    water_status = EXCLUDED.water_status,
-                    osm_tags = EXCLUDED.osm_tags,
+                    water_status = CASE
+                        WHEN EXCLUDED.category = 'water' AND
+                             (trekbrain_osm_cache_v9.water_status = 'not_potable'
+                              OR EXCLUDED.water_status = 'not_potable')
+                          THEN 'not_potable'
+                        WHEN EXCLUDED.category = 'water' AND EXCLUDED.osm_tags = '{}'::jsonb
+                          THEN trekbrain_osm_cache_v9.water_status
+                        ELSE EXCLUDED.water_status
+                    END,
+                    -- A partially tagged rediscovery cannot erase a previous
+                    -- water restriction or strip metadata from a cached shop.
+                    osm_tags = CASE
+                        WHEN EXCLUDED.category = 'water'
+                          THEN trekbrain_osm_cache_v9.osm_tags || EXCLUDED.osm_tags
+                        WHEN EXCLUDED.osm_tags = '{}'::jsonb
+                          THEN trekbrain_osm_cache_v9.osm_tags
+                        ELSE EXCLUDED.osm_tags
+                    END,
                     location = EXCLUDED.location,
                     last_seen = NOW()
             """)

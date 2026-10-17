@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from pathlib import Path
 import os
+import time
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.action_chains import ActionChains
@@ -186,6 +187,9 @@ try:
     prior = "collapsed" in drawer.get_attribute("class").split()
     drawer_button.click()
     wait.until(lambda d: ("collapsed" in drawer.get_attribute("class").split()) != prior)
+    # Avoid treating two machine-speed clicks within the drawer transition as
+    # two separate user actions. Both states still have to be visibly reached.
+    time.sleep(0.35)
     drawer_button.click()
     wait.until(lambda d: ("collapsed" in drawer.get_attribute("class").split()) == prior)
 
@@ -657,8 +661,9 @@ try:
     expand = panel.find_elements(By.CSS_SELECTOR, '[data-workspace-action="expand"]')
     assert expand, "Phone route steps cannot be expanded"
     expand[0].click()
-    assert "expanded" in panel.get_attribute("class").split(), (
-        "Phone expand did not reveal stage list"
+    wait.until(
+        lambda d: "expanded" in panel.get_attribute("class").split(),
+        message="Phone expand did not reveal stage list",
     )
     driver.execute_script("window.TrekBrainMapWorkspace.exit();")
     assert not driver.execute_script(
