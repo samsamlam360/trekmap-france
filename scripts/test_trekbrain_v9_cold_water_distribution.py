@@ -143,3 +143,47 @@ finally:
     free._request_json=actual
 
 print("Cold-cache water merge, no duplicate lookup and provider-outage safety: PASS")
+
+
+# Provider-free coverage of the new Overpass polyline query: six OSM filters
+# are used regardless of how many path samples cover the missing days.
+synthetic_samples=[[45+i*.025,5+(i%3)*.01] for i in range(16)]
+compact_query=water._water_corridor_query(synthetic_samples)
+assert compact_query.count("nwr(around:3200,")==6,compact_query
+assert '["amenity"="drinking_water"]' in compact_query
+assert '["amenity"="water_point"]' in compact_query
+assert '["man_made"="water_well"]["drinking_water"="yes"]' in compact_query
+assert '["man_made"="water_pump"]["drinking_water"="yes"]' in compact_query
+assert f"{synthetic_samples[-1][0]:.6f},{synthetic_samples[-1][1]:.6f}" in compact_query
+assert len(compact_query)<3500,len(compact_query)
+assert water._water_corridor_query([])==""
+# Source-identity conflicts: the new parse must retain access=private when
+# another OSM result of the exact same source reports just amenity=drinking_water.
+conflict_calls=[]
+def private_source_request(url,**kwargs):
+    conflict_calls.append(kwargs)
+    return {"elements":[
+        {"type":"node","id":110230,"lat":45.12,"lon":5.0,
+         "tags":{"amenity":"drinking_water"}},
+        {"type":"node","id":110230,"lat":45.12,"lon":5.0,
+         "tags":{"amenity":"drinking_water","access":"private"}},
+        {"type":"node","id":110231,"lat":45.21,"lon":5.0,
+         "tags":{"amenity":"drinking_water","drinking_water":"no"}},
+    ]}
+from backend.trekbrain_water_evidence_v9 import confirmed_water_reference
+saved_request=free._request_json
+free._request_json=private_source_request
+try:
+    sources=water.discover_water_points(None,plan)
+finally:
+    free._request_json=saved_request
+assert len(conflict_calls)==1,conflict_calls
+assert conflict_calls[0]["data"]["data"].count("nwr(around:3200,")==6
+source=next(row for row in sources if row["source_url"].endswith("/110230"))
+assert source["osm_tags"].get("access")=="private",source
+assert source["water_status"]=="potable_referenced",source
+assert not confirmed_water_reference(source),source
+assert "restreint" in source["notes"],source
+unsafe=next(row for row in sources if row["source_url"].endswith("/110231"))
+assert unsafe["water_status"]=="not_potable" and not confirmed_water_reference(unsafe)
+print("Overpass one-line water corridor (6 filters / 1 request) and private-access preservation: PASS")
