@@ -1131,7 +1131,7 @@ assert logistics._assign_verified_nights(
 # metadata whose own geometry cannot safely be regenerated here.
 for untrusted in (
     {**stay_22,"source_url":""},
-    {**stay_22,"_offroute_km":0.9},
+    {**stay_22,"_offroute_km":1.4},
     {**stay_22,"_route_progress_km":30.0},
 ):
     rejected,reason=logistics._source_aware_stage_plan(
@@ -1170,3 +1170,51 @@ with_resources,_=logistics._source_aware_stage_plan(
     resource_rows=[near_water,near_food])
 assert abs(with_resources["progress"][0]-22.0)<0.02,with_resources
 print("Source-aware stage boundary planner: real campsite/water/shop, hard daily limits, immutable pedestrian geometry and ORS walk validation: PASS")
+
+
+# Phase 1 final: more real near-trail overnight options must become candidates
+# for ORS checks, NEVER instant walking confirmation. The explicit DAILY
+# MINIMUM must be enforced on both affected stages when moving a night.
+sourced_stay_095={**stay_22,"_offroute_km":0.95}
+wider,metadata=logistics._source_aware_stage_plan(
+    FakeRoundtrip,coords,template_stages,fixed_anchors,
+    [sourced_stay_095],5,25.0)
+assert wider and metadata["changed"],metadata
+assert abs(wider["progress"][0]-22.0)<0.01,wider
+unverified=logistics._assign_verified_nights(
+    {1:logistics._night_options(
+        logistics._night_anchors(FakeRoundtrip,coords,5,
+            [{"distance_km":n} for n in wider["lengths"]]),
+        [sourced_stay_095],20.0)[1]},
+    {}, wider["lengths"],25.0,True,
+)
+assert unverified==[None],unverified
+hard_min_block,_=logistics._source_aware_stage_plan(
+    FakeRoundtrip,coords,template_stages,fixed_anchors,
+    [stay_22],5,25.0,daily_min=19.0)
+assert hard_min_block is None,hard_min_block
+hard_min_ok,_=logistics._source_aware_stage_plan(
+    FakeRoundtrip,coords,template_stages,fixed_anchors,
+    [stay_22],5,25.0,daily_min=18.0)
+assert hard_min_ok and abs(sum(hard_min_ok["lengths"])-100.0)<0.0001
+
+# Mapped spring near a LOOP crossing but >3 km away in route progress
+# cannot tip the overnight choice. Only an OSM point matched to the same
+# walked section may contribute a water preference.
+other_stay={**stay_22,"name":"Campement proche du milieu",
+    "_route_progress_km":19.8,"lon":0.198,
+    "source_url":"https://www.openstreetmap.org/node/990001"}
+misplaced_water={"name":"Fontaine sur une autre étape",
+    "category":"water","lat":0.001,"lon":0.10,
+    "source_url":"https://www.openstreetmap.org/node/990002",
+    "status":"potable_referenced","osm_tags":{"amenity":"drinking_water"}}
+without_preference,_=logistics._source_aware_stage_plan(
+    FakeRoundtrip,coords,template_stages,fixed_anchors,
+    [stay_22,other_stay],5,25.0,resource_rows=[misplaced_water])
+with_no_reference,_=logistics._source_aware_stage_plan(
+    FakeRoundtrip,coords,template_stages,fixed_anchors,
+    [stay_22,other_stay],5,25.0,resource_rows=[])
+assert without_preference["progress"]==with_no_reference["progress"],(
+    without_preference,with_no_reference
+)
+print("Deep stage planner: wider 1.25km source radius, explicit daily minimum, disjoint water sections ignored, ORS safety intact: PASS")
