@@ -1,0 +1,57 @@
+name: One-off stage boundary decision diagnostics
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/stage-decision-diagnostic-20261017.yml'
+permissions:
+  contents: read
+jobs:
+  stage-evidence:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - name: Inspect exact LIVE build and stage movement for four real treks
+        env:
+          TREKBRAIN_BENCHMARK_OUT: results-stage-decision
+          TREKBRAIN_BENCHMARK_MIN_INTERVAL_SECONDS: '18'
+          TREKBRAIN_BENCHMARK_EXPECTED_SHA: '751990d0f59eec10ad6a065e05d207a8d09df580'
+        shell: python
+        continue-on-error: true
+        run: |
+          import sys,json
+          sys.path.insert(0,'scripts')
+          import benchmark_trekbrain_v9_unseen20 as unseen
+          import benchmark_trekbrain_v9_production as core
+          exact_ids=['cote-granit-rose','florac-cevennes','nasbinals-aubrac']
+          cases={row['id']:row for row in unseen.SCENARIOS}
+          core.SCENARIOS=[cases[key] for key in exact_ids]
+          evaluate=core.evaluate
+          def diagnosed(case,result,elapsed,clarify):
+              row=evaluate(case,result,elapsed,clarify)
+              log=result.get('logistics') or {}
+              row['stage_boundary_optimization']=log.get('stage_boundary_optimization')
+              row['stage_distances_after']=[s.get('distance_km') for s in result.get('stages') or []]
+              print('DECISION',case['id'],json.dumps(row['stage_boundary_optimization']),flush=True)
+              return row
+          core.evaluate=diagnosed
+          core.OUT_DIR=core.Path('results-stage-decision')
+          core.OUT_DIR.mkdir(parents=True,exist_ok=True)
+          core.main()
+      - name: Print diagnostic snapshot
+        if: always()
+        shell: python
+        run: |
+          import json
+          from pathlib import Path
+          p=Path('results-stage-decision/trekbrain-production-benchmark.json')
+          if p.exists():
+              d=json.loads(p.read_text(encoding='utf-8'))
+              for r in d.get('scenarios',[]):
+                  print('STAGE_OPT',r['id'],r.get('stage_boundary_optimization'),r.get('stage_distances_after'),'walk_nights',r.get('nights_walk_confirmed'))
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: stage-boundary-diagnostic-three-real
+          path: results-stage-decision/
+          retention-days: 7
