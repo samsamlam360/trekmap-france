@@ -147,6 +147,8 @@ jobs:
           node --check /tmp/trekmap-trekbrain.js
       - name: Vérifier les quatre espaces et le GPS préservé
         run: python scripts/test_four_spaces_design.py
+      - name: Vérifier la nouvelle fiche et les filtres du profil
+        run: python scripts/test_detail_profile_polish.py
 
   production-smoke:
     runs-on: ubuntu-latest

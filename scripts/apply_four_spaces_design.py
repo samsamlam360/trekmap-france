@@ -348,3 +348,7 @@ if hike.count("</body>") != 1:
     raise SystemExit("Mode randonnée: fermeture de body ambiguë")
 HIKE.write_text(hike.replace("</body>", hike_block + "\n</body>", 1), encoding="utf-8")
 print("Design TrekMap: navigation en 4 espaces, outils contextuels et mode randonnée installés")
+
+# Dernière couche : organiser les fiches et la bibliothèque sans recréer de contrôles.
+from runpy import run_path
+run_path(str(Path(__file__).with_name('apply_detail_profile_polish.py')))

@@ -440,6 +440,13 @@ try:
     card.click()
     wait.until(lambda d: d.find_element(By.ID,'modal-backdrop').is_displayed())
     assert name in driver.find_element(By.ID,'modal').text, "Card click opened the wrong trek"
+    wait.until(lambda d: d.find_element(By.CSS_SELECTOR,
+               '#modal.tm-detail-refined .tm-detail-overview'))
+    options=driver.find_element(By.CSS_SELECTOR,'#modal .tm-detail-secondary')
+    assert options.find_element(By.TAG_NAME,'summary').is_displayed()
+    options.find_element(By.TAG_NAME,'summary').click()
+    assert options.get_attribute('open') is not None, "Secondary actions not accessible"
+
     assert name in info.text, "Side panel did not update to chosen trek"
     # The daily stages legend must sit at the left edge, BELOW the zoom/Carte
     # dock; previously it floated ~80px into the map and overlapped controls.
@@ -772,6 +779,19 @@ try:
     )
     driver.find_element(By.CSS_SELECTOR, '[data-p-tab="projects"]').click()
     # Reproduce reported bug: "À découvrir" must expose and focus the actual editor.
+    wait.until(lambda d: d.find_element(By.ID,'tm-p-status-filter').is_displayed())
+    driver.find_element(By.CSS_SELECTOR,'[data-tm-status="completed"]').click()
+    assert driver.find_element(By.CSS_SELECTOR,'[data-p-select="910001"]').is_displayed()
+    assert not driver.find_element(By.CSS_SELECTOR,'[data-p-select="910002"]').is_displayed()
+    driver.find_element(By.CSS_SELECTOR,'[data-tm-status="planned"]').click()
+    assert driver.find_element(By.CSS_SELECTOR,'[data-p-select="910002"]').is_displayed()
+    assert not driver.find_element(By.CSS_SELECTOR,'[data-p-select="910001"]').is_displayed()
+    driver.find_element(By.ID,'tm-p-status-search').send_keys('découvrir')
+    assert driver.find_element(By.CSS_SELECTOR,'[data-p-select="910002"]').is_displayed()
+    driver.find_element(By.ID,'tm-p-status-search').clear()
+    driver.find_element(By.CSS_SELECTOR,'[data-tm-status="all"]').click()
+    wait.until(lambda d: d.find_element(By.CSS_SELECTOR,'[data-p-select="910001"]').is_displayed())
+    wait.until(lambda d: d.find_element(By.CSS_SELECTOR,'[data-p-select="910002"]').is_displayed())
     discover=driver.find_element(By.CSS_SELECTOR, '[data-p-select="910002"]')
     assert "À découvrir" in discover.text
     driver.execute_script(
@@ -781,9 +801,17 @@ try:
     )
     discover.click()
     wait.until(lambda d: d.find_element(By.ID, "tm-p-journey-card").is_displayed())
+    assert driver.execute_script(
+        "return document.activeElement?.id==='tm-p-journey-card'"
+    ), "Adventure click did not bring its detail editor into focus"
     assert not driver.execute_script("return window.__profileErrors"), (
         "The first-time adventure editor raised a JavaScript exception"
     )
+    personal=driver.find_element(By.CSS_SELECTOR,'#tm-p-journey-form .tm-p-more')
+    assert personal.is_displayed(), "Notes and photos disclosure missing"
+    personal.find_element(By.TAG_NAME,'summary').click()
+    assert personal.find_element(By.NAME,'notes').is_displayed(), (
+        "Personal notes must remain editable after expanding")
     assert not driver.find_element(By.ID,"tm-p-completion").is_displayed(), (
         "Completion-only metrics must stay hidden on an unstarted trek"
     )
@@ -792,9 +820,6 @@ try:
         "Sparse collection membership must not overwrite the trek distance"
     )
     assert "Sentier à découvrir" in driver.find_element(By.ID, "tm-p-journey-card").text
-    assert driver.execute_script(
-        "return document.activeElement?.id==='tm-p-journey-card'"
-    ), "Adventure click did not bring its detail editor into focus"
     assert driver.find_element(By.CSS_SELECTOR, '[data-p-select="910002"]').get_attribute("aria-pressed")=="true"
     driver.find_element(By.CSS_SELECTOR, '[data-p-select="910001"]').click()
     assert driver.find_element(By.ID, "tm-p-journey-form").is_displayed()
