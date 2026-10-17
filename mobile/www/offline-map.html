@@ -58,6 +58,15 @@ function poiCollection(id){
 }
 let map=null,routes=[],waypoints=[],selected=null,current=null,headingMode=false,follow=true,lastGPS=null,panelOpen=false,mapReady=false;
 const locale=n=>Number(n).toLocaleString('fr-FR',{maximumFractionDigits:2,minimumFractionDigits:2});
+// Only a recent, sufficiently accurate fix is live navigation evidence.
+// A stored last known position may still be shown but never used to re-center
+// the map automatically or trigger an off-route alert after a long outage.
+function reliableGpsFix(s, now){
+ const age=now-Number(s?.lastFixEpoch);
+ const accuracy=Number(s?.accuracy);
+ return s?.status==='active' && Number.isFinite(age) && age>=-3000 && age<=30000 &&
+  Number(s.lastFixEpoch)>0 && Number.isFinite(accuracy) && accuracy>=0 && accuracy<=45;
+}
 const line=coords=>({type:'Feature',properties:{},geometry:{type:'LineString',coordinates:coords.map(p=>[p[1],p[0]])}});
 function bbox(coords){const b=new maplibregl.LngLatBounds();coords.forEach(p=>b.extend([p[1],p[0]]));return b}
 function choose(id,zoom=true){
@@ -163,15 +172,23 @@ async function refreshSession(){
   $('remaining').textContent=Number.isFinite(remaining)&&remaining>=0?locale(remaining/1000):'—';
   const section=Number.isFinite(remaining)&&remaining>=0?Math.floor(Math.max(0,routeMeters(selected.coords)-remaining)/25000)+1:1;
   $('day').textContent=Math.min(Math.max(1,Math.ceil(routeMeters(selected.coords)/25000)),section)+'/'+Math.max(1,Math.ceil(routeMeters(selected.coords)/25000));
-  $('track-status').textContent='GPS '+(s.status||'prêt')+' · Précision '+(s.accuracy>=0?Math.round(s.accuracy)+' m':'inconnue');
+  const live=reliableGpsFix(s,Date.now());
+  const age=Math.max(0,Date.now()-Number(s.lastFixEpoch||0));
+  $('track-status').textContent=live
+   ?'GPS actif · Précision '+Math.round(Number(s.accuracy))+' m'
+   :'GPS '+(s.status||'prêt')+' · Position non actualisée'+
+     (Number(s.lastFixEpoch)>0?' (dernier signal il y a '+Math.max(1,Math.round(age/1000))+' s)':'');
   $('details').textContent=s.note||'La position et le suivi restent sur cet appareil.';
   const off=Number(s.offtrack);
-  const alert=Number.isFinite(off)&&off>Math.max(45,Number(s.accuracy||45)*1.8) && s.status==='active';
-  $('alert').classList.toggle('show',!!alert);$('alert').textContent=alert?'⚠ Écart au parcours estimé : '+Math.round(off)+' m. Vérifie ta position et les chemins.':'';
+  // The native service requires three accurate consecutive departures;
+  // the map must not contradict that rule on the very first noisy fix.
+  const alert=live && Number(s.offtrackFixes)>=3 && Number.isFinite(off) &&
+   off>Math.max(45,Number(s.accuracy)*1.8);
+  $('alert').classList.toggle('show',!!alert);$('alert').textContent=alert?'⚠ Écart au parcours confirmé sur trois points GPS : '+Math.round(off)+' m. Vérifie ta position et les chemins.':'';
   if(Number.isFinite(s.lastLat)&&Number.isFinite(s.lastLon)){
    lastGPS=[s.lastLat,s.lastLon];
    updateLayer('gps',{type:'FeatureCollection',features:[{type:'Feature',properties:{},geometry:{type:'Point',coordinates:[s.lastLon,s.lastLat]}}]});
-   if(follow&&mapReady)map.easeTo({center:[s.lastLon,s.lastLat],zoom:Math.max(map.getZoom(),14),bearing:headingMode&&Number.isFinite(s.bearing)?s.bearing:0,duration:650});
+   if(live&&follow&&mapReady)map.easeTo({center:[s.lastLon,s.lastLat],zoom:Math.max(map.getZoom(),14),bearing:headingMode&&Number.isFinite(s.bearing)?s.bearing:0,duration:650});
   }
   if(Array.isArray(s.points)&&s.points.length>=2)updateLayer('walk',{type:'FeatureCollection',features:[line(s.points)]});
  }catch(_){}

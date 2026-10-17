@@ -138,7 +138,11 @@ public class GpsTrackService extends Service implements LocationListener {
             getSystemService(NotificationManager.class).notify(NOTIFICATION_ID,
                     notification("Suivi actif · Pause disponible dans la notification"));
             activeSince=SystemClock.elapsedRealtime();
-            previous=null;lastSampleTime=0;startGps();
+            previous=null;lastSampleTime=0;
+            // The three-departure counter is meaningful only for consecutive
+            // fixes within one uninterrupted GPS recording window.
+            set("offtrackFixes",0);
+            startGps();
         }catch(Exception e){
             Log.e("TrekMapGPS","Unable to start location service",e);
             set("status","interrupted");set("note","Service GPS indisponible : permissions ou localisation.");
@@ -177,9 +181,27 @@ public class GpsTrackService extends Service implements LocationListener {
             set("note","Position simulée ignorée.");GpsTrackStore.save(this,session);return;
         }
         if(location.getTime()<System.currentTimeMillis()-30000)return;
-        if(location.hasAccuracy() && location.getAccuracy()>45){
-            set("accuracy",Math.round(location.getAccuracy()));
-            set("note","Signal GPS trop imprécis.");GpsTrackStore.save(this,session);return;
+        // A missing accuracy estimate is never permission to count metres.
+        if(!location.hasAccuracy() || !Float.isFinite(location.getAccuracy()) ||
+                location.getAccuracy()>45 || location.getAccuracy()<0){
+            set("accuracy",location.hasAccuracy() && Float.isFinite(location.getAccuracy())
+                    ?Math.round(location.getAccuracy()):-1);
+            set("note","Position GPS sans précision fiable. Distance non comptée.");
+            GpsTrackStore.save(this,session);return;
+        }
+        // Android may deliver cached fixes out of order after the screen wakes.
+        // Monotonic fix timestamps stop an older position counting as a walk.
+        if(previous!=null &&
+                location.getElapsedRealtimeNanos()<=previous.getElapsedRealtimeNanos()){
+            return;
+        }
+        // A long location outage must not become a fictitious straight-line
+        // walk. Reacquire an anchor and count only subsequent measured legs.
+        boolean gpsRecovered=false;
+        if(previous!=null &&
+                location.getElapsedRealtimeNanos()-previous.getElapsedRealtimeNanos()>90000000000L){
+            previous=null;lastSampleTime=0;gpsRecovered=true;
+            set("offtrackFixes",0);  // Departure confirmations cannot span a GPS outage.
         }
         // Reject teleport jumps without resetting the accepted anchor.
         double step=previous==null?0:location.distanceTo(previous);
@@ -190,6 +212,7 @@ public class GpsTrackService extends Service implements LocationListener {
         }
         int before=session.optInt("offtrackFixes",0);
         GpsTrackStore.appendLocation(session,location,previous,lastSampleTime);
+        if(gpsRecovered)set("note","GPS retrouvé après une coupure : distance sans signal non calculée.");
         // Haptic departure alert only after 3 consecutive accurate fixes,
         // never more than once every 3 minutes.
         if(before<3 && session.optInt("offtrackFixes",0)>=3 &&
