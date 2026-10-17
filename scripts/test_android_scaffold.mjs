@@ -114,3 +114,33 @@ assert.ok(patch.includes('android.permission.VIBRATE')&&patch.includes('TrackArc
 assert.ok(fs.readFileSync('mobile/native-src/fr/trekmap/france/OfflineTreksActivity.java','utf8').includes('OfflineVectorMapActivity.class'));
 assert.ok(bridge.includes('openOfflineJournal(')&&bridge.includes('openOfflineMap('));
 console.log('ANDROID SCAFFOLD PASS: isolated Android workflow, transport, live backend, foreground GPS only, offline warning.');
+
+
+// Phase 2: simulated GPS freshness, using the SAME pure function shipped in
+// the local MapLibre HTML. No Android hardware or real position data needed.
+const gpsHelper=mapHtml.match(/function reliableGpsFix\(s, now\)\{[\s\S]*?\n\}/);
+assert.ok(gpsHelper,'Offline map must explicitly distinguish stale fixes');
+const reliableGpsFix=vm.runInNewContext('('+gpsHelper[0]+')');
+const now=1_700_000_000_000;
+const live={status:'active',lastFixEpoch:now-3000,accuracy:9};
+assert.equal(reliableGpsFix(live,now),true);
+assert.equal(reliableGpsFix({...live,lastFixEpoch:now-31_000},now),false,'31s-old fix is stale');
+assert.equal(reliableGpsFix({...live,lastFixEpoch:0},now),false,'no stored GPS fix');
+assert.equal(reliableGpsFix({...live,lastFixEpoch:now+5000},now),false,'future timestamp');
+assert.equal(reliableGpsFix({...live,accuracy:80},now),false,'bad accuracy');
+assert.equal(reliableGpsFix({...live,accuracy:-1},now),false,'unknown accuracy');
+assert.equal(reliableGpsFix({...live,status:'paused'},now),false,'paused is not live');
+assert.ok(mapHtml.includes("if(live&&follow&&mapReady)"),'only live GPS auto-centers');
+assert.ok(mapHtml.includes("Number(s.offtrackFixes)>=3"),'three confirmations before route warning');
+
+const gpsService=fs.readFileSync('mobile/native-src/fr/trekmap/france/GpsTrackService.java','utf8');
+assert.ok(gpsService.includes('location.getElapsedRealtimeNanos()<=previous.getElapsedRealtimeNanos()'),
+ 'out-of-order fixes rejected');
+assert.ok(gpsService.includes('location.getElapsedRealtimeNanos()-previous.getElapsedRealtimeNanos()>90000000000L'),
+ '90-second GPS gaps must reset the distance anchor');
+assert.ok(gpsService.includes('!location.hasAccuracy()'),'unknown GPS accuracy is not valid');
+const gpsStorage=fs.readFileSync('mobile/native-src/fr/trekmap/france/GpsTrackStore.java','utf8');
+assert.ok(gpsStorage.indexOf('if(points.length()>=MAX_TRACK_POINTS)')<
+ gpsStorage.indexOf('session.put("distance",session.optDouble("distance")+step)'),
+ 'Never increase recorded distance if a GPX point cannot be stored');
+console.log('ANDROID GPS SAFETY: stale, delayed, inaccurate and unrecordable positions guarded');
