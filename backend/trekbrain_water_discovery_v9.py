@@ -236,6 +236,13 @@ def discover_water_points(v3, result: dict[str, Any]) -> list[dict[str, Any]]:
                     "source_url": source_url, "osm_tags": dict(tags),
                     "water_status": status, "status": status,
                 })
+                from .trekbrain_water_evidence_v9 import confirmed_water_reference, water_evidence_status
+                if (water_evidence_status(existing) == "potable_referenced"
+                        and not confirmed_water_reference(existing)):
+                    existing["notes"] = (
+                        "Source signalée potable dans OSM mais accès ou disponibilité "
+                        "restreints : ne pas compter dessus sans vérification."
+                    )
             elif status == "not_potable":
                 existing.update({
                     "water_status": "not_potable", "status": "not_potable",
