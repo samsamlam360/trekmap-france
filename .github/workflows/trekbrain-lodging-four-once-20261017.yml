@@ -1,0 +1,65 @@
+name: TrekBrain four real lodging checks after verified camp reuse
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/trekbrain-lodging-four-once-20261017.yml'
+permissions:
+  contents: read
+concurrency:
+  group: trekbrain-four-lodging-one-off
+  cancel-in-progress: false
+jobs:
+  real-four:
+    runs-on: ubuntu-latest
+    timeout-minutes: 17
+    env:
+      EXPECTED_SHA: 279426bc47f369aaf2069c9f23cc8aa135be3a3a
+      TREKBRAIN_BENCHMARK_URL: https://trekmap-france.onrender.com
+      TREKBRAIN_BENCHMARK_OUT: benchmark-results-four-lodging
+      TREKBRAIN_BENCHMARK_MIN_INTERVAL_SECONDS: '20'
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify exact deployed production before requesting real routes
+        shell: python
+        run: |
+          import os,json,time,urllib.request
+          for _ in range(36):
+              try:
+                  with urllib.request.urlopen('https://trekmap-france.onrender.com/ai/status',timeout=20) as reply:data=json.load(reply)
+                  if str(data.get('build_commit','')).lower()==os.environ['EXPECTED_SHA'].lower():
+                      print('Measured LIVE release:',data['build_commit']);break
+              except Exception as e:print(type(e).__name__,str(e)[:120],flush=True)
+              time.sleep(10)
+          else:raise SystemExit('Never benchmark the wrong Render revision')
+      - name: Four previous audited loop cases, same expectations and scoring
+        shell: python
+        run: |
+          import os,sys
+          sys.path.insert(0,'scripts')
+          import benchmark_trekbrain_v9_unseen20 as unseen
+          import benchmark_trekbrain_v9_production as core
+          choices={'cote-granit-rose','florac-cevennes','luberon-bonnieux','sarlat-dordogne'}
+          core.SCENARIOS=[x for x in unseen.SCENARIOS if x['id'] in choices]
+          assert len(core.SCENARIOS)==4
+          assert {x['id'] for x in core.SCENARIOS}==choices
+          core.OUT_DIR=core.Path(os.environ['TREKBRAIN_BENCHMARK_OUT'])
+          core.OUT_DIR.mkdir(parents=True,exist_ok=True)
+          core.main()
+      - name: Persist full partial or complete report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: trekbrain-lodging-four-after
+          path: benchmark-results-four-lodging/
+          if-no-files-found: warn
+          retention-days: 14
+      - name: Show precise report even if plans are incomplete
+        if: always()
+        shell: python
+        run: |
+          from pathlib import Path
+          import os
+          p=Path('benchmark-results-four-lodging/trekbrain-production-benchmark.md')
+          summary=p.read_text(encoding='utf-8') if p.exists() else 'Audit missing, consult job.'
+          print(summary)
+          with open(os.environ['GITHUB_STEP_SUMMARY'],'a',encoding='utf-8') as f:f.write(summary)
