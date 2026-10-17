@@ -37,3 +37,7 @@ block='''<!-- TM_HIKER_NAV_ENTRY_START -->
 if html.count('</body>')!=1:raise SystemExit('unexpected html body closing')
 p.write_text(html.replace('</body>',block+'\n</body>',1),encoding='utf-8')
 print('Offline hike navigation entry installed')
+
+# Last additive design layer: route all navigation through four contextual spaces.
+from runpy import run_path
+run_path(str(Path(__file__).with_name('apply_four_spaces_design.py')))
