@@ -1258,3 +1258,57 @@ assert all("_photon_alternatives" not in s for s in stay_batch)
 assert all(s["category"]=="camping" for s in stay_batch)
 assert coords==base_result["route_preview"]["coords"]
 print("Stay Photon batch: three OSM camps from ONE request, no unsourced/wrong category validation: PASS")
+
+
+# Runtime walking capacity cannot be inferred from a campsite's bare
+# off-route/crow-flight distance. A distance > remaining daily slack rules
+# the stay OUT of the ORS verification budget, but keeps it as an unverified
+# transfer option; a near candidate still requires ORS return+outward proof.
+limit_anchors=[
+    {"night":1,"lat":0.0,"lon":0.20,"route_progress_km":20.0},
+    {"night":2,"lat":0.0,"lon":0.40,"route_progress_km":40.0},
+]
+distant_with_no_daily_slack={
+    "name":"OSM camping requiring too much daily travel",
+    "lat":0.010,"lon":0.20,"_route_progress_km":20.0,
+    "source_url":"https://www.openstreetmap.org/node/8700001",
+}
+close_with_slack={
+    "name":"OSM camping close enough to verify",
+    "lat":0.002,"lon":0.40,"_route_progress_km":40.0,
+    "source_url":"https://www.openstreetmap.org/node/8700002",
+}
+with_daily_budget=logistics._night_options(
+    limit_anchors,[distant_with_no_daily_slack,close_with_slack],20,
+    stage_lengths=[19.7,19.7,19.7],daily_max=20.3,
+)
+assert any(not row["_walk_budget_feasible"]
+           for row in with_daily_budget[1]),with_daily_budget
+assert any(row["_walk_budget_feasible"]
+           for row in with_daily_budget[2]),with_daily_budget
+before_pedestrian=[p[:] for p in coords]
+checked_rows,night_checks=logistics._validate_night_options(
+    FakeORS,FakeLegacy,FakeRoundtrip,coords,with_daily_budget,
+)
+assert night_checks["connector_matrix_calls"]==1,night_checks
+assert night_checks["connector_candidates_checked"]>=1,night_checks
+assert all(not key.endswith("8700001") for key in checked_rows),checked_rows
+assert coords==before_pedestrian
+missing_all=logistics._night_options(
+    [limit_anchors[0]],[distant_with_no_daily_slack],20,
+    stage_lengths=[19.7,19.7],daily_max=19.8,
+)
+assert missing_all[1] and missing_all[1][0]["_walk_budget_feasible"] is False
+unverified,skipped=logistics._validate_night_options(
+    FakeORS,FakeLegacy,FakeRoundtrip,coords,missing_all,
+)
+assert unverified=={} and skipped["connector_matrix_calls"]==0,skipped
+diag=logistics._night_access_diagnostics(
+    [limit_anchors[0]],[distant_with_no_daily_slack],missing_all,{},[None]
+)
+assert diag[0]["reason"]=="candidate_not_compatible_with_daily_limits",diag
+# Legacy callers without distances retain the previous ORS candidate set.
+old_compat=logistics._night_options(
+    [limit_anchors[0]],[distant_with_no_daily_slack],20)
+assert old_compat[1][0]["_walk_budget_feasible"] is True
+print("Night ORS quota: reject provably over-budget walk options before API, preserve transfer evidence and old callers: PASS")
