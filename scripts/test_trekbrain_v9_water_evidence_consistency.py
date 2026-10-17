@@ -289,3 +289,62 @@ finally:
     database_module.SessionLocal = real_session_local
 
 print("OSM CACHE: tagged public/restricted/unsafe water retained on read and protected on upsert PASS")
+
+
+# Expand source discovery without mistaking a livestock well for potable water.
+# The three existing providers must agree on tag categories, never promote an
+# unsourced or explicitly restricted source into a confirmed daily resupply.
+from backend.trekbrain_water_evidence_v9 import mapped_water_source
+new_water_cases = [
+    ({"amenity": "water_point", "drinking_water": "yes"}, "potable_referenced", True),
+    ({"amenity": "water_point"}, "unverified", False),
+    ({"man_made": "water_well", "drinking_water": "yes"}, "potable_referenced", True),
+    ({"man_made": "water_pump", "drinking_water": "yes"}, "potable_referenced", True),
+    ({"man_made": "water_well"}, "unverified", False),
+    ({"man_made": "water_pump", "drinking_water": "no"}, "not_potable", False),
+    ({"amenity": "water_point", "drinking_water": "yes", "access": "private"}, "potable_referenced", False),
+    ({"shop": "bakery", "potable": "yes"}, "potable_referenced", False),
+]
+for index, (tags, status, public) in enumerate(new_water_cases):
+    found = mapped_water_source(tags)
+    assert found is (index < 4 or index == 6), (tags, found)
+    assert potability_status(tags) == status, (tags, status)
+    element = {"type": "node", "id": 985300 + index,
+               "lat": 45.009, "lon": 5.001, "tags": tags}
+    item = logistics._terrain_resource(element)
+    if found:
+        assert item and item["category"] == "water", tags
+        assert item["water_status"] == status, (item, status)
+        assert confirmed_water_reference(item) is public, item
+    else:
+        assert item is None or item.get("category") != "water", (tags, item)
+
+# Ensure the Overpass stage query and independent rescue query actually
+# request the new categories, rather than merely recognizing mock records.
+network_before = free._request_json
+water_queries = []
+try:
+    def sourced_water_provider(url, **kwargs):
+        water_queries.append(str((kwargs.get("data") or {}).get("data") or ""))
+        return {"elements": [{
+            "type": "node", "id": 985388, "lat": 45.009, "lon": 5.001,
+            "tags": {"amenity": "water_point", "drinking_water": "yes"},
+        }]}
+    free._request_json = sourced_water_provider
+    plan = {
+        "route_preview": {"coords": [[45.0, 5.0], [45.02, 5.02]], "fallback": False},
+        "duration_days": 2,
+        "stages": [{"day": 1, "distance_km": 1.4}, {"day": 2, "distance_km": 1.4}],
+    }
+    mapped = resources._bbox_route_water_food(plan, {"water": True, "food": False})
+    shown = water.discover_water_points(None, plan)
+    assert mapped and mapped[0]["water_status"] == "potable_referenced", mapped
+    assert shown and shown[0]["water_status"] == "potable_referenced", shown
+    assert len(water_queries) >= 2, water_queries
+    for query in water_queries:
+        assert '["amenity"="water_point"]' in query, query[:500]
+        assert '["man_made"="water_well"]["drinking_water"="yes"]' in query, query[:500]
+        assert '["man_made"="water_pump"]["drinking_water"="yes"]' in query, query[:500]
+finally:
+    free._request_json = network_before
+print("Expanded OSM water categories remain grounded, safely classified and searched: OK")

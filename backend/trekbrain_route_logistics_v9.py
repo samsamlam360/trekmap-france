@@ -203,14 +203,10 @@ def _terrain_resource(element: dict[str, Any]) -> dict[str, Any] | None:
     lat, lon = point
     category = None
     status = "unverified"
-    if (
-        tags.get("amenity") == "drinking_water"
-        or tags.get("man_made") == "water_tap"
-        or tags.get("natural") == "spring"
-    ):
+    from .trekbrain_water_evidence_v9 import mapped_water_source, potability_status
+    if mapped_water_source(tags):
         category = "water"
-        # Consistent interpretation across all TrekBrain OSM providers.
-        from .trekbrain_water_evidence_v9 import potability_status
+        # Explicit no/conditional water tags remain stronger than the icon.
         status = potability_status(tags)
     elif tags.get("shop") in {
         "supermarket", "convenience", "bakery", "general",
@@ -299,6 +295,9 @@ def _bbox_route_query(
         '["amenity"="drinking_water"]',
         '["man_made"="water_tap"]',
         '["natural"="spring"]',
+        '["amenity"="water_point"]',
+        '["man_made"="water_well"]["drinking_water"="yes"]',
+        '["man_made"="water_pump"]["drinking_water"="yes"]',
         '["railway"="station"]',
         '["railway"="halt"]',
         '["amenity"="bus_station"]',
@@ -1257,10 +1256,16 @@ def _night_options(anchors, rows, daily_target, *, allow_distant_transfer=False)
         options = []
         for stay in rows:
             gap = abs(float(stay.get("_route_progress_km") or 0) - anchor["route_progress_km"])
-            if gap > window and not allow_distant_transfer:
-                continue
             distance = _geo_km(anchor, stay)
             if not math.isfinite(distance):
+                continue
+            # On intersecting/looped paths a real lodging can sit right at
+            # this stage end but its nearest-route projection belongs to a
+            # different lap. Don't discard its ACTUAL proximity to this night
+            # anchor merely because the progress indices differ. Only ORS
+            # pedestrian outward+return links, checked below, can certify it.
+            if (gap > window and distance > _WALK_CONNECTOR_LIMIT_KM
+                    and not allow_distant_transfer):
                 continue
             options.append({**stay, "_night": anchor["night"], "_anchor": dict(anchor),
                             "_anchor_distance_km": distance, "_progress_gap_km": gap})

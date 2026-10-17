@@ -140,6 +140,9 @@ def discover_water_points(v3, result: dict[str, Any]) -> list[dict[str, Any]]:
             f'nwr(around:{radius_m},{lat:.6f},{lon:.6f})["amenity"="drinking_water"];',
             f'nwr(around:{radius_m},{lat:.6f},{lon:.6f})["man_made"="water_tap"];',
             f'nwr(around:{radius_m},{lat:.6f},{lon:.6f})["natural"="spring"];',
+            f'nwr(around:{radius_m},{lat:.6f},{lon:.6f})["amenity"="water_point"];',
+            f'nwr(around:{radius_m},{lat:.6f},{lon:.6f})["man_made"="water_well"]["drinking_water"="yes"];',
+            f'nwr(around:{radius_m},{lat:.6f},{lon:.6f})["man_made"="water_pump"]["drinking_water"="yes"];',
         ])
     query = "[out:json][timeout:4];(" + "".join(clauses) + ");out center tags 120;"
     try:
@@ -188,6 +191,9 @@ def discover_water_points(v3, result: dict[str, Any]) -> list[dict[str, Any]]:
         status = potability_status(tags)
         unsafe = status == "not_potable"
         referenced = status == "potable_referenced"
+        from .trekbrain_water_evidence_v9 import mapped_water_source
+        if not mapped_water_source(tags):
+            continue
         is_spring = tags.get("natural") == "spring"
         is_tap = tags.get("man_made") == "water_tap"
         default_name = "Source" if is_spring else "Robinet d'eau" if is_tap else "Point d'eau"
