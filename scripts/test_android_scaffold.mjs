@@ -73,6 +73,11 @@ assert.ok(patch.includes('TREKMAP_KEYSTORE_PATH') &&
 const workflow=fs.readFileSync('.github/workflows/android-apk.yml','utf8');
 assert.ok(workflow.includes('TREKMAP_ANDROID_KEYSTORE_BASE64') &&
           workflow.includes('assembleRelease') && workflow.includes('gh release create'));
+assert.ok(workflow.includes(':app:bundleRelease')&&workflow.includes('app-release.aab'));
+assert.ok(workflow.includes('REQUEST_INSTALL_PACKAGES')&&workflow.includes('Upload Play Store AAB artifact'));
+assert.ok(patch.includes('installedFromPlayStore()')&&patch.includes('com.android.vending'),
+ 'Play Store installation must use Play updates rather than sideload APKs');
+
 
 for(const f of ['OfflineRouteStore.java','OfflineTreksActivity.java','OfflineRouteActivity.java'])
  assert.ok(fs.readFileSync('mobile/native-src/fr/trekmap/france/'+f,'utf8').includes('package fr.trekmap.france;'));
