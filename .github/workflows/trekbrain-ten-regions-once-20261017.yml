@@ -1,0 +1,72 @@
+name: Audit one-off TrekBrain 10 regions live 2026-10-17
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/trekbrain-ten-regions-once-20261017.yml'
+permissions:
+  contents: read
+concurrency:
+  group: audit-trekbrain-ten-real-20261017
+  cancel-in-progress: false
+jobs:
+  ten-real:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      EXPECTED_SHA: 033d9cdbbd22f3cdb48ea7c9205dee58906761f4
+      TREKBRAIN_BENCHMARK_URL: https://trekmap-france.onrender.com
+      TREKBRAIN_BENCHMARK_OUT: benchmark-results-ten-oct17
+      TREKBRAIN_BENCHMARK_MIN_INTERVAL_SECONDS: '20'
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify exact deployed live revision, no silent benchmark on other commit
+        shell: python
+        run: |
+          import os,json,time,urllib.request
+          for _ in range(36):
+              try:
+                  with urllib.request.urlopen('https://trekmap-france.onrender.com/ai/status', timeout=20) as r: data=json.load(r)
+                  if str(data.get('build_commit','')).lower() == os.environ['EXPECTED_SHA']:
+                      print('Confirmed Render production commit:',data['build_commit'], flush=True)
+                      break
+                  print('Unexpected live commit:',data.get('build_commit'),flush=True)
+              except Exception as exc:
+                  print(type(exc).__name__,str(exc)[:180],flush=True)
+              time.sleep(10)
+          else: raise SystemExit('Refuse to benchmark the wrong release')
+      - name: Ten existing reference regions with strict water lodging food and geometry checks
+        shell: python
+        run: |
+          import os,sys
+          sys.path.insert(0, 'scripts')
+          import benchmark_trekbrain_v9_unseen20 as unseen
+          import benchmark_trekbrain_v9_production as core
+          ids = [
+              'cote-granit-rose', 'sarlat-dordogne', 'florac-cevennes', 'luberon-bonnieux',
+              'etretat-pays-caux', 'lac-blanc-vosges', 'nasbinals-aubrac',
+              'chartreuse-saint-pierre', 'cauterets-pont-espagne', 'riquewihr-vosges',
+          ]
+          catalog={row['id']:row for row in unseen.SCENARIOS}
+          assert len(ids)==len(set(ids))==10 and all(key in catalog for key in ids)
+          core.SCENARIOS=[catalog[key] for key in ids]
+          core.OUT_DIR=core.Path(os.environ['TREKBRAIN_BENCHMARK_OUT'])
+          core.OUT_DIR.mkdir(parents=True,exist_ok=True)
+          core.main()
+      - name: Archive full results even if incomplete
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: trekbrain-10-regions-production-oct17
+          path: benchmark-results-ten-oct17/
+          if-no-files-found: warn
+          retention-days: 14
+      - name: Display measured results and errors
+        if: always()
+        shell: python
+        run: |
+          from pathlib import Path
+          import os
+          p=Path('benchmark-results-ten-oct17/trekbrain-production-benchmark.md')
+          summary=p.read_text(encoding='utf-8') if p.exists() else 'No report generated: inspect previous steps.'
+          print(summary)
+          with open(os.environ['GITHUB_STEP_SUMMARY'],'a',encoding='utf-8') as f:f.write(summary)
