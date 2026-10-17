@@ -38,6 +38,32 @@ for tags, expected in tag_cases:
 assert potability_status({}) == "unverified"
 assert potability_status(None) == "unverified"
 
+# A traceable OSM drinking-water icon does NOT establish publicly available
+# daily water when tags document an access or seasonal restriction.
+from backend.trekbrain_water_evidence_v9 import confirmed_water_reference
+reference={
+    "source_url":"https://www.openstreetmap.org/node/993123",
+    "osm_tags":{"amenity":"drinking_water"},
+    "status":"potable_referenced",
+}
+assert confirmed_water_reference(reference)
+for restriction in [
+    {"access":"private"},{"access":"no"},{"access":"customers"},
+    {"access":"permit"},{"locked":"yes"},{"disused":"yes"},
+    {"abandoned":"yes"},{"intermittent":"yes"},
+    {"seasonal":"summer"},{"seasonal":"winter"},
+    {"drinking_water":"conditional"},{"water:potable":"conditional"},
+]:
+    point={**reference,"osm_tags":{**reference["osm_tags"],**restriction}}
+    assert not confirmed_water_reference(point),restriction
+    assert potability_status(point["osm_tags"]) != "not_potable",restriction
+for unrestricted in [{"access":"yes"},{"seasonal":"no"},{"intermittent":"no"}]:
+    point={**reference,"osm_tags":{**reference["osm_tags"],**unrestricted}}
+    assert confirmed_water_reference(point),unrestricted
+assert not confirmed_water_reference({**reference,"source_url":"https://example.com/non-osm"})
+print("OSM WATER ACCESS: restricted/seasonal water remains visible but unconfirmed PASS")
+
+
 elements = [
     {"type": "node", "id": 923100 + i,
      "lat": 45.001 + i * 0.0001, "lon": 5.001,

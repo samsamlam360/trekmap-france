@@ -66,8 +66,28 @@ def confirmed_water_reference(item: Mapping[str, Any] | None) -> bool:
     tags = item.get("osm_tags") or {}
     if not isinstance(tags, Mapping):
         tags = {}
-    return (str(tags.get("access") or "").casefold() not in {"private", "no"}
-            and str(tags.get("disused") or "").casefold() != "yes")
+    def tag(name: str) -> str:
+        return str(tags.get(name) or "").strip().casefold()
+
+    # These are availability/access restrictions, NOT claims that the water
+    # itself is unsafe. Keep the point visible on the map, but do not count
+    # a locked, private, abandoned or seasonal source as a guaranteed daily
+    # public resupply. Each conclusion must be grounded in actual OSM tags.
+    if tag("access") in {"private", "no", "customers", "permit"}:
+        return False
+    if any(tag(key) in {"yes", "true", "1"} for key in (
+        "disused", "abandoned", "locked", "intermittent",
+    )):
+        return False
+    if tag("seasonal") not in {"", "no", "false", "0"}:
+        return False
+    # amenity=drinking_water is often present even when a more precise
+    # conditional status says availability or potability is uncertain.
+    if any(tag(key) in {"conditional", "seasonal", "intermittent", "unknown"} for key in (
+        "drinking_water", "water:potable", "potable",
+    )):
+        return False
+    return True
 
 
 __all__ = ["potability_status", "has_osm_identity", "water_evidence_status", "confirmed_water_reference"]
