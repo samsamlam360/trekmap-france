@@ -176,6 +176,7 @@ aside{height:auto;overflow:visible;padding-bottom:calc(32px + env(safe-area-inse
 <div class="actions"><button class="primary" id="download">↓ Télécharger une section</button><button id="checkoffline">Assembler / vérifier le trek</button><button id="download-all" type="button">↓ Préparer le trek entier</button></div>
 <progress id="download-progress" max="100" value="0" hidden></progress>
 <div id="offline-status" role="status" aria-live="polite">Pas encore préparé.</div>
+<div id="offline-coverage" aria-live="polite" style="padding:10px 12px;margin:7px 0;border-radius:11px;background:#edf6ef;color:#20563c;font-size:12px;line-height:1.5">Couverture non vérifiée. Prépare le trek avant le départ.</div>
 <button id="android-diagnostic" type="button" style="padding:10px 12px;border:1px solid #b6d8bf;background:#eef8f0;color:#0b533a;border-radius:10px;margin:8px 0;font-size:12px">🔎 Vérifier mon stockage Android / version GPS</button>
 <div class="notice">Le fond de carte utilise des données OpenStreetMap via OpenFreeMap (licence ODbL). Il affiche les chemins, l’eau et les zones boisées, mais ce n’est pas une carte IGN ni un système de guidage virage par virage. Le téléchargement est limité pour rester sur un service gratuit.</div>
 <h2>Sécurité</h2><p class="muted">Le GPS peut être imprécis sous les arbres ou en montagne. Il faut garder cet écran ouvert : le navigateur peut interrompre le suivi quand le téléphone se verrouille. Emporte une batterie, une carte ou GPX de secours, et ne coupe pas hors sentier pour rejoindre le tracé. La position reste sur cet appareil, jamais transmise au compte TrekMap.</p>
@@ -531,6 +532,35 @@ async function ensureOfflineShell(){
   }
  }
 }
+// Cached figures are an indicator only. Never present a historical download
+// timestamp as proof that the native AND browser maps are currently complete.
+function updateOfflineCoverage(){
+ const target=el('offline-coverage');if(!target||!route)return;
+ const android=window.Capacitor?.getPlatform?.()==='android';
+ if(android){
+   target.textContent='Carte Android : couverture non vérifiée ici. Ouvre « Télécharger le trek hors ligne » et vérifie les sections dans le gestionnaire Android.';
+   return;
+ }
+ let data;
+ try{data=JSON.parse(localStorage.getItem('tm-hike-offline-v1-'+route.id)||'null')}catch(_){data=null}
+ if(!data||!Number.isFinite(Number(data.stamp))){
+   target.textContent='Aucune vérification récente de cette carte. Prépare les sections puis utilise « Vérifier / assembler ».';
+   return;
+ }
+ const age=Math.max(0,Date.now()-Number(data.stamp));
+ const ageLabel=age>24*3600000?'(vérification ancienne)':'(vérification enregistrée)';
+ const count=Number(data.tiles),present=Number(data.present);
+ if(Number.isFinite(count)&&count>0&&Number.isFinite(present)&&present>=0){
+   const total=Math.round(count),saved=Math.min(total,Math.round(present));
+   target.textContent=(data.complete===true?'✓ Couverture web vérifiée : ':'⚠ Couverture web partielle : ')+saved+'/'+total+
+    ' tuiles, '+Math.round(100*saved/total)+' % '+ageLabel+
+    '. La vérification hors réseau reste à faire sur le téléphone.';
+ }else{
+   const last=Number(data.lastDownloadTiles)||0;
+   target.textContent='Téléchargement web enregistré : '+last+
+      ' nouvelles tuiles au dernier lot. Couverture totale NON vérifiée. Utilise « Vérifier / assembler ».';
+ }
+}
 async function nativePreparation(){
  if(!nativePlugin?.saveOfflineRoute||!nativePlugin?.openOfflineDownload)return false;
  // Download in Android's PRIVATE storage: browser Cache Storage is a separate
@@ -586,7 +616,14 @@ async function prepare(all=false){
   }
   if(rateLimit)info.textContent='Limite horaire des cartes atteinte. Les parties déjà enregistrées sont conservées. Reviens plus tard.';
   else if(!info.textContent.startsWith('Lot atteint'))info.textContent='Lot terminé. '+totalNew+' nouvelles tuiles, '+fail+' erreurs. Appuie sur « Assembler / vérifier le trek » pour connaître les sections manquantes.';
-  localStorage.setItem('tm-hike-offline-v1-'+route.id,JSON.stringify({partial:true,sections:plan.length,zoom:Number(el('offline-zoom').value),stamp:Date.now()}));
+  // Invalidate any previous complete coverage proof: new zoom/sections may
+   // require tiles that were not in the old verified set.
+   localStorage.setItem('tm-hike-offline-v1-'+route.id,JSON.stringify({
+    complete:false,partial:true,sections:plan.length,zoom:Number(el('offline-zoom').value),
+    stamp:Date.now(),lastDownloadTiles:totalNew,lastDownloadErrors:fail,
+    lastDownloadBytes:bytes
+   }));
+   updateOfflineCoverage();
  }catch(e){info.textContent='Préparation interrompue : '+String(e.message||e)+'. Les tuiles déjà téléchargées restent enregistrées.'}
  finally{downloadActive=false;el('download').disabled=false;el('download-all').disabled=false}
 }
@@ -607,6 +644,7 @@ async function checkOffline(){
    !!(await app.match('https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js'));
   const complete=shell&&available===unique.length&&unique.length>0;
   localStorage.setItem('tm-hike-offline-v1-'+route.id,JSON.stringify({complete,sections:plan.length,tiles:unique.length,present:available,zoom:Number(el('offline-zoom').value),stamp:Date.now()}));
+  updateOfflineCoverage();
   info.textContent=(complete?'✓ Parcours complet reconstitué ! ':'⚠ Assemblage partiel : ')+
    available+'/'+unique.length+' tuiles présentes sur '+plan.length+' sections. '+
    (complete?'Trace intégrale et carte en cache. Teste en mode avion.':
@@ -680,6 +718,7 @@ if(window.Capacitor?.getPlatform?.()==='android' && nativePlugin?.openTracker){
      try{
        await nativePlugin.saveOfflineRoute({route:nativeRoute()});
        await nativePlugin.openOfflineDownload({id:route.id});
+  updateOfflineCoverage();
      }catch(e){state('Téléchargement Android indisponible : '+String(e?.message||e),'danger')}
    });
  }
@@ -793,7 +832,10 @@ el('quick-pause').addEventListener('click',()=>el('pause').click());
  aside.inert=isMobile();if(isMobile())aside.setAttribute('aria-hidden','true');
  el('quick-tools').setAttribute('aria-haspopup','dialog');
  el('quick-tools').setAttribute('aria-expanded','false');
- el('quick-tools').addEventListener('click',()=>{if(isMobile())setOpen(true);else aside.scrollIntoView({behavior:'smooth',block:'start'})});
+ el('quick-tools').addEventListener('click',()=>{
+ updateOfflineCoverage();
+ if(isMobile())setOpen(true);else aside.scrollIntoView({behavior:'smooth',block:'start'});
+});
  el('close-hike-options').addEventListener('click',()=>setOpen(false));
  backdrop.addEventListener('click',()=>setOpen(false));
  window.addEventListener('resize',sync);
@@ -817,6 +859,7 @@ window.TrekMapHikeCore={dist,projected,tileXY,tilesForLine,validCoords,splitAtDi
 el('segment-overview').textContent='Parcours chargé ('+formatKm(routeLength)+'). Pour télécharger les cartes, touche « Découper mon trek en sections ».';
 if(coords.length>5500)
  el('offline-status').textContent='Aperçu cartographique simplifié pour éviter une surcharge mémoire. Tracé GPS et itinéraire complet conservés.';
+updateOfflineCoverage();
 
 })();
 </script></body></html>
