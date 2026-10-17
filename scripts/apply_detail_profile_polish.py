@@ -125,8 +125,10 @@ body.tm-design-library-mode #tm-profile-v2 .tm-p-hero p{font-size:12px}
  // Contrôles d'origine : tous les gestionnaires de clic restent attachés aux mêmes noeuds.
  function refineDetail(){
   var actions=modal.querySelector('.modal-actions'),grid=modal.querySelector('.detail-grid');
-  if(!actions||!grid||!modal.querySelector('#fav-detail'))return;
-  if(!modal.classList.contains('tm-detail-refined')){
+  if(!actions||!grid||!modal.querySelector('#fav-detail')){
+   modal.classList.remove('tm-detail-refined');return;
+  }
+  if(!modal.querySelector('.tm-detail-overview')){
    modal.classList.add('tm-detail-refined');
    var overview=document.createElement('section');
    overview.className='tm-detail-overview';
@@ -201,7 +203,8 @@ body.tm-design-library-mode #tm-profile-v2 .tm-p-hero p{font-size:12px}
    var filter=b.dataset.tmStatus;
    b.setAttribute('aria-pressed',String(state.status===filter));
    var count=filter==='all'?rows.length:rows.filter(function(r){return statusOf(r)===filter}).length;
-   b.textContent=statuses.find(function(s){return s[0]===filter})[1]+' · '+count;
+   var next=statuses.find(function(s){return s[0]===filter})[1]+' · '+count;
+   if(b.textContent!==next)b.textContent=next;
   });
   var empty=content.querySelector('#tm-p-status-empty');
   if(empty)empty.hidden=shown>0 ||rows.length===0;
