@@ -41,6 +41,25 @@ def potability_status(tags: Mapping[str, Any] | None) -> str:
     return "unverified"
 
 
+
+def mapped_water_source(tags: Mapping[str, Any] | None) -> bool:
+    """Recognise real water features, not arbitrary 'potable=yes' objects.
+
+    Water points mapped for caravans and explicitly drinkable wells/pumps
+    were absent from the three OSM provider classifiers. An unspecified
+    well/pump is *not* evidence of potable water; public availability and
+    contradictory negatives remain independently checked downstream.
+    """
+    tags = tags if isinstance(tags, Mapping) else {}
+    def value(key: str) -> str:
+        return str(tags.get(key) or "").strip().casefold()
+    if (value("amenity") in {"drinking_water", "water_point"}
+            or value("man_made") == "water_tap"
+            or value("natural") == "spring"):
+        return True
+    return (value("man_made") in {"water_well", "water_pump"}
+            and potability_status(tags) == "potable_referenced")
+
 def water_evidence_status(item: Mapping[str, Any] | None) -> str:
     """Preserve explicit negative evidence across raw and cached schemas."""
     item = item if isinstance(item, Mapping) else {}
@@ -135,4 +154,4 @@ def merge_water_evidence(existing: dict[str, Any], incoming: Mapping[str, Any]) 
         existing.update(status="potable_referenced", water_status="potable_referenced")
 
 
-__all__ = ["potability_status", "has_osm_identity", "water_evidence_status", "confirmed_water_reference", "merge_water_evidence"]
+__all__ = ["potability_status", "mapped_water_source", "has_osm_identity", "water_evidence_status", "confirmed_water_reference", "merge_water_evidence"]
