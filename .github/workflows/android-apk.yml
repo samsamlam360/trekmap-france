@@ -111,3 +111,37 @@ jobs:
             --title "TrekMap Android $TREKMAP_VERSION_CODE" \
             --notes "Version Android signée, à installer sans désinstaller la version précédente possédant la même signature." \
             --latest
+
+      # Google Play accepts Android App Bundles, not the debug APK. This build
+      # is produced only when a persistent private signing key is configured.
+      - name: Exclude sideload-install permission from Play distribution
+        if: env.TREKMAP_RELEASE_ENABLED == '1'
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('mobile/android/app/src/main/AndroidManifest.xml')
+          xml=p.read_text(encoding='utf-8')
+          item='<uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />'
+          if item not in xml:
+              raise SystemExit('Expected debug-only installer permission not found')
+          p.write_text(xml.replace(item,''),encoding='utf-8')
+          print('Google Play manifest: sideload installer permission removed')
+          PY
+
+      - name: Build signed Android App Bundle for Google Play
+        if: env.TREKMAP_RELEASE_ENABLED == '1'
+        working-directory: mobile/android
+        shell: bash
+        run: |
+          ./gradlew --no-daemon :app:bundleRelease
+          test -s app/build/outputs/bundle/release/app-release.aab
+
+      - name: Upload Play Store AAB artifact
+        if: env.TREKMAP_RELEASE_ENABLED == '1'
+        uses: actions/upload-artifact@v4
+        with:
+          name: trekmap-france-play-aab-${{ github.run_number }}
+          path: mobile/android/app/build/outputs/bundle/release/app-release.aab
+          if-no-files-found: error
+          retention-days: 30
