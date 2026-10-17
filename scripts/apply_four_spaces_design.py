@@ -48,6 +48,11 @@ block = r'''<!-- TREKMAP_FOUR_SPACES_START -->
  border-radius:10px;padding:7px 12px;font-weight:750}
 #tm-inline-filters{gap:7px!important}
 #tm-design-toolbar{position:absolute;z-index:3650;top:calc(var(--tm-top) + 69px);right:clamp(276px,21vw,340px);display:flex;align-items:center;gap:6px}
+body.tm-map-immersive #tm-design-toolbar{display:none!important}
+#tm-design-add-menu{position:absolute;top:50px;right:0;display:none;min-width:200px;padding:7px;background:#fff;border:1px solid #d6e6da;border-radius:14px;box-shadow:0 15px 40px rgba(9,45,26,.20)}
+#tm-design-add-menu.is-open{display:flex;flex-direction:column;gap:4px}
+#tm-design-add-menu button{min-height:44px;padding:9px 12px;border:0;border-radius:9px;background:#f4f8f5;color:#16482f;font-weight:760;text-align:left}
+#tm-design-add-menu button:hover{background:#e8f4ec}
 
 #tm-inline-filters select{min-width:126px!important}
 #tm-inline-filters [data-filter-target="duration-filter"]{max-width:152px!important}
@@ -247,6 +252,17 @@ body.tm-design-library-mode #tm-design-library-hint{display:block;color:#d8ebe0;
   }
   var addButton=actionButton('tm-design-add-button','＋ Ajouter');
   var filtersButton=actionButton('tm-design-filter-button','☷ Filtres');
+  var addMenu=document.createElement('div');
+  addMenu.id='tm-design-add-menu';
+  addMenu.setAttribute('role','group');
+  addMenu.setAttribute('aria-label','Ajouter un trek');
+  [['✎ Tracer un trek','tm-create-btn'],['⇧ Importer un GPX','tm-import-btn']].forEach(function(pair){
+   var b=document.createElement('button');b.type='button';b.textContent=pair[0];
+   b.addEventListener('click',function(){addMenu.classList.remove('is-open');addButton.setAttribute('aria-expanded','false');$(pair[1])?.click()});
+   addMenu.appendChild(b);
+  });
+  toolbar.appendChild(addMenu);
+  addButton.setAttribute('aria-expanded','false');
   addButton.addEventListener('click',function(){
    if(mobile()){
     var sheet=$('tm-mobile-create-sheet');
@@ -255,7 +271,15 @@ body.tm-design-library-mode #tm-design-library-hint{display:block;color:#d8ebe0;
      sheet.setAttribute('aria-hidden','false');return;
     }
    }
-   $('tm-map-options')?.click();
+   var open=!addMenu.classList.contains('is-open');
+   addMenu.classList.toggle('is-open',open);
+   addButton.setAttribute('aria-expanded',String(open));
+  });
+  document.addEventListener('pointerdown',function(e){
+   if(!toolbar.contains(e.target)){addMenu.classList.remove('is-open');addButton.setAttribute('aria-expanded','false')}
+  },true);
+  document.addEventListener('keydown',function(e){
+   if(e.key==='Escape'&&addMenu.classList.contains('is-open')){addMenu.classList.remove('is-open');addButton.setAttribute('aria-expanded','false');addButton.focus()}
   });
   filtersButton.addEventListener('click',function(){
    if(mobile()){
