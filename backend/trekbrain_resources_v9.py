@@ -989,12 +989,13 @@ def _cold_water_stage_probes(result: dict[str, Any], days: int,
         chosen.append(ordered.pop(0))
         if ordered:
             chosen.append(ordered.pop(-1))
-    # A confirmed OSM village near the *walked* stage often offers better
-    # fountain coverage than a mathematical midpoint in an empty field. Only
-    # use source-linked settlements on or close to the existing hiking line.
-    # Their existence is NOT evidence that public drinking water is available.
+    # A confirmed OSM village or sourced public grocery near the *walked*
+    # stage often offers better fountain coverage than a midpoint in a field.
+    # These are only probe centres, NEVER drinking-water evidence.
     settlements = []
-    for item in (result.get("points_of_interest") or [])[:80]:
+    candidates = (list(result.get("points_of_interest") or [])[:80]
+                  + _food_candidates(result)[:30])
+    for item in candidates:
         if not isinstance(item, dict) or not has_osm_identity(item):
             continue
         tags = item.get("osm_tags") or {}
@@ -1002,7 +1003,13 @@ def _cold_water_stage_probes(result: dict[str, Any], days: int,
             continue
         place_type = str(tags.get("place") or "").casefold()
         if place_type not in {"village", "town", "city", "hamlet"}:
-            continue
+            # Fresh regions commonly have actual OSM grocery shops but no
+            # place=town/village POI. These are a useful search *location*,
+            # never proof that bottled or tap water is available.
+            if _potential_bottled_water_shop(item):
+                place_type = "shop"
+            else:
+                continue
         location = _point(item)
         matched = _route_match(coords, item, (profile, total)) if location else None
         if matched and matched[0] <= 1.5:
@@ -1025,7 +1032,7 @@ def _cold_water_stage_probes(result: dict[str, Any], days: int,
             # across a long section just because a distant city is known.
             max_shift_km = min(6.0, max(2.5, stage_km * 0.4))
             nearby = [
-                ({"city": 0, "town": 0, "village": 1, "hamlet": 2}[kind],
+                ({"city": 0, "town": 0, "village": 1, "hamlet": 2, "shop": 3}[kind],
                  abs(progress * total - distance), route_gap, location)
                 for location, progress, kind, route_gap in settlements
                 if low + 0.04 * (high - low) <= progress <= high - 0.04 * (high - low)
