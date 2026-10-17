@@ -72,12 +72,11 @@ public class MainActivity extends BridgeActivity {
     @Override public void onCreate(Bundle savedInstanceState) {
         registerPlugin(TrekMapNativeGpsPlugin.class);
         super.onCreate(savedInstanceState);
-        // Always show the native, bundled vector map on a fresh application
-        // launch. Neither HTML nor GPS depends on Render waking up.
-        if(savedInstanceState==null && (getIntent()==null ||
-                !"fr.trekmap.france.RELOAD_ONLINE".equals(getIntent().getAction()))){
+        // Capacitor starts its bundled local dashboard immediately. The
+        // native MapLibre view is one tap away and needs no remote boot.
+        if(savedInstanceState==null && getIntent()!=null &&
+                "fr.trekmap.france.OPEN_OFFLINE".equals(getIntent().getAction()))
             showNativeOffline();
-        }
     }
     @Override public void onNewIntent(Intent intent) {
         super.onNewIntent(intent);
@@ -90,6 +89,8 @@ public class MainActivity extends BridgeActivity {
             offlineScreenVisible=false;
             if(getBridge()!=null && getBridge().getWebView()!=null)
                 getBridge().getWebView().loadUrl("https://localhost/");
+        } else if("fr.trekmap.france.OPEN_OFFLINE".equals(intent.getAction())){
+            showNativeOffline();
         }
     }
     @Override public void onResume() {
