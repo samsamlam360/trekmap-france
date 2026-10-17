@@ -87,7 +87,18 @@ public class TrekMapNativeGpsPlugin extends Plugin {
     /** Online features load only after a deliberate tap; no cold-start dependency. */
     @PluginMethod
     public void openOnline(PluginCall call){
-        permitted(call,false,()->navigate(call,"https://trekmap-france.onrender.com/"));
+        permitted(call,false,()->{
+            android.net.ConnectivityManager cm=(android.net.ConnectivityManager)
+                    getContext().getSystemService(android.content.Context.CONNECTIVITY_SERVICE);
+            android.net.NetworkCapabilities caps=cm==null?null:
+                    cm.getNetworkCapabilities(cm.getActiveNetwork());
+            if(caps==null||!caps.hasCapability(
+                    android.net.NetworkCapabilities.NET_CAPABILITY_VALIDATED)){
+                call.reject("Pas de connexion Internet vérifiée. La carte locale reste disponible.");
+                return;
+            }
+            navigate(call,"https://trekmap-france.onrender.com/");
+        });
     }
 
     /** Return to the bundled, network-independent application dashboard. */
