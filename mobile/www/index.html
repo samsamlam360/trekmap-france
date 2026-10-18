@@ -16,6 +16,11 @@ h2{font-size:18px;letter-spacing:-.02em;margin:27px 3px 12px}section{display:gri
 .tile{border:1px solid #d6e8dc;background:#fff;border-radius:17px;padding:16px;text-align:left;min-height:134px;display:flex;flex-direction:column;gap:8px;box-shadow:0 4px 12px #2449310a}
 .tile .icon{font-size:26px}.tile b{font-size:15px}.tile small{font-size:12px;color:#5b7668;line-height:1.5}
 .notice{padding:15px;border:1px solid #cfe1d4;background:#f5fbf6;border-radius:15px;font-size:13px;line-height:1.5;color:#335946}
+.online-progress{display:grid;gap:8px;margin:12px 0 0;padding:15px;border:1px solid #b9d9c6;border-radius:15px;background:#f2faf5;color:#244f3a;font-size:13px;line-height:1.5}
+.online-progress[hidden]{display:none}
+.online-progress strong{font-size:14px}
+.online-progress button{justify-self:start;min-height:43px;padding:10px 14px;border:1px solid #c7dfd0;border-radius:11px;background:#fff;color:#185239;font:inherit;font-weight:750}
+#online:disabled{opacity:.65;cursor:wait}
 #routes{display:grid;gap:9px}
 .route{display:flex;justify-content:space-between;align-items:center;gap:10px;text-align:left;border:1px solid #d4e7db;background:#fff;border-radius:13px;padding:13px 14px;min-height:57px}
 .route b{display:block;font-size:14px;overflow:hidden;text-overflow:ellipsis}.route small{display:block;color:#698173;font-size:11px;margin-top:3px}
@@ -41,6 +46,11 @@ button:focus-visible{outline:3px solid #d69c2e;outline-offset:3px}
   <button type="button" class="tile" id="online"><span class="icon" aria-hidden="true">🌐</span><b>TrekMap en ligne</b><small>Recherche, profil, favoris et TrekBrain</small></button>
   <button type="button" class="tile" id="refresh"><span class="icon" aria-hidden="true">🔄</span><b>Actualiser</b><small>Rafraîchir mes treks stockés sur ce téléphone</small></button>
  </div>
+ <section class="online-progress" id="online-progress" role="status" aria-live="polite" hidden>
+  <strong id="online-progress-title">Connexion à TrekMap</strong>
+  <span id="online-progress-text">Vérification de la disponibilité du serveur.</span>
+  <button type="button" id="cancel-online">Rester hors ligne</button>
+ </section>
  <h2>Prêts pour la randonnée <span id="route-count" aria-live="polite"></span></h2>
  <section id="routes" aria-label="Liste des treks enregistrés"><div class="notice">Chargement des itinéraires de cet appareil…</div></section>
  <p role="status" aria-live="polite" id="feedback"></p>
@@ -59,6 +69,68 @@ async function action(name,data){
  try{feedback('Ouverture…');var result=await plugin[name](data||{});feedback('');return result||{}}
  catch(e){feedback(e.message||'Cet outil Android n’a pas pu s’ouvrir.');return null}
 }
+var onlineWaiting=false;
+var cancelOnlineWait=false;
+async function openOnline(){
+ var plugin=native();
+ if(!plugin||typeof plugin.openOnline!=='function'||typeof plugin.checkOnlineReady!=='function'){
+  feedback('Cette version de l’application doit être mise à jour pour ouvrir TrekMap en ligne sans écran bloqué.');
+  return;
+ }
+ if(onlineWaiting)return;
+ onlineWaiting=true;cancelOnlineWait=false;
+ var started=Date.now();
+ $('online').disabled=true;
+ $('online-progress').hidden=false;
+ $('online-progress-title').textContent='Connexion à TrekMap en cours';
+ $('online-progress-text').textContent='Vérification de la connexion. L’accueil local reste disponible.';
+ $('cancel-online').textContent='Rester hors ligne';
+ try{
+  while(Date.now()-started<90000){
+   if(cancelOnlineWait)return;
+   var state=null;
+   try{state=await plugin.checkOnlineReady()}catch(_){state={ready:false}}
+   if(cancelOnlineWait)return;
+   if(state&&state.ready===true){
+    $('online-progress-title').textContent='Serveur disponible';
+    $('online-progress-text').textContent='Ouverture de TrekMap en ligne…';
+    try{
+     await plugin.openOnline();
+     $('online-progress').hidden=true;
+     return;
+    }catch(_){
+     $('online-progress-title').textContent='TrekMap en ligne n’a pas pu s’ouvrir';
+     $('online-progress-text').textContent='Ta carte locale et tes treks enregistrés restent disponibles. Réessaie dans un instant.';
+     $('cancel-online').textContent='Fermer';
+     return;
+    }
+   }
+   var seconds=Math.floor((Date.now()-started)/1000);
+   $('online-progress-title').textContent=seconds<10?'Vérification du serveur…':'Réveil du serveur Render…';
+   $('online-progress-text').textContent=seconds<10
+    ?'L’accueil local reste utilisable pendant la vérification.'
+    :seconds<30
+     ?'Le serveur gratuit démarre. Tes treks téléchargés restent accessibles ici.'
+     :'Render met plus de temps que prévu. Tu peux continuer hors ligne sans perdre tes données.';
+   await new Promise(function(resolve){setTimeout(resolve,1200)});
+  }
+  $('online-progress-title').textContent='Le serveur met trop de temps à répondre';
+  $('online-progress-text').textContent='Render ne répond pas encore après 90 secondes. Tu peux continuer avec la carte et les treks locaux, puis réessayer plus tard.';
+  $('cancel-online').textContent='Fermer';
+ }finally{
+  onlineWaiting=false;
+  $('online').disabled=false;
+  if(cancelOnlineWait)$('online-progress').hidden=true;
+ }
+}
+$('cancel-online').addEventListener('click',function(){
+ if(onlineWaiting){
+  cancelOnlineWait=true;
+  $('online-progress-text').textContent='Arrêt de la vérification…';
+ }else{
+  $('online-progress').hidden=true;
+ }
+});
 async function refresh(){
  var plugin=native();
  if(!plugin){$('routes').textContent='Cette liste est disponible depuis l’application Android.';return}
@@ -81,7 +153,7 @@ async function refresh(){
 $('offline-map').addEventListener('click',function(){action('openOfflineMap')});
 $('saved-routes').addEventListener('click',function(){action('openOfflineRoutes')});
 $('journal').addEventListener('click',function(){action('openOfflineJournal')});
-$('online').addEventListener('click',function(){action('openOnline')});
+$('online').addEventListener('click',openOnline);
 $('refresh').addEventListener('click',refresh);
 function network(){ $('network').querySelector('span').textContent=navigator.onLine?'Application prête · mode local disponible':'Sans connexion · mode local disponible'}
 window.addEventListener('online',network);window.addEventListener('offline',network);network();
