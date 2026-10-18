@@ -1,7 +1,7 @@
 """Reset de mot de passe TrekMap : lien secret à usage unique, 30 min.
 
-Les tokens bruts ne sont jamais persistés. L'envoi externe est activé seulement
-si RESEND_API_KEY et RESET_EMAIL_FROM sont configurés dans les secrets Render.
+Les tokens bruts ne sont jamais persistés. L'envoi externe utilise le relais
+Gmail HTTPS ou, en solution de repli, Resend. Aucun secret n'est stocké en base.
 Pas de fuite d'existence des comptes dans les réponses publiques.
 """
 from datetime import datetime, timedelta
@@ -33,9 +33,15 @@ class ResetPassword(BaseModel):
     new_password: str = Field(min_length=12, max_length=200)
 
 
+def gmail_relay_configured():
+    return bool(os.getenv("GMAIL_RELAY_URL", "").strip() and
+                os.getenv("GMAIL_RELAY_TOKEN", "").strip())
+
+
 def configured():
-    return bool(os.getenv("RESEND_API_KEY", "").strip() and
-                os.getenv("RESET_EMAIL_FROM", "").strip())
+    resend_ready = bool(os.getenv("RESEND_API_KEY", "").strip() and
+                        os.getenv("RESET_EMAIL_FROM", "").strip())
+    return gmail_relay_configured() or resend_ready
 
 
 def hash_token(token):
@@ -73,13 +79,34 @@ def send_reset_email(email, token):
             "et une seule fois) :\n" + url + "\n\n"
             "Si tu n'as rien demandé, ignore ce message.\n"
             "L'équipe TrekMap France")
+    subject = "Réinitialiser ton mot de passe TrekMap"
+
+    # Google Apps Script envoie le message via Gmail en HTTPS. Cela évite les
+    # ports SMTP sortants bloqués sur les services Render gratuits.
+    if gmail_relay_configured():
+        response = requests.post(
+            os.environ["GMAIL_RELAY_URL"].strip(),
+            headers={"Content-Type": "application/json"},
+            json={"token": os.environ["GMAIL_RELAY_TOKEN"].strip(),
+                  "to": email, "subject": subject, "body": body},
+            timeout=12,
+        )
+        if response.status_code != 200:
+            raise RuntimeError("Le relais Gmail a refusé la demande.")
+        try:
+            result = response.json()
+        except ValueError as exc:
+            raise RuntimeError("Réponse invalide du relais Gmail.") from exc
+        if result.get("ok") is not True:
+            raise RuntimeError("Le relais Gmail n'a pas confirmé l'envoi.")
+        return
+
     response = requests.post(
         "https://api.resend.com/emails",
         headers={"Authorization": "Bearer " + os.environ["RESEND_API_KEY"].strip(),
                  "Content-Type": "application/json"},
         json={"from": os.environ["RESET_EMAIL_FROM"].strip(),
-              "to": [email], "subject": "Réinitialiser ton mot de passe TrekMap",
-              "text": body},
+              "to": [email], "subject": subject, "text": body},
         timeout=9,
     )
     if response.status_code not in (200, 201):
