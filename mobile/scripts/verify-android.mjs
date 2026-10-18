@@ -11,6 +11,12 @@ const home=fs.readFileSync('www/index.html','utf8');
 for(const id of ['id="offline-map"','id="saved-routes"','id="journal"','id="online"','id="routes"'])
  assert.ok(home.includes(id),'Bundled dashboard missing '+id);
 assert.ok(home.includes('openOnline')&&home.includes('listOfflineRoutes'));
+assert.ok(home.includes('checkOnlineReady')&&home.includes('online-progress')&&
+ home.includes('Rester hors ligne'),'online startup must stay on local dashboard and be cancellable');
+const bridgeSource=fs.readFileSync('native-src/fr/trekmap/france/TrekMapNativeGpsPlugin.java','utf8');
+assert.ok(bridgeSource.includes('public void checkOnlineReady(')&&
+ bridgeSource.includes('/auth/password/status')&&bridgeSource.includes('setReadTimeout(2500)'),
+ 'Render readiness probe must be bounded and lightweight');
 
 assert.equal(conf.server.cleartext,false);
 assert.equal(conf.android.allowMixedContent,false);
