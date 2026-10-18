@@ -1,7 +1,7 @@
 """Reset de mot de passe TrekMap : lien secret à usage unique, 30 min.
 
-Les tokens bruts ne sont jamais persistés. L'envoi externe est activé seulement
-si RESEND_API_KEY et RESET_EMAIL_FROM sont configurés dans les secrets Render.
+Les tokens bruts ne sont jamais persistés. L'envoi externe utilise le relais
+Gmail HTTPS ou, en solution de repli, Resend. Aucun secret n'est stocké en base.
 Pas de fuite d'existence des comptes dans les réponses publiques.
 """
 from datetime import datetime, timedelta
