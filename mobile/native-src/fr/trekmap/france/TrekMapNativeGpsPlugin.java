@@ -11,6 +11,8 @@ import com.getcapacitor.PluginMethod;
 import com.getcapacitor.annotation.CapacitorPlugin;
 import org.json.JSONArray;
 import org.json.JSONObject;
+import java.net.HttpURLConnection;
+import java.net.URL;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -84,7 +86,54 @@ public class TrekMapNativeGpsPlugin extends Plugin {
         });
     }
 
-    /** Online features load only after a deliberate tap; no cold-start dependency. */
+    /**
+     * Lightweight readiness probe for the free Render service.
+     * Called while the bundled dashboard remains visible, so a cold start
+     * never replaces the offline UI with a blank remote WebView.
+     */
+    @PluginMethod
+    public void checkOnlineReady(PluginCall call){
+        permitted(call,false,()->{
+            JSObject result=new JSObject();
+            android.net.ConnectivityManager cm=(android.net.ConnectivityManager)
+                    getContext().getSystemService(android.content.Context.CONNECTIVITY_SERVICE);
+            android.net.NetworkCapabilities caps=cm==null?null:
+                    cm.getNetworkCapabilities(cm.getActiveNetwork());
+            if(caps==null||!caps.hasCapability(
+                    android.net.NetworkCapabilities.NET_CAPABILITY_VALIDATED)){
+                result.put("ready",false);
+                result.put("reason","no_network");
+                call.resolve(result);
+                return;
+            }
+
+            HttpURLConnection connection=null;
+            try{
+                connection=(HttpURLConnection)new URL(
+                        "https://trekmap-france.onrender.com/auth/password/status").openConnection();
+                connection.setRequestMethod("GET");
+                connection.setConnectTimeout(2500);
+                connection.setReadTimeout(2500);
+                connection.setInstanceFollowRedirects(true);
+                connection.setUseCaches(false);
+                connection.setRequestProperty("Accept","application/json");
+                connection.setRequestProperty("Cache-Control","no-cache");
+                int status=connection.getResponseCode();
+                result.put("ready",status==200);
+                call.resolve(result);
+            }catch(Exception ignored){
+                // Expected while a sleeping free instance is booting. Avoid
+                // exposing low-level network errors to users or the UI.
+                result.put("ready",false);
+                result.put("reason","server_starting");
+                call.resolve(result);
+            }finally{
+                if(connection!=null)connection.disconnect();
+            }
+        });
+    }
+
+    /** Navigate only after the local UI has confirmed the backend is responding. */
     @PluginMethod
     public void openOnline(PluginCall call){
         permitted(call,false,()->{
