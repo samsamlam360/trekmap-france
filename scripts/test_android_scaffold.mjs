@@ -17,6 +17,12 @@ const home=fs.readFileSync('mobile/www/index.html','utf8');
 for(const id of ['id="offline-map"','id="saved-routes"','id="journal"','id="online"','id="routes"'])
  assert.ok(home.includes(id),'Bundled app missing '+id);
 assert.ok(home.includes('listOfflineRoutes')&&home.includes('openOnline'),'Dashboard actions missing');
+assert.ok(home.includes('checkOnlineReady')&&home.includes('online-progress')&&
+ home.includes('Rester hors ligne'),'online wakeup must preserve a cancellable local dashboard');
+const bridgeSource=fs.readFileSync('mobile/native-src/fr/trekmap/france/TrekMapNativeGpsPlugin.java','utf8');
+assert.ok(bridgeSource.includes('public void checkOnlineReady(')&&
+ bridgeSource.includes('/auth/password/status')&&bridgeSource.includes('setReadTimeout(2500)'),
+ 'Render startup polling must use a bounded readiness request');
 assert.ok(!/<script[^>]+src=["']https?:/.test(home)&&!/<link[^>]+href=["']https?:/.test(home),
  'Bundled launcher must not load remote assets');
 new vm.Script(home.match(/<script>([\s\S]*?)<\/script>/)?.[1]||'throw Error("No dashboard script")');
