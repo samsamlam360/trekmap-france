@@ -180,7 +180,19 @@ public class GpsTrackService extends Service implements LocationListener {
         if(location.isFromMockProvider()) {
             set("note","Position simulée ignorée.");GpsTrackStore.save(this,session);return;
         }
-        if(location.getTime()<System.currentTimeMillis()-30000)return;
+        // Wall-clock timestamps are checked as well as monotonic timestamps below.
+        // Reject cached fixes and implausible future timestamps instead of silently
+        // allowing them to become the first anchor after app/service startup.
+        long wallNow=System.currentTimeMillis();
+        long fixTime=location.getTime();
+        if(fixTime<=0 || fixTime<wallNow-30000 || fixTime>wallNow+10000){
+            set("accuracy",-1);
+            set("note",fixTime>wallNow+10000
+                    ?"Horodatage GPS incohérent. Position ignorée."
+                    :"Position GPS trop ancienne. Attends une nouvelle mesure.");
+            GpsTrackStore.save(this,session);
+            return;
+        }
         // A missing accuracy estimate is never permission to count metres.
         if(!location.hasAccuracy() || !Float.isFinite(location.getAccuracy()) ||
                 location.getAccuracy()>45 || location.getAccuracy()<0){
