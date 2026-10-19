@@ -194,6 +194,15 @@ body.tm-brain-route-mode #tm-map-control-dock #tm-map-options-panel{
 .tm-trek-cluster-list b{font-size:13px;margin-bottom:4px}
 .tm-trek-cluster-list button{padding:7px;text-align:left;border:1px solid #daeadf;border-radius:8px;
   background:#f5faf6;color:#11583b;font-size:12px;cursor:pointer}
+
+/* Desktop: the floating Ajouter/Filtres shortcuts duplicate the header controls.
+   Hide only this map-level toolbar on desktop; keep it available on touch devices. */
+@media(min-width:821px){
+  /* These are the actual floating shortcuts created by the desktop experience.
+     Their header equivalents remain available; touch layouts keep both controls. */
+  #tm-design-add-button,
+  #tm-design-filter-button{display:none!important}
+}
 </style>
 <script id="trekmap-map-tools-v2-js">
 (function(){

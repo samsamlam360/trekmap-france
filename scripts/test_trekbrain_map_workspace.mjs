@@ -20,6 +20,7 @@ assert.ok(css.includes('.tm-brain-actions'),'save and modify remain accessible')
 assert.ok(css.includes('.tm-brain-alert'),'safety warnings are visibly surfaced');
 assert.ok(css.includes('.tm-brain-detail'),'stages use the shared scrollable content');
 assert.ok(css.includes('focus-visible'),'keyboard focus remains obvious');
+assert.ok(css.includes('color:#fff!important;background:#174f38!important'), 'hiking mode action must have high contrast');
 assert.ok(script.includes("data-workspace-action=\"fit\""),'recenter action');
 assert.ok(script.includes("data-workspace-action=\"save\""),'save action');
 assert.ok(script.includes("data-workspace-action=\"exit\""),'return to explorer');

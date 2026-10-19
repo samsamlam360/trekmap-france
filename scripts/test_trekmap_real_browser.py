@@ -307,9 +307,9 @@ try:
     driver.find_element(By.ID,'tm-recovery-back').click()
     wait.until(lambda d: d.find_element(By.ID, 'tm-forgot-link').is_displayed())
     driver.execute_script("closeModal()")
-    # New menu exposes the same create/import actions without duplication.
-    assert driver.find_element(By.ID, "tm-design-add-button").is_displayed()
-    assert driver.find_element(By.ID, "tm-design-filter-button").is_displayed()
+    # Desktop map shortcuts duplicate the header actions and must be hidden on PC.
+    assert not driver.find_element(By.ID, "tm-design-add-button").is_displayed()
+    assert not driver.find_element(By.ID, "tm-design-filter-button").is_displayed()
     nav_buttons[1].click()
     wait.until(lambda d: d.find_element(By.ID, "tm-ai-overlay").is_displayed())
     assert driver.find_element(By.ID, "tm-ai-prompt").is_displayed()
@@ -566,6 +566,9 @@ try:
     driver.save_screenshot(str(OUT / "desktop-carrousel-and-selection.png"))
     # Preserve the original mobile navigation and hide only desktop helper panel.
     driver.set_window_size(390, 844)
+    # The two shortcuts are intentionally retained on touch/mobile layouts.
+    assert driver.find_element(By.ID, "tm-design-add-button").is_displayed()
+    assert driver.find_element(By.ID, "tm-design-filter-button").is_displayed()
     mobile_navigation = driver.find_element(By.ID, "tm-mobile-nav")
     assert mobile_navigation.is_displayed(), "Mobile navigation is hidden"
     assert driver.find_element(By.ID, "tm-map-control-dock").is_displayed(), (
