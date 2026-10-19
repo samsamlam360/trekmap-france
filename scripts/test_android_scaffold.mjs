@@ -166,6 +166,11 @@ assert.ok(gpsService.includes('location.getElapsedRealtimeNanos()<=previous.getE
 assert.ok(gpsService.includes('location.getElapsedRealtimeNanos()-previous.getElapsedRealtimeNanos()>90000000000L'),
  '90-second GPS gaps must reset the distance anchor');
 assert.ok(gpsService.includes('!location.hasAccuracy()'),'unknown GPS accuracy is not valid');
+assert.ok(gpsService.includes('fixTime<wallNow-30000') &&
+          gpsService.includes('fixTime>wallNow+10000') &&
+          gpsService.includes('Horodatage GPS incohérent') &&
+          gpsService.includes('Position GPS trop ancienne'),
+  'native GPS must reject stale and future wall-clock timestamps with a visible diagnostic');
 assert.ok(gpsService.includes('if(gpsRecovered)set("note"'),'GPS gap warning survives normal point status');
 assert.ok(gpsService.includes('set("offtrackFixes",0)'),'pause and outage must reset departure confirmations');
 const gpsStorage=fs.readFileSync('mobile/native-src/fr/trekmap/france/GpsTrackStore.java','utf8');
