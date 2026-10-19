@@ -566,6 +566,9 @@ try:
     driver.save_screenshot(str(OUT / "desktop-carrousel-and-selection.png"))
     # Preserve the original mobile navigation and hide only desktop helper panel.
     driver.set_window_size(390, 844)
+    # The two shortcuts are intentionally retained on touch/mobile layouts.
+    assert driver.find_element(By.ID, "tm-design-add-button").is_displayed()
+    assert driver.find_element(By.ID, "tm-design-filter-button").is_displayed()
     mobile_navigation = driver.find_element(By.ID, "tm-mobile-nav")
     assert mobile_navigation.is_displayed(), "Mobile navigation is hidden"
     assert driver.find_element(By.ID, "tm-map-control-dock").is_displayed(), (
