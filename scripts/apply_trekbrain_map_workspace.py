@@ -226,6 +226,15 @@ body.tm-brain-route-mode.tm-brain-show-resources .tm-v91-legend {display:block!i
 @media(prefers-reduced-motion:reduce){
   #tm-brain-route-panel * {scroll-behavior:auto!important;transition:none!important}
 }
+
+/* Improve contrast for the hiking-mode entry action: green text on green is not a design system. */
+#tm-brain-route-panel .tm-brain-actions button[data-workspace-action="navigate"]{
+  color:#fff!important;background:#174f38!important;border-color:#174f38!important;
+  text-shadow:none!important;box-shadow:0 2px 5px rgba(8,48,30,.18)!important
+}
+#tm-brain-route-panel .tm-brain-actions button[data-workspace-action="navigate"]:hover{
+  background:#0f3f2d!important;border-color:#0f3f2d!important
+}
 </style>
 <script id="trekbrain-route-workspace-js">
 (function(){
