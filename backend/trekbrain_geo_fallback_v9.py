@@ -124,7 +124,11 @@ def filter_provider_places(query: str, rows: list[dict], provider: str) -> list[
             valid = False
         if not valid:
             reason = "invalid_coordinates"
-        label = str(point.get("name") or point.get("short_name") or "")
+        # Keep the primary feature identity separate from its full display label:
+        # an address may mention the requested massif even when the named feature
+        # itself is a different business or street.
+        full_label = str(point.get("name") or point.get("short_name") or "")
+        feature_label = str(point.get("short_name") or full_label.split(",", 1)[0])
         if qualifier and not reason:
             if region_hint is not None:
                 # A provider's named, located feature must be inside the
@@ -133,7 +137,7 @@ def filter_provider_places(query: str, rows: list[dict], provider: str) -> list[
                 reference = {"lat": region_hint[0], "lon": region_hint[1]}
                 if geo._dist(reference, point) > 75.0:
                     reason = "outside_named_region"
-                elif wanted and not wanted.issubset(_words(label)):
+                elif wanted and not wanted.issubset(_words(feature_label)):
                     reason = "name_mismatch"
                 elif (provider == "ign-geoplateforme"
                       and not _fold(point.get("short_name") or "").startswith(_fold(landmark))):
@@ -144,12 +148,12 @@ def filter_provider_places(query: str, rows: list[dict], provider: str) -> list[
                 if re.fullmatch(r"(?:[0-9]{2,3}|2[abAB])", qualifier):
                     matches_department = str(point.get("department_code") or "").upper() == qualifier.upper()
                 else:
-                    labels = {_fold(part) for part in label.split(",")}
+                    labels = {_fold(part) for part in full_label.split(",")}
                     labels.add(_fold(point.get("geocode_department") or ""))
                     matches_department = _fold(qualifier) in labels
                 if not matches_department:
                     reason = "department_not_confirmed"
-                elif wanted and not wanted.issubset(_words(label)):
+                elif wanted and not wanted.issubset(_words(feature_label)):
                     reason = "name_mismatch"
         if reason:
             record_geocode(query, provider, accepted=False, reason=reason, point=point)
