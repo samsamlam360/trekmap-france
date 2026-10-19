@@ -230,8 +230,9 @@ body.tm-brain-route-mode.tm-brain-show-resources .tm-v91-legend {display:block!i
 /* Hide duplicate map-level Ajouter/Filtres shortcuts on desktop only.
    Keep the actual touch controls available on mobile and the header actions intact. */
 @media(min-width:821px){
-  #tm-design-add-button,
-  #tm-design-filter-button{display:none!important}
+  /* Higher specificity wins over the earlier map-toolbar declarations. */
+  html body #tm-design-add-button,
+  html body #tm-design-filter-button{display:none!important;visibility:hidden!important;pointer-events:none!important}
 }
 /* Improve contrast for the hiking-mode entry action: green text on green is not a design system. */
 #tm-brain-route-panel .tm-brain-actions button[data-workspace-action="navigate"]{
