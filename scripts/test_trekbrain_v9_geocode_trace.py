@@ -62,6 +62,28 @@ class GeocodeEvidenceTests(unittest.TestCase):
         self.assertEqual(result[0]["commune_insee"], "05026")
         self.assertEqual(result[0]["geocode_precision"], "official-municipality")
 
+    def test_named_massif_rejects_wrong_feature_even_if_address_contains_request(self):
+        lat, lon = geocoding.named_massif_reference("Cévennes")
+        wrong = geo._normalise_place(
+            "Auberge des Cévennes, Mont Lozère, Lozère, France", lat, lon
+        )
+        wrong["short_name"] = "Auberge des Cévennes"
+        self.assertEqual(
+            geocoding.filter_provider_places(
+                "Mont Lozère, Cévennes", [wrong], "nominatim"
+            ),
+            [],
+            "An address mention must not turn a different named feature into Mont Lozère",
+        )
+
+        correct = geo._normalise_place("Mont Lozère, Lozère, France", lat, lon)
+        correct["short_name"] = "Mont Lozère"
+        selected = geocoding.filter_provider_places(
+            "Mont Lozère, Cévennes", [correct], "nominatim"
+        )
+        self.assertEqual(len(selected), 1)
+        self.assertEqual(selected[0]["short_name"], "Mont Lozère")
+
     def test_ign_never_confuses_homonymous_street_with_requested_city(self):
         alien = {"features": [{"geometry": {"coordinates": [0.4027, 44.0667]},
                  "properties": {"label": "Dijon 47600 Francescas",
