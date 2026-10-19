@@ -1,0 +1,25 @@
+name: Export signed Android v1013 for transfer
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/export-signed-android-v1013.yml'
+permissions:
+  contents: read
+jobs:
+  export-apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Fetch verified signed release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release download android-v1013 --repo samsamlam360/trekmap-france --pattern 'trekmap-france.apk' --dir . --clobber
+          echo '06e621f83584caa06ca99970428770cc281774e075701b5c1dfac532b8fe0c49  trekmap-france.apk' | sha256sum -c -
+      - name: Provide APK to conversation
+        uses: actions/upload-artifact@v4
+        with:
+          name: trekmap-france-v1013-signe
+          path: trekmap-france.apk
+          if-no-files-found: error
+          retention-days: 7
