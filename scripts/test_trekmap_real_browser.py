@@ -307,9 +307,9 @@ try:
     driver.find_element(By.ID,'tm-recovery-back').click()
     wait.until(lambda d: d.find_element(By.ID, 'tm-forgot-link').is_displayed())
     driver.execute_script("closeModal()")
-    # New menu exposes the same create/import actions without duplication.
-    assert driver.find_element(By.ID, "tm-design-add-button").is_displayed()
-    assert driver.find_element(By.ID, "tm-design-filter-button").is_displayed()
+    # Desktop map shortcuts duplicate the header actions and must be hidden on PC.
+    assert not driver.find_element(By.ID, "tm-design-add-button").is_displayed()
+    assert not driver.find_element(By.ID, "tm-design-filter-button").is_displayed()
     nav_buttons[1].click()
     wait.until(lambda d: d.find_element(By.ID, "tm-ai-overlay").is_displayed())
     assert driver.find_element(By.ID, "tm-ai-prompt").is_displayed()
