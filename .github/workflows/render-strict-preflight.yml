@@ -82,6 +82,7 @@ jobs:
           python scripts/finalize_unified_build.py
           python scripts/apply_mobile_experience.py
           python scripts/apply_map_polish.py
+          python scripts/apply_explorer_map_tools.py
           python scripts/apply_ai_planner.py
           python scripts/apply_free_planner_labels.py
           python scripts/apply_language_learning_ui.py
