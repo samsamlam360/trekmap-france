@@ -1,4 +1,4 @@
-name: TrekBrain reference benchmark (one pass)
+name: TrekBrain reference benchmark (repeat pass 2)
 
 on:
   push:
@@ -14,7 +14,7 @@ concurrency:
 
 jobs:
   benchmark:
-    name: Six reference treks against current production
+    name: Repeat six reference treks against current production
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -59,11 +59,11 @@ jobs:
       - name: Install benchmark dependencies
         run: python -m pip install requests
 
-      - name: Run the six reference treks once
+      - name: Repeat the six reference treks once
         env:
           EXPECTED_SHA: f5190b610a6e2b1d7f0aa8e907fce44518995f0f
           TREKBRAIN_BENCHMARK_URL: https://trekmap-france.onrender.com
-          TREKBRAIN_BENCHMARK_OUT: benchmark-results-reference
+          TREKBRAIN_BENCHMARK_OUT: benchmark-results-reference-pass2
           TREKBRAIN_BENCHMARK_MIN_INTERVAL_SECONDS: "20"
         run: python scripts/benchmark_trekbrain_v9_production.py
 
@@ -73,7 +73,7 @@ jobs:
         run: |
           import os
           from pathlib import Path
-          report = Path("benchmark-results-reference/trekbrain-production-benchmark.md")
+          report = Path("benchmark-results-reference-pass2/trekbrain-production-benchmark.md")
           text = report.read_text(encoding="utf-8") if report.exists() else "Benchmark report unavailable; inspect the failed step logs.\\n"
           print(text)
           with open(os.environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as summary:
@@ -83,7 +83,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: trekbrain-reference-benchmark-20261020
-          path: benchmark-results-reference/
+          name: trekbrain-reference-benchmark-20261020-pass2
+          path: benchmark-results-reference-pass2/
           if-no-files-found: ignore
           retention-days: 14
